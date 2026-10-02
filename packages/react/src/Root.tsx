@@ -9,7 +9,7 @@ import {
     type GridView,
     type RowKeyGetter,
     type Size,
-    veto,
+    type SortColumn,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -32,15 +32,23 @@ import {
 } from "./context";
 import { attachGridRef, type DataGridRef } from "./gridRef";
 import {
+    bindControlled,
+    type ControlledFlags,
+    type ControlledState,
+    followControlled,
+    settleControlled,
+} from "./utils/controlled";
+import {
     type DivPrimitiveProps,
     dataAttributes,
     useRenderElement,
 } from "./utils/useRender";
 
-interface KeyDownProps {
+interface HandlerProps {
     onKeyDown?:
         | ((event: React.KeyboardEvent<HTMLDivElement>) => void)
         | undefined;
+    onClick?: ((event: React.MouseEvent<HTMLDivElement>) => void) | undefined;
 }
 
 /** The root's state: what its `className`/`style` functions and `render` receive. */
@@ -84,6 +92,17 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onActivePositionChange?:
             | ((position: CellPosition | null) => void)
             | undefined;
+        /**
+         * the sorted columns, controlled, the first one first; pair it with `onSortColumnsChange`.
+         * The grid keeps the sort: the app orders the rows it passes
+         */
+        sortColumns?: readonly SortColumn[] | undefined;
+        /** the sorted columns to start with, uncontrolled */
+        defaultSortColumns?: readonly SortColumn[] | undefined;
+        /** the sort changed (or, controlled, asks to): a header cell was toggled, or a command ran */
+        onSortColumnsChange?:
+            | ((sortColumns: readonly SortColumn[]) => void)
+            | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -111,6 +130,18 @@ function samePosition(
     return (
         (a ?? null) === (b ?? null) ||
         (a?.rowIndex === b?.rowIndex && a?.columnIndex === b?.columnIndex)
+    );
+}
+
+function sameSort(a: readonly SortColumn[], b: readonly SortColumn[]): boolean {
+    return (
+        a === b ||
+        (a.length === b.length &&
+            a.every(
+                (entry, i) =>
+                    entry.columnKey === b[i]?.columnKey &&
+                    entry.direction === b[i]?.direction,
+            ))
     );
 }
 
@@ -148,6 +179,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         activePosition,
         defaultActivePosition,
         onActivePositionChange,
+        sortColumns,
+        defaultSortColumns,
+        onSortColumnsChange,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -157,16 +191,17 @@ export function Root<TRow>(props: RootProps<TRow>) {
         gridRef,
         children,
         onKeyDown,
+        onClick,
         ...rest
     } = props;
     const latest = useRef(props);
     latest.current = props;
-    /** a command the root runs to follow a controlled prop: the controlled guard lets it through */
-    const syncing = useRef(false);
-    /** the root is applying the data props: a controlled position they clamp is settled after */
-    const applying = useRef(false);
+    const flags: ControlledFlags = {
+        syncing: useRef(false),
+        applying: useRef(false),
+    };
 
-    const [context] = useState<DataGridContextValue<TRow>>(() => {
+    const [grid] = useState(() => {
         const model = createDataGridModel<TRow, ReactNode>({
             columns,
             ...(rows !== undefined
@@ -179,43 +214,53 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 activePosition !== undefined
                     ? activePosition
                     : defaultActivePosition,
+            sortColumns: sortColumns ?? defaultSortColumns,
         });
-        // controlled: a change is asked for (onActivePositionChange) and applied only when the
-        // prop follows
-        model.use((ctx, next) => {
-            if (!ctx.command.startsWith("active-position.")) return next();
-            const result = next();
-            if (
-                ctx.dryRun ||
-                syncing.current ||
-                latest.current.activePosition === undefined ||
-                !result.ok
-            ) {
-                return result;
-            }
-            const position =
-                ctx.command === "active-position.clear"
+        const position: ControlledState<TRow, CellPosition | null> = {
+            prefix: "active-position.",
+            prop: () => latest.current.activePosition,
+            read: (state) => state.activePosition,
+            same: samePosition,
+            valueOf: (command, value) =>
+                command === "active-position.clear"
                     ? null
-                    : (result.value as CellPosition);
-            if (!samePosition(position, model.state.activePosition)) {
-                latest.current.onActivePositionChange?.(position);
-            }
-            return veto("the active position is controlled");
-        });
-        // a change the guard let through: uncontrolled, or the grid's shape moved it (rows
-        // removed); the root's own syncs to a controlled prop are not reported back
-        model.subscribe(({ before, after }) => {
-            if (
-                syncing.current ||
-                before.activePosition === after.activePosition ||
-                // controlled: decided once every prop is applied (the last effect below)
-                (applying.current &&
-                    latest.current.activePosition !== undefined)
-            ) {
-                return;
-            }
-            latest.current.onActivePositionChange?.(after.activePosition);
-        });
+                    : (value as CellPosition),
+            report: (value) => latest.current.onActivePositionChange?.(value),
+            apply: (value) => {
+                if (value === null) model.run("active-position.clear");
+                else model.run("active-position.set", value);
+            },
+        };
+        const sort: ControlledState<TRow, readonly SortColumn[]> = {
+            prefix: "sort-columns.",
+            prop: () => latest.current.sortColumns,
+            read: (state) => state.sortColumns,
+            same: sameSort,
+            valueOf: (_, value) => value as readonly SortColumn[],
+            report: (value) => latest.current.onSortColumnsChange?.(value),
+            // what the columns cannot take (a column not sortable, twice) is left out, as at
+            // mount, and the parent is told the sort as it settled
+            apply: (value) => {
+                if (model.run("sort-columns.set", { sortColumns: value }).ok) {
+                    return;
+                }
+                const seen = new Set<string>();
+                const sortColumns = value.filter((entry) => {
+                    const keep =
+                        !seen.has(entry.columnKey) &&
+                        (entry.direction === "ascending" ||
+                            entry.direction === "descending") &&
+                        model.is("column-sortable", {
+                            columnKey: entry.columnKey,
+                        });
+                    seen.add(entry.columnKey);
+                    return keep;
+                });
+                model.run("sort-columns.set", { sortColumns });
+            },
+        };
+        bindControlled(model, flags, position);
+        bindControlled(model, flags, sort);
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -231,8 +276,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
         engine.subscribe("rows-end-reached", (info) =>
             latest.current.onRowsEndReached?.(info),
         );
-        return { model, engine };
+        const context: DataGridContextValue<TRow> = { model, engine };
+        return { context, position, sort };
     });
+    const { context } = grid;
     const { model, engine } = context;
     // before paint; the components that follow the ref (useRowWindow(gridRef), …) are told
     useLayoutEffect(
@@ -251,29 +298,12 @@ export function Root<TRow>(props: RootProps<TRow>) {
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
     });
 
-    /** Moves the model to the controlled position, when it is not there. */
-    const followControlled = (position: CellPosition | null | undefined) => {
-        if (
-            position === undefined ||
-            samePosition(position, model.state.activePosition)
-        ) {
-            return;
-        }
-        syncing.current = true;
-        try {
-            if (position === null) model.run("active-position.clear");
-            else model.run("active-position.set", position);
-        } finally {
-            syncing.current = false;
-        }
-    };
-
     // the props follow onto the model, before paint. A controlled position first: valid before
     // the data changes (rows filtered down), it survives them
-    useLayoutEffect(() => followControlled(activePosition));
+    useLayoutEffect(() => followControlled(model, flags, grid.position));
 
     useLayoutEffect(() => {
-        applying.current = true;
+        flags.applying.current = true;
     });
 
     useLayoutEffect(() => {
@@ -315,17 +345,12 @@ export function Root<TRow>(props: RootProps<TRow>) {
     }, [model, rowHeight, headerRowHeight]);
 
     // and last: a controlled position valid only after the data changed (rows grown) follows now;
-    // one the data made impossible was clamped by the model, and the parent is told where
+    // one the data made impossible was clamped by the model, and the parent is told where. A
+    // controlled sort follows the columns, and one they cannot take is told as it settled
     useLayoutEffect(() => {
-        applying.current = false;
-        followControlled(activePosition);
-        const settled = model.state.activePosition;
-        if (
-            activePosition !== undefined &&
-            !samePosition(activePosition, settled)
-        ) {
-            latest.current.onActivePositionChange?.(settled);
-        }
+        flags.applying.current = false;
+        settleControlled(model, flags, grid.position);
+        settleControlled(model, flags, grid.sort);
     });
 
     const overscanRows = overscan?.rows;
@@ -350,24 +375,34 @@ export function Root<TRow>(props: RootProps<TRow>) {
         [engine],
     );
 
-    // the consumer's onKeyDown, on the root or on its render element, runs before the grid's keys
+    // the consumer's onKeyDown and onClick, on the root or on its render element, run before the
+    // grid's keys and header clicks (sorting), so preventDefault cancels them
     const { render } = rest;
-    const renderElement = isValidElement<KeyDownProps>(render)
+    const renderElement = isValidElement<HandlerProps>(render)
         ? render
         : undefined;
     const renderKeyDown = renderElement?.props.onKeyDown;
+    const renderClick = renderElement?.props.onClick;
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
         onKeyDown?.(event);
         renderKeyDown?.(event);
         engine.adapter.keydown(event.nativeEvent);
     };
+    const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+        onClick?.(event);
+        renderClick?.(event);
+        engine.adapter.click(event.nativeEvent);
+    };
 
     const element = useRenderElement(
         "div",
-        renderElement && renderKeyDown
+        renderElement && (renderKeyDown || renderClick)
             ? {
                   ...rest,
-                  render: cloneElement(renderElement, { onKeyDown: undefined }),
+                  render: cloneElement(renderElement, {
+                      onKeyDown: undefined,
+                      onClick: undefined,
+                  }),
               }
             : rest,
         {
@@ -381,6 +416,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 // a scroll container is a tab stop in some browsers: the grid has its own
                 tabIndex: -1,
                 onKeyDown: handleKeyDown,
+                onClick: handleClick,
                 children,
             },
             style: { position: "relative", overflow: "auto" },

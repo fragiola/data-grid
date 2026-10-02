@@ -8,6 +8,8 @@ export type {
     Range,
     RowKeyGetter,
     Size,
+    SortColumn,
+    SortDirection,
 } from "@fragiola/data-grid";
 export {
     type CellInfo,
