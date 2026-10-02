@@ -1,6 +1,11 @@
 // Type fixtures: checked by `tsc`, never run. `@ts-expect-error` marks what must not compile.
 
-import { type Column, createDataGridModel } from "../../src";
+import {
+    type Column,
+    type ColumnGroup,
+    type ColumnOrGroup,
+    createDataGridModel,
+} from "../../src";
 
 interface Person {
     name: string;
@@ -71,6 +76,57 @@ grid.use((ctx, next) => {
     return next();
 });
 
+// column groups: a column inside a group still gets the row type
+const grouped: ColumnOrGroup<Person>[] = [
+    {
+        key: "person",
+        renderHeaderCell: ({ group, columnIndex, columnSpan }) =>
+            `${group.key} ${columnIndex}+${columnSpan}`,
+        children: [
+            {
+                key: "name",
+                width: 100,
+                renderCell: ({ row }) => row.name.toUpperCase(),
+            },
+            {
+                key: "inner",
+                children: [
+                    {
+                        key: "age",
+                        width: 60,
+                        // @ts-expect-error
+                        renderCell: ({ row }: { row: Order }) => row.total,
+                    },
+                ],
+            },
+        ],
+    },
+];
+grid.run("columns.set", { columns: grouped });
+
+// a group has no cells of its own and no width: it spans its columns
+const groupWithCells: ColumnGroup<Person> = {
+    key: "g",
+    children: [],
+    // @ts-expect-error
+    renderCell: () => "x",
+};
+// @ts-expect-error
+const groupWithWidth: ColumnOrGroup<Person> = {
+    key: "g",
+    width: 10,
+    children: [],
+};
+const columnWithChildren: Column<Person> = {
+    key: "c",
+    width: 10,
+    // @ts-expect-error
+    children: [],
+};
+
+void groupWithCells;
+void groupWithWidth;
+void columnWithChildren;
 void badKey;
 void wrongRow;
 void row;

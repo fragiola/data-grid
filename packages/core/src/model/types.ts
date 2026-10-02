@@ -11,6 +11,15 @@ export interface HeaderCellRenderProps<TRow, TNode = unknown> {
     readonly columnIndex: number;
 }
 
+/** What a group's header cell renderer receives. */
+export interface GroupHeaderCellRenderProps<TRow, TNode = unknown> {
+    readonly group: ColumnGroup<TRow, TNode>;
+    /** its first column's index */
+    readonly columnIndex: number;
+    /** how many columns it spans */
+    readonly columnSpan: number;
+}
+
 /** What a body cell's renderer receives: only for a loaded row. */
 export interface CellRenderProps<TRow, TNode = unknown> {
     readonly row: TRow;
@@ -44,9 +53,79 @@ export interface Column<TRow, TNode = unknown> {
         | undefined;
     /** anything the app wants to keep on the column */
     readonly meta?: Readonly<Record<string, unknown>> | undefined;
+    /** a column has no children: an entry with children is a {@link ColumnGroup} */
+    readonly children?: never;
 }
 
-/** A cell: header cells are on row -1. */
+/**
+ * Columns grouped under a header cell of their own (G1). Groups nest to any depth; their leaves,
+ * in order, are the grid's columns.
+ */
+export interface ColumnGroup<TRow, TNode = unknown> {
+    /** unique among the grid's groups and columns together */
+    readonly key: string;
+    /** the group header's text, as the app wrote it (see {@link Column.name}) */
+    readonly name?: string | undefined;
+    /** what the group's header cell shows when it is given no children */
+    readonly renderHeaderCell?:
+        | ((props: GroupHeaderCellRenderProps<TRow, TNode>) => TNode)
+        | undefined;
+    /** its columns and groups, in order: at least one column below it */
+    readonly children: readonly ColumnOrGroup<TRow, TNode>[];
+    /** anything the app wants to keep on the group */
+    readonly meta?: Readonly<Record<string, unknown>> | undefined;
+    /** a group is sized by its columns, and has no cells of its own */
+    readonly width?: never;
+    readonly getValue?: never;
+    readonly renderCell?: never;
+}
+
+/** An entry of `columns`: a column, or a group of them. */
+export type ColumnOrGroup<TRow, TNode = unknown> =
+    | Column<TRow, TNode>
+    | ColumnGroup<TRow, TNode>;
+
+/**
+ * A header cell, as the core lays it out (G3): a group spanning its columns, or a column. A column
+ * with fewer groups above it than the header has rows spans the rows down to the last (G2).
+ */
+export type HeaderCellLayout<TRow, TNode = unknown> = {
+    /** the group's or the column's key */
+    readonly key: string;
+    /** its header row: `-depth` (the top) … -1 (the columns' row); a spanning column's top row */
+    readonly rowIndex: number;
+    /** its first column's index: its position, with `rowIndex` */
+    readonly columnIndex: number;
+    readonly columnSpan: number;
+    readonly rowSpan: number;
+} & (
+    | {
+          readonly group: ColumnGroup<TRow, TNode>;
+          readonly column?: undefined;
+      }
+    | {
+          readonly column: Column<TRow, TNode>;
+          readonly group?: undefined;
+      }
+);
+
+/** The header's rows and cells, for the whole grid. */
+export interface HeaderLayout<TRow, TNode = unknown> {
+    /** how many header rows the columns need: 1 without groups, 1 + the deepest nesting with them */
+    readonly depth: number;
+    /** per header row, the top one first: the cells starting in it, in column order */
+    readonly rows: readonly (readonly HeaderCellLayout<TRow, TNode>[])[];
+    /** the cell covering a header position (a spanning column covers the rows below its top) */
+    cellAt(
+        rowIndex: number,
+        columnIndex: number,
+    ): HeaderCellLayout<TRow, TNode> | undefined;
+}
+
+/**
+ * A cell: header cells are on rows -1 and above, at their first column (a column spanning header
+ * rows is at any of its rows).
+ */
 export interface CellPosition {
     readonly rowIndex: number;
     readonly columnIndex: number;
@@ -69,26 +148,32 @@ export type RowSource<TRow> =
 
 /** The model's state: immutable, replaced on every committed command. */
 export interface DataGridState<TRow, TNode = unknown> {
+    /** the grid's columns: the leaves of `columnEntries`, in order */
     readonly columns: readonly Column<TRow, TNode>[];
+    /** the columns and groups as declared (the same array as `columns` without groups) */
+    readonly columnEntries: readonly ColumnOrGroup<TRow, TNode>[];
+    /** the header's rows and cells */
+    readonly header: HeaderLayout<TRow, TNode>;
     readonly source: RowSource<TRow>;
     readonly rowCount: number;
     readonly rowKey: RowKeyGetter<TRow> | undefined;
     readonly rowHeight: Size;
-    /** 0 for a grid without a header row */
+    /** a header row's height; 0 for a grid without a header */
     readonly headerRowHeight: number;
     readonly activePosition: CellPosition | null;
 }
 
 /** What `createDataGridModel` starts from. */
 export interface DataGridModelOptions<TRow, TNode = unknown> {
-    columns?: readonly Column<TRow, TNode>[];
+    /** the columns, and the groups above them */
+    columns?: readonly ColumnOrGroup<TRow, TNode>[];
     rows?: readonly TRow[];
     rowCount?: number;
     getRow?: (index: number) => TRow | undefined;
     rowKey?: RowKeyGetter<TRow>;
     /** a row's height in pixels, or a function of its index (default 35) */
     rowHeight?: Size;
-    /** the header row's height in pixels (default 35); 0 for no header row */
+    /** a header row's height in pixels (default 35); 0 for no header */
     headerRowHeight?: number;
     activePosition?: CellPosition | null;
 }
@@ -104,9 +189,12 @@ export type DataSetPayload<TRow> = (
 
 /** Every command: its payload and the value it returns. */
 export interface CommandMap<TRow, TNode = unknown> {
-    /** replaces the columns (keys unique, widths finite and not negative) */
+    /**
+     * replaces the columns and their groups (keys unique across both, widths finite and not
+     * negative, at least one column under every group)
+     */
     "columns.set": {
-        payload: { readonly columns: readonly Column<TRow, TNode>[] };
+        payload: { readonly columns: readonly ColumnOrGroup<TRow, TNode>[] };
         result: { readonly columnCount: number };
     };
     /** replaces where the rows come from */
@@ -122,7 +210,10 @@ export interface CommandMap<TRow, TNode = unknown> {
         };
         result: undefined;
     };
-    /** makes a cell the active one (row -1 is the header) */
+    /**
+     * makes a cell the active one (rows -1 and above are the header); a position inside a header
+     * cell's span activates that cell, at its own position
+     */
     "active-position.set": {
         payload: CellPosition;
         result: CellPosition;
@@ -132,11 +223,17 @@ export interface CommandMap<TRow, TNode = unknown> {
         payload: Record<string, never>;
         result: undefined;
     };
-    /** moves the active cell (the engine supplies `pageSize`, the rows in view) */
+    /**
+     * moves the active cell (the engine supplies `pageSize`, the rows in view, and
+     * `visibleColumns`, where a move down from a group lands)
+     */
     "active-position.move": {
         payload: {
             readonly direction: Direction;
             readonly pageSize?: number | undefined;
+            readonly visibleColumns?:
+                | { readonly start: number; readonly end: number }
+                | undefined;
         };
         result: CellPosition;
     };
@@ -239,8 +336,25 @@ export interface QueryMap<TRow, TNode = unknown> {
     };
     "column-count": { payload: undefined; result: number };
     "row-count": { payload: undefined; result: number };
-    /** 1 with a header row, 0 without */
+    /** the header's rows: its depth with a header, 0 without */
     "header-row-count": { payload: undefined; result: number };
+    /** the header rows the columns need (1 without groups), whether the header shows or not */
+    "header-depth": { payload: undefined; result: number };
+    /** the header's cells, per row (the top one first), whether the header shows or not */
+    "header-rows": {
+        payload: undefined;
+        result: readonly (readonly HeaderCellLayout<TRow, TNode>[])[];
+    };
+    /** the header cell covering a header position, or `undefined` outside the header */
+    "header-cell-by": {
+        payload: CellPosition;
+        result: HeaderCellLayout<TRow, TNode> | undefined;
+    };
+    /** the columns and groups as declared */
+    "column-entries": {
+        payload: undefined;
+        result: readonly ColumnOrGroup<TRow, TNode>[];
+    };
     /** a row by its index; `undefined` while it is not loaded */
     "row-by": { payload: { readonly index: number }; result: TRow | undefined };
     /** a row's key: `rowKey(row, index)`, or its index when there is no getter or no row yet */
@@ -262,7 +376,7 @@ export type QueryKey = keyof QueryMap<unknown>;
 
 /** What `model.is` answers. */
 export interface QuestionMap {
-    /** whether the cell is the active one */
+    /** whether the cell is the active one (a header cell spanning rows, on any of them) */
     "cell-active": CellPosition;
     /** whether the row holds the active cell */
     "row-active": { readonly rowIndex: number };

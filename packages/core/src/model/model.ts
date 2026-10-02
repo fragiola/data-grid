@@ -1,4 +1,10 @@
-import { DIRECTIONS, nextPosition } from "../navigation/navigation";
+import { columnsError, layoutColumns } from "../header/header";
+import {
+    DIRECTIONS,
+    type GridBounds,
+    nextPosition,
+    sameCell,
+} from "../navigation/navigation";
 import type {
     CellPosition,
     Column,
@@ -110,7 +116,32 @@ export function rowAt<TRow>(
 function headerRowCountOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
 ): number {
-    return state.headerRowHeight > 0 ? 1 : 0;
+    return state.headerRowHeight > 0 ? state.header.depth : 0;
+}
+
+/** What moves in the grid are bounded by: its rows, its columns and its header's cells. */
+function boundsOf<TRow, TNode>(state: DataGridState<TRow, TNode>): GridBounds {
+    return {
+        rowCount: state.rowCount,
+        columnCount: state.columns.length,
+        headerRowCount: headerRowCountOf(state),
+        headerCellAt: state.header.cellAt,
+    };
+}
+
+/**
+ * A position inside a header cell's span, as that cell's position: its first column, on the same
+ * row (a column spanning header rows has a position on each of them).
+ */
+function headerCellPosition<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    position: CellPosition,
+): CellPosition {
+    if (position.rowIndex >= 0) return position;
+    const cell = state.header.cellAt(position.rowIndex, position.columnIndex);
+    return cell && cell.columnIndex !== position.columnIndex
+        ? { rowIndex: position.rowIndex, columnIndex: cell.columnIndex }
+        : position;
 }
 
 /** The cell's value: the column's getter, or the row's property named by the key. */
@@ -157,11 +188,13 @@ function reconcile<TRow, TNode>(
     ) {
         return { ...state, activePosition: null };
     }
-    const rowIndex = Math.min(Math.max(active.rowIndex, firstRow), lastRow);
-    const columnIndex = Math.min(
-        Math.max(active.columnIndex, 0),
-        state.columns.length - 1,
-    );
+    const { rowIndex, columnIndex } = headerCellPosition(state, {
+        rowIndex: Math.min(Math.max(active.rowIndex, firstRow), lastRow),
+        columnIndex: Math.min(
+            Math.max(active.columnIndex, 0),
+            state.columns.length - 1,
+        ),
+    });
     if (rowIndex === active.rowIndex && columnIndex === active.columnIndex) {
         return state;
     }
@@ -177,30 +210,19 @@ function validSize(size: unknown): boolean {
 
 function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
     return {
-        "columns.set": (state, { columns }) => {
-            if (!Array.isArray(columns)) {
-                return fail("invalid_payload", "columns must be an array");
-            }
-            const keys = new Set<string>();
-            for (const column of columns) {
-                if (keys.has(column.key)) {
-                    return fail(
-                        "invalid_payload",
-                        `two columns have the key "${column.key}"`,
-                    );
-                }
-                keys.add(column.key);
-                if (!Number.isFinite(column.width) || column.width < 0) {
-                    return fail(
-                        "invalid_payload",
-                        `column "${column.key}" has an invalid width`,
-                    );
-                }
-            }
+        "columns.set": (state, { columns: entries }) => {
+            const error = columnsError(entries);
+            if (error) return fail("invalid_payload", error);
+            const { columns, header } = layoutColumns(entries);
             return {
                 ok: true,
                 value: {
-                    state: reconcile({ ...state, columns }),
+                    state: reconcile({
+                        ...state,
+                        columns,
+                        columnEntries: entries,
+                        header,
+                    }),
                     value: { columnCount: columns.length },
                 },
             };
@@ -270,10 +292,10 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                     `no cell at row ${payload.rowIndex}, column ${payload.columnIndex}`,
                 );
             }
-            const position = {
+            const position = headerCellPosition(state, {
                 rowIndex: payload.rowIndex,
                 columnIndex: payload.columnIndex,
-            };
+            });
             const current = state.activePosition;
             const next =
                 current?.rowIndex === position.rowIndex &&
@@ -291,7 +313,10 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                 value: undefined,
             },
         }),
-        "active-position.move": (state, { direction, pageSize }) => {
+        "active-position.move": (
+            state,
+            { direction, pageSize, visibleColumns },
+        ) => {
             if (!DIRECTIONS.includes(direction)) {
                 return fail(
                     "invalid_payload",
@@ -301,6 +326,16 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
             if (pageSize !== undefined && !Number.isFinite(pageSize)) {
                 return fail("invalid_payload", "pageSize must be a number");
             }
+            if (
+                visibleColumns !== undefined &&
+                (!Number.isInteger(visibleColumns.start) ||
+                    !Number.isInteger(visibleColumns.end))
+            ) {
+                return fail(
+                    "invalid_payload",
+                    "visibleColumns must have whole-number bounds",
+                );
+            }
             const current = state.activePosition;
             if (!current) {
                 return fail("refused", "no cell is active");
@@ -308,11 +343,7 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
             const position = nextPosition(
                 current,
                 direction,
-                {
-                    rowCount: state.rowCount,
-                    columnCount: state.columns.length,
-                    headerRowCount: headerRowCountOf(state),
-                },
+                { ...boundsOf(state), visibleColumns },
                 pageSize,
             );
             const moved =
@@ -345,8 +376,12 @@ export function createDataGridModel<TRow, TNode = unknown>(
         options.rows !== undefined || options.getRow === undefined
             ? { rows: options.rows ?? [] }
             : { rowCount: options.rowCount ?? 0, getRow: options.getRow };
+    const entries = options.columns ?? [];
+    const { columns, header } = layoutColumns(entries);
     let state: DataGridState<TRow, TNode> = reconcile({
-        columns: options.columns ?? [],
+        columns,
+        columnEntries: entries,
+        header,
         source,
         rowCount: rowCountOf(source),
         rowKey: options.rowKey,
@@ -493,6 +528,13 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "column-count": () => state.columns.length,
         "row-count": () => state.rowCount,
         "header-row-count": () => headerRowCountOf(state),
+        "header-depth": () => state.header.depth,
+        "header-rows": () => state.header.rows,
+        "header-cell-by": ({ rowIndex, columnIndex }) =>
+            rowIndex < 0 && rowIndex >= 0 - headerRowCountOf(state)
+                ? state.header.cellAt(rowIndex, columnIndex)
+                : undefined,
+        "column-entries": () => state.columnEntries,
         "row-by": ({ index }) => rowAt(state.source, index),
         "row-key-by": ({ rowIndex }) => {
             const row = rowAt(state.source, rowIndex);
@@ -515,9 +557,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
     const questions: {
         [K in QuestionKey]: (payload: QuestionMap[K]) => boolean;
     } = {
-        "cell-active": ({ rowIndex, columnIndex }) =>
-            state.activePosition?.rowIndex === rowIndex &&
-            state.activePosition.columnIndex === columnIndex,
+        "cell-active": (position) =>
+            state.activePosition !== null &&
+            sameCell(state.activePosition, position, state.header.cellAt),
         "row-active": ({ rowIndex }) =>
             state.activePosition?.rowIndex === rowIndex,
         "row-loaded": ({ rowIndex }) =>

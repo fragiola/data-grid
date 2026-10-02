@@ -2,6 +2,7 @@
 
 export { type Axis, createAxis, type Size } from "./axis/axis";
 export {
+    ariaHeaderCellSpans,
     ariaRowCount,
     ariaRowIndex,
     columnLeft,
@@ -17,9 +18,18 @@ export {
     type EngineQueryKey,
     type EngineQueryMap,
     type GridView,
+    type HeaderRowView,
+    headerCellBox,
     renderedWidth,
     rowTop,
 } from "./engine/engine";
+export {
+    type ColumnLayout,
+    columnsError,
+    headerCellsIn,
+    isColumnGroup,
+    layoutColumns,
+} from "./header/header";
 export {
     COMMANDS,
     cellValue,
@@ -34,6 +44,8 @@ export type {
     CellPosition,
     CellRenderProps,
     Column,
+    ColumnGroup,
+    ColumnOrGroup,
     CommandArgs,
     CommandContext,
     CommandContextBase,
@@ -47,7 +59,10 @@ export type {
     DataGridModelOptions,
     DataGridState,
     DataSetPayload,
+    GroupHeaderCellRenderProps,
+    HeaderCellLayout,
     HeaderCellRenderProps,
+    HeaderLayout,
     Middleware,
     PayloadArgs,
     PayloadOf,
@@ -63,7 +78,9 @@ export {
     DIRECTIONS,
     type Direction,
     type GridBounds,
+    type HeaderCellSpan,
     nextPosition,
+    sameCell,
 } from "./navigation/navigation";
 export {
     createScrollMapping,
