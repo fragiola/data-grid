@@ -569,6 +569,62 @@ describe("regressions", () => {
     });
 });
 
+describe("the viewport taking focus", () => {
+    it("hands focus to the active cell, or the first in view", () => {
+        const { model, element, render } = setup();
+        render();
+        element.tabIndex = 0;
+        element.focus();
+        expect(model.get("active-position")).toEqual({
+            rowIndex: 0,
+            columnIndex: 0,
+        });
+        render();
+        expect(document.activeElement?.getAttribute("data-row-index")).toBe(
+            "0",
+        );
+        model.run("active-position.set", { rowIndex: 3, columnIndex: 2 });
+        render();
+        element.focus();
+        expect(document.activeElement?.getAttribute("data-row-index")).toBe(
+            "3",
+        );
+    });
+});
+
+describe("focus that should not activate", () => {
+    it("ignores a click on the viewport's empty space", () => {
+        const { model, element, render } = setup();
+        render();
+        element.tabIndex = -1;
+        element.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        element.focus();
+        expect(model.get("active-position")).toBeNull();
+        document.dispatchEvent(new Event("pointerup"));
+    });
+
+    it("leaves no focus pending when the first cell is refused", () => {
+        const { model, element, render, grid } = setup();
+        const input = document.createElement("input");
+        document.body.append(input);
+        render();
+        const remove = model.use((ctx, next) =>
+            ctx.command === "active-position.set"
+                ? { ok: false, error: { code: "vetoed", message: "no" } }
+                : next(),
+        );
+        grid.tabIndex = 0;
+        grid.focus();
+        remove();
+        input.focus();
+        // a later change from code does not pull focus out of the field
+        model.run("active-position.set", { rowIndex: 1, columnIndex: 1 });
+        render();
+        expect(document.activeElement).toBe(input);
+        void element;
+    });
+});
+
 describe("events and keys", () => {
     it("never leaves keydown to a global listener: keys reach it through the adapter", () => {
         const { model, element } = setup();

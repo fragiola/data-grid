@@ -25,6 +25,9 @@ export {
     cellValue,
     createDataGridModel,
     type DataGridModel,
+    DEFAULT_HEADER_ROW_HEIGHT,
+    DEFAULT_ROW_HEIGHT,
+    rowAt,
     veto,
 } from "./model/model";
 export type {

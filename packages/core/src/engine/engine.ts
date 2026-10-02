@@ -257,6 +257,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** physical scroll positions waiting for the sizer to have its new size (applied on commit) */
     let pendingScroll: { top?: number; left?: number } = {};
     let pendingFocus = false;
+    /** focus was in the grid when a new view went out to render */
+    let focusBeforeRender = false;
+    /** a pointer is down in the viewport: focus it causes is a click, not a Tab */
+    let pointerDown = false;
     const viewListeners = new Set<() => void>();
     const eventListeners: {
         [K in EngineEventKey]: Set<(value: EngineEventMap[K]) => void>;
@@ -394,6 +398,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // the visible ranges moving inside the rendered ones keep the same view: nothing renders
         if (viewChanged(next)) {
             view = next;
+            // a render may remove the focused cell (a row remounting as it loads): commit restores it
+            focusBeforeRender ||= focusInside();
             for (const listener of [...viewListeners]) listener();
         }
         writeLayers();
@@ -609,6 +615,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return { rowIndex, columnIndex };
     }
 
+    function onPointerDown() {
+        pointerDown = true;
+        viewport?.ownerDocument.addEventListener(
+            "pointerup",
+            () => {
+                pointerDown = false;
+            },
+            { once: true, capture: true },
+        );
+    }
+
     function onFocusIn(event: FocusEvent) {
         const cell = cellOf(event.target);
         if (cell) {
@@ -621,13 +638,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
             return;
         }
-        // the grid itself took focus (Tab into a grid with no active cell): start in view
-        if (event.target === layers.grid && !state.activePosition) {
-            const first = firstVisibleCell();
-            if (first) {
-                pendingFocus = true;
-                model.run("active-position.set", first);
-            }
+        // the grid or the scroll container itself took focus (Tab into the grid; Firefox makes a
+        // scroll container a tab stop): hand it to the active cell, or the first in view
+        if (event.target !== layers.grid && event.target !== viewport) return;
+        // a click on empty space focuses the container: that is no reason to activate a cell
+        if (pointerDown) return;
+        pendingFocus = true;
+        if (state.activePosition) {
+            flushFocus();
+            return;
+        }
+        const first = firstVisibleCell();
+        // refused (a middleware, a controlled parent): nothing to focus
+        if (!first || !model.run("active-position.set", first).ok) {
+            pendingFocus = false;
         }
     }
 
@@ -648,8 +672,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         pendingFocus = true;
         if (!state.activePosition) {
             const first = firstVisibleCell();
-            if (first) model.run("active-position.set", first);
-            else pendingFocus = false;
+            if (!first || !model.run("active-position.set", first).ok) {
+                pendingFocus = false;
+            }
             return true;
         }
         const visible = rowWindow.visible.end - rowWindow.visible.start;
@@ -713,6 +738,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("wheel", onWheel, { passive: false });
             element.addEventListener("focusin", onFocusIn);
+            element.addEventListener("pointerdown", onPointerDown, {
+                capture: true,
+            });
             // the real mappings first, so a scroll already set (restored) is read, not reset
             rowsY.mapping = createScrollMapping(
                 rowAxis.totalSize,
@@ -736,6 +764,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 element.removeEventListener("scroll", onScroll);
                 element.removeEventListener("wheel", onWheel);
                 element.removeEventListener("focusin", onFocusIn);
+                element.removeEventListener("pointerdown", onPointerDown, {
+                    capture: true,
+                });
                 if (viewport === element) {
                     // the committed view stays: a re-attach (StrictMode) shows the same layers
                     viewport = null;
@@ -765,6 +796,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         },
         commit(rendered) {
             committed = rendered;
+            if (focusBeforeRender && state.activePosition) {
+                const focused = viewport?.ownerDocument.activeElement;
+                // the focused cell was removed by the render: focus fell to the document
+                if (!focused || focused === viewport?.ownerDocument.body) {
+                    pendingFocus = true;
+                }
+            }
+            focusBeforeRender = false;
             const moves = pendingScroll;
             pendingScroll = {};
             if (moves.top !== undefined || moves.left !== undefined) {

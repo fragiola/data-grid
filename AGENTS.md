@@ -60,9 +60,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    both axes alike.
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
    the layers' offsets imperatively; React never reconciles what the engine writes.
-10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, width, getValue?,
-    renderHeaderCell?, renderCell?, meta? }`; a cell renders its column's renderer when it has no
-    children. No column helper, no feature registry, no `flexRender`.
+10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
+    renderHeaderCell?, renderCell?, meta? }`. Without children, a header cell renders
+    `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
+    up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
+    no feature registry, no `flexRender`.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
@@ -154,8 +156,13 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
-- **Hooks have one shape.** `useDataGrid()` is `{ model, engine }`; a part hook returns
-  `{ state, props }`.
+- **Hooks have one shape.** `useDataGrid()` is `{ model, engine }`; a part hook (`useRow`,
+  `useCell`, `useHeaderCell`) returns `{ state, props }`, the structural style in `props.style`.
+- **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
+  consumer's `onKeyDown`, and a cell's `onKeyDown` runs before both (bubbling): `preventDefault`
+  in either cancels a grid key.
+- **The root is no tab stop** (`tabIndex={-1}`, some browsers make a scroll container one): the
+  grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.
 
 ## Site

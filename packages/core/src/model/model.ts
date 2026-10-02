@@ -27,8 +27,10 @@ import type {
 // command through the middleware chain; reads are `get`/`is` keys. It loads and runs in plain
 // Node: no DOM, no framework.
 
-const DEFAULT_ROW_HEIGHT = 35;
-const DEFAULT_HEADER_ROW_HEIGHT = 35;
+/** A row's height when none is given. */
+export const DEFAULT_ROW_HEIGHT = 35;
+/** The header row's height when none is given. */
+export const DEFAULT_HEADER_ROW_HEIGHT = 35;
 
 /** The grid's model. */
 export interface DataGridModel<TRow, TNode = unknown> {
@@ -95,7 +97,11 @@ function rowCountOf<TRow>(source: RowSource<TRow>): number {
     return "rows" in source ? source.rows.length : source.rowCount;
 }
 
-function rowOf<TRow>(source: RowSource<TRow>, index: number): TRow | undefined {
+/** The row at `index` of a source, or `undefined` while it is not loaded. */
+export function rowAt<TRow>(
+    source: RowSource<TRow>,
+    index: number,
+): TRow | undefined {
     if (!Number.isInteger(index) || index < 0) return undefined;
     if ("rows" in source) return source.rows[index];
     return index < source.rowCount ? source.getRow(index) : undefined;
@@ -487,15 +493,15 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "column-count": () => state.columns.length,
         "row-count": () => state.rowCount,
         "header-row-count": () => headerRowCountOf(state),
-        "row-by": ({ index }) => rowOf(state.source, index),
+        "row-by": ({ index }) => rowAt(state.source, index),
         "row-key-by": ({ rowIndex }) => {
-            const row = rowOf(state.source, rowIndex);
+            const row = rowAt(state.source, rowIndex);
             return row !== undefined && state.rowKey
                 ? state.rowKey(row, rowIndex)
                 : rowIndex;
         },
         "cell-value-by": ({ rowIndex, columnIndex }) => {
-            const row = rowOf(state.source, rowIndex);
+            const row = rowAt(state.source, rowIndex);
             const column = state.columns[columnIndex];
             return row !== undefined && column
                 ? cellValue(column, row, rowIndex)
@@ -515,7 +521,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "row-active": ({ rowIndex }) =>
             state.activePosition?.rowIndex === rowIndex,
         "row-loaded": ({ rowIndex }) =>
-            rowOf(state.source, rowIndex) !== undefined,
+            rowAt(state.source, rowIndex) !== undefined,
     };
 
     const model: DataGridModel<TRow, TNode> = {

@@ -25,6 +25,11 @@ export interface CellRenderProps<TRow, TNode = unknown> {
 export interface Column<TRow, TNode = unknown> {
     /** unique among the grid's columns */
     readonly key: string;
+    /**
+     * the header's text, as the app wrote it: what a header cell shows when it has no children
+     * and the column no `renderHeaderCell` (the packages never translate or invent one)
+     */
+    readonly name?: string | undefined;
     /** in pixels */
     readonly width: number;
     /** the cell's value; without one, `row[key]` */
