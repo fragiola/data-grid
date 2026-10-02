@@ -367,7 +367,7 @@ interface Queued {
     payload: unknown;
 }
 
-/** Creates a grid's model. */
+/** Creates a grid's model. It throws when the columns are invalid (see `columns.set`). */
 export function createDataGridModel<TRow, TNode = unknown>(
     options: DataGridModelOptions<TRow, TNode> = {},
 ): DataGridModel<TRow, TNode> {
@@ -377,6 +377,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
             ? { rows: options.rows ?? [] }
             : { rowCount: options.rowCount ?? 0, getRow: options.getRow };
     const entries = options.columns ?? [];
+    // the same rules as `columns.set`: a grid never starts with columns it would refuse
+    const error = columnsError(entries);
+    if (error) throw new TypeError(`invalid columns: ${error}`);
     const { columns, header } = layoutColumns(entries);
     let state: DataGridState<TRow, TNode> = reconcile({
         columns,

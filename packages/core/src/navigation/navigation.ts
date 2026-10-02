@@ -102,22 +102,21 @@ export function nextPosition(
     const stay = at(position.rowIndex, position.columnIndex);
     const top = here.rowIndex;
     const bottom = here.rowIndex + here.rowSpan - 1;
+    /** where a move down from a group lands: its first column in view, else its first column */
+    const columnBelow = () => {
+        const visible = bounds.visibleColumns;
+        const end = here.columnIndex + here.columnSpan;
+        return visible &&
+            visible.start > here.columnIndex &&
+            visible.start < end
+            ? visible.start
+            : here.columnIndex;
+    };
     switch (direction) {
         case "up":
             return top - 1 < firstRow ? stay : at(top - 1, here.columnIndex);
-        case "down": {
-            if (bottom + 1 > lastRow) return stay;
-            // from a group: its first column in view, else its first column
-            const visible = bounds.visibleColumns;
-            const end = here.columnIndex + here.columnSpan;
-            const columnIndex =
-                visible &&
-                visible.start > here.columnIndex &&
-                visible.start < end
-                    ? visible.start
-                    : here.columnIndex;
-            return at(bottom + 1, columnIndex);
-        }
+        case "down":
+            return bottom + 1 > lastRow ? stay : at(bottom + 1, columnBelow());
         case "left":
             return here.columnIndex - 1 < 0
                 ? stay
@@ -140,7 +139,7 @@ export function nextPosition(
                 ? stay
                 : at(Math.max(stay.rowIndex - page, 0), here.columnIndex);
         case "page-down":
-            return at(bottom + page, here.columnIndex);
+            return at(bottom + page, columnBelow());
     }
 }
 

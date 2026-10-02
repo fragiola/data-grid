@@ -18,12 +18,14 @@ function groupEdges(page: Page) {
             ),
         ].map((group) => {
             const start = Number(group.getAttribute("data-column-index"));
+            // every group here spans several columns: a missing span fails below
             const span = Number(group.getAttribute("aria-colspan"));
             const box = group.getBoundingClientRect();
             const first = header(start)?.getBoundingClientRect();
             const last = header(start + span - 1)?.getBoundingClientRect();
             return {
                 name: group.textContent,
+                span,
                 left: first ? first.left - box.left : null,
                 right: last ? last.right - box.right : null,
                 below: first ? first.top - box.bottom : null,
@@ -42,6 +44,7 @@ test("a group stays over its columns while they scroll sideways", async ({
         const groups = await groupEdges(page);
         expect(groups.length, `at ${left}`).toBeGreaterThan(0);
         for (const group of groups) {
+            expect(group.span, group.name ?? "").toBeGreaterThan(1);
             if (group.left === null || group.right === null) cut++;
             for (const edge of [group.left, group.right, group.below]) {
                 if (edge !== null) {

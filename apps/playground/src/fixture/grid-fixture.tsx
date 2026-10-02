@@ -3,6 +3,7 @@ import {
     type ColumnOrGroup,
     DataGrid,
     type DataGridContextValue,
+    type HeaderRowInfo,
     useDataGrid,
 } from "@fragiola/data-grid-react";
 import { Profiler, StrictMode, useMemo } from "react";
@@ -70,6 +71,28 @@ const EMPTY_CONTENT = {
     placeItems: "center",
 } as const;
 
+/** A header row of the fixture: `row` from `HeaderRows`, or the columns' row without one. */
+function HeaderRow({
+    table,
+    row,
+}: {
+    table: boolean;
+    row?: HeaderRowInfo<FixtureRow>;
+}) {
+    return (
+        <DataGrid.HeaderRow row={row} render={table ? <tr /> : undefined}>
+            <DataGrid.HeaderCells<FixtureRow>>
+                {(cell) => (
+                    <DataGrid.HeaderCell
+                        cell={cell}
+                        render={table ? <th /> : undefined}
+                    />
+                )}
+            </DataGrid.HeaderCells>
+        </DataGrid.HeaderRow>
+    );
+}
+
 function Fixture({ kind }: { kind: "table" | "div" }) {
     const params = new URLSearchParams(location.search);
     const rowCount = numberParam(params, "rows", 1_000);
@@ -131,27 +154,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                             render={table ? <thead /> : undefined}
                             style={{ background: "white", zIndex: 1 }}
                         >
-                            <DataGrid.HeaderRows<FixtureRow>>
-                                {(row) => (
-                                    <DataGrid.HeaderRow
-                                        row={row}
-                                        render={table ? <tr /> : undefined}
-                                    >
-                                        <DataGrid.HeaderCells<FixtureRow>>
-                                            {(cell) => (
-                                                <DataGrid.HeaderCell
-                                                    cell={cell}
-                                                    render={
-                                                        table ? (
-                                                            <th />
-                                                        ) : undefined
-                                                    }
-                                                />
-                                            )}
-                                        </DataGrid.HeaderCells>
-                                    </DataGrid.HeaderRow>
-                                )}
-                            </DataGrid.HeaderRows>
+                            {groups ? (
+                                // a header row per level
+                                <DataGrid.HeaderRows<FixtureRow>>
+                                    {(row) => (
+                                        <HeaderRow table={table} row={row} />
+                                    )}
+                                </DataGrid.HeaderRows>
+                            ) : (
+                                // without groups, the single header row (the markup most grids use)
+                                <HeaderRow table={table} />
+                            )}
                         </DataGrid.Header>
                         <DataGrid.Body render={table ? <tbody /> : undefined}>
                             <DataGrid.Rows<FixtureRow>>

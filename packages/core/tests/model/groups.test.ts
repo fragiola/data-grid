@@ -71,6 +71,17 @@ describe("columns with groups", () => {
         expect(model.get("columns")).toBe(next);
     });
 
+    it("refuses to start with columns it would not set", () => {
+        expect(() =>
+            createDataGridModel<Row>({
+                columns: [{ key: "x", children: [leaf("x")] }],
+            }),
+        ).toThrow(/invalid columns: two columns or groups have the key "x"/);
+        expect(() =>
+            createDataGridModel<Row>({ columns: [{ key: "g", children: [] }] }),
+        ).toThrow(/"g" has no column/);
+    });
+
     it("sets groups, and refuses a key used by a group and a column", () => {
         const model = createDataGridModel<Row>({ columns: [leaf("a")], rows });
         expect(model.run("columns.set", { columns: TREE })).toEqual({

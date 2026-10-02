@@ -362,6 +362,8 @@ describe("moving across header rows (column groups)", () => {
         // a view starting before the group, or after it: the group's first column
         expect(nextPosition(G4, "down", inView(0))).toEqual(E);
         expect(nextPosition(G2, "down", inView(4))).toEqual(B);
+        // and so does a page down, into the body
+        expect(nextPosition(G1, "page-down", inView(3), 5)).toEqual(at(2, 3));
     });
 
     it("moves from a position inside a span as from that cell", () => {

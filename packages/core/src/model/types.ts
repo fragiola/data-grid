@@ -376,7 +376,10 @@ export type QueryKey = keyof QueryMap<unknown>;
 
 /** What `model.is` answers. */
 export interface QuestionMap {
-    /** whether the cell is the active one (a header cell spanning rows, on any of them) */
+    /**
+     * whether the cell is the active one: for a header cell, any position inside its span (a
+     * group's columns, a column's rows)
+     */
     "cell-active": CellPosition;
     /** whether the row holds the active cell */
     "row-active": { readonly rowIndex: number };

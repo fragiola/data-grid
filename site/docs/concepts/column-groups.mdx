@@ -4,7 +4,7 @@ description: Group columns under header cells of their own, nested to any depth,
 ---
 
 A column group is a header cell over the columns below it: "Person" over "Name" and "Email". Groups
-are declared in `columns`, as RDG does, and nest to any depth. Their columns, in order, are the
+are declared in `columns`, and nest to any depth. Their columns, in order, are the
 grid's columns: rows, cells, column windows and the keyboard in the body do not change.
 
 <Example id="grouped-headers" />
@@ -32,7 +32,8 @@ const columns: ColumnOrGroup<Person>[] = [
 ```
 
 Keys are unique across groups and columns together, and every group holds at least one column:
-`columns.set` refuses anything else. A group's `renderHeaderCell` receives the group, its first
+the model refuses anything else (it throws when created with such columns, and `columns.set`
+fails). A group's `renderHeaderCell` receives the group, its first
 column's index and how many columns it spans.
 
 ## Header rows
@@ -90,7 +91,8 @@ active. See [Keyboard and accessibility](/docs/concepts/keyboard).
 
 `aria-rowcount` counts every header row, and `aria-rowindex` numbers them first, from 1. A group
 cell carries `aria-colspan`, a column spanning rows `aria-rowspan`; `aria-colindex` is the first
-column's, 1-based. Rendered as a `<th>`, a header cell also gets `colSpan` and `rowSpan`.
+column's, 1-based. Rendered with `render={<th />}`, a header cell also gets `colSpan` and
+`rowSpan`; a render function finds them in the state (`columnSpan`, `rowSpan`).
 
 ## Styling
 

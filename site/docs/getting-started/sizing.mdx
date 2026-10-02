@@ -30,7 +30,9 @@ A new `rowHeight` function means new sizes: every offset is computed again. Defi
 component or memoise it (`useCallback`), and pass a new one only when heights change.
 </Callout>
 
-`headerRowHeight` is the header row's height (35 by default); `0` renders no header.
+`headerRowHeight` is a header row's height (35 by default): with
+[column groups](/docs/concepts/column-groups), the header is that times its rows. `0` renders no
+header.
 
 ## Columns
 
