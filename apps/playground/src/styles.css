@@ -1,0 +1,30 @@
+/* The examples' stylesheet stack is examples/react's: the Fragiola base and palettes, the five
+   example themes, and the `@source` lines that reach the examples and the vendored Fragiola UI.
+   Imported, not re-listed. */
+@import "../../../examples/react/src/embed/styles.css";
+
+/* The shell. e2e/shell.spec.ts checks computed colours, so a class that compiled to nothing
+   fails there instead of silently. */
+@source "./";
+
+/* The shell's palette: Fragiola's surface values, under a name no example theme overrides. The
+   example theme is on <body> (it must be, for the popups an example portals into <body>), and
+   each theme restyles `.palette-surface` and the other example palettes
+   inside it; the shell keeps the page's light/dark look whatever the example theme. */
+:root[data-theme="light"] .palette-shell {
+    --palette-base: oklch(1 0 0);
+    --palette-soft: oklch(0.96 0.003 250);
+    --palette-line: oklch(0.86 0.004 250);
+    --palette-contrast: oklch(0.15 0.01 250);
+    --palette-accent: oklch(0.3 0.01 250);
+    --palette-ring: var(--palette-accent);
+}
+
+:root[data-theme="dark"] .palette-shell {
+    --palette-base: oklch(0.15 0.01 250);
+    --palette-soft: oklch(0.26 0.012 250);
+    --palette-line: oklch(0.31 0.012 250);
+    --palette-contrast: oklch(0.95 0.005 250);
+    --palette-accent: oklch(0.88 0.005 250);
+    --palette-ring: var(--palette-accent);
+}

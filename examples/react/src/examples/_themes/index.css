@@ -1,0 +1,8 @@
+/* The five example themes. Imported by app/globals.css after the Fragiola
+   palettes, which is what lets a theme's palette rules win the tie. */
+
+@import "./light.css";
+@import "./dark.css";
+@import "./ide.css";
+@import "./paper.css";
+@import "./terminal.css";

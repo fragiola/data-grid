@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <!-- An example is a fragment of a page, not a page for search engines (contract v1.2, §5.1) -->
+        <meta name="robots" content="noindex" />
+        <title>Data Grid examples</title>
+    </head>
+    <body>
+        <!-- The stage. The example theme goes on <body> before the first paint (vite.shared.ts) -->
+        <div
+            id="root"
+            data-testid="stage"
+            class="palette-surface grid h-full bg-palette-base text-palette-contrast [grid-template:minmax(0,1fr)/minmax(0,1fr)]"
+        ></div>
+        <script type="module" src="/src/embed/main.tsx"></script>
+    </body>
+</html>

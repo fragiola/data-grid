@@ -1,0 +1,125 @@
+/* Theme "ide" — A dense data table for a code editor: small type, monospaced numbers, zebra rows, square corners.
+
+   One file per theme, selected by data-example-theme="ide" on any element
+   (the docs put it on <body>, as an app would). A theme only sets values; it styles
+   no markup. It declares:
+     1. shape tokens (--dg-*) that the examples' class names read: fonts and sizes
+        (--dg-font, --dg-font-size, --dg-numeric-font), the cell padding (--dg-cell-padding),
+        the grid's frame (--dg-radius, --dg-border, --dg-shadow), the lines between cells
+        (--dg-gridline), the header's type (--dg-header-weight, --dg-header-transform,
+        --dg-header-tracking), the active cell's outline (--dg-active-width,
+        --dg-active-style), striped rows on or off (--dg-zebra: 1 or 0) and motion
+        (--dg-motion);
+     2. the Fragiola palettes the examples use, each with all SIX roles
+        (base, soft, line, contrast, accent, ring). A palette that omitted one
+        would inherit it from the page and leak across the theme boundary;
+     3. on every palette, the colour tokens that depend on it: the header
+        (--dg-header-bg), striped and hovered rows (--dg-row-alt-bg, --dg-row-hover-bg),
+        the lines (--dg-gridline-color), the active cell (--dg-active-line) and the
+        placeholder of a row still loading (--dg-loading-bg). They are declared per palette
+        so that var(--palette-…) resolves against the palette the element sits in.
+
+   Specificity: the palette rules are ":root [data-example-theme="ide"] .palette-x", which ties
+   with Fragiola's own ":root[data-theme] .palette-x" and wins by coming
+   later in the cascade, so a theme overrides the page's light/dark. */
+
+[data-example-theme="ide"] {
+    color-scheme: dark;
+    --palette-state-shift: 0.1;
+    --dg-font: var(--font-sans);
+    --dg-font-size: 0.75rem;
+    --dg-numeric-font:
+        ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --dg-cell-padding: 0.5rem;
+    --dg-radius: 0px;
+    --dg-border: 1px;
+    --dg-shadow: none;
+    --dg-gridline: 1px;
+    --dg-header-weight: 500;
+    --dg-header-transform: none;
+    --dg-header-tracking: 0;
+    --dg-active-width: 1px;
+    --dg-active-style: solid;
+    --dg-zebra: 1;
+    --dg-motion: 0ms;
+}
+
+:root [data-example-theme="ide"] .palette-surface,
+:root [data-example-theme="ide"].palette-surface {
+    --palette-base: oklch(0.2 0.006 260);
+    --palette-soft: oklch(0.26 0.008 260);
+    --palette-line: oklch(0.32 0.008 260);
+    --palette-contrast: oklch(0.9 0.005 260);
+    --palette-accent: oklch(0.82 0.006 260);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] .palette-raised,
+:root [data-example-theme="ide"].palette-raised {
+    --palette-base: oklch(0.235 0.006 260);
+    --palette-soft: oklch(0.19 0.006 260);
+    --palette-line: oklch(0.32 0.008 260);
+    --palette-contrast: oklch(0.92 0.005 260);
+    --palette-accent: oklch(0.8 0.006 260);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] .palette-blue,
+:root [data-example-theme="ide"].palette-blue {
+    --palette-base: oklch(0.55 0.16 245);
+    --palette-soft: oklch(0.3 0.08 245);
+    --palette-line: oklch(0.42 0.1 245);
+    --palette-contrast: oklch(0.99 0 0);
+    --palette-accent: oklch(0.75 0.13 245);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] .palette-orange,
+:root [data-example-theme="ide"].palette-orange {
+    --palette-base: oklch(0.72 0.15 60);
+    --palette-soft: oklch(0.3 0.07 60);
+    --palette-line: oklch(0.42 0.09 60);
+    --palette-contrast: oklch(0.18 0.03 60);
+    --palette-accent: oklch(0.8 0.13 60);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] .palette-green,
+:root [data-example-theme="ide"].palette-green {
+    --palette-base: oklch(0.68 0.15 150);
+    --palette-soft: oklch(0.3 0.07 150);
+    --palette-line: oklch(0.42 0.09 150);
+    --palette-contrast: oklch(0.15 0.03 150);
+    --palette-accent: oklch(0.76 0.13 150);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] .palette-danger,
+:root [data-example-theme="ide"].palette-danger {
+    --palette-base: oklch(0.66 0.18 25);
+    --palette-soft: oklch(0.3 0.08 25);
+    --palette-line: oklch(0.42 0.1 25);
+    --palette-contrast: oklch(0.14 0.03 25);
+    --palette-accent: oklch(0.76 0.15 25);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] .palette-purple,
+:root [data-example-theme="ide"].palette-purple {
+    --palette-base: oklch(0.68 0.16 300);
+    --palette-soft: oklch(0.3 0.08 300);
+    --palette-line: oklch(0.42 0.1 300);
+    --palette-contrast: oklch(0.14 0.03 300);
+    --palette-accent: oklch(0.78 0.14 300);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="ide"] [class*="palette-"],
+:root [data-example-theme="ide"][class*="palette-"] {
+    --dg-header-bg: var(--palette-soft);
+    --dg-row-alt-bg: oklch(from var(--palette-soft) l c h / 0.45);
+    --dg-row-hover-bg: var(--palette-soft);
+    --dg-gridline-color: var(--palette-line);
+    --dg-active-line: oklch(0.55 0.16 245);
+    --dg-loading-bg: var(--palette-soft);
+}

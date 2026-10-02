@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  # the site's examples (fragiola.com): one embed app per framework
+  - "examples/*"
+# Dependencies allowed to run install scripts. pnpm 11 refuses an ignored
+# build script in CI (ERR_PNPM_IGNORED_BUILDS). `allowBuilds` is the pnpm 11
+# key; `onlyBuiltDependencies` was its predecessor.
+allowBuilds:
+  esbuild: true
+verifyDepsBeforeRun: false

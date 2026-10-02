@@ -1,0 +1,56 @@
+{
+    "name": "@fragiola/data-grid-react",
+    "version": "0.0.0",
+    "description": "Composable, unstyled React primitives for @fragiola/data-grid: render the grid as a table, as divs, or as anything else.",
+    "license": "MIT",
+    "type": "module",
+    "author": {
+        "name": "Mauro de Souza",
+        "email": "maurodesouza.me@gmail.com",
+        "url": "https://github.com/maurodesouza"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/fragiola/data-grid.git",
+        "directory": "packages/react"
+    },
+    "homepage": "https://fragiola.com/data-grid",
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "development": "./src/index.ts",
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "dist",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsdown",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@fragiola/data-grid": "workspace:*"
+    },
+    "peerDependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+        "@testing-library/dom": "10.4.2",
+        "@testing-library/jest-dom": "7.0.1",
+        "@testing-library/react": "16.3.3",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "jsdom": "30.1.1",
+        "react": "19.3.0",
+        "react-dom": "19.3.0",
+        "tsdown": "0.23.0",
+        "typescript": "7.0.2",
+        "vitest": "5.0.2"
+    }
+}

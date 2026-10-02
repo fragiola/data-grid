@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+packages/*/dist
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Env files (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+
+# Local worktrees
+.worktrees/
