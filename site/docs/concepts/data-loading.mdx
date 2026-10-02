@@ -29,20 +29,33 @@ represents every row from the start; `getRow` answers the row, or `undefined` wh
 loaded. A row not loaded keeps its place and renders with `data-loading`, so you can draw a
 placeholder.
 
-Load what `onRowWindowChange` reports, and pass a **new** `getRow` when rows arrive: the grid
-renders them in place.
+Load what `onRowWindowChange` reports. When rows arrive, tell the grid which with
+`rows.changed`, through a [`gridRef`](/docs/concepts/model-and-engine#from-outside-the-root):
+`getRow` stays the same function, and the grid renders again only when the rows that arrived are
+on screen. Rows that land far from the view cost nothing.
 
 ```tsx title="windowed.tsx"
-const version = useSyncExternalStore(cache.subscribe, () => cache.version);
-const getRow = useMemo(() => (index: number) => cache.get(index), [cache, version]);
+const gridRef = useDataGridRef<Person>();
+// the cache tells which rows each block brought
+useEffect(
+    () =>
+        cache.subscribe((range) =>
+            gridRef.current?.model.run("rows.changed", range),
+        ),
+    [cache, gridRef],
+);
 
 <DataGrid.Root
     rowCount={1_000_000}
-    getRow={getRow}
+    getRow={cache.get}
+    gridRef={gridRef}
     onRowWindowChange={({ rendered }) => cache.ensure(rendered.start, rendered.end)}
     …
 />
 ```
+
+`rows.changed` takes `{ start, end }` (end excluded), either bound alone, or nothing for every
+row. Passing a new `getRow` still works too, and renders the grid each time.
 
 Wait for the scroll to settle before loading (a short timeout): a thumb dragged across the
 dataset then asks only for where it stops. See the [`windowed-loading`](/examples/windowed-loading)

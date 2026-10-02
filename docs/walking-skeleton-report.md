@@ -86,9 +86,9 @@ so only the prop moves it; `useDataGrid().model.run` drives the same state.
 | --- | --- | --- | --- |
 | 1 | **Pinned columns**: the row-number column of `large-dataset` scrolls away. | None. | Columns Epic |
 | 2 | The **header needs a background and a `z-index`** to cover the rows. | `z-10 bg-palette-base` on `Header`. | Documented; by design (stacking is the consumer's) |
-| 3 | Rows loaded by window render only when **`getRow` changes**. | A `getRow` memoised on the cache's version (with a lint suppression). | Consider a `rows.changed` command or a revision prop |
-| 4 | A component outside the grid that shows its **windows** re-renders the grid when its state lives in the grid's parent. | `_kit/store.ts`, written by the callbacks. | Consider window hooks usable outside `Root` (a `DataGrid.Provider`) |
-| 5 | No per-column **alignment** hint (numeric columns). | `justify-end` on the cells' classes. | Columns Epic (`meta` or an `align` field) |
+| 3 | Rows loaded by window render only when **`getRow` changes**. | A `getRow` memoised on the cache's version (with a lint suppression). | Done in Epic #23: `rows.changed` |
+| 4 | A component outside the grid that shows its **windows** re-renders the grid when its state lives in the grid's parent. | `_kit/store.ts`, written by the callbacks. | Done in Epic #23: `gridRef` and the hooks that take it |
+| 5 | No per-column **alignment** hint (numeric columns). | `justify-end` on the cells' classes. | Settled in Epic #23: app policy, `meta` read in the cells' classes (guide "Column alignment") |
 | 6 | A **placeholder** for a row not loaded is the app's. | Cell children when `!cell.loaded`. | By design (D6) |
 
 ## 4. Decisions taken while building

@@ -24,9 +24,9 @@ Everything has the same verbs, each taking a key and a payload:
 | `use` | adds a middleware |
 | `subscribe` | listens to every committed command |
 
-The commands of this version are `columns.set`, `data.set`, `sizes.set`, `active-position.set`,
-`active-position.clear` and `active-position.move`. A command never throws on bad input: it
-returns `{ ok: false, error }`.
+The commands of this version are `columns.set`, `data.set`, `rows.changed`, `sizes.set`,
+`active-position.set`, `active-position.clear` and `active-position.move`. A command never
+throws on bad input: it returns `{ ok: false, error }`.
 
 ```ts title="middleware.ts"
 import { veto } from "@fragiola/data-grid";
@@ -52,6 +52,57 @@ the verbs: `engine.get("row-window")`, `engine.run("scroll-to-cell", { rowIndex:
 `rows` (or `rowCount` and `getRow`) becomes `data.set`, `activePosition` becomes
 `active-position.set`. `useDataGrid()` returns `{ model, engine }` to any part inside it, so an
 app can read and drive the same grid from code.
+
+## From outside the root
+
+A toolbar, a status bar or a data cache usually lives beside the grid, not inside it. Give the
+root a `gridRef` from `useDataGridRef()`: it is the root's model and engine while the root is
+mounted, and `null` otherwise. `ref` stays the root's element.
+
+```tsx title="status-bar.tsx"
+import {
+    DataGrid,
+    type DataGridRef,
+    useDataGridRef,
+    useRowWindow,
+} from "@fragiola/data-grid-react";
+
+function StatusBar({ gridRef }: { gridRef: DataGridRef<Person> }) {
+    // re-renders this component when the rows in view change, never the grid
+    const { visible } = useRowWindow(gridRef);
+    return (
+        <p>
+            Rows {visible.start + 1}–{visible.end}
+        </p>
+    );
+}
+
+export function People() {
+    const gridRef = useDataGridRef<Person>();
+    return (
+        <>
+            <StatusBar gridRef={gridRef} />
+            <button
+                type="button"
+                onClick={() =>
+                    gridRef.current?.engine.run("scroll-to-cell", { rowIndex: 0 })
+                }
+            >
+                Back to the top
+            </button>
+            <DataGrid.Root columns={columns} rows={people} gridRef={gridRef}>
+                {/* … */}
+            </DataGrid.Root>
+        </>
+    );
+}
+```
+
+Unlike a plain ref, a `gridRef` tells when a root takes or releases it, so the hooks that take
+one follow the grid from anywhere: `useDataGrid(gridRef)` (`{ model, engine }`, or `null` until
+a root holds it), `useRowWindow(gridRef)` and `useColumnWindow(gridRef)` (the empty window
+until then). Only the component calling them re-renders. A `gridRef` belongs to one mounted root
+at a time. The [`large-dataset`](/examples/large-dataset) example shows its windows this way.
 
 ## Controlled or not
 

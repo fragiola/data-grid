@@ -1,0 +1,55 @@
+---
+title: Column alignment
+description: Line numbers up on the right and text on the left, with a hint you keep on the column and your own classes.
+---
+
+The grid ships no styles, so it has no alignment of its own: a cell is laid out by your classes.
+When every column holds the same kind of value, one class on every cell is enough. When text and
+numbers share a grid, keep the hint on the column, in `meta`, and read it where you style the
+cell.
+
+## A hint on the column
+
+`meta` is the column's own bag: the grid never reads it. Name the hint as you like.
+
+```tsx title="columns.tsx"
+const columns: Column<Order>[] = [
+    { key: "customer", name: "Customer", width: 200 },
+    { key: "items", name: "Items", width: 90, meta: { align: "end" } },
+    { key: "total", name: "Total", width: 120, meta: { align: "end" } },
+];
+```
+
+## Read it where you style
+
+A cell and a header cell both know their column, so both can follow the hint and the numbers sit
+under their header.
+
+```tsx title="orders.tsx"
+const end = (column: Column<Order>) => column.meta?.align === "end";
+
+<DataGrid.HeaderCells<Order>>
+    {(cell) => (
+        <DataGrid.HeaderCell
+            cell={cell}
+            className={cn("flex items-center", cell.column && end(cell.column) && "justify-end")}
+        />
+    )}
+</DataGrid.HeaderCells>
+
+<DataGrid.Cells<Order>>
+    {(cell) => (
+        <DataGrid.Cell
+            cell={cell}
+            className={cn("flex items-center", end(cell.column) && "justify-end tabular-nums")}
+        />
+    )}
+</DataGrid.Cells>
+```
+
+With plain CSS, the same hint can become an attribute your stylesheet selects:
+`data-align={cell.column.meta?.align}` on the cell, and `[data-align="end"] { justify-content:
+flex-end; }`.
+
+The [`grouped-headers`](/examples/grouped-headers) example keeps a `numeric` hint this way: its
+numeric columns line up on the right, in the theme's numeric font.
