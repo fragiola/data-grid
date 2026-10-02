@@ -1,0 +1,19 @@
+{
+    "contract": 1,
+    "slug": "data-grid",
+    "title": "Data Grid",
+    "description": "A headless data grid for millions of cells: virtualized on both axes, keyboard-ready, as a table or as divs, styled by you.",
+    "frameworks": ["react"],
+    "defaultFramework": "react",
+    "repository": "https://github.com/fragiola/data-grid",
+    "keywords": [
+        "data grid",
+        "headless ui",
+        "react",
+        "virtualization",
+        "table",
+        "keyboard navigation",
+        "large datasets",
+        "infinite scroll"
+    ]
+}

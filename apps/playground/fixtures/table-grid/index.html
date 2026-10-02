@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Table grid fixture</title>
+        <style>
+            body { margin: 0; font: 13px/1.2 system-ui, sans-serif; }
+        </style>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script type="module">
+            import { mountGridFixture } from "../../src/fixture/grid-fixture.tsx";
+            mountGridFixture("table");
+        </script>
+    </body>
+</html>

@@ -1,0 +1,40 @@
+---
+title: Introduction
+description: What the data grid is, what it ships and what it leaves to you, and how its two packages fit together.
+---
+
+The data grid is **headless**: it ships the behaviour of a grid (virtualization on both axes,
+scroll scaling, windows to load data by, the keyboard, focus and ARIA) as composable React
+primitives, and no CSS, no icons and no text. You choose the elements and you write the styles.
+
+It joins two ideas. From React Data Grid, an API that reads like your data: columns are plain
+objects, rows an array, the active cell a prop. From TanStack Table, no markup of its own: every
+part renders what you give it, as a real `<table>` or as `<div>`s.
+
+## What you get
+
+- **Both axes virtualized.** Only the cells in view, and a few around them, are in the page:
+  a million rows by a thousand columns renders a few hundred cells. See
+  [Virtualization and windows](/docs/concepts/virtualization).
+- **The whole dataset in the scrollbar.** Past the browser's size limit, scroll scaling maps a
+  capped scroll onto the full dataset, with exact moves for the wheel and the keyboard. See
+  [Scroll scaling](/docs/concepts/scroll-scaling).
+- **Windows.** The grid reports the rows and the columns in view; load that range from your
+  server. See [Loading data](/docs/concepts/data-loading).
+- **The keyboard.** An active cell, the APG grid keys, a roving tab stop, ARIA totals and
+  indexes, and every key replaceable. See [Keyboard and accessibility](/docs/concepts/keyboard).
+
+## Two packages
+
+| package | what it is |
+| --- | --- |
+| `@fragiola/data-grid` | the core, framework-free: the model and its commands, the axis math, scroll scaling, navigation, and the engine that binds a grid to the DOM |
+| `@fragiola/data-grid-react` | the `DataGrid.*` primitives and the hooks, for React 19 |
+
+An app installs the React package; the core comes with it. See
+[Model and engine](/docs/concepts/model-and-engine) for how they divide the work.
+
+## What it does not do yet
+
+Sorting, filtering, pagination, pinned columns, column groups, resizing, selection and editing
+are the next steps. [Limitations and roadmap](/docs/limitations) lists them in order.

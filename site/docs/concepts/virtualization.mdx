@@ -1,0 +1,38 @@
+---
+title: Virtualization and windows
+description: Only the rows and columns in view, and a few around them, are rendered; the grid reports both windows as they move.
+---
+
+A grid of a million rows by a thousand columns renders a few hundred cells: the ones in view and
+a few around them. The rest exists only as size.
+
+<Example id="large-dataset" />
+
+## Windows
+
+On each axis, the engine computes a **window**:
+
+- `visible`: the items in view (an item partly in view counts);
+- `rendered`: the visible items plus an **overscan** on each side (4 rows and 2 columns by
+  default, `overscan={{ rows, columns }}` to change it).
+
+Ranges are `{ start, end }`, `end` excluded. Read them with `onRowWindowChange` and
+`onColumnWindowChange` (they fire when a range changes), with `useRowWindow()` and
+`useColumnWindow()` inside the grid, or with `engine.get("row-window")`.
+
+## Scrolling inside the overscan renders nothing
+
+The rendered range is kept while the view stays inside it: scrolling a row or two renders
+nothing in React. Once the view leaves it, the rendered range is recomputed around the view.
+
+## The active cell stays rendered
+
+The active row and column are rendered even out of the window, so focus never falls to the
+page while you scroll away and back.
+
+## Sizes
+
+Row offsets come from `rowHeight`: one number costs nothing at any count, and a function is
+summed once into an array of offsets and searched in O(log n). See the
+[`variable-row-height`](/examples/variable-row-height) and
+[`many-columns`](/examples/many-columns) examples.

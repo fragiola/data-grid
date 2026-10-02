@@ -1,0 +1,69 @@
+---
+title: Data Grid — a headless data grid for millions of cells
+description: A headless data grid for React. It ships virtualization, keyboard navigation and accessibility; the markup and every pixel are yours.
+layout: landing
+---
+
+<Hero
+    eyebrow="@fragiola/data-grid · React"
+    title="A billion cells, and not a line of CSS from us."
+    description="A headless data grid: both axes virtualized, a scrollbar that covers the whole dataset, windows you load data by, and the APG grid keyboard. Render it as a table or as divs, and style it your way."
+    actions={[
+        { label: "Read the docs", href: "/docs/getting-started/introduction", variant: "primary" },
+        { label: "Browse {examples} examples", href: "/examples", variant: "secondary" },
+        { label: "GitHub", href: "https://github.com/fragiola/data-grid", variant: "ghost" },
+    ]}
+/>
+
+<Example
+    id="large-dataset"
+    variant="showcase"
+    theme="ide"
+    height={560}
+    label="One million rows by a thousand columns, five themes:"
+/>
+
+<Features columns={4}>
+<Feature title="Millions of cells">
+Rows and columns are virtualized, and scroll scaling keeps the whole dataset reachable past the
+browser's size limit.
+</Feature>
+<Feature title="Windows">
+The grid tells you which rows and columns are in view: load exactly that range, wherever the
+scrollbar lands.
+</Feature>
+<Feature title="Keyboard and ARIA">
+An active cell, the arrows, Home, End and the page keys, a roving tab stop and ARIA totals, all
+replaceable.
+</Feature>
+<Feature title="Any structure">
+The same primitives render a real table or divs, through render. The structure is yours, and so
+is the look.
+</Feature>
+</Features>
+
+<Section title="What it never ships">
+<Pills strike items={["CSS", "Icons", "Text", "A fixed DOM", "A design system"]} />
+
+The state is exposed as data-\* attributes and ARIA, so any styling solution works: Tailwind,
+plain CSS, CSS modules, CSS-in-JS. The examples use Fragiola UI and its palettes.
+</Section>
+
+<Section title="An API that reads like your data">
+One generic, the row type. Columns are plain objects, rows an array or a getter, and every
+change is a command you can veto or rewrite.
+
+```tsx title="people.tsx"
+const columns: Column<Person>[] = [
+    { key: "name", name: "Name", width: 180 },
+    { key: "salary", name: "Salary", width: 120, renderCell: ({ row }) => money(row.salary) },
+];
+
+<DataGrid.Root columns={columns} rows={people}>
+    <DataGrid.Grid aria-label="People">
+        <DataGrid.Header />
+        <DataGrid.Body />
+    </DataGrid.Grid>
+</DataGrid.Root>
+```
+</Section>

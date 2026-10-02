@@ -1,0 +1,49 @@
+---
+title: State attributes
+description: Every state a part has is a data attribute or ARIA, present or absent, so any styling solution can read it.
+---
+
+A part's state is on its element, as `data-*` attributes and ARIA. A boolean attribute is
+present (empty) or absent, never `"false"`.
+
+## Parts
+
+Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
+`body`, `row` or `cell`. Rows and cells carry their indexes: `data-row-index` (the header row is
+`-1`) and `data-column-index`. Tests select by them, never by class names.
+
+## States
+
+| attribute | on | when |
+| --- | --- | --- |
+| `data-active` | cell, header cell | it is the active cell |
+| `data-active` | row | it holds the active cell |
+| `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
+
+## ARIA
+
+| attribute | on | value |
+| --- | --- | --- |
+| `role` | grid, rowgroup, row, columnheader, gridcell | the grid pattern |
+| `aria-rowcount` | grid | every row, header included, rendered or not |
+| `aria-colcount` | grid | every column |
+| `aria-rowindex` | row | 1-based, the header row first |
+| `aria-colindex` | cell, header cell | 1-based |
+
+## Styling a state
+
+```css title="grid.css"
+[data-grid-part="cell"][data-active] {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+[data-grid-part="row"][data-loading] [data-grid-part="cell"]::after {
+    content: "";
+    inline-size: 60%;
+    block-size: 0.75rem;
+    background: var(--placeholder);
+}
+```
+
+With Tailwind: `data-active:outline-2`, `data-loading:opacity-50`.
