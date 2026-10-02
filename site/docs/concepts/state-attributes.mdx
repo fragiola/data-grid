@@ -9,8 +9,9 @@ present (empty) or absent, never `"false"`.
 ## Parts
 
 Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
-`body`, `row`, `cell` or `empty`. Rows and cells carry their indexes: `data-row-index` (the header row is
-`-1`) and `data-column-index`. Tests select by them, never by class names.
+`body`, `row`, `cell` or `empty`. Rows and cells carry their indexes: `data-row-index` (header
+rows are `-1` and above, a header cell spanning rows is at its top one) and `data-column-index`
+(a header cell spanning columns is at its first). Tests select by them, never by class names.
 
 ## States
 
@@ -20,16 +21,19 @@ Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `he
 | `data-active` | row | it holds the active cell |
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
+| `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
 
 ## ARIA
 
 | attribute | on | value |
 | --- | --- | --- |
 | `role` | grid, rowgroup, row, columnheader, gridcell | the grid pattern |
-| `aria-rowcount` | grid | every row, header included, rendered or not |
+| `aria-rowcount` | grid | every row, header rows included, rendered or not |
 | `aria-colcount` | grid | every column |
-| `aria-rowindex` | row | 1-based, the header row first |
-| `aria-colindex` | cell, header cell | 1-based |
+| `aria-rowindex` | row | 1-based, the header rows first |
+| `aria-colindex` | cell, header cell | 1-based (a group's first column) |
+| `aria-colspan` | header cell | the columns a group spans, when more than one |
+| `aria-rowspan` | header cell | the header rows a column spans, when more than one |
 
 ## Styling a state
 
@@ -47,4 +51,5 @@ Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `he
 }
 ```
 
-With Tailwind: `data-active:outline-2`, `data-loading:opacity-50`, `in-data-empty:hidden`.
+With Tailwind: `data-active:outline-2`, `data-loading:opacity-50`, `in-data-empty:hidden`,
+`data-group:justify-center`.

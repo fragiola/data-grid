@@ -66,7 +66,14 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     renderHeaderCell?, renderCell?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
-    no feature registry, no `flexRender`.
+    no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
+    entry is a `Column` or a `ColumnGroup<TRow>` `{ key, name?, renderHeaderCell?, children,
+    meta? }`, nested to any depth, keys unique across both; the leaves, in order, are the grid's
+    columns (the column axis, cells and windows never see groups). The header has a row per level
+    (rows `-depth … -1`, each `headerRowHeight` tall); a leaf with fewer groups above it spans the
+    rows down to -1 (G2). The core lays the header cells out per column window (G3, a cut group
+    included); a header cell's position is its first column on its row, a leaf spanning rows has
+    one per row (G4); `aria-colspan`/`aria-rowspan` (G5).
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
@@ -170,7 +177,12 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
-- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's.
+- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's. The
+  header layer has an element per header row: the engine writes the same transform to each.
+- **Header rows render through `HeaderRows` (Epic #13, G6)**, a children function over the
+  header rows that `Header` renders by default; each `HeaderRow` takes its `row`, `HeaderCells`
+  that row's cells (groups and columns), and `HeaderCell` carries `data-group` for a group and
+  `colSpan`/`rowSpan` when rendered as a `th`. A grid without groups renders exactly as before.
 - **A grid owns only its own cells (Epic #12, E4).** Every cell lookup and focus decision of an
   engine considers only cells whose nearest attached viewport is its own (a registry of attached
   viewports, across engines). A grid nested in a cell is its own grid; to the outer grid, focus

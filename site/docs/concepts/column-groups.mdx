@@ -1,0 +1,106 @@
+---
+title: Column groups
+description: Group columns under header cells of their own, nested to any depth, with as many header rows as they need, virtualized and keyboard-ready.
+---
+
+A column group is a header cell over the columns below it: "Person" over "Name" and "Email". Groups
+are declared in `columns`, as RDG does, and nest to any depth. Their columns, in order, are the
+grid's columns: rows, cells, column windows and the keyboard in the body do not change.
+
+<Example id="grouped-headers" />
+
+## Declaring groups
+
+An entry of `columns` is a column, or a group: `key`, `name` (or `renderHeaderCell`) and
+`children`, the columns and groups under it. A group has no width and no cells of its own: it
+spans its columns.
+
+```tsx title="columns.tsx"
+import type { ColumnOrGroup } from "@fragiola/data-grid-react";
+
+const columns: ColumnOrGroup<Person>[] = [
+    { key: "id", name: "#", width: 64 },
+    {
+        key: "person",
+        name: "Person",
+        children: [
+            { key: "name", name: "Name", width: 180 },
+            { key: "email", name: "Email", width: 260 },
+        ],
+    },
+];
+```
+
+Keys are unique across groups and columns together, and every group holds at least one column:
+`columns.set` refuses anything else. A group's `renderHeaderCell` receives the group, its first
+column's index and how many columns it spans.
+
+## Header rows
+
+The header has a row per level: one without groups, two when a group holds columns, three when a
+group holds groups. `headerRowHeight` is the height of each row, so the header is
+`rows × headerRowHeight` tall. A column with fewer groups above it than the header has rows (the
+`#` above) spans the rows down to the last, as a table cell with `rowspan` does.
+
+Header rows are rows `-1` and above: `-1` is the columns' row, `-2` the groups right above it.
+Render them with `DataGrid.HeaderRows`, a children function over the header rows, each with its
+own cells (groups and columns). `DataGrid.Header` renders it by default.
+
+```tsx title="header.tsx"
+<DataGrid.Header>
+    <DataGrid.HeaderRows<Person>>
+        {(row) => (
+            <DataGrid.HeaderRow row={row}>
+                <DataGrid.HeaderCells<Person>>
+                    {(cell) => <DataGrid.HeaderCell cell={cell} />}
+                </DataGrid.HeaderCells>
+            </DataGrid.HeaderRow>
+        )}
+    </DataGrid.HeaderRows>
+</DataGrid.Header>
+```
+
+A header cell is a group's (`cell.group`) or a column's (`cell.column`); `cell.key` is either's
+key. A `HeaderRow` without `row`, outside `HeaderRows`, renders the columns' row only: with
+groups, render the rows through `HeaderRows`, since a column spanning rows lives in the top one.
+
+## Virtualized
+
+Each header row renders the cells that intersect the rendered columns. A group partly out of the
+column window is still rendered, placed from its first column and as wide as its columns, so it
+stays over them while they scroll. Scrolling inside the overscan renders nothing, as without
+groups.
+
+## The keyboard
+
+Header cells are cells of the grid, and the arrows move between them:
+
+- **Up** from a column reaches the group above it; from the first body row, the header cell above
+  the column.
+- **Down** from a group lands on its first column in view, so it never scrolls away from what you
+  see.
+- **Left** and **Right** move to the next cell of the same header row, across spans. A column
+  spanning header rows is on each of them: the arrows walk every header row from end to end.
+
+A group's active position is its row and its first column, `{ rowIndex: -2, columnIndex: 1 }`
+for "Person" above. A group already in view is not scrolled to its first column when it becomes
+active. See [Keyboard and accessibility](/docs/concepts/keyboard).
+
+## ARIA
+
+`aria-rowcount` counts every header row, and `aria-rowindex` numbers them first, from 1. A group
+cell carries `aria-colspan`, a column spanning rows `aria-rowspan`; `aria-colindex` is the first
+column's, 1-based. Rendered as a `<th>`, a header cell also gets `colSpan` and `rowSpan`.
+
+## Styling
+
+A group's header cell carries `data-group`. The header cell's state has `group`, `rowIndex`,
+`columnSpan` and `rowSpan`, and the header row's state its `rowIndex`, for class functions:
+
+```ts title="styles.ts"
+export const headerCell = (state: HeaderCellState) =>
+    state.group ? "justify-center border-b" : state.rowSpan > 1 ? "items-end" : "";
+```
+
+With several header rows, an upper row stays above the next (a structural `z-index`): a column
+spanning rows is never covered by the row it reaches into.
