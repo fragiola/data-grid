@@ -755,3 +755,56 @@ describe("events and keys", () => {
         });
     });
 });
+
+describe("rows.changed", () => {
+    it("renders again when the range meets the rendered rows, and only then", () => {
+        const { engine, model, view } = setup();
+        // 10 rows in view, 3 of overscan: rows 0–13 rendered
+        expect(view().renderedRows).toEqual({ start: 0, end: 13 });
+        const renders = vi.fn();
+        engine.adapter.subscribe(renders);
+        model.run("rows.changed", { start: 5, end: 8 });
+        expect(renders).toHaveBeenCalledTimes(1);
+        expect(view().rowsRevision).toBe(1);
+        // partly rendered
+        model.run("rows.changed", { start: 12, end: 50 });
+        expect(renders).toHaveBeenCalledTimes(2);
+        // out of view: nothing renders, the view stays the same object
+        const current = view();
+        model.run("rows.changed", { start: 13, end: 600 });
+        model.run("rows.changed", { start: 900 });
+        expect(renders).toHaveBeenCalledTimes(2);
+        expect(view()).toBe(current);
+        // every row
+        model.run("rows.changed");
+        expect(renders).toHaveBeenCalledTimes(3);
+        expect(view().rowsRevision).toBe(3);
+        // no row at all
+        model.run("rows.changed", { start: 4, end: 4 });
+        expect(renders).toHaveBeenCalledTimes(3);
+    });
+
+    it("renders again for the active row, even out of the rendered rows", () => {
+        const { engine, model, view, scrollTo, render } = setup();
+        model.run("active-position.set", { rowIndex: 2, columnIndex: 1 });
+        render();
+        scrollTo(10_000); // rows 500–510: the active row is still rendered, alone
+        render();
+        expect(view().rows).toContain(2);
+        const renders = vi.fn();
+        engine.adapter.subscribe(renders);
+        model.run("rows.changed", { start: 100, end: 102 });
+        expect(renders).not.toHaveBeenCalled();
+        model.run("rows.changed", { start: 2, end: 3 });
+        expect(renders).toHaveBeenCalledTimes(1);
+    });
+
+    it("moves no window and fires no window event", () => {
+        const { engine, model } = setup();
+        const rows = events(engine, "row-window");
+        const columns = events(engine, "column-window");
+        model.run("rows.changed");
+        expect(rows).toHaveLength(0);
+        expect(columns).toHaveLength(0);
+    });
+});

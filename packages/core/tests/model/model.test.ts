@@ -464,3 +464,111 @@ describe("middleware", () => {
         expect(seen).toEqual([true, false]);
     });
 });
+
+describe("rows.changed", () => {
+    it("tells the rows' data changed, for a range clamped to the grid's rows", () => {
+        const grid = model();
+        const seen: CommandEvent<Person>[] = [];
+        grid.subscribe((event) => seen.push(event));
+        expect(grid.run("rows.changed", { start: 5, end: 8 })).toEqual({
+            ok: true,
+            value: { start: 5, end: 8 },
+        });
+        expect(grid.state.rowsRevision).toBe(1);
+        // beyond the 20 rows: clamped, not an error
+        expect(grid.run("rows.changed", { start: 15, end: 500 })).toEqual({
+            ok: true,
+            value: { start: 15, end: 20 },
+        });
+        expect(seen.map((event) => event.result)).toEqual([
+            { start: 5, end: 8 },
+            { start: 15, end: 20 },
+        ]);
+        expect(grid.state.rowsRevision).toBe(2);
+    });
+
+    it("covers every row without a range, and the rest of them from a start or up to an end", () => {
+        const grid = model();
+        expect(grid.run("rows.changed")).toEqual({
+            ok: true,
+            value: { start: 0, end: 20 },
+        });
+        expect(grid.run("rows.changed", { start: 12 })).toEqual({
+            ok: true,
+            value: { start: 12, end: 20 },
+        });
+        expect(grid.run("rows.changed", { end: 3 })).toEqual({
+            ok: true,
+            value: { start: 0, end: 3 },
+        });
+        expect(grid.state.rowsRevision).toBe(3);
+    });
+
+    it("changes nothing else: no count, no size, no active position", () => {
+        const grid = model();
+        grid.run("active-position.set", { rowIndex: 4, columnIndex: 1 });
+        const before = grid.state;
+        grid.run("rows.changed", { start: 0, end: 10 });
+        const { rowsRevision, ...after } = grid.state;
+        const { rowsRevision: _, ...rest } = before;
+        expect(after).toEqual(rest);
+        expect(grid.state.source).toBe(before.source);
+        expect(rowsRevision).toBe(1);
+    });
+
+    it("commits nothing for a range without a row", () => {
+        const grid = model();
+        const listener = vi.fn();
+        grid.subscribe(listener);
+        const state = grid.state;
+        // empty, and entirely past the last row
+        expect(grid.run("rows.changed", { start: 4, end: 4 }).ok).toBe(true);
+        expect(grid.run("rows.changed", { start: 40, end: 50 })).toEqual({
+            ok: true,
+            value: { start: 20, end: 20 },
+        });
+        expect(grid.state).toBe(state);
+        expect(listener).not.toHaveBeenCalled();
+        const empty = createDataGridModel<Person>({ columns, rows: [] });
+        expect(empty.run("rows.changed")).toEqual({
+            ok: true,
+            value: { start: 0, end: 0 },
+        });
+        expect(empty.state.rowsRevision).toBe(0);
+    });
+
+    it("refuses bounds that are not whole numbers, negative or reversed", () => {
+        const grid = model();
+        for (const payload of [
+            { start: -1 },
+            { end: 1.5 },
+            { start: Number.NaN },
+            { start: 6, end: 2 },
+        ]) {
+            const result = grid.run("rows.changed", payload);
+            expect(result.ok, JSON.stringify(payload)).toBe(false);
+            if (!result.ok) expect(result.error.code).toBe("invalid_payload");
+        }
+        expect(grid.state.rowsRevision).toBe(0);
+    });
+
+    it("goes through the middleware, which can refuse or rewrite it", () => {
+        const grid = model();
+        const remove = grid.use((ctx, next) => {
+            if (ctx.command !== "rows.changed") return next();
+            return veto("not now");
+        });
+        expect(grid.run("rows.changed").ok).toBe(false);
+        expect(grid.state.rowsRevision).toBe(0);
+        remove();
+        grid.use((ctx, next) => {
+            if (ctx.command === "rows.changed")
+                ctx.payload = { start: 1, end: 2 };
+            return next();
+        });
+        expect(grid.run("rows.changed")).toEqual({
+            ok: true,
+            value: { start: 1, end: 2 },
+        });
+    });
+});

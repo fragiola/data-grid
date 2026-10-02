@@ -104,6 +104,11 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly columnDefs: readonly Column<TRow, TNode>[];
     readonly source: RowSource<TRow>;
     readonly active: CellPosition | null;
+    /**
+     * moves when `rows.changed` names rows this view renders (the rendered rows or the active
+     * row): their data is new, read it again
+     */
+    readonly rowsRevision: number;
 }
 
 /** What `engine.get` reads. */
@@ -318,6 +323,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     let rowWindow: AxisWindow = EMPTY_WINDOW;
     let columnWindow: AxisWindow = EMPTY_WINDOW;
+    /** the view's `rowsRevision`: only a change to rows on screen moves it */
+    let rowsRevision = 0;
     let view: GridView<TRow, TNode> = makeView();
     let committed: GridView<TRow, TNode> | null = null;
     let endReachedAt = -1;
@@ -439,6 +446,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columnDefs: state.columns,
             source: state.source,
             active,
+            rowsRevision,
         };
     }
 
@@ -468,7 +476,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.columnAxis !== next.columnAxis ||
             current.columnDefs !== next.columnDefs ||
             current.source !== next.source ||
-            current.active !== next.active
+            current.active !== next.active ||
+            current.rowsRevision !== next.rowsRevision
         );
     }
 
@@ -949,8 +958,29 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     // ── the model ────────────────────────────────────────────────────────────
 
-    const unsubscribeModel = model.subscribe(({ before, after }) => {
+    /** Whether the view renders a row of the range: in the rendered rows, or the active row. */
+    function rendersRows(range: Range): boolean {
+        const rendered = view.renderedRows;
+        if (range.start < rendered.end && rendered.start < range.end)
+            return true;
+        const active = state.activePosition;
+        return (
+            active !== null &&
+            active.rowIndex >= range.start &&
+            active.rowIndex < range.end
+        );
+    }
+
+    const unsubscribeModel = model.subscribe((event) => {
+        const { before, after } = event;
         state = after;
+        // `rows.changed` answers the range it clamped to the rows
+        if (
+            event.command === "rows.changed" &&
+            rendersRows(event.result as Range)
+        ) {
+            rowsRevision += 1;
+        }
         let fresh = false;
         if (
             after.rowCount !== before.rowCount ||
