@@ -148,6 +148,23 @@ grid.run("sort-columns.set", {
 });
 void sortableGroup;
 
+// a column pins at the start; a group is pinned by its columns, and "end" is not there yet
+const pinnedColumn: Column<Person> = {
+    key: "name",
+    width: 60,
+    pinned: "start",
+};
+// @ts-expect-error
+const pinnedEnd: Column<Person> = { key: "age", width: 60, pinned: "end" };
+// @ts-expect-error
+const pinnedGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    pinned: "start",
+    children: [pinnedColumn],
+};
+void pinnedEnd;
+void pinnedGroup;
+
 void groupWithCells;
 void groupWithWidth;
 void columnWithChildren;

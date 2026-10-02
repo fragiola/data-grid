@@ -22,6 +22,8 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
+| `data-pinned` | cell, header cell | `start`: its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
+| `data-pinned-edge` | cell, header cell | it ends at the last pinned column |
 | `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
 | `data-sort` | header cell | `ascending` or `descending`, while its column is sorted |
 | `data-sort-priority` | header cell | its column's place in the sort, 1-based |

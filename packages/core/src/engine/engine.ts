@@ -1,5 +1,5 @@
 import { type Axis, createAxis } from "../axis/axis";
-import { headerCellsIn } from "../header/header";
+import { headerCellsIn, pinnedColumnCount } from "../header/header";
 import type { DataGridModel } from "../model/model";
 import type {
     CellPosition,
@@ -113,6 +113,10 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly rowsRevision: number;
     /** the sorted columns, the first one first */
     readonly sortColumns: readonly SortColumn[];
+    /** how many columns are pinned at the start (always rendered, in `columns` first) */
+    readonly pinnedColumnCount: number;
+    /** their width: the column window covers the view right of it */
+    readonly pinnedWidth: number;
 }
 
 /** What `engine.get` reads. */
@@ -162,8 +166,11 @@ export interface EngineEventMap {
 
 export type EngineEventKey = keyof EngineEventMap;
 
-/** The layers whose geometry the engine writes. */
-export type EngineLayer = "grid" | "header" | "body";
+/**
+ * The elements whose geometry the engine writes: the layers, and the cells of pinned columns
+ * (`pinned`: the engine keeps them at the visible start while the layers scroll sideways).
+ */
+export type EngineLayer = "grid" | "header" | "body" | "pinned";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {
@@ -362,6 +369,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         grid: new Set(),
         header: new Set(),
         body: new Set(),
+        pinned: new Set(),
     };
     let detachViewport: (() => void) | null = null;
 
@@ -369,6 +377,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let rowAxis = rowAxisOf(state);
     let columnAxis = columnAxisOf(state);
     let width = 0;
+    /** the pinned columns in effect, and their width */
+    let pinnedCount = 0;
+    let pinnedWidth = 0;
+    updatePinning();
     let height = 0;
 
     const maxScroll = () => options.maxScrollSize ?? DEFAULT_MAX_SCROLL_SIZE;
@@ -386,6 +398,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         start: number;
         end: number;
         extra: number | null;
+        pinned: number;
         rows: readonly HeaderRowView<TRow, TNode>[];
     } | null = null;
 
@@ -421,13 +434,28 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         for (const listener of [...eventListeners[event]]) listener(value);
     }
 
+    /** A column window without the pinned columns (the overscan may reach into them). */
+    function scrollingWindow(columns: AxisWindow): AxisWindow {
+        const { visible, rendered } = columns;
+        if (rendered.start >= pinnedCount) return columns;
+        const clamp = (range: Range): Range =>
+            range.start >= pinnedCount
+                ? range
+                : {
+                      start: pinnedCount,
+                      end: Math.max(range.end, pinnedCount),
+                  };
+        return { visible: clamp(visible), rendered: clamp(rendered) };
+    }
+
     /**
      * The column rendered outside the window for the active cell: its own, or none for a header
      * cell whose span reaches into the window (it is rendered with the window's cells).
      */
     function activeColumn(): number | null {
         const active = state.activePosition;
-        if (!active) return null;
+        // a pinned column is always rendered
+        if (!active || active.columnIndex < pinnedCount) return null;
         const { start, end } = columnWindow.rendered;
         if (active.rowIndex < 0) {
             const cell = state.header.cellAt(
@@ -458,14 +486,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             memo.count === count &&
             memo.start === start &&
             memo.end === end &&
-            memo.extra === extra
+            memo.extra === extra &&
+            memo.pinned === pinnedCount
         ) {
             return memo.rows;
         }
+        // the pinned columns' cells first: a pinned group holds only pinned columns
+        const pinned =
+            pinnedCount > 0 ? headerCellsIn(state.header, 0, pinnedCount) : [];
         const rows =
             count > 0
                 ? headerCellsIn(state.header, start, end, extra).map(
-                      (cells, level) => ({ rowIndex: level - count, cells }),
+                      (cells, level) => ({
+                          rowIndex: level - count,
+                          cells: [...(pinned[level] ?? []), ...cells],
+                      }),
                   )
                 : [];
         headerRowsMemo = {
@@ -474,6 +509,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             start,
             end,
             extra,
+            pinned: pinnedCount,
             rows,
         };
         return rows;
@@ -491,11 +527,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 rowWindow.rendered.end,
                 activeRow,
             ),
-            columns: indexes(
-                columnWindow.rendered.start,
-                columnWindow.rendered.end,
-                extraColumn,
-            ),
+            // the pinned columns first, always rendered
+            columns: [
+                ...indexes(0, pinnedCount, null),
+                ...indexes(
+                    columnWindow.rendered.start,
+                    columnWindow.rendered.end,
+                    extraColumn,
+                ),
+            ],
             renderedRows: rowWindow.rendered,
             renderedColumns: columnWindow.rendered,
             rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
@@ -518,6 +558,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             active,
             rowsRevision,
             sortColumns: state.sortColumns,
+            pinnedColumnCount: pinnedCount,
+            pinnedWidth,
         };
     }
 
@@ -549,7 +591,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.source !== next.source ||
             current.active !== next.active ||
             current.rowsRevision !== next.rowsRevision ||
-            current.sortColumns !== next.sortColumns
+            current.sortColumns !== next.sortColumns ||
+            current.pinnedColumnCount !== next.pinnedColumnCount
         );
     }
 
@@ -602,12 +645,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             overscan.rows ?? 4,
             fresh ? undefined : rowWindow,
         );
-        const nextColumns = windowFor(
-            columnAxis,
-            columnsX.virtual,
-            width,
-            overscan.columns ?? 2,
-            fresh ? undefined : columnWindow,
+        // the columns that scroll, in the view right of the pinned ones
+        const nextColumns = scrollingWindow(
+            windowFor(
+                columnAxis,
+                columnsX.virtual + pinnedWidth,
+                width - pinnedWidth,
+                overscan.columns ?? 2,
+                fresh ? undefined : columnWindow,
+            ),
         );
         const rowsMoved = !sameWindow(rowWindow, nextRows);
         const columnsMoved = !sameWindow(columnWindow, nextColumns);
@@ -640,23 +686,41 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     const gridLayers = (): ReadonlySet<Element> => layers.grid;
 
     function setTransform(layer: EngineLayer, transform: string) {
-        for (const element of layers[layer]) {
-            if (written.get(element) === transform) continue;
-            written.set(element, transform);
-            element.style.transform = transform;
-        }
+        for (const element of layers[layer]) write(element, transform);
+    }
+
+    function write(element: HTMLElement, transform: string) {
+        if (written.get(element) === transform) return;
+        written.set(element, transform);
+        element.style.transform = transform;
     }
 
     /** The layers' offsets for the view on screen: what is in view is the virtual offset's content. */
-    function writeLayers() {
-        if (!viewport || !committed) return;
+    /** Each layer's transform for the view on screen (none before one is committed). */
+    function layerTransforms(): Partial<Record<EngineLayer, string>> {
+        if (!viewport || !committed) return {};
         const x = columnsX.layerOffset(
             committed.columnBase,
             viewport.scrollLeft,
         );
         const y = rowsY.layerOffset(committed.rowBase, viewport.scrollTop);
-        setTransform("body", `translate3d(${x}px, ${y}px, 0px)`);
-        setTransform("header", `translate3d(${x}px, 0px, 0px)`);
+        return {
+            body: `translate3d(${x}px, ${y}px, 0px)`,
+            header: `translate3d(${x}px, 0px, 0px)`,
+            // a pinned cell sits at its own offset in its row (`columnLeft`) and moves back by
+            // what its layer moved: it stays at that offset from the view's start, scaled or not.
+            // Both numbers stay small (the base follows the view): CSS never sees an offset near
+            // its limits
+            pinned: `translate3d(${columnsX.virtual - committed.columnBase}px, 0px, 0px)`,
+        };
+    }
+
+    function writeLayers() {
+        const transforms = layerTransforms();
+        for (const layer of ["body", "header", "pinned"] as const) {
+            const transform = transforms[layer];
+            if (transform !== undefined) setTransform(layer, transform);
+        }
     }
 
     /**
@@ -681,6 +745,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (!viewport) return;
         width = viewport.clientWidth;
         height = viewport.clientHeight;
+        updatePinning();
+    }
+
+    /**
+     * The pinned columns in effect: the leading `pinned` ones, while they leave part of the view
+     * to scroll. As wide as the view or wider (a narrow screen), they would hide every other
+     * column: they scroll with the rest until the view is wider again.
+     */
+    function updatePinning() {
+        const count = pinnedColumnCount(state.columns);
+        const pinned = columnAxis.offsetOf(count);
+        const fits = width === 0 || pinned < width;
+        pinnedCount = fits ? count : 0;
+        pinnedWidth = fits ? pinned : 0;
     }
 
     /** The sizes or the content changed: remap, then update; scroll once the sizer has its size. */
@@ -767,18 +845,27 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (
             columnIndex !== undefined &&
-            columnIndex >= 0 &&
+            columnIndex >= pinnedCount &&
             columnIndex < columnAxis.count
         ) {
+            // into the view right of the pinned columns; a pinned one is always in view
+            const from = columnsX.virtual + pinnedWidth;
             const target = scrollTargetFor(
                 columnAxis,
                 columnIndex,
-                columnsX.virtual,
-                width,
+                from,
+                width - pinnedWidth,
                 align,
             );
-            if (target !== columnsX.virtual)
-                moves.left = columnsX.scrollTo(target);
+            // compared where it was computed: a column in view moves nothing, exactly
+            if (target !== from) {
+                moves.left = columnsX.scrollTo(
+                    Math.min(
+                        Math.max(target - pinnedWidth, 0),
+                        Math.max(0, columnAxis.totalSize - width),
+                    ),
+                );
+            }
         }
         if (moves.top === undefined && moves.left === undefined) return;
         update();
@@ -804,6 +891,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             position.columnIndex,
         );
         if (!cell || cell.columnSpan <= 1) return position.columnIndex;
+        // a pinned group is always in view
+        if (cell.columnIndex + cell.columnSpan <= pinnedCount) return undefined;
         const end = cell.columnIndex + cell.columnSpan;
         const { start: from, end: to } = columnWindow.visible;
         if (cell.columnIndex < to && end > from) return undefined;
@@ -869,7 +958,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                   ? -1
                   : null;
         if (rowIndex === null) return null;
-        return { rowIndex, columnIndex: columnWindow.visible.start };
+        return {
+            rowIndex,
+            columnIndex: pinnedCount > 0 ? 0 : columnWindow.visible.start,
+        };
     }
 
     /** Whether an event comes from this grid itself, not from a grid nested in one of its cells. */
@@ -1136,6 +1228,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (after.columns !== before.columns) {
             columnAxis = columnAxisOf(after);
+            updatePinning();
             fresh = true;
         }
         if (
@@ -1241,10 +1334,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         registerLayer(layer, element) {
             layers[layer].add(element);
             written.delete(element);
-            writeLayers();
+            // only this element: a row of pinned cells mounting does not rewrite every other one
+            const transform = layerTransforms()[layer];
+            if (transform !== undefined) write(element, transform);
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
+                // a cell no longer pinned (its column was unpinned) keeps no offset of the engine's
+                if (layer === "pinned") element.style.transform = "";
             };
         },
         getView: () => view,
@@ -1342,21 +1439,66 @@ export function rowTop<TRow, TNode>(
     return view.rowAxis.offsetOf(rowIndex) - view.rowBase;
 }
 
-/** A column's left in its layer (the same in the header and in every row). */
+/**
+ * A row's left in its layer (a header row's too): with pinned columns, it starts their width
+ * before the layer, so its box holds them wherever the engine keeps them (a row's background,
+ * its hover, its `overflow`). 0 without.
+ */
+export function rowLeft<TRow, TNode>(view: GridView<TRow, TNode>): number {
+    return -view.pinnedWidth;
+}
+
+/**
+ * Whether columns `columnIndex` to `columnIndex + columnSpan` (a cell, a header cell's span) are
+ * pinned, and whether they end at the last pinned column (its edge).
+ */
+export function columnPinning<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    columnIndex: number,
+    columnSpan = 1,
+): { readonly pinned: boolean; readonly pinnedEdge: boolean } {
+    const end = columnIndex + columnSpan;
+    const pinned = end <= view.pinnedColumnCount;
+    return { pinned, pinnedEdge: pinned && end === view.pinnedColumnCount };
+}
+
+/**
+ * Where something at virtual `offset` sits in its row: a pinned column at its own offset (the
+ * engine's transform keeps it in view), the others from the base; both after the row's start
+ * (`rowLeft`).
+ */
+function leftInRow<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    offset: number,
+    pinned: boolean,
+): number {
+    return (pinned ? offset : offset - view.columnBase) + view.pinnedWidth;
+}
+
+/** A column's left in its row (the same in the header rows and in every row). */
 export function columnLeft<TRow, TNode>(
     view: GridView<TRow, TNode>,
     columnIndex: number,
 ): number {
-    return view.columnAxis.offsetOf(columnIndex) - view.columnBase;
+    return leftInRow(
+        view,
+        view.columnAxis.offsetOf(columnIndex),
+        columnPinning(view, columnIndex).pinned,
+    );
 }
 
-/** The width of a row's rendered cells: from the layer's start to the last rendered column's end. */
+/**
+ * The width of a row's rendered cells: from the row's start (`rowLeft`) to the last rendered
+ * column's end.
+ */
 export function renderedWidth<TRow, TNode>(
     view: GridView<TRow, TNode>,
 ): number {
     const last = view.columns[view.columns.length - 1];
     if (last === undefined) return 0;
-    return view.columnAxis.offsetOf(last + 1) - view.columnBase;
+    return (
+        view.columnAxis.offsetOf(last + 1) - view.columnBase + view.pinnedWidth
+    );
 }
 
 /**
@@ -1378,7 +1520,9 @@ export function headerCellBox<TRow, TNode>(
     const to = cell.columnIndex + cell.columnSpan;
     let start = axis.offsetOf(from);
     let end = axis.offsetOf(to);
-    if (axis.totalSize > view.width) {
+    const { pinned } = columnPinning(view, from, cell.columnSpan);
+    // a pinned cell is always whole: its columns are all rendered
+    if (axis.totalSize > view.width && !pinned) {
         // the rendered columns it reaches into, or the active column it is rendered for
         const rendered = view.renderedColumns;
         const reaches = from < rendered.end && to > rendered.start;
@@ -1395,7 +1539,8 @@ export function headerCellBox<TRow, TNode>(
     }
     return {
         top: (cell.rowIndex + view.headerRowCount) * view.headerRowHeight,
-        left: start - view.columnBase,
+        // in its header row, as `columnLeft`
+        left: leftInRow(view, start, pinned),
         width: Math.max(0, end - start),
         height: cell.rowSpan * view.headerRowHeight,
     };

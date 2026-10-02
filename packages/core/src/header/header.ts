@@ -46,6 +46,8 @@ export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
     // a group inside itself repeats its own key: refused as a duplicate before it is entered again
     const keys = new Set<string>();
+    /** an unpinned column was met: a pinned one after it would not be at the start */
+    let unpinnedSeen = false;
     /** the columns below `list`, or an error */
     const visit = (list: readonly unknown[]): number | string => {
         let leaves = 0;
@@ -68,21 +70,57 @@ export function columnsError(entries: unknown): string | null {
                 ) {
                     return `column "${key}" has an invalid width`;
                 }
+                const pinned: unknown = Reflect.get(entry, "pinned");
+                if (pinned !== undefined && pinned !== "start") {
+                    return `column "${key}" has an invalid pin`;
+                }
+                if (pinned === "start" && unpinnedSeen) {
+                    return `pinned column "${key}" comes after an unpinned one: pinned columns come first`;
+                }
+                if (pinned !== "start") unpinnedSeen = true;
                 leaves += 1;
                 continue;
             }
             if (!Array.isArray(children)) {
                 return `group "${key}" has children that are not an array`;
             }
+            if (Reflect.get(entry, "pinned") !== undefined) {
+                return `group "${key}" is pinned: a group is pinned by its columns`;
+            }
+            const before = unpinnedSeen;
             const below = visit(children);
             if (typeof below === "string") return below;
             if (below === 0) return `group "${key}" has no column`;
+            // its columns all pinned, or none: one pinned column first then one that is not
+            if (!before && unpinnedSeen && pinnedIn(children)) {
+                return `group "${key}" mixes pinned and unpinned columns`;
+            }
             leaves += below;
         }
         return leaves;
     };
     const result = visit(entries);
     return typeof result === "string" ? result : null;
+}
+
+/** Whether a column below `list` is pinned. */
+function pinnedIn(list: readonly unknown[]): boolean {
+    return list.some((entry) => {
+        if (typeof entry !== "object" || entry === null) return false;
+        const children: unknown = Reflect.get(entry, "children");
+        return Array.isArray(children)
+            ? pinnedIn(children)
+            : Reflect.get(entry, "pinned") === "start";
+    });
+}
+
+/** How many columns are pinned at the start: the leading ones with `pinned: "start"`. */
+export function pinnedColumnCount<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+): number {
+    let count = 0;
+    while (columns[count]?.pinned === "start") count += 1;
+    return count;
 }
 
 /** A header of one row: a cell per column. */

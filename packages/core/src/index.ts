@@ -6,6 +6,7 @@ export {
     ariaRowCount,
     ariaRowIndex,
     columnLeft,
+    columnPinning,
     createDataGridEngine,
     type DataGridEngine,
     type DataGridEngineOptions,
@@ -23,6 +24,7 @@ export {
     headerCellBox,
     headerCellSort,
     renderedWidth,
+    rowLeft,
     rowTop,
 } from "./engine/engine";
 export {

@@ -84,7 +84,7 @@ so only the prop moves it; `useDataGrid().model.run` drives the same state.
 
 | # | missing | workaround in the examples | next |
 | --- | --- | --- | --- |
-| 1 | **Pinned columns**: the row-number column of `large-dataset` scrolls away. | None. | Columns Epic |
+| 1 | **Pinned columns**: the row-number column of `large-dataset` scrolls away. | None. | Done in Epic #31: `pinned: "start"` |
 | 2 | The **header needs a background and a `z-index`** to cover the rows. | `z-10 bg-palette-base` on `Header`. | Documented; by design (stacking is the consumer's) |
 | 3 | Rows loaded by window render only when **`getRow` changes**. | A `getRow` memoised on the cache's version (with a lint suppression). | Done in Epic #23: `rows.changed` |
 | 4 | A component outside the grid that shows its **windows** re-renders the grid when its state lives in the grid's parent. | `_kit/store.ts`, written by the callbacks. | Done in Epic #23: `gridRef` and the hooks that take it |

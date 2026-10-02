@@ -1,0 +1,82 @@
+---
+title: Pinned columns
+description: Keep the leading columns in view while the others scroll sideways, under virtualization and scroll scaling, from the keyboard, as divs or as a table.
+---
+
+A pinned column stays at the start of the view while the other columns scroll sideways: a row
+number, a name, the columns that say which row you are reading. Its cells stay in their rows, in
+the same markup, as divs or as a real table.
+
+<Example id="pinned-columns" />
+
+## Pinning a column
+
+Give the leading columns `pinned: "start"`. Pinned columns come first, and a group's columns are
+all pinned or none: a group whose columns are pinned is pinned with them.
+
+```tsx title="columns.tsx"
+const columns: ColumnOrGroup<Person>[] = [
+    {
+        key: "person",
+        name: "Person",
+        children: [
+            { key: "name", name: "Name", width: 180, pinned: "start" },
+            { key: "team", name: "Team", width: 120, pinned: "start" },
+        ],
+    },
+    // … the columns that scroll
+];
+```
+
+A pinned column after one that is not, or a group mixing both, is refused like any invalid
+column (`columns.set` fails, and a grid never starts with them).
+
+## What stays in view
+
+Pinned columns are always rendered, wherever the view is. The column window
+(`onColumnWindowChange`, `useColumnWindow`) describes the columns that scroll: the view right of
+the pinned ones. Bringing a cell into view (the keyboard, `scroll-to-cell`) leaves it right of
+them, never under them, and a pinned cell is always in view: it never scrolls sideways.
+
+When the pinned columns are as wide as the view or wider (a narrow screen), they would hide every
+other column: they scroll with the rest until the view is wider again.
+
+## Stacking is yours
+
+The grid keeps pinned cells in place; what is painted on top is yours, as for the header. Make
+pinned cells opaque and above the cells that scroll under them:
+
+```css title="grid.css"
+[data-grid-part="cell"][data-pinned],
+[data-grid-part="header-cell"][data-pinned] {
+    background: var(--surface);
+    z-index: 1;
+}
+
+/* the last pinned column: a line or a shadow where the others pass under it */
+[data-pinned-edge] {
+    box-shadow: 6px 0 8px -6px rgb(0 0 0 / 0.3);
+}
+```
+
+A row starts the pinned columns' width before its layer, so its box holds the pinned cells: a
+row's background, its hover or `overflow: hidden` cover them. A row stripe that is translucent
+needs painting on the pinned cell too, over its opaque background (the example does it from the
+cell's state).
+
+## What it shows
+
+| on a cell or header cell | when |
+| --- | --- |
+| `data-pinned` | `start`, its column is pinned (a header cell: all of its columns) |
+| `data-pinned-edge` | it ends at the last pinned column |
+
+`useCell` and `useHeaderCell` report the same as `pinned` and `pinnedEdge`. ARIA does not change:
+the DOM order is the columns' order, and `aria-colindex` is the column's.
+
+## How it works
+
+The engine writes a pinned cell's `transform` as the view scrolls, as it does for the layers: no
+React render while scrolling, the same under [scroll scaling](/docs/concepts/scroll-scaling), and
+a `transform` you give a pinned cell is dropped. A browser that scrolls on its own thread may show
+pinned cells a frame behind during a fast fling; they settle as the scroll does.

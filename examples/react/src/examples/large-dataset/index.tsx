@@ -26,6 +26,8 @@ const columns: Column<Row>[] = [
     {
         key: "row",
         name: "Row",
+        // in view while the measurements scroll sideways
+        pinned: "start",
         width: 96,
         renderCell: ({ row }) => formatNumber(row.index + 1),
     },

@@ -1,17 +1,12 @@
 import type {
     CellState,
     HeaderCellState,
+    HeaderRowState,
     RowState,
 } from "@fragiola/data-grid-react";
 import { cn } from "#/lib/cn";
 
-export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";
-
-export const readout =
-    "palette-surface flex flex-wrap gap-x-4 gap-y-1 text-xs text-palette-accent/85 font-(family-name:--dg-font)";
-
-export const figure =
-    "font-(family-name:--dg-numeric-font) tabular-nums text-palette-contrast";
+export const frame = "flex h-full min-h-0 flex-col p-3";
 
 /** the scroll container: the theme's frame, font and size */
 export const root = cn(
@@ -27,26 +22,37 @@ export const grid =
 /** opaque and above the rows: they scroll under it */
 export const header = "z-10 bg-palette-base";
 
-export const headerRow = cn(
-    "bg-(--dg-header-bg) text-palette-accent",
-    "border-b-(length:--dg-gridline) border-(--dg-gridline-color)",
-);
+/** the columns' row (-1) closes the header with a line; the groups' row sits above it */
+export const headerRow = (state: HeaderRowState) =>
+    cn(
+        "bg-(--dg-header-bg) text-palette-accent",
+        state.rowIndex === -1 &&
+            "border-b-(length:--dg-gridline) border-(--dg-gridline-color)",
+    );
+
+const active =
+    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]";
 
 /**
  * a pinned cell is opaque and above the cells that scroll under it (stacking is the app's): the
- * base colour, then the tint its row or header shows through
+ * base colour, then the tint of its row or header painted over it
  */
 const pinned = "z-1 bg-palette-base";
 
-/** the last pinned column ends on a firmer line, so the columns scrolling under it read as such */
-const pinnedEdge = "border-r-2 border-r-palette-line";
+/** the last pinned column ends on a shadow, so the columns scrolling under it read as such */
+const pinnedEdge =
+    "shadow-[6px_0_8px_-6px_color-mix(in_oklab,var(--palette-contrast)_35%,transparent)]";
 
+/** a group centred over its columns, a line under it */
 export const headerCell = (state: HeaderCellState) =>
     cn(
-        "flex items-center px-(--dg-cell-padding) outline-none",
+        "flex px-(--dg-cell-padding) outline-none",
         "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
         "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
-        "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+        state.group
+            ? "items-center justify-center border-b-(length:--dg-gridline) text-palette-contrast"
+            : "items-center",
+        active,
         state.pinned && [
             pinned,
             "[background-image:linear-gradient(var(--dg-header-bg),var(--dg-header-bg))]",
@@ -64,10 +70,9 @@ export const row = (state: RowState) =>
 /** the active cell's outline sits inside it, so neighbours never cover it */
 export const cell = (state: CellState) =>
     cn(
-        "flex items-center justify-end overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
-        "font-(family-name:--dg-numeric-font) tabular-nums",
+        "flex items-center overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
         "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
-        "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+        active,
         state.pinned && [
             pinned,
             state.rowIndex % 2 === 1 &&
@@ -75,4 +80,11 @@ export const cell = (state: CellState) =>
             "group-hover/row:[background-image:linear-gradient(var(--dg-row-hover-bg),var(--dg-row-hover-bg))]",
         ],
         state.pinnedEdge && pinnedEdge,
+    );
+
+/** numbers line up on the right, in the theme's numeric font (the months never pin) */
+export const numeric = (state: CellState) =>
+    cn(
+        cell(state),
+        "justify-end font-(family-name:--dg-numeric-font) tabular-nums",
     );

@@ -10,7 +10,7 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 
 | missing | what the examples do meanwhile |
 | --- | --- |
-| **Pinned columns**: a row-number column scrolls away with the rest. | Nothing: the [`large-dataset`](/examples/large-dataset) row column scrolls. |
+| Columns pin only at the **start**: none at the end yet, and a pinned cell may trail a fast fling by a frame in a browser that scrolls on its own thread. | Pinned columns first ([Pinned columns](/docs/concepts/pinned-columns)). |
 | The header needs a **background and a `z-index`** to cover the rows that scroll under it. | `z-10` and an opaque background on `Header`. |
 | No built-in **selection or filtering**: the grid shows the rows it is given. | The app keeps that state and passes the rows: [`companies`](/examples/companies) selects, [`tasks`](/examples/tasks) filters by facets. |
 | **Sorting** is state only: the grid keeps the sort, never orders the rows (no local pipeline yet). | The app orders the rows it passes by `sortColumns` ([`sorting`](/examples/sorting), [`companies`](/examples/companies)). |
@@ -41,9 +41,10 @@ for), filtering and pagination.
 
 ## Columns
 
-Started: [column groups](/docs/concepts/column-groups) with multi-row headers. Next: pinned
-columns (start and end), column spans in the body, sticky group labels, collapsing groups,
-reordering by drag and keyboard, resizing with minimum and maximum widths, automatic widths.
+Started: [column groups](/docs/concepts/column-groups) with multi-row headers and
+[pinned columns](/docs/concepts/pinned-columns) at the start. Next: pinned columns at the end,
+column spans in the body, sticky group labels, collapsing groups, reordering by drag and
+keyboard, resizing with minimum and maximum widths, automatic widths.
 
 </Step>
 

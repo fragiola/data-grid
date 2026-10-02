@@ -47,6 +47,10 @@
                     "path": "concepts/column-groups"
                 },
                 {
+                    "label": "Pinned columns",
+                    "path": "concepts/pinned-columns"
+                },
+                {
                     "label": "Sorting",
                     "path": "concepts/sorting"
                 },

@@ -4,12 +4,14 @@ import {
     ariaRowIndex,
     cellValue,
     columnLeft,
+    columnPinning,
     EMPTY_WINDOW,
     type GridView,
     headerCellBox,
     headerCellSort,
     renderedWidth,
     rowAt,
+    rowLeft,
     rowTop,
     type SortDirection,
     sameCell,
@@ -128,7 +130,7 @@ export function useRow<TRow>(row: RowInfo<TRow>): {
             style: {
                 position: "absolute",
                 top: rowTop(view, row.rowIndex),
-                left: 0,
+                left: rowLeft(view),
                 width: renderedWidth(view),
                 height: view.rowAxis.sizeOf(row.rowIndex),
                 boxSizing: "border-box",
@@ -166,6 +168,10 @@ export interface CellState {
     readonly loaded: boolean;
     /** it is the active cell (the one the keyboard moves) */
     readonly active: boolean;
+    /** its column is pinned at the start: the engine keeps it in view sideways */
+    readonly pinned: boolean;
+    /** its column is the last pinned one (for a divider or a shadow) */
+    readonly pinnedEdge: boolean;
 }
 
 /** A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. */
@@ -177,12 +183,15 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
     const active =
         view.active?.rowIndex === cell.rowIndex &&
         view.active.columnIndex === cell.columnIndex;
+    const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
     return {
         state: {
             rowIndex: cell.rowIndex,
             columnIndex: cell.columnIndex,
             loaded: cell.loaded,
             active,
+            pinned,
+            pinnedEdge,
         },
         props: {
             role: "gridcell",
@@ -194,6 +203,8 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
                 "column-index": cell.columnIndex,
                 loading: !cell.loaded,
                 active,
+                pinned: pinned ? "start" : undefined,
+                "pinned-edge": pinnedEdge,
             }),
             style: {
                 position: "absolute",
@@ -249,6 +260,10 @@ export interface HeaderCellState {
     readonly sortDirection: SortDirection | undefined;
     /** its column's place among the sorted columns, 1-based, when it is sorted */
     readonly sortPriority: number | undefined;
+    /** its columns are pinned at the start: the engine keeps it in view sideways */
+    readonly pinned: boolean;
+    /** it ends at the last pinned column (for a divider or a shadow) */
+    readonly pinnedEdge: boolean;
 }
 
 /** A header cell's state, and the props for its element. */
@@ -263,6 +278,11 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
     const group = cell.group !== undefined;
     const box = headerCellBox(view, cell);
     const sort = headerCellSort(view, cell);
+    const { pinned, pinnedEdge } = columnPinning(
+        view,
+        cell.columnIndex,
+        cell.columnSpan,
+    );
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -274,6 +294,8 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
             sortable: sort.sortable,
             sortDirection: sort.direction,
             sortPriority: sort.priority,
+            pinned,
+            pinnedEdge,
         },
         props: {
             role: "columnheader",
@@ -291,6 +313,8 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
                 sortable: sort.sortable,
                 sort: sort.direction,
                 "sort-priority": sort.priority,
+                pinned: pinned ? "start" : undefined,
+                "pinned-edge": pinnedEdge,
             }),
             style: {
                 // at its row's top: a cell spanning rows reaches down past it

@@ -712,6 +712,151 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("pinned columns", () => {
+            /** A cell's left from the viewport's left edge. */
+            async function leftInView(viewport: Locator, target: Locator) {
+                const view = await viewport.boundingBox();
+                const box = await target.boundingBox();
+                if (!view || !box) throw new Error("no box");
+                return box.x - view.x;
+            }
+
+            function headerCell(
+                page: Page,
+                rowIndex: number,
+                columnIndex: number,
+            ) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
+                );
+            }
+
+            test("keeps pinned cells and header cells in place while scrolling sideways", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 1_000,
+                    columns: 60,
+                    pinned: 2,
+                });
+                for (const left of [0, 1_234, "end"] as const) {
+                    await scroll(page, viewport, 32 * 5, left);
+                    for (const columnIndex of [0, 1]) {
+                        expect(
+                            await leftInView(
+                                viewport,
+                                cell(page, 6, columnIndex),
+                            ),
+                            `cell ${columnIndex} at ${left}`,
+                        ).toBeCloseTo(columnIndex * 100, 0);
+                        expect(
+                            await leftInView(
+                                viewport,
+                                headerCell(page, -1, columnIndex),
+                            ),
+                            `header ${columnIndex} at ${left}`,
+                        ).toBeCloseTo(columnIndex * 100, 0);
+                    }
+                    await expect(cell(page, 6, 1)).toHaveAttribute(
+                        "data-pinned-edge",
+                        "",
+                    );
+                    await expect(cell(page, 6, 0)).toHaveAttribute(
+                        "aria-colindex",
+                        "1",
+                    );
+                }
+            });
+
+            test("keeps them in place under scaled column scroll", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 100,
+                    columns: 1_000_000,
+                    maxScrollSize: 1_000_000,
+                    pinned: 1,
+                });
+                for (const left of [0, 333_333, "end"] as const) {
+                    await scroll(page, viewport, 0, left);
+                    expect(
+                        await leftInView(viewport, cell(page, 0, 0)),
+                    ).toBeCloseTo(0, 0);
+                    expect(
+                        await leftInView(viewport, headerCell(page, -1, 0)),
+                    ).toBeCloseTo(0, 0);
+                }
+            });
+
+            test("brings a cell into view right of the pinned columns, from the keyboard", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 1_000,
+                    columns: 60,
+                    pinned: 2,
+                });
+                await scroll(page, viewport, 0, 2_000);
+                await cell(page, 3, 1).click();
+                await page.keyboard.press("ArrowRight");
+                await settle(page);
+                await expect(cell(page, 3, 2)).toBeFocused();
+                expect(
+                    await leftInView(viewport, cell(page, 3, 2)),
+                ).toBeGreaterThanOrEqual(200 - 0.5);
+                await expectFullyInBody(viewport, cell(page, 3, 2));
+                await page.keyboard.press("End");
+                await settle(page);
+                await expectFullyInBody(viewport, cell(page, 3, 59));
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                expect(
+                    await leftInView(viewport, cell(page, 3, 58)),
+                ).toBeGreaterThanOrEqual(200 - 0.5);
+                await page.keyboard.press("Home");
+                await settle(page);
+                await expect(cell(page, 3, 0)).toBeFocused();
+                expect(
+                    await leftInView(viewport, cell(page, 3, 0)),
+                ).toBeCloseTo(0, 0);
+            });
+
+            test("keeps a pinned group over its columns", async ({ page }) => {
+                const viewport = await open(page, kind, {
+                    rows: 1_000,
+                    columns: 60,
+                    groups: 1,
+                    pinned: 5,
+                });
+                await scroll(page, viewport, 0, 3_000);
+                // G0 holds C1–C4, after C0
+                expect(
+                    await leftInView(viewport, headerCell(page, -2, 1)),
+                ).toBeCloseTo(100, 0);
+                await expect(headerCell(page, -2, 1)).toHaveAttribute(
+                    "data-pinned-edge",
+                    "",
+                );
+            });
+
+            test("does not render React while scrolling sideways inside the overscan", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 1_000,
+                    columns: 60,
+                    pinned: 2,
+                });
+                await scroll(page, viewport, 0, 1_000);
+                const before = await page.evaluate(() => window.commits);
+                await scroll(page, viewport, 0, 1_040);
+                expect(await page.evaluate(() => window.commits)).toBe(before);
+                expect(
+                    await leftInView(viewport, cell(page, 0, 1)),
+                ).toBeCloseTo(100, 0);
+            });
+        });
+
         test.describe("sorting", () => {
             const SORT = { rows: 1_000, columns: 20, sort: 1 };
 

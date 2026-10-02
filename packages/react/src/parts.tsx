@@ -3,9 +3,11 @@ import {
     ariaRowIndex,
     type EngineLayer,
     renderedWidth,
+    rowLeft,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
+    cloneElement,
     isValidElement,
     type ReactNode,
     useCallback,
@@ -56,25 +58,37 @@ function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
 type LayerStyle<State> = DivPrimitiveProps<State>["style"];
 
 /**
- * A layer's props without a `transform` in their style: the engine writes the layer's transform
- * itself, after every commit, so a consumer's would hide the rows.
+ * A layer's props (or a pinned cell's) without a `transform` in their style, nor in their
+ * `render` element's: the engine writes that transform itself, so a consumer's would move the
+ * rows, or let a pinned cell scroll away.
  */
-function withoutTransform<State, P extends { style?: LayerStyle<State> }>(
-    props: P,
-): P {
-    const { style } = props;
-    if (style === undefined) return props;
+function withoutTransform<
+    State,
+    P extends { style?: LayerStyle<State>; render?: unknown },
+>(props: P): P {
     const strip = (value: React.CSSProperties | undefined) => {
         if (!value || !("transform" in value)) return value;
         const { transform: _, ...rest } = value;
         return rest;
     };
+    const { style, render } = props;
+    const element = isValidElement<{ style?: React.CSSProperties }>(render)
+        ? render
+        : undefined;
+    const renderStyle = element?.props.style;
     return {
         ...props,
-        style:
-            typeof style === "function"
-                ? (state: State) => strip(style(state))
-                : strip(style),
+        ...(style === undefined
+            ? {}
+            : {
+                  style:
+                      typeof style === "function"
+                          ? (state: State) => strip(style(state))
+                          : strip(style),
+              }),
+        ...(element && renderStyle && "transform" in renderStyle
+            ? { render: cloneElement(element, { style: strip(renderStyle) }) }
+            : {}),
     };
 }
 
@@ -239,7 +253,7 @@ export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
         style: {
             position: "absolute",
             top: (rowIndex + view.headerRowCount) * view.headerRowHeight,
-            left: 0,
+            left: rowLeft(view),
             width: renderedWidth(view),
             height: view.headerRowHeight,
             // with several rows, an upper one stays above the next: a cell spanning down from it
@@ -292,8 +306,12 @@ function isTableCell(render: unknown): boolean {
  * then gets `colSpan`/`rowSpan` too (a render function finds them in the state).
  */
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
-    const { cell, children, ...rest } = props;
-    const { state, props: own } = useHeaderCell(cell);
+    const { state, props: own } = useHeaderCell(props.cell);
+    // a pinned cell's transform is the engine's (it keeps the cell in view sideways)
+    const { cell, children, ...rest } = state.pinned
+        ? withoutTransform<HeaderCellState, HeaderCellProps<TRow>>(props)
+        : props;
+    const pinnedRef = useLayer("pinned");
     const { style, ...cellProps } = own;
     const content = children !== undefined ? children : headerCellContent(cell);
     const spans = isTableCell(rest.render)
@@ -304,6 +322,7 @@ export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
         : {};
     return useRenderElement("div", rest, {
         state,
+        ref: state.pinned ? pinnedRef : undefined,
         props: { ...cellProps, ...spans, children: content },
         style,
     });
@@ -482,8 +501,12 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
  * cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on click.
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
-    const { cell, children, ...rest } = props;
-    const { state, props: own } = useCell(cell);
+    const { state, props: own } = useCell(props.cell);
+    // a pinned cell's transform is the engine's (it keeps the cell in view sideways)
+    const { cell, children, ...rest } = state.pinned
+        ? withoutTransform<CellState, CellProps<TRow>>(props)
+        : props;
+    const pinnedRef = useLayer("pinned");
     const { style, ...cellProps } = own;
     let content: ReactNode = null;
     if (children !== undefined) {
@@ -501,6 +524,7 @@ export function Cell<TRow>(props: CellProps<TRow>) {
     }
     return useRenderElement("div", rest, {
         state,
+        ref: state.pinned ? pinnedRef : undefined,
         props: { ...cellProps, children: content },
         style,
     });

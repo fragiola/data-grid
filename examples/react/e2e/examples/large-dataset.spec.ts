@@ -28,3 +28,22 @@ test("keeps the cells in the page bounded at the top, the middle and the end", a
     await expect(cell(page, 999_999, 999)).toBeVisible();
     await expect(page.getByTestId("rendered-cells")).not.toHaveText("0");
 });
+
+test("keeps the pinned row column in view, far to the right", async ({
+    page,
+}) => {
+    await openExample(page, "large-dataset");
+    await scrollTo(page, { top: "50%", left: "75%" });
+    const view = await page
+        .locator('[data-grid-part="root"]')
+        .first()
+        .boundingBox();
+    const first = page
+        .locator('[data-grid-part="cell"][data-column-index="0"]')
+        .nth(3);
+    await expect(first).toHaveAttribute("data-pinned", "start");
+    const box = await first.boundingBox();
+    if (!view || !box) throw new Error("no box");
+    expect(box.x - view.x).toBeLessThan(4);
+    await expect(first).toHaveText(/^\d[\d,]*$/);
+});

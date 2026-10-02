@@ -23,6 +23,8 @@ import { createRoot } from "react-dom/client";
 //                        and 12 columns in turn (a 12-column group is wider than the viewport)
 //   &sort=1              C0 and C1 sortable (C1's header cell holds a button of its own), the
 //                        sort uncontrolled
+//   &pinned=2            the first N columns pinned at the start (with groups, 5 pins C0 and
+//                        the first group); the two lines of CSS stacking needs are the fixture's
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported, and a button before
@@ -76,6 +78,14 @@ const EMPTY_CONTENT = {
     placeItems: "center",
 } as const;
 
+/**
+ * Stacking is the consumer's (P4): pinned cells are opaque and above the cells that scroll under
+ * them.
+ */
+function pinnedStyle(state: { pinned: boolean }) {
+    return state.pinned ? { background: "white", zIndex: 1 } : undefined;
+}
+
 /** A header row of the fixture: `row` from `HeaderRows`, or the columns' row without one. */
 function HeaderRow({
     table,
@@ -91,6 +101,7 @@ function HeaderRow({
                     <DataGrid.HeaderCell
                         cell={cell}
                         render={table ? <th /> : undefined}
+                        style={pinnedStyle}
                     />
                 )}
             </DataGrid.HeaderCells>
@@ -109,6 +120,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         : undefined;
     const groups = params.get("groups") === "1";
     const sort = params.get("sort") === "1";
+    const pinnedCount = numberParam(params, "pinned", 0);
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
 
@@ -121,6 +133,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                 width: 100,
                 getValue: (row) => `${row.index}:${columnIndex}`,
                 ...(sort && columnIndex < 2 ? { sortable: true } : {}),
+                ...(columnIndex < pinnedCount
+                    ? { pinned: "start" as const }
+                    : {}),
                 ...(sort && columnIndex === 1
                     ? {
                           renderHeaderCell: () => (
@@ -136,7 +151,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             }),
         );
         return groups ? grouped(leaves) : leaves;
-    }, [columnCount, groups, sort]);
+    }, [columnCount, groups, sort, pinnedCount]);
     const rowHeight = useMemo(
         () =>
             variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
@@ -204,6 +219,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                             <td />
                                                         ) : undefined
                                                     }
+                                                    style={pinnedStyle}
                                                 />
                                             )}
                                         </DataGrid.Cells>
