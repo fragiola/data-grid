@@ -161,8 +161,15 @@ export interface DataGridState<TRow, TNode = unknown> {
     /** a header row's height; 0 for a grid without a header */
     readonly headerRowHeight: number;
     readonly activePosition: CellPosition | null;
-    /** how many times `rows.changed` said the rows' data changed */
-    readonly rowsRevision: number;
+    /**
+     * the last `rows.changed`: which rows' data changed (end excluded), and how many times it
+     * was said (`revision`, 0 before the first)
+     */
+    readonly rowsChanged: {
+        readonly revision: number;
+        readonly start: number;
+        readonly end: number;
+    };
 }
 
 /** What `createDataGridModel` starts from. */

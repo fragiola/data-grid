@@ -474,7 +474,7 @@ describe("rows.changed", () => {
             ok: true,
             value: { start: 5, end: 8 },
         });
-        expect(grid.state.rowsRevision).toBe(1);
+        expect(grid.state.rowsChanged.revision).toBe(1);
         // beyond the 20 rows: clamped, not an error
         expect(grid.run("rows.changed", { start: 15, end: 500 })).toEqual({
             ok: true,
@@ -484,7 +484,11 @@ describe("rows.changed", () => {
             { start: 5, end: 8 },
             { start: 15, end: 20 },
         ]);
-        expect(grid.state.rowsRevision).toBe(2);
+        expect(grid.state.rowsChanged).toEqual({
+            revision: 2,
+            start: 15,
+            end: 20,
+        });
     });
 
     it("covers every row without a range, and the rest of them from a start or up to an end", () => {
@@ -501,7 +505,7 @@ describe("rows.changed", () => {
             ok: true,
             value: { start: 0, end: 3 },
         });
-        expect(grid.state.rowsRevision).toBe(3);
+        expect(grid.state.rowsChanged.revision).toBe(3);
     });
 
     it("changes nothing else: no count, no size, no active position", () => {
@@ -509,11 +513,11 @@ describe("rows.changed", () => {
         grid.run("active-position.set", { rowIndex: 4, columnIndex: 1 });
         const before = grid.state;
         grid.run("rows.changed", { start: 0, end: 10 });
-        const { rowsRevision, ...after } = grid.state;
-        const { rowsRevision: _, ...rest } = before;
+        const { rowsChanged, ...after } = grid.state;
+        const { rowsChanged: _, ...rest } = before;
         expect(after).toEqual(rest);
         expect(grid.state.source).toBe(before.source);
-        expect(rowsRevision).toBe(1);
+        expect(rowsChanged).toEqual({ revision: 1, start: 0, end: 10 });
     });
 
     it("commits nothing for a range without a row", () => {
@@ -534,7 +538,7 @@ describe("rows.changed", () => {
             ok: true,
             value: { start: 0, end: 0 },
         });
-        expect(empty.state.rowsRevision).toBe(0);
+        expect(empty.state.rowsChanged.revision).toBe(0);
     });
 
     it("refuses bounds that are not whole numbers, negative or reversed", () => {
@@ -549,7 +553,7 @@ describe("rows.changed", () => {
             expect(result.ok, JSON.stringify(payload)).toBe(false);
             if (!result.ok) expect(result.error.code).toBe("invalid_payload");
         }
-        expect(grid.state.rowsRevision).toBe(0);
+        expect(grid.state.rowsChanged.revision).toBe(0);
     });
 
     it("goes through the middleware, which can refuse or rewrite it", () => {
@@ -559,7 +563,7 @@ describe("rows.changed", () => {
             return veto("not now");
         });
         expect(grid.run("rows.changed").ok).toBe(false);
-        expect(grid.state.rowsRevision).toBe(0);
+        expect(grid.state.rowsChanged.revision).toBe(0);
         remove();
         grid.use((ctx, next) => {
             if (ctx.command === "rows.changed")

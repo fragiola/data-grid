@@ -53,8 +53,8 @@ export default function WindowedColumns() {
     );
     const [columns] = useState(() => columnsFor(tiles));
     const gridRef = useDataGridRef<Row>();
-    // a tile that arrives fills the cells of its rows: the grid is told which, and renders them
-    // only if they are on screen
+    // a tile that arrives fills cells of its rows: the grid is told which rows, and renders only
+    // if they are on screen
     useEffect(
         () =>
             tiles.subscribe((rows) =>

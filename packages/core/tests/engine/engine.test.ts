@@ -799,6 +799,19 @@ describe("rows.changed", () => {
         expect(renders).toHaveBeenCalledTimes(1);
     });
 
+    it("does not depend on what a middleware answers", () => {
+        const { engine, model } = setup();
+        model.use((ctx, next) => {
+            if (ctx.command !== "rows.changed") return next();
+            next();
+            return { ok: true, value: "logged" };
+        });
+        const renders = vi.fn();
+        engine.adapter.subscribe(renders);
+        model.run("rows.changed", { start: 0, end: 5 });
+        expect(renders).toHaveBeenCalledTimes(1);
+    });
+
     it("moves no window and fires no window event", () => {
         const { engine, model } = setup();
         const rows = events(engine, "row-window");

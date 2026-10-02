@@ -41,7 +41,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    declarative props, controlled (`activePosition` + `onActivePositionChange`) or uncontrolled
    (`defaultActivePosition`), and maps them onto commands; `useDataGrid()` returns the model and
    the engine. **From outside the root (Epic #23)** an app gives `Root` a `gridRef`
-   (`useDataGridRef()`): a subscribable handle whose `current` is `{ model, engine }` while that
+   (`useDataGridRef()`, or `createDataGridRef()` outside a component): a subscribable handle whose `current` is `{ model, engine }` while that
    root is mounted, which `useDataGrid(gridRef)`, `useRowWindow(gridRef)` and
    `useColumnWindow(gridRef)` take. No Provider, no model created outside `Root`; `ref` stays the
    element. Rows that arrive behind the same `getRow` are told with `rows.changed { start?, end? }`,

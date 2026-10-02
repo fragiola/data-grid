@@ -94,7 +94,7 @@ export function useGrid<TRow>(
  */
 export function useDataGrid<TRow = unknown>(): DataGridContextValue<TRow>;
 export function useDataGrid<TRow>(
-    gridRef: DataGridRef<TRow>,
+    gridRef: DataGridRef<TRow> | undefined,
 ): DataGridContextValue<TRow> | null;
 export function useDataGrid<TRow>(
     gridRef?: DataGridRef<TRow>,

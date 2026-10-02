@@ -16,7 +16,11 @@ export interface DataGridRef<TRow = unknown> {
 /** What sets a ref's `current`: kept off the ref, so only a `Root` writes it. */
 const writers = new WeakMap<object, (value: object | null) => void>();
 
-function createDataGridRef<TRow>(): DataGridRef<TRow> {
+/**
+ * A handle on a grid, made outside a component (a module, a test, a store): the same as
+ * `useDataGridRef()` returns. A `gridRef` must be made by one of the two.
+ */
+export function createDataGridRef<TRow = unknown>(): DataGridRef<TRow> {
     let current: DataGridContextValue<TRow> | null = null;
     const listeners = new Set<() => void>();
     const gridRef: DataGridRef<TRow> = {
@@ -46,7 +50,8 @@ export function useDataGridRef<TRow = unknown>(): DataGridRef<TRow> {
 
 /**
  * Hands a `Root`'s grid to its `gridRef`; returns the release. A ref belongs to one mounted
- * `Root` at a time.
+ * `Root` at a time: a second one is told about in the console and does not take it, rather than
+ * breaking the page for a mistake the types cannot see.
  */
 export function attachGridRef<TRow>(
     gridRef: DataGridRef<TRow>,
@@ -54,12 +59,16 @@ export function attachGridRef<TRow>(
 ): () => void {
     const write = writers.get(gridRef);
     if (!write) {
-        throw new Error("gridRef must come from useDataGridRef()");
+        console.error(
+            "<DataGrid.Root gridRef>: the ref must come from useDataGridRef() or createDataGridRef()",
+        );
+        return () => {};
     }
     if (gridRef.current && gridRef.current !== grid) {
-        throw new Error(
-            "this gridRef is already held by another mounted <DataGrid.Root>",
+        console.error(
+            "<DataGrid.Root gridRef>: this ref is already held by another mounted root; give each root its own",
         );
+        return () => {};
     }
     write(grid);
     return () => {

@@ -234,7 +234,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         return { model, engine };
     });
     const { model, engine } = context;
-    // before paint and before the components around it run their effects: they see the grid
+    // before paint; the components that follow the ref (useRowWindow(gridRef), …) are told
     useLayoutEffect(
         () => (gridRef ? attachGridRef(gridRef, context) : undefined),
         [gridRef, context],

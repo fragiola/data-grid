@@ -974,11 +974,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     const unsubscribeModel = model.subscribe((event) => {
         const { before, after } = event;
         state = after;
-        // `rows.changed` answers the range it clamped to the rows
-        if (
-            event.command === "rows.changed" &&
-            rendersRows(event.result as Range)
-        ) {
+        if (after.rowsChanged !== before.rowsChanged) {
+            // rows' data changed, and nothing else did: off screen, there is nothing to do
+            if (!rendersRows(after.rowsChanged)) return;
             rowsRevision += 1;
         }
         let fresh = false;

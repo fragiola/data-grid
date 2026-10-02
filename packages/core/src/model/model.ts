@@ -286,7 +286,13 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
             // no row in it: nothing to tell
             const next =
                 range.start < range.end
-                    ? { ...state, rowsRevision: state.rowsRevision + 1 }
+                    ? {
+                          ...state,
+                          rowsChanged: {
+                              revision: state.rowsChanged.revision + 1,
+                              ...range,
+                          },
+                      }
                     : state;
             return { ok: true, value: { state: next, value: range } };
         },
@@ -420,7 +426,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         rowHeight: options.rowHeight ?? DEFAULT_ROW_HEIGHT,
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
         activePosition: options.activePosition ?? null,
-        rowsRevision: 0,
+        rowsChanged: { revision: 0, start: 0, end: 0 },
     });
     const middlewares: Middleware<TRow, TNode>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();

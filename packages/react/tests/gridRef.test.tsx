@@ -3,6 +3,7 @@ import { type ReactNode, StrictMode, useState } from "react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
     type Column,
+    createDataGridRef,
     DataGrid,
     type DataGridRef,
     useColumnWindow,
@@ -254,20 +255,53 @@ describe("gridRef", () => {
         expect(screen.getByTestId("status")).toHaveTextContent("10–20");
     });
 
-    it("belongs to one mounted root", () => {
+    it("belongs to one mounted root: a second one is told in the console and does not take it", () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
-        expect(() =>
-            render(
-                <App onRef={() => {}}>
-                    {(gridRef) => (
-                        <>
-                            <Grid gridRef={gridRef} />
-                            <Grid gridRef={gridRef} />
-                        </>
-                    )}
-                </App>,
-            ),
-        ).toThrow(/already held/);
+        let gridRef: DataGridRef<Person> | undefined;
+        const { container } = render(
+            <App onRef={(ref) => (gridRef = ref)}>
+                {(ref) => (
+                    <>
+                        <Grid gridRef={ref} />
+                        <Grid gridRef={ref} />
+                    </>
+                )}
+            </App>,
+        );
+        expect(error).toHaveBeenCalledWith(
+            expect.stringContaining("already held"),
+        );
+        // the first root keeps it, and both grids still work
+        const [first] = container.querySelectorAll('[data-grid-part="root"]');
+        expect(gridRef?.current?.engine.adapter.getView().rowCount).toBe(1_000);
+        act(() => {
+            gridRef?.current?.model.run("active-position.set", {
+                rowIndex: 1,
+                columnIndex: 0,
+            });
+        });
+        expect(first?.querySelector("[data-active]")).not.toBeNull();
+        expect(
+            container.querySelectorAll('[data-grid-part="cell"][data-active]'),
+        ).toHaveLength(1);
+        error.mockRestore();
+    });
+
+    it("can be made outside a component, and refuses one it did not make", () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const made = createDataGridRef<Person>();
+        const { unmount } = render(<Grid gridRef={made} />);
+        expect(made.current?.model.get("row-count")).toBe(1_000);
+        unmount();
+        expect(made.current).toBeNull();
+        const fake: DataGridRef<Person> = {
+            current: null,
+            subscribe: () => () => {},
+        };
+        render(<Grid gridRef={fake} />);
+        expect(error).toHaveBeenCalledWith(
+            expect.stringContaining("useDataGridRef()"),
+        );
         error.mockRestore();
     });
 
