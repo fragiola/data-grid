@@ -1,0 +1,12 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "customConditions": ["development"],
+        "types": ["node", "vite/client"],
+        "allowImportingTsExtensions": true,
+        "paths": {
+            "#/*": ["../../examples/react/src/*"]
+        }
+    },
+    "include": ["src", "fixtures", "e2e", "tests", "*.config.ts"]
+}

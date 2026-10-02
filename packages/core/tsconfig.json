@@ -1,0 +1,8 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "types": [],
+        "stripInternal": true
+    },
+    "include": ["src", "tests", "*.config.ts"]
+}

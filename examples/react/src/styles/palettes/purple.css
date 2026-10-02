@@ -1,0 +1,21 @@
+/* Vendored from the Fragiola UI registry (https://fragiola.com/r/palette-purple.json, source registry/styles/palettes/purple.css). Do not edit: re-run scripts/vendor-fragiola.ts. */
+/* Purple — a chromatic palette, hue ~300. The colour IS the element. Both
+   themes declare all six roles. */
+
+:root[data-theme="light"] .palette-purple {
+    --palette-base: oklch(0.55 0.2 300);
+    --palette-soft: oklch(0.94 0.06 300);
+    --palette-line: oklch(0.85 0.08 300);
+    --palette-contrast: oklch(1 0 0);
+    --palette-accent: oklch(0.45 0.18 300);
+    --palette-ring: var(--palette-accent);
+}
+
+:root[data-theme="dark"] .palette-purple {
+    --palette-base: oklch(0.7 0.18 300);
+    --palette-soft: oklch(0.3 0.08 300);
+    --palette-line: oklch(0.4 0.1 300);
+    --palette-contrast: oklch(0.12 0.02 300);
+    --palette-accent: oklch(0.78 0.15 300);
+    --palette-ring: var(--palette-accent);
+}

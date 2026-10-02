@@ -1,0 +1,124 @@
+/* Theme "paper" — Warm and spacious: a serif report with roomy cells, no vertical lines, uppercase headers.
+
+   One file per theme, selected by data-example-theme="paper" on any element
+   (the docs put it on <body>, as an app would). A theme only sets values; it styles
+   no markup. It declares:
+     1. shape tokens (--dg-*) that the examples' class names read: fonts and sizes
+        (--dg-font, --dg-font-size, --dg-numeric-font), the cell padding (--dg-cell-padding),
+        the grid's frame (--dg-radius, --dg-border, --dg-shadow), the lines between cells
+        (--dg-gridline), the header's type (--dg-header-weight, --dg-header-transform,
+        --dg-header-tracking), the active cell's outline (--dg-active-width,
+        --dg-active-style), striped rows on or off (--dg-zebra: 1 or 0) and motion
+        (--dg-motion);
+     2. the Fragiola palettes the examples use, each with all SIX roles
+        (base, soft, line, contrast, accent, ring). A palette that omitted one
+        would inherit it from the page and leak across the theme boundary;
+     3. on every palette, the colour tokens that depend on it: the header
+        (--dg-header-bg), striped and hovered rows (--dg-row-alt-bg, --dg-row-hover-bg),
+        the lines (--dg-gridline-color), the active cell (--dg-active-line) and the
+        placeholder of a row still loading (--dg-loading-bg). They are declared per palette
+        so that var(--palette-…) resolves against the palette the element sits in.
+
+   Specificity: the palette rules are ":root [data-example-theme="paper"] .palette-x", which ties
+   with Fragiola's own ":root[data-theme] .palette-x" and wins by coming
+   later in the cascade, so a theme overrides the page's light/dark. */
+
+[data-example-theme="paper"] {
+    color-scheme: light;
+    --palette-state-shift: -0.1;
+    --dg-font: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    --dg-font-size: 0.875rem;
+    --dg-numeric-font: var(--font-sans);
+    --dg-cell-padding: 1rem;
+    --dg-radius: 14px;
+    --dg-border: 1px;
+    --dg-shadow: 0 2px 10px oklch(0.3 0.03 60 / 0.08);
+    --dg-gridline: 0px;
+    --dg-header-weight: 600;
+    --dg-header-transform: uppercase;
+    --dg-header-tracking: 0.06em;
+    --dg-active-width: 2px;
+    --dg-active-style: solid;
+    --dg-zebra: 1;
+    --dg-motion: 180ms;
+}
+
+:root [data-example-theme="paper"] .palette-surface,
+:root [data-example-theme="paper"].palette-surface {
+    --palette-base: oklch(0.955 0.014 85);
+    --palette-soft: oklch(0.92 0.02 85);
+    --palette-line: oklch(0.84 0.028 80);
+    --palette-contrast: oklch(0.25 0.03 60);
+    --palette-accent: oklch(0.33 0.035 60);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] .palette-raised,
+:root [data-example-theme="paper"].palette-raised {
+    --palette-base: oklch(0.99 0.006 85);
+    --palette-soft: oklch(0.945 0.016 85);
+    --palette-line: oklch(0.87 0.022 80);
+    --palette-contrast: oklch(0.25 0.03 60);
+    --palette-accent: oklch(0.33 0.035 60);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] .palette-blue,
+:root [data-example-theme="paper"].palette-blue {
+    --palette-base: oklch(0.46 0.09 220);
+    --palette-soft: oklch(0.93 0.03 220);
+    --palette-line: oklch(0.82 0.05 220);
+    --palette-contrast: oklch(0.99 0.005 85);
+    --palette-accent: oklch(0.4 0.08 220);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] .palette-orange,
+:root [data-example-theme="paper"].palette-orange {
+    --palette-base: oklch(0.62 0.14 45);
+    --palette-soft: oklch(0.93 0.04 55);
+    --palette-line: oklch(0.83 0.07 55);
+    --palette-contrast: oklch(0.17 0.04 45);
+    --palette-accent: oklch(0.45 0.12 45);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] .palette-green,
+:root [data-example-theme="paper"].palette-green {
+    --palette-base: oklch(0.5 0.09 150);
+    --palette-soft: oklch(0.93 0.035 150);
+    --palette-line: oklch(0.83 0.05 150);
+    --palette-contrast: oklch(0.99 0.005 85);
+    --palette-accent: oklch(0.42 0.08 150);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] .palette-danger,
+:root [data-example-theme="paper"].palette-danger {
+    --palette-base: oklch(0.52 0.17 25);
+    --palette-soft: oklch(0.93 0.04 25);
+    --palette-line: oklch(0.83 0.07 25);
+    --palette-contrast: oklch(0.99 0.005 85);
+    --palette-accent: oklch(0.45 0.15 25);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] .palette-purple,
+:root [data-example-theme="paper"].palette-purple {
+    --palette-base: oklch(0.5 0.12 330);
+    --palette-soft: oklch(0.93 0.035 330);
+    --palette-line: oklch(0.83 0.06 330);
+    --palette-contrast: oklch(0.99 0.005 85);
+    --palette-accent: oklch(0.43 0.11 330);
+    --palette-ring: var(--palette-accent);
+}
+
+:root [data-example-theme="paper"] [class*="palette-"],
+:root [data-example-theme="paper"][class*="palette-"] {
+    --dg-header-bg: transparent;
+    --dg-row-alt-bg: oklch(from var(--palette-soft) l c h / 0.6);
+    --dg-row-hover-bg: var(--palette-soft);
+    --dg-gridline-color: var(--palette-line);
+    --dg-active-line: oklch(0.46 0.09 220);
+    --dg-loading-bg: var(--palette-soft);
+}
