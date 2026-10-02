@@ -40,7 +40,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    adapter calls is under `engine.adapter`; an app never touches it. `DataGrid.Root` takes
    declarative props, controlled (`activePosition` + `onActivePositionChange`) or uncontrolled
    (`defaultActivePosition`), and maps them onto commands; `useDataGrid()` returns the model and
-   the engine. **Names say what they take**: an id field is `<entity>Id`, an index is
+   the engine. **From outside the root (Epic #23)** an app gives `Root` a `gridRef`
+   (`useDataGridRef()`, or `createDataGridRef()` outside a component): a subscribable handle whose `current` is `{ model, engine }` while that
+   root is mounted, which `useDataGrid(gridRef)`, `useRowWindow(gridRef)` and
+   `useColumnWindow(gridRef)` take. No Provider, no model created outside `Root`; `ref` stays the
+   element. Rows that arrive behind the same `getRow` are told with `rows.changed { start?, end? }`,
+   which renders only when the range is on screen. **Names say what they take**: an id field is `<entity>Id`, an index is
    `<entity>Index` (`rowIndex`, `columnIndex`), except a plain `index` (or `key`) when it is the
    index of what the key returns (`row-by { index }`, `column-by { key }`, as Dockable's
    `node-by { id }`); a key and its payload read as one sentence
@@ -170,8 +175,9 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
-- **Hooks have one shape.** `useDataGrid()` is `{ model, engine }`; a part hook (`useRow`,
-  `useCell`, `useHeaderCell`) returns `{ state, props }`, the structural style in `props.style`.
+- **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
+  until a root holds it); a part hook (`useRow`, `useCell`, `useHeaderCell`) returns
+  `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
   before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the

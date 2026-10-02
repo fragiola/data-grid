@@ -10,6 +10,8 @@ export default {
         "rowCount",
         "getRow",
         "onRowWindowChange",
+        "rows.changed",
+        "gridRef",
         "data-loading",
         "range cache",
     ],

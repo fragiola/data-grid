@@ -1,13 +1,13 @@
 "use client";
 
 import {
-    type AxisWindow,
     type Column,
     DataGrid,
+    type DataGridRef,
+    useColumnWindow,
+    useDataGridRef,
 } from "@fragiola/data-grid-react";
-import { useState } from "react";
 import { formatNumber, measurement } from "../_kit/data";
-import { createStore, type Store, useStore } from "../_kit/store";
 import * as styles from "./styles";
 
 const ROWS = 10_000;
@@ -31,16 +31,12 @@ const columns: Column<Row>[] = Array.from(
     }),
 );
 
-const EMPTY: AxisWindow = {
-    visible: { start: 0, end: 0 },
-    rendered: { start: 0, end: 0 },
-};
-
 export default function ManyColumns() {
-    const [window] = useState(() => createStore<AxisWindow>(EMPTY));
+    // the readout follows the column window through the ref: it re-renders, the grid does not
+    const gridRef = useDataGridRef<Row>();
     return (
         <div className={styles.frame}>
-            <ColumnReadout window={window} />
+            <ColumnReadout gridRef={gridRef} />
             <DataGrid.Root
                 columns={columns}
                 rowCount={ROWS}
@@ -48,7 +44,7 @@ export default function ManyColumns() {
                 rowHeight={32}
                 overscan={{ columns: 3 }}
                 className={styles.root}
-                onColumnWindowChange={window.set}
+                gridRef={gridRef}
             >
                 <DataGrid.Grid aria-label="Columns" className={styles.grid}>
                     <DataGrid.Header className={styles.header}>
@@ -85,8 +81,8 @@ export default function ManyColumns() {
     );
 }
 
-function ColumnReadout({ window }: { window: Store<AxisWindow> }) {
-    const { visible, rendered } = useStore(window);
+function ColumnReadout({ gridRef }: { gridRef: DataGridRef<Row> }) {
+    const { visible, rendered } = useColumnWindow(gridRef);
     return (
         <p className={styles.readout} data-testid="readout">
             <span>

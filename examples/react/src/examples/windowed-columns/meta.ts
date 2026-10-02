@@ -9,6 +9,7 @@ export default {
     features: [
         "onRowWindowChange",
         "onColumnWindowChange",
+        "rows.changed",
         "getValue",
         "tiles",
     ],

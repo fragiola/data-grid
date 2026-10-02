@@ -49,6 +49,11 @@ grid.run("active-position.move", { direction: "sideways" });
 grid.run("columns.set", { columns: [{ key: "x" }] });
 grid.run("active-position.clear");
 grid.run("sizes.set", { rowHeight: (index) => 20 + (index % 3) });
+// rows.changed takes a range, or nothing for every row
+grid.run("rows.changed");
+grid.run("rows.changed", { start: 10, end: 20 });
+// @ts-expect-error
+grid.run("rows.changed", { start: "10" });
 
 // with a name typed as a union of commands, the payload is required
 declare const some: "columns.set" | "active-position.clear";

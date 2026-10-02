@@ -161,6 +161,15 @@ export interface DataGridState<TRow, TNode = unknown> {
     /** a header row's height; 0 for a grid without a header */
     readonly headerRowHeight: number;
     readonly activePosition: CellPosition | null;
+    /**
+     * the last `rows.changed`: which rows' data changed (end excluded), and how many times it
+     * was said (`revision`, 0 before the first)
+     */
+    readonly rowsChanged: {
+        readonly revision: number;
+        readonly start: number;
+        readonly end: number;
+    };
 }
 
 /** What `createDataGridModel` starts from. */
@@ -201,6 +210,19 @@ export interface CommandMap<TRow, TNode = unknown> {
     "data.set": {
         payload: DataSetPayload<TRow>;
         result: { readonly rowCount: number };
+    };
+    /**
+     * tells that the data behind the rows changed (rows arrived in a cache `getRow` reads): the
+     * rows from `start` to `end` (end excluded), clamped to the grid's; without them, from the
+     * first row or to the last. It changes no count and no size: the engine renders again only
+     * when the range meets the rendered rows or the active row. Returns the clamped range.
+     */
+    "rows.changed": {
+        payload: {
+            readonly start?: number | undefined;
+            readonly end?: number | undefined;
+        };
+        result: { readonly start: number; readonly end: number };
     };
     /** changes the row height (a number or a function of the index) or the header row's */
     "sizes.set": {

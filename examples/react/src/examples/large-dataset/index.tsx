@@ -1,14 +1,15 @@
 "use client";
 
 import {
-    type AxisWindow,
     type Column,
     DataGrid,
+    type DataGridRef,
     type Range,
+    useColumnWindow,
+    useDataGridRef,
+    useRowWindow,
 } from "@fragiola/data-grid-react";
-import { useState } from "react";
 import { formatNumber, measurement } from "../_kit/data";
-import { createStore, type Store, useStore } from "../_kit/store";
 import * as styles from "./styles";
 
 const ROWS = 1_000_000;
@@ -41,36 +42,19 @@ const columns: Column<Row>[] = [
     ),
 ];
 
-const EMPTY: AxisWindow = {
-    visible: { start: 0, end: 0 },
-    rendered: { start: 0, end: 0 },
-};
-
-interface Windows {
-    rows: AxisWindow;
-    columns: AxisWindow;
-}
-
 export default function LargeDataset() {
-    // the windows go to a store the readout reads, so the grid never re-renders for them
-    const [windows] = useState(() =>
-        createStore<Windows>({ rows: EMPTY, columns: EMPTY }),
-    );
+    // the readout follows the grid's windows through the ref: it re-renders, the grid does not
+    const gridRef = useDataGridRef<Row>();
     return (
         <div className={styles.frame}>
-            <Readout windows={windows} />
+            <Readout gridRef={gridRef} />
             <DataGrid.Root
                 columns={columns}
                 rowCount={ROWS}
                 getRow={getRow}
                 rowHeight={32}
                 className={styles.root}
-                onRowWindowChange={(rows) =>
-                    windows.set((current) => ({ ...current, rows }))
-                }
-                onColumnWindowChange={(columns) =>
-                    windows.set((current) => ({ ...current, columns }))
-                }
+                gridRef={gridRef}
             >
                 <DataGrid.Grid
                     aria-label="Measurements"
@@ -114,8 +98,9 @@ function span(range: Range) {
     return range.end - range.start;
 }
 
-function Readout({ windows }: { windows: Store<Windows> }) {
-    const { rows, columns } = useStore(windows);
+function Readout({ gridRef }: { gridRef: DataGridRef<Row> }) {
+    const rows = useRowWindow(gridRef);
+    const columns = useColumnWindow(gridRef);
     return (
         <p className={styles.readout} data-testid="readout">
             <span>

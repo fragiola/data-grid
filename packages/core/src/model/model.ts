@@ -261,6 +261,41 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
             });
             return { ok: true, value: { state: next, value: { rowCount } } };
         },
+        "rows.changed": (state, { start, end }) => {
+            for (const [name, bound] of [
+                ["start", start],
+                ["end", end],
+            ] as const) {
+                if (
+                    bound !== undefined &&
+                    (!Number.isInteger(bound) || bound < 0)
+                ) {
+                    return fail(
+                        "invalid_payload",
+                        `${name} must be a whole number, 0 or more`,
+                    );
+                }
+            }
+            if (start !== undefined && end !== undefined && start > end) {
+                return fail("invalid_payload", "start must not be after end");
+            }
+            const range = {
+                start: Math.min(start ?? 0, state.rowCount),
+                end: Math.min(end ?? state.rowCount, state.rowCount),
+            };
+            // no row in it: nothing to tell
+            const next =
+                range.start < range.end
+                    ? {
+                          ...state,
+                          rowsChanged: {
+                              revision: state.rowsChanged.revision + 1,
+                              ...range,
+                          },
+                      }
+                    : state;
+            return { ok: true, value: { state: next, value: range } };
+        },
         "sizes.set": (state, { rowHeight, headerRowHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return fail(
@@ -391,6 +426,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         rowHeight: options.rowHeight ?? DEFAULT_ROW_HEIGHT,
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
         activePosition: options.activePosition ?? null,
+        rowsChanged: { revision: 0, start: 0, end: 0 },
     });
     const middlewares: Middleware<TRow, TNode>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
@@ -617,6 +653,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
 export const COMMANDS: readonly CommandName[] = [
     "columns.set",
     "data.set",
+    "rows.changed",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

@@ -77,6 +77,10 @@
                     "path": "guides/styling-css"
                 },
                 {
+                    "label": "Column alignment",
+                    "path": "guides/column-alignment"
+                },
+                {
                     "label": "Nested grids",
                     "path": "guides/nested-grids"
                 },

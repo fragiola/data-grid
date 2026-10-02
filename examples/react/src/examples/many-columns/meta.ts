@@ -6,6 +6,11 @@ export default {
         "Five thousand columns, virtualized like the rows: the grid reports the columns in view and the few rendered around them.",
     category: "virtualization",
     order: 2,
-    features: ["column virtualization", "onColumnWindowChange", "overscan"],
+    features: [
+        "column virtualization",
+        "gridRef",
+        "useColumnWindow",
+        "overscan",
+    ],
     docs: "/docs/concepts/virtualization",
 } satisfies ExampleMeta;

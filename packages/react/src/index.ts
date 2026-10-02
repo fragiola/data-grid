@@ -21,6 +21,11 @@ export {
     useDataGrid,
 } from "./context";
 export {
+    createDataGridRef,
+    type DataGridRef,
+    useDataGridRef,
+} from "./gridRef";
+export {
     type CellState,
     type HeaderCellState,
     type RowState,
