@@ -20,6 +20,7 @@ export {
     type RowInfo,
     useDataGrid,
 } from "./context";
+export { type DataGridRef, useDataGridRef } from "./gridRef";
 export {
     type CellState,
     type HeaderCellState,

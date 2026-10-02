@@ -4,6 +4,7 @@ import {
     ariaRowIndex,
     cellValue,
     columnLeft,
+    EMPTY_WINDOW,
     type GridView,
     headerCellBox,
     renderedWidth,
@@ -12,7 +13,12 @@ import {
     sameCell,
 } from "@fragiola/data-grid";
 import type * as React from "react";
-import { type ReactNode, useContext, useEffect, useState } from "react";
+import {
+    type ReactNode,
+    useCallback,
+    useContext,
+    useSyncExternalStore,
+} from "react";
 import {
     type CellInfo,
     type HeaderCellInfo,
@@ -20,8 +26,10 @@ import {
     type HeaderRowInfo,
     type RowInfo,
     useDataGrid,
+    useGrid,
     ViewContext,
 } from "./context";
+import type { DataGridRef } from "./gridRef";
 import { dataAttributes } from "./utils/useRender";
 
 export { useDataGrid } from "./context";
@@ -36,24 +44,37 @@ export function useGridView<TRow = unknown>(): GridView<TRow, ReactNode> {
     return view as GridView<TRow, ReactNode>;
 }
 
-function useWindow(event: "row-window" | "column-window"): AxisWindow {
-    const { engine } = useDataGrid();
-    const [value, setValue] = useState(() => engine.get(event));
-    useEffect(() => {
-        setValue(engine.get(event));
-        return engine.subscribe(event, setValue);
-    }, [engine, event]);
-    return value;
+function useWindow<TRow>(
+    event: "row-window" | "column-window",
+    gridRef: DataGridRef<TRow> | undefined,
+): AxisWindow {
+    const grid = useGrid(gridRef);
+    if (!grid && !gridRef) {
+        throw new Error(
+            "a window hook must be used inside <DataGrid.Root>, or be given a gridRef",
+        );
+    }
+    const engine = grid?.engine;
+    const subscribe = useCallback(
+        (listener: () => void) =>
+            engine ? engine.subscribe(event, listener) : () => {},
+        [engine, event],
+    );
+    const read = () => (engine ? engine.get(event) : EMPTY_WINDOW);
+    return useSyncExternalStore(subscribe, read, read);
 }
 
-/** The rows in view and rendered; re-renders when either range changes (e.g. to show them). */
-export function useRowWindow(): AxisWindow {
-    return useWindow("row-window");
+/**
+ * The rows in view and rendered; re-renders when either range changes (e.g. to show them). With
+ * a `gridRef`, from outside the `Root` too (the empty window until a `Root` takes the ref).
+ */
+export function useRowWindow<TRow>(gridRef?: DataGridRef<TRow>): AxisWindow {
+    return useWindow("row-window", gridRef);
 }
 
-/** The columns in view and rendered; re-renders when either range changes. */
-export function useColumnWindow(): AxisWindow {
-    return useWindow("column-window");
+/** The columns in view and rendered; re-renders when either range changes. Takes a `gridRef` too. */
+export function useColumnWindow<TRow>(gridRef?: DataGridRef<TRow>): AxisWindow {
+    return useWindow("column-window", gridRef);
 }
 
 /** The rows a render shows, with their data and keys. */

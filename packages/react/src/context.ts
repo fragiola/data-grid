@@ -8,6 +8,7 @@ import type {
     HeaderRowView,
 } from "@fragiola/data-grid";
 import { createContext, type ReactNode, useContext } from "react";
+import { type DataGridRef, useGridRefCurrent } from "./gridRef";
 
 /** A column of a React grid: its renderers return React nodes. One generic, the row type (D10). */
 export type Column<TRow> = CoreColumn<TRow, ReactNode>;
@@ -71,15 +72,38 @@ export const ViewContext = createContext<GridView<unknown, ReactNode> | null>(
 );
 
 /**
+ * The grid a hook reads: the one a `gridRef` holds when it is given one (`null` until a `Root`
+ * takes it), else the `Root` around the component's (`null` outside one).
+ */
+export function useGrid<TRow>(
+    gridRef: DataGridRef<TRow> | undefined,
+): DataGridContextValue<TRow> | null {
+    const fromRoot = useContext(DataGridContext);
+    const fromRef = useGridRefCurrent(gridRef);
+    if (gridRef) return fromRef;
+    // the `Root` that provides it was given the row type the hook states
+    return fromRoot as unknown as DataGridContextValue<TRow> | null;
+}
+
+/**
  * The grid's model and engine, typed by the row type the app passes. A context cannot carry a
  * generic: the `Root` that provides it was given that row type, so the hook states it.
+ *
+ * With a `gridRef`, it works outside the `Root` too: the grid that ref's `Root` holds, or `null`
+ * until one does.
  */
-export function useDataGrid<TRow = unknown>(): DataGridContextValue<TRow> {
-    const value = useContext(DataGridContext);
-    if (!value) {
+export function useDataGrid<TRow = unknown>(): DataGridContextValue<TRow>;
+export function useDataGrid<TRow>(
+    gridRef: DataGridRef<TRow>,
+): DataGridContextValue<TRow> | null;
+export function useDataGrid<TRow>(
+    gridRef?: DataGridRef<TRow>,
+): DataGridContextValue<TRow> | null {
+    const grid = useGrid(gridRef);
+    if (!grid && !gridRef) {
         throw new Error("useDataGrid() must be used inside <DataGrid.Root>");
     }
-    return value as unknown as DataGridContextValue<TRow>;
+    return grid;
 }
 
 /** The row a part renders in (`DataGrid.Cells`, `DataGrid.Cell`). */

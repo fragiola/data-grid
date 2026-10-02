@@ -30,6 +30,7 @@ import {
     RowContext,
     ViewContext,
 } from "./context";
+import { attachGridRef, type DataGridRef } from "./gridRef";
 import {
     type DivPrimitiveProps,
     dataAttributes,
@@ -59,7 +60,8 @@ type RowsProps<TRow> =
           rowCount: number;
           /**
            * the row at an index, or `undefined` while it is not loaded (it renders with
-           * `data-loading`). Pass a new function when rows arrive, so the grid renders them.
+           * `data-loading`). When rows arrive, run `rows.changed` (through a `gridRef` from
+           * outside the root), or pass a new function, so the grid renders them.
            */
           getRow: (index: number) => TRow | undefined;
       };
@@ -94,6 +96,11 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         overscan?: { rows?: number; columns?: number } | undefined;
         /** the cap on an axis's scroll size before scroll scaling takes over (default 10M px) */
         maxScrollSize?: number | undefined;
+        /**
+         * a handle on this grid from outside the root (`useDataGridRef()`): its model and engine,
+         * and the hooks that take it. `ref` stays the root's element.
+         */
+        gridRef?: DataGridRef<TRow> | undefined;
         children?: ReactNode;
     };
 
@@ -147,6 +154,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         endReachedThreshold,
         overscan,
         maxScrollSize,
+        gridRef,
         children,
         onKeyDown,
         ...rest
@@ -226,6 +234,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
         return { model, engine };
     });
     const { model, engine } = context;
+    // before paint and before the components around it run their effects: they see the grid
+    useLayoutEffect(
+        () => (gridRef ? attachGridRef(gridRef, context) : undefined),
+        [gridRef, context],
+    );
     const view = useSyncExternalStore(
         engine.adapter.subscribe,
         engine.adapter.getView,
