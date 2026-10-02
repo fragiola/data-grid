@@ -116,7 +116,7 @@
 :root [data-example-theme="light"] [class*="palette-"],
 :root [data-example-theme="light"][class*="palette-"] {
     --dg-header-bg: var(--palette-soft);
-    --dg-row-alt-bg: oklch(from var(--palette-soft) l c h / 0.5);
+    --dg-row-alt-bg: transparent;
     --dg-row-hover-bg: var(--palette-soft);
     --dg-gridline-color: var(--palette-line);
     --dg-active-line: oklch(0.55 0.2 250);
