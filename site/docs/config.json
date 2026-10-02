@@ -47,6 +47,10 @@
                     "path": "concepts/column-groups"
                 },
                 {
+                    "label": "Sorting",
+                    "path": "concepts/sorting"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

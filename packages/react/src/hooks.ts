@@ -7,9 +7,11 @@ import {
     EMPTY_WINDOW,
     type GridView,
     headerCellBox,
+    headerCellSort,
     renderedWidth,
     rowAt,
     rowTop,
+    type SortDirection,
     sameCell,
 } from "@fragiola/data-grid";
 import type * as React from "react";
@@ -241,6 +243,12 @@ export interface HeaderCellState {
     readonly group: boolean;
     /** it is the active cell */
     readonly active: boolean;
+    /** its column sorts the grid: a click, Enter or Space toggles it (never a group) */
+    readonly sortable: boolean;
+    /** the direction its column is sorted in, when it is */
+    readonly sortDirection: SortDirection | undefined;
+    /** its column's place among the sorted columns, 1-based, when it is sorted */
+    readonly sortPriority: number | undefined;
 }
 
 /** A header cell's state, and the props for its element. */
@@ -254,6 +262,7 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
         view.active !== null && sameCell(view.active, cell, view.header.cellAt);
     const group = cell.group !== undefined;
     const box = headerCellBox(view, cell);
+    const sort = headerCellSort(view, cell);
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -262,11 +271,16 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
             rowSpan: cell.rowSpan,
             group,
             active,
+            sortable: sort.sortable,
+            sortDirection: sort.direction,
+            sortPriority: sort.priority,
         },
         props: {
             role: "columnheader",
             "aria-colindex": cell.columnIndex + 1,
             ...ariaHeaderCellSpans(cell),
+            // on the first sorted column only (ARIA 1.2: one header at a time)
+            ...(sort.ariaSort ? { "aria-sort": sort.ariaSort } : {}),
             tabIndex: active ? 0 : -1,
             ...dataAttributes({
                 "grid-part": "header-cell",
@@ -274,6 +288,9 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
                 "column-index": cell.columnIndex,
                 active,
                 group,
+                sortable: sort.sortable,
+                sort: sort.direction,
+                "sort-priority": sort.priority,
             }),
             style: {
                 // at its row's top: a cell spanning rows reaches down past it

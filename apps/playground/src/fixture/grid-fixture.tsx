@@ -4,6 +4,7 @@ import {
     DataGrid,
     type DataGridContextValue,
     type HeaderRowInfo,
+    type SortColumn,
     useDataGrid,
 } from "@fragiola/data-grid-react";
 import { Profiler, StrictMode, useMemo } from "react";
@@ -20,9 +21,12 @@ import { createRoot } from "react-dom/client";
 //   &width=800&height=600 the viewport's size
 //   &groups=1            column groups (two header rows): C0 spans both rows, then groups of 4
 //                        and 12 columns in turn (a 12-column group is wider than the viewport)
+//   &sort=1              C0 and C1 sortable (C1's header cell holds a button of its own), the
+//                        sort uncontrolled
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
-// commits of the grid (a Profiler), and a button before and after the grid take Tab.
+// commits of the grid (a Profiler), `window.sortChanges` the sorts reported, and a button before
+// and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -32,6 +36,7 @@ declare global {
     interface Window {
         grid?: DataGridContextValue<FixtureRow>;
         commits: number;
+        sortChanges: (readonly SortColumn[])[];
     }
 }
 
@@ -103,6 +108,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         ? numberParam(params, "maxScrollSize", 10_000_000)
         : undefined;
     const groups = params.get("groups") === "1";
+    const sort = params.get("sort") === "1";
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
 
@@ -114,10 +120,23 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                 name: `C${columnIndex}`,
                 width: 100,
                 getValue: (row) => `${row.index}:${columnIndex}`,
+                ...(sort && columnIndex < 2 ? { sortable: true } : {}),
+                ...(sort && columnIndex === 1
+                    ? {
+                          renderHeaderCell: () => (
+                              <>
+                                  C1{" "}
+                                  <button type="button" data-testid="menu">
+                                      menu
+                                  </button>
+                              </>
+                          ),
+                      }
+                    : {}),
             }),
         );
         return groups ? grouped(leaves) : leaves;
-    }, [columnCount, groups]);
+    }, [columnCount, groups, sort]);
     const rowHeight = useMemo(
         () =>
             variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
@@ -142,6 +161,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     getRow={getRow}
                     rowHeight={rowHeight}
                     maxScrollSize={maxScrollSize}
+                    onSortColumnsChange={(sortColumns) =>
+                        window.sortChanges.push(sortColumns)
+                    }
                     data-testid="viewport"
                     style={{ width, height }}
                 >
@@ -216,6 +238,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
 
 export function mountGridFixture(kind: "table" | "div") {
     window.commits = 0;
+    window.sortChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

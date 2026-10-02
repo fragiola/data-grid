@@ -711,5 +711,109 @@ for (const kind of KINDS) {
                 ).toBeGreaterThan(before);
             });
         });
+
+        test.describe("sorting", () => {
+            const SORT = { rows: 1_000, columns: 20, sort: 1 };
+
+            function headerCell(page: Page, columnIndex: number) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]`,
+                );
+            }
+
+            /** Each of the first three header cells' sort, as its attributes show it. */
+            function shown(page: Page) {
+                return page.evaluate(() =>
+                    [0, 1, 2].map((columnIndex) => {
+                        const element = document.querySelector(
+                            `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]`,
+                        );
+                        return [
+                            element?.getAttribute("aria-sort") ?? null,
+                            element?.getAttribute("data-sort") ?? null,
+                            element?.getAttribute("data-sort-priority") ?? null,
+                        ];
+                    }),
+                );
+            }
+
+            const changes = (page: Page) =>
+                page.evaluate(() => window.sortChanges.length);
+
+            test("toggles on a click, Ctrl or ⌘ adding a column, aria-sort on one header only", async ({
+                page,
+            }) => {
+                await open(page, kind, SORT);
+                await headerCell(page, 0).click();
+                expect(await shown(page)).toEqual([
+                    ["ascending", "ascending", "1"],
+                    [null, null, null],
+                    [null, null, null],
+                ]);
+                await headerCell(page, 1).click({
+                    modifiers: ["ControlOrMeta"],
+                    position: { x: 5, y: 5 },
+                });
+                expect(await shown(page)).toEqual([
+                    ["ascending", "ascending", "1"],
+                    [null, "ascending", "2"],
+                    [null, null, null],
+                ]);
+                expect(await page.locator("[aria-sort]").count()).toBe(1);
+                await headerCell(page, 0).click();
+                expect(await shown(page)).toEqual([
+                    ["descending", "descending", "1"],
+                    [null, null, null],
+                    [null, null, null],
+                ]);
+                if (kind === "table") {
+                    expect(
+                        await headerCell(page, 0).evaluate(
+                            (element) => element.tagName,
+                        ),
+                    ).toBe("TH");
+                }
+            });
+
+            test("toggles on Enter and Space on the active header cell", async ({
+                page,
+            }) => {
+                await open(page, kind, SORT);
+                await headerCell(page, 0).focus();
+                await page.keyboard.press("Enter");
+                expect((await shown(page))[0]?.[1]).toBe("ascending");
+                await page.keyboard.press("Space");
+                expect((await shown(page))[0]?.[1]).toBe("descending");
+                // the arrows still move: Space sorted, it did not scroll
+                await page.keyboard.press("ArrowDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 0,
+                    columnIndex: 0,
+                });
+            });
+
+            test("does not sort for a column that is not sortable, a button in a header cell, or a cancelled event", async ({
+                page,
+            }) => {
+                await open(page, kind, SORT);
+                await headerCell(page, 2).click();
+                await page.getByTestId("menu").click();
+                // the consumer's own handler, before the grid's: preventDefault cancels
+                await headerCell(page, 0).evaluate((element) => {
+                    const cancel = (event: Event) => event.preventDefault();
+                    element.addEventListener("click", cancel);
+                    element.addEventListener("keydown", cancel);
+                });
+                await headerCell(page, 0).click();
+                await headerCell(page, 0).focus();
+                await page.keyboard.press("Enter");
+                expect(await changes(page)).toBe(0);
+                expect(await shown(page)).toEqual([
+                    [null, null, null],
+                    [null, null, null],
+                    [null, null, null],
+                ]);
+            });
+        });
     });
 }

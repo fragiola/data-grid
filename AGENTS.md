@@ -68,7 +68,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
-    renderHeaderCell?, renderCell?, meta? }`. Without children, a header cell renders
+    renderHeaderCell?, renderCell?, sortable?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -78,7 +78,15 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     (rows `-depth … -1`, each `headerRowHeight` tall); a leaf with fewer groups above it spans the
     rows down to -1 (G2). The core lays the header cells out per column window (G3, a cut group
     included); a header cell's position is its first column on its row, a leaf spanning rows has
-    one per row (G4); `aria-colspan`/`aria-rowspan` (G5).
+    one per row (G4); `aria-colspan`/`aria-rowspan` (G5). **Sorting (Epic #27, S1–S7):** the
+    model keeps `sortColumns` (`{ columnKey, direction: "ascending" | "descending" }[]`, the
+    first one first; `sort-columns.set`, `sort-columns.toggle { columnKey, multi }`), controlled
+    or not on `Root` like the active position (`sortColumns`/`defaultSortColumns`/
+    `onSortColumnsChange`, one helper for both). A click, Enter or Space on a sortable column's
+    header cell toggles it (ascending, descending, none; Ctrl/⌘ adds it); a control inside the
+    cell (or a widget holding controls), a drag and a held key's repeats are not a sort. `aria-sort` on the first
+    sorted column only; `data-sortable`, `data-sort`, `data-sort-priority`. The grid never orders
+    the rows: the app does.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
@@ -180,7 +188,9 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
-  before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the
+  before both (bubbling): `preventDefault` in either cancels a grid key. **Clicks too (Epic
+  #27):** `Root` calls the engine's `click` (a header cell's sort) after the consumer's
+  `onClick`, the same way. Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
 - **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's. The

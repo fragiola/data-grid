@@ -1,7 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
 
-// The app's own selection, deleting and sorting over the rows it gives the grid.
+// The app's own selection and deleting over the rows it gives the grid, and the grid's sort (the
+// app orders the rows by it).
 
 const header = (page: Page, name: string) =>
     page.getByRole("columnheader").filter({ hasText: name });
@@ -52,7 +53,7 @@ test("sorts from the header, both ways, with aria-sort", async ({ page }) => {
         "aria-sort",
         "ascending",
     );
-    await header(page, "Domain").getByRole("button").click();
+    await header(page, "Domain").click();
     await expect(header(page, "Domain")).toHaveAttribute(
         "aria-sort",
         "ascending",
@@ -65,7 +66,7 @@ test("sorts from the header, both ways, with aria-sort", async ({ page }) => {
     expect(ascending).toEqual(
         [...ascending].sort((a, b) => a.localeCompare(b)),
     );
-    await header(page, "Domain").getByRole("button").click();
+    await header(page, "Domain").click();
     await expect(header(page, "Domain")).toHaveAttribute(
         "aria-sort",
         "descending",
@@ -74,6 +75,22 @@ test("sorts from the header, both ways, with aria-sort", async ({ page }) => {
     expect(descending).toEqual(
         [...descending].sort((a, b) => b.localeCompare(a)),
     );
+});
+
+test("adds a column to the sort with Ctrl or ⌘, the first one keeping aria-sort", async ({
+    page,
+}) => {
+    await openExample(page, "companies");
+    await header(page, "Domain").click({ modifiers: ["ControlOrMeta"] });
+    await expect(header(page, "Company")).toHaveAttribute(
+        "aria-sort",
+        "ascending",
+    );
+    await expect(header(page, "Domain")).toHaveAttribute(
+        "data-sort-priority",
+        "2",
+    );
+    await expect(header(page, "Domain")).not.toHaveAttribute("aria-sort", /.*/);
 });
 
 test("sorts from the toolbar's select", async ({ page }) => {

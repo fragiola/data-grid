@@ -35,13 +35,12 @@ export const headerCell = cn(
     "flex items-center gap-1.5 px-(--dg-cell-padding) outline-none",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
     "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
+    // a sortable header cell sorts on a click: it reads as one, and its text is not selected
+    "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const headerLabel = "flex items-center gap-1.5";
-
-export const sortButton =
-    "flex items-center gap-1.5 rounded-sm text-start hover:text-palette-contrast focus-visible:outline-2 focus-visible:outline-palette-ring";
 
 export const icon = "size-3.5 shrink-0 opacity-80";
 

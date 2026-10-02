@@ -24,18 +24,11 @@ export function isSortKey(value: unknown): value is SortKey {
     return SORT_KEYS.some((key) => key === value);
 }
 
-export interface Sort {
-    key: SortKey;
-    direction: "ascending" | "descending";
-}
-
 export interface TableState {
     selected: ReadonlySet<number>;
     visibleIds: readonly number[];
     toggle: (id: number) => void;
     toggleAll: () => void;
-    sort: Sort;
-    sortBy: (key: SortKey) => void;
 }
 
 const TableContext = createContext<TableState | null>(null);
@@ -114,36 +107,32 @@ export function SelectAllHeader({ at }: { at: CellAt }) {
     );
 }
 
-/** A sortable header: its icon and name, and a button that sorts by it. */
-export function SortHeader({
-    sortKey,
+/**
+ * A sortable column's header: its icon, its name and, while it is sorted, the direction. The
+ * grid sorts on a click, Enter or Space on the header cell; the arrow is the app's.
+ */
+export function SortLabel({
+    columnKey,
     icon,
-    at,
     children,
 }: {
-    sortKey: SortKey;
+    columnKey: SortKey;
     icon: ReactNode;
-    at: CellAt;
     children: ReactNode;
 }) {
-    const { sort, sortBy } = useTable();
-    const active = sort.key === sortKey;
+    const { sortColumns } = useGridView();
+    const sorted = sortColumns.find((entry) => entry.columnKey === columnKey);
     return (
-        <button
-            type="button"
-            tabIndex={useCellTabIndex(at)}
-            className={styles.sortButton}
-            onClick={() => sortBy(sortKey)}
-        >
+        <span className={styles.headerLabel}>
             {icon}
             {children}
-            {active &&
-                (sort.direction === "ascending" ? (
+            {sorted &&
+                (sorted.direction === "ascending" ? (
                     <ArrowUp aria-hidden className={styles.sortIcon} />
                 ) : (
                     <ArrowDown aria-hidden className={styles.sortIcon} />
                 ))}
-        </button>
+        </span>
     );
 }
 
@@ -168,12 +157,4 @@ export function CellLink({
             {children}
         </a>
     );
-}
-
-/** `aria-sort` for a header cell. */
-export function useAriaSort(
-    key: string,
-): "ascending" | "descending" | undefined {
-    const { sort } = useTable();
-    return sort.key === key ? sort.direction : undefined;
 }
