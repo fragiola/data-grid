@@ -1,0 +1,57 @@
+---
+title: Styling with Tailwind
+description: Style every part with utility classes, state variants for data attributes, and theme tokens for what changes per theme.
+---
+
+The examples are styled with Tailwind v4 and the Fragiola UI palettes. Nothing in the package
+depends on either.
+
+## Classes on the parts
+
+```tsx title="grid.tsx"
+<DataGrid.Root className="h-96 overflow-auto rounded-lg border" columns={columns} rows={rows}>
+    <DataGrid.Grid aria-label="People">
+        <DataGrid.Header className="z-10 bg-white">
+            <DataGrid.HeaderRow className="border-b font-semibold">
+                <DataGrid.HeaderCells<Person>>
+                    {(cell) => <DataGrid.HeaderCell cell={cell} className="flex items-center px-3" />}
+                </DataGrid.HeaderCells>
+            </DataGrid.HeaderRow>
+        </DataGrid.Header>
+        <DataGrid.Body>
+            <DataGrid.Rows<Person>>
+                {(row) => (
+                    <DataGrid.Row row={row} className="border-b hover:bg-zinc-50">
+                        <DataGrid.Cells<Person>>
+                            {(cell) => (
+                                <DataGrid.Cell
+                                    cell={cell}
+                                    className="flex items-center px-3 outline-none data-active:outline-2 data-active:-outline-offset-2"
+                                />
+                            )}
+                        </DataGrid.Cells>
+                    </DataGrid.Row>
+                )}
+            </DataGrid.Rows>
+        </DataGrid.Body>
+    </DataGrid.Grid>
+</DataGrid.Root>
+```
+
+## State variants
+
+Tailwind v4 reads data attributes as variants: `data-active:`, `data-loading:`, and
+`in-data-active:` for an element inside an active row. See
+[State attributes](/docs/concepts/state-attributes).
+
+## Theme tokens
+
+The examples read their shapes from CSS variables a theme declares (`--dg-cell-padding`,
+`--dg-gridline`, `--dg-active-line`, …), so one set of classes takes five themes:
+`px-(--dg-cell-padding)`, `border-b-(length:--dg-gridline)`,
+`data-active:outline-(--dg-active-line)`. The gallery shows each example in every theme.
+
+## Keep classes complete
+
+Tailwind finds classes by reading your source: write whole class names, and map a value to a
+class instead of building one (`` `px-${size}` `` is never generated).

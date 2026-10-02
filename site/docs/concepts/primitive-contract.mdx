@@ -1,0 +1,54 @@
+---
+title: The primitive contract
+description: The rules every part follows, render instead of asChild, merged refs and handlers, class and style functions, and structural style only.
+---
+
+Every part of `DataGrid` (`Root`, `Grid`, `Header`, `HeaderRow`, `HeaderCell`, `Body`, `Row`,
+`Cell`) follows the same rules.
+
+## `render`, never `asChild`
+
+`render` replaces the element a part renders. Give it an element, and the part's props are merged
+into it; or a function, which receives the props and the part's state.
+
+```tsx title="render.tsx"
+<DataGrid.Grid render={<table />} aria-label="People" />
+
+<DataGrid.Cell
+    cell={cell}
+    render={(props, state) => <td {...props} title={state.active ? "active" : undefined} />}
+/>
+```
+
+## Props, refs and handlers
+
+- Any prop a part does not use is forwarded to its element (`id`, `aria-*`, `data-*`, handlers).
+- `ref` is a plain prop, merged with the part's own.
+- A handler you pass runs after the part's own, with one exception: `Root` runs the grid's keys
+  **after** your `onKeyDown`, and a cell's `onKeyDown` runs before both, so `preventDefault`
+  cancels a key. See [Keyboard and accessibility](/docs/concepts/keyboard).
+
+## `className` and `style`
+
+Both take a value, or a function of the part's state:
+
+```tsx title="row.tsx"
+<DataGrid.Row row={row} className={(state) => (state.rowIndex % 2 ? "bg-zinc-50" : undefined)} />
+```
+
+## Structural style only
+
+The only inline style a part sets is what places it: `position`, `top`, `left`, `width`,
+`height`, the layers' `transform`, `display`, the root's `overflow`, `box-sizing`. Your style is
+merged under these keys, which always win. Nothing cosmetic is ever set: see the
+[`unstyled`](/examples/unstyled) example.
+
+## No text and no names
+
+Parts render their children, or the column's renderer. They set no `aria-label` of their own:
+name the grid yourself (`<DataGrid.Grid aria-label="People">`).
+
+## The recursion is yours
+
+`Rows`, `Cells` and `HeaderCells` take a function that renders each item, so every row and cell
+is written by you. Without it, they render the default `Row`, `Cell` and `HeaderCell`.

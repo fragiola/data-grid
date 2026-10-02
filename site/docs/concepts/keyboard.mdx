@@ -1,0 +1,53 @@
+---
+title: Keyboard and accessibility
+description: The active cell, the APG grid keys, a roving tab stop and ARIA, and how to replace any key without leaving the grid behind.
+---
+
+## The active cell
+
+One cell at a time is **active**: it has `data-active` and is the grid's tab stop. The keys move
+it, the grid scrolls it into view and focuses it.
+
+| key | moves to |
+| --- | --- |
+| Arrows | the next cell in that direction (the header is row -1) |
+| Home, End | the row's first or last cell |
+| Ctrl+Home, Ctrl+End | the grid's first or last cell |
+| PageUp, PageDown | a page of rows up or down |
+| Tab | leaves the grid |
+
+Moves stop at the edges. A click or a Tab into a cell makes it active.
+
+<Example id="keyboard-navigation" />
+
+## One tab stop
+
+While no cell is active, the grid is the tab stop; focusing it activates the first cell in view.
+Then the active cell is (`tabIndex` 0, the others -1), so Tab moves past the grid in one step.
+
+## Replacing a key
+
+A cell's `onKeyDown` runs before the grid's: `preventDefault` cancels the grid's handling, and
+`useDataGrid().model.run("active-position.set", …)` moves the cell where you want. The
+[`custom-navigation`](/examples/custom-navigation) example makes Tab move across rows this way.
+
+A middleware can refuse or rewrite any move:
+
+```ts title="no-header.ts"
+import { veto } from "@fragiola/data-grid";
+
+// ArrowUp from the first row stays there: the header never becomes active
+model.use((ctx, next) =>
+    ctx.command === "active-position.move" &&
+    ctx.payload.direction === "up" &&
+    ctx.state.activePosition?.rowIndex === 0
+        ? veto("the header is not navigable")
+        : next(),
+);
+```
+
+## ARIA
+
+The grid is `role="grid"` with `aria-rowcount` and `aria-colcount` counting every row and column,
+rendered or not; rows and cells carry `aria-rowindex` and `aria-colindex`. Name the grid with
+`aria-label`: the package sets no names. See [State attributes](/docs/concepts/state-attributes).

@@ -24,7 +24,9 @@
         "bench": "vitest bench --run",
         "build": "pnpm -r build && node scripts/check-dts.ts",
         "e2e": "pnpm --workspace-concurrency=1 --filter playground --filter examples-react e2e",
-        "dev": "pnpm --filter playground dev"
+        "dev": "pnpm --filter playground dev",
+        "site:export": "node site/export.ts",
+        "site:dev": "node site/dev.ts"
     },
     "devDependencies": {
         "@biomejs/biome": "2.5.14",

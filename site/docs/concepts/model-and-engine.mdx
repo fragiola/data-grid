@@ -1,0 +1,60 @@
+---
+title: Model and engine
+description: The model holds the grid's data and rules and changes only through commands; the engine is the grid on screen, scrolling and focus.
+---
+
+The core splits a grid in two, and the React package wires them to your props.
+
+## The model
+
+The model is the grid's data and its rules: the columns, where the rows come from, the sizes and
+the active cell. It is plain data, it runs in Node, and it changes only through **commands**.
+Every command runs through a chain of **middleware** that can let it pass, rewrite its payload or
+veto it.
+
+Everything has the same verbs, each taking a key and a payload:
+
+| verb | does |
+| --- | --- |
+| `run` | runs a command and commits it: `model.run("active-position.set", { rowIndex: 3, columnIndex: 1 })` |
+| `can` | whether a command would apply now (nothing is committed) |
+| `check` | what a command would return now (nothing is committed) |
+| `get` | reads a value: `model.get("row-count")`, `model.get("row-by", { index: 3 })` |
+| `is` | answers a question: `model.is("cell-active", { rowIndex: 3, columnIndex: 1 })` |
+| `use` | adds a middleware |
+| `subscribe` | listens to every committed command |
+
+The commands of this version are `columns.set`, `data.set`, `sizes.set`, `active-position.set`,
+`active-position.clear` and `active-position.move`. A command never throws on bad input: it
+returns `{ ok: false, error }`.
+
+```ts title="middleware.ts"
+import { veto } from "@fragiola/data-grid";
+
+// rows 0–9 are read-only: their cells cannot become active
+model.use((ctx, next) =>
+    ctx.command === "active-position.set" && ctx.payload.rowIndex < 10
+        ? veto("locked")
+        : next(),
+);
+```
+
+## The engine
+
+The engine is one grid on screen. It measures the root, reads the scroll, computes the windows,
+writes the layers' positions, maps the keys onto commands and moves focus. It also has
+the verbs: `engine.get("row-window")`, `engine.run("scroll-to-cell", { rowIndex: 500 })` and
+`engine.subscribe("rows-end-reached", listener)`.
+
+## From props to commands
+
+`DataGrid.Root` creates both and maps its props onto commands: `columns` becomes `columns.set`,
+`rows` (or `rowCount` and `getRow`) becomes `data.set`, `activePosition` becomes
+`active-position.set`. `useDataGrid()` returns `{ model, engine }` to any part inside it, so an
+app can read and drive the same grid from code.
+
+## Controlled or not
+
+`defaultActivePosition` starts the active cell and lets the grid move it.
+`activePosition` controls it: a key press asks, through `onActivePositionChange`, and only the
+prop moves it. See the [`keyboard-navigation`](/examples/keyboard-navigation) example.

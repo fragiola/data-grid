@@ -1,0 +1,38 @@
+---
+title: Sizing the grid
+description: The root is the scroll container and needs a size; rows and columns take theirs in pixels, from numbers or from a function.
+---
+
+## The root is the scroll container
+
+`DataGrid.Root` renders the element that scrolls (`overflow: auto`). The grid inside it is as
+large as the dataset, so the root needs a bounded size, from a fixed height, a flex or grid
+parent, or anything else your layout uses. The engine measures it with a `ResizeObserver` and
+follows it as it changes.
+
+```tsx title="layout.tsx"
+<div className="flex h-dvh flex-col">
+    <header>…</header>
+    <DataGrid.Root className="min-h-0 flex-1" columns={columns} rows={rows}>
+        …
+    </DataGrid.Root>
+</div>
+```
+
+## Rows
+
+`rowHeight` is a number (every row the same, the default 35) or a function of the row's index. A
+function is summed once into offsets, so positions stay exact at any scroll position. See the
+[`variable-row-height`](/examples/variable-row-height) example.
+
+`headerRowHeight` is the header row's height (35 by default); `0` renders no header.
+
+## Columns
+
+A column's `width` is in pixels. The grid's width is the sum of its columns: wider than the
+root, it scrolls sideways, and columns are virtualized like rows.
+
+<Callout type="warn" title="Measured sizes come later">
+Heights measured from the rendered content, automatic widths and resizable columns are not built
+yet. See [Limitations and roadmap](/docs/limitations).
+</Callout>

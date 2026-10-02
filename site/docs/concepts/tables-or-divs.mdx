@@ -1,0 +1,45 @@
+---
+title: Tables or divs
+description: The same primitives render a real table or a tree of divs; the structure is yours, and the behaviour does not change.
+---
+
+By default every part is a `div`. Through `render`, each can be the table element it stands for,
+and the grid behaves the same: the same virtualization, keyboard and ARIA. One test suite runs
+against both structures.
+
+```tsx title="table-grid.tsx"
+<DataGrid.Grid render={<table />} aria-label="People">
+    <DataGrid.Header render={<thead />}>
+        <DataGrid.HeaderRow render={<tr />}>
+            <DataGrid.HeaderCells<Person>>
+                {(cell) => <DataGrid.HeaderCell cell={cell} render={<th />} />}
+            </DataGrid.HeaderCells>
+        </DataGrid.HeaderRow>
+    </DataGrid.Header>
+    <DataGrid.Body render={<tbody />}>
+        <DataGrid.Rows<Person>>
+            {(row) => (
+                <DataGrid.Row row={row} render={<tr />}>
+                    <DataGrid.Cells<Person>>
+                        {(cell) => <DataGrid.Cell cell={cell} render={<td />} />}
+                    </DataGrid.Cells>
+                </DataGrid.Row>
+            )}
+        </DataGrid.Rows>
+    </DataGrid.Body>
+</DataGrid.Grid>
+```
+
+<Example id="table-elements" />
+
+## How a table is positioned
+
+A virtualized grid places rows and cells itself, which the table layout cannot do. So the
+primitives set the structural style that makes table parts positionable (`display: block` on the
+table and its header, absolute positions on rows and cells), and the table keeps its elements and
+`role="grid"`.
+
+## Choosing
+
+A `<table>` reads as a table with styles off and in tools that read the markup; `<div>`s carry no
+default styles to undo. Both are accessible: the ARIA is the same.

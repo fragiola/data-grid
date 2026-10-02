@@ -87,11 +87,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm check` | Biome lint + format + assist (non-mutating) |
 | `pnpm check:fix` | Biome check with auto-fix |
 | `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit) |
-| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react` |
+| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `site` |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
 | `pnpm e2e` | Playwright: the playground (Chromium and Firefox) and the examples app (Chromium) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
+| `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
+| `pnpm site:dev --base /data-grid --port <n>` | the examples app with hot reload, under the base `www` proxies in dev |
 
 ## Repository layout
 
@@ -104,6 +106,8 @@ apps/playground/    src/                       the shell: catalog, sidebar, tool
 examples/react/     src/examples/<slug>/       the site's examples (the embed app, Vite)
                     src/components, lib, …     Fragiola UI, vendored (scripts/vendor-fragiola.ts)
                     e2e/                       Playwright specs, also inside an iframe
+site/               docs/                      the pages fragiola.com/data-grid serves
+                    export.ts, contract.ts     `pnpm site:export` and its validation
 docs/                                          reports
 ```
 
@@ -168,7 +172,12 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 ## Site
 
 The docs and examples are served by `fragiola.com/data-grid`, built by the `www` repo from this
-repo's site export (`../www/CONTRACT.md`, v1.2). Examples import internal modules through `#/…`
+repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: the pages
+(`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
+and the examples app (`examples/react`, built for `<base>/embed/react/`). `www` owns the shell,
+the gallery chrome, the code panel and search. A page's `title` is at most 60 characters and
+never repeats "Data Grid"; its `description` is 50–160 characters, plain words, no `: ` (YAML);
+a page body has no `#` and never skips a heading level; `pnpm site:export` checks all of it. Examples import internal modules through `#/…`
 (never `@/…`). Every HTML file of the examples app carries
 `<meta name="robots" content="noindex">`.
 

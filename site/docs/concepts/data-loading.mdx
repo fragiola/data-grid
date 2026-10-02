@@ -1,0 +1,45 @@
+---
+title: Loading data
+description: Three ways to give the grid its rows, all rows at once, page by page as the end nears, or only the window in view.
+---
+
+The grid never fetches: it tells you what is in view, and you decide what to load and how to keep
+it. Fetching, caching and placeholders are your app's.
+
+## All the rows
+
+Pass `rows`, an array. Append to it (a new array) and the grid renders the new rows, keeping the
+scroll position.
+
+## Page by page
+
+`onRowsEndReached` fires when the view's last row comes within `endReachedThreshold` rows of the
+end (10 by default), once per row count. Load the next page there and append it.
+
+<Example id="infinite-loading" />
+
+## Only the window
+
+For a dataset you cannot load in full, pass `rowCount` and `getRow(index)`. The scrollbar
+represents every row from the start; `getRow` answers the row, or `undefined` while it is not
+loaded. A row not loaded keeps its place and renders with `data-loading`, so you can draw a
+placeholder.
+
+Load what `onRowWindowChange` reports, and pass a **new** `getRow` when rows arrive: the grid
+renders them in place.
+
+```tsx title="windowed.tsx"
+const version = useSyncExternalStore(cache.subscribe, () => cache.version);
+const getRow = useMemo(() => (index: number) => cache.get(index), [cache, version]);
+
+<DataGrid.Root
+    rowCount={1_000_000}
+    getRow={getRow}
+    onRowWindowChange={({ rendered }) => cache.ensure(rendered.start, rendered.end)}
+    …
+/>
+```
+
+Wait for the scroll to settle before loading (a short timeout): a thumb dragged across the
+dataset then asks only for where it stops. See the [`windowed-loading`](/examples/windowed-loading)
+example, and [`windowed-columns`](/examples/windowed-columns) for the same with columns, by tiles.
