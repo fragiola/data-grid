@@ -13,6 +13,7 @@ const REPRESENTATIVE: string[] = [
     "table-elements", // the same look on table elements
     "windowed-loading", // placeholders and the request log beside the grid
     "keyboard-navigation", // the app's panel and buttons (Fragiola UI) around the grid
+    "grouped-headers", // two header rows: group cells, a column spanning both
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));
