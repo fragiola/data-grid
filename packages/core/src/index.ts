@@ -2,6 +2,48 @@
 
 export { type Axis, createAxis, type Size } from "./axis/axis";
 export {
+    COMMANDS,
+    cellValue,
+    createDataGridModel,
+    type DataGridModel,
+    veto,
+} from "./model/model";
+export type {
+    CellPosition,
+    CellRenderProps,
+    Column,
+    CommandArgs,
+    CommandContext,
+    CommandContextBase,
+    CommandError,
+    CommandErrorCode,
+    CommandEvent,
+    CommandListener,
+    CommandMap,
+    CommandName,
+    CommandResult,
+    DataGridModelOptions,
+    DataGridState,
+    DataSetPayload,
+    HeaderCellRenderProps,
+    Middleware,
+    PayloadArgs,
+    PayloadOf,
+    QueryKey,
+    QueryMap,
+    QuestionKey,
+    QuestionMap,
+    ResultOf,
+    RowKeyGetter,
+    RowSource,
+} from "./model/types";
+export {
+    DIRECTIONS,
+    type Direction,
+    type GridBounds,
+    nextPosition,
+} from "./navigation/navigation";
+export {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
     ScrollAxisState,
