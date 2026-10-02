@@ -160,7 +160,7 @@ export type EngineLayer = "grid" | "header" | "body";
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {
     /** binds the engine to the scroll container; returns the unbinding (idempotent) */
     attach(viewport: HTMLElement): () => void;
-    /** registers a layer element; returns the unregistration */
+    /** registers a layer's element (the header layer has one per header row); returns the unregistration */
     registerLayer(layer: EngineLayer, element: HTMLElement): () => void;
     /** the view to render */
     getView(): GridView<TRow, TNode>;
@@ -284,7 +284,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 ): DataGridEngine<TRow, TNode> {
     let options = initialOptions;
     let viewport: HTMLElement | null = null;
-    const layers: Partial<Record<EngineLayer, HTMLElement>> = {};
+    /** the layers' elements: the header layer has one per header row */
+    const layers: Record<EngineLayer, Set<HTMLElement>> = {
+        grid: new Set(),
+        header: new Set(),
+        body: new Set(),
+    };
     let detachViewport: (() => void) | null = null;
 
     let state = model.state;
@@ -550,13 +555,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
     }
 
-    const written: Partial<Record<EngineLayer, string>> = {};
+    const written = new WeakMap<HTMLElement, string>();
+    const gridLayers = (): ReadonlySet<Element> => layers.grid;
 
     function setTransform(layer: EngineLayer, transform: string) {
-        const element = layers[layer];
-        if (!element || written[layer] === transform) return;
-        written[layer] = transform;
-        element.style.transform = transform;
+        for (const element of layers[layer]) {
+            if (written.get(element) === transform) continue;
+            written.set(element, transform);
+            element.style.transform = transform;
+        }
     }
 
     /** The layers' offsets for the view on screen: what is in view is the virtual offset's content. */
@@ -794,9 +801,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** Whether a key from `target` is the grid's: from one of its cells, its viewport or a layer. */
     function ownsKeysOf(target: EventTarget | null): boolean {
         if (target === viewport) return true;
-        for (const layer of Object.values(layers)) {
-            if (target === layer) return true;
-        }
+        if (!isElement(target)) return false;
+        const owned: ReadonlySet<Element>[] = Object.values(layers);
+        if (owned.some((elements) => elements.has(target))) return true;
         return cellOf(target) !== null;
     }
 
@@ -869,7 +876,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // the grid or the scroll container itself took focus (Tab into the grid; Firefox makes a
         // scroll container a tab stop): hand it to the active cell, or the first in view
-        if (event.target !== layers.grid && event.target !== viewport) return;
+        const target = event.target;
+        if (
+            target !== viewport &&
+            !(isElement(target) && gridLayers().has(target))
+        ) {
+            return;
+        }
         // a click on empty space focuses the container: that is no reason to activate a cell
         if (pointerDown) return;
         pendingFocus = true;
@@ -1054,14 +1067,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return detach;
         },
         registerLayer(layer, element) {
-            layers[layer] = element;
-            delete written[layer];
+            layers[layer].add(element);
+            written.delete(element);
             writeLayers();
             return () => {
-                if (layers[layer] === element) {
-                    delete layers[layer];
-                    delete written[layer];
-                }
+                layers[layer].delete(element);
+                written.delete(element);
             };
         },
         getView: () => view,
@@ -1190,17 +1201,24 @@ export function headerCellBox<TRow, TNode>(
     readonly height: number;
 } {
     const axis = view.columnAxis;
-    let start = axis.offsetOf(cell.columnIndex);
-    let end = axis.offsetOf(cell.columnIndex + cell.columnSpan);
-    const first = view.columns[0];
-    const last = view.columns[view.columns.length - 1];
-    if (
-        axis.totalSize > view.width &&
-        first !== undefined &&
-        last !== undefined
-    ) {
-        start = Math.max(start, axis.offsetOf(first));
-        end = Math.min(end, axis.offsetOf(last + 1));
+    const from = cell.columnIndex;
+    const to = cell.columnIndex + cell.columnSpan;
+    let start = axis.offsetOf(from);
+    let end = axis.offsetOf(to);
+    if (axis.totalSize > view.width) {
+        // the rendered columns it reaches into, or the active column it is rendered for
+        const rendered = view.renderedColumns;
+        const reaches = from < rendered.end && to > rendered.start;
+        const extra = view.columns.find(
+            (c) =>
+                (c < rendered.start || c >= rendered.end) &&
+                c >= from &&
+                c < to,
+        );
+        const clipFrom = reaches ? rendered.start : (extra ?? from);
+        const clipTo = reaches ? rendered.end : (extra ?? from) + 1;
+        start = Math.max(start, axis.offsetOf(clipFrom));
+        end = Math.min(end, axis.offsetOf(clipTo));
     }
     return {
         top: (cell.rowIndex + view.headerRowCount) * view.headerRowHeight,

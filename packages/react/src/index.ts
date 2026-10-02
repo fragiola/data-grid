@@ -12,8 +12,11 @@ export type {
 export {
     type CellInfo,
     type Column,
+    type ColumnGroup,
+    type ColumnOrGroup,
     type DataGridContextValue,
     type HeaderCellInfo,
+    type HeaderRowInfo,
     type RowInfo,
     useDataGrid,
 } from "./context";
@@ -27,6 +30,7 @@ export {
     useGridView,
     useHeaderCell,
     useHeaderCells,
+    useHeaderRows,
     useRow,
     useRows,
     useRowWindow,
@@ -42,6 +46,8 @@ export type {
     HeaderCellsProps,
     HeaderProps,
     HeaderRowProps,
+    HeaderRowState,
+    HeaderRowsProps,
     RootProps,
     RootState,
     RowProps,

@@ -156,7 +156,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   merged *under* the structural style: structural keys always win.
 - **Structural inline style only**: `position`, `top`/`left`/`width`/`height`/`inset`,
   `transform` on the layers, `display` (also to make table parts positionable), `overflow` on the
-  viewport, `contain`, `box-sizing`. Nothing cosmetic.
+  viewport, `contain`, `box-sizing`, and `z-index` between header rows (with column groups, an
+  upper row stays above the next, which a column spanning rows reaches into). Nothing cosmetic.
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.

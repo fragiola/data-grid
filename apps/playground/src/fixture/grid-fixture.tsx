@@ -1,5 +1,6 @@
 import {
     type Column,
+    type ColumnOrGroup,
     DataGrid,
     type DataGridContextValue,
     useDataGrid,
@@ -16,6 +17,8 @@ import { createRoot } from "react-dom/client";
 //   &rowHeight=32        a row's height; &variable=1 makes it vary by index (24–48px)
 //   &maxScrollSize=…     the scroll scaling cap
 //   &width=800&height=600 the viewport's size
+//   &groups=1            column groups (two header rows): C0 spans both rows, then groups of 4
+//                        and 12 columns in turn (a 12-column group is wider than the viewport)
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), and a button before and after the grid take Tab.
@@ -43,6 +46,22 @@ function Expose() {
 
 const getRow = (index: number): FixtureRow => ({ index });
 
+/** The columns under groups: C0 alone, then groups of 4 and 12 columns in turn. */
+function grouped(columns: Column<FixtureRow>[]): ColumnOrGroup<FixtureRow>[] {
+    const [first, ...rest] = columns;
+    const entries: ColumnOrGroup<FixtureRow>[] = first ? [first] : [];
+    for (let start = 0, group = 0; start < rest.length; group++) {
+        const size = group % 2 === 0 ? 4 : 12;
+        entries.push({
+            key: `G${group}`,
+            name: `G${group}`,
+            children: rest.slice(start, start + size),
+        });
+        start += size;
+    }
+    return entries;
+}
+
 // The empty state's content, centred in it (the part's own display is structural: a block)
 const EMPTY_ROW = { display: "block", height: "100%" } as const;
 const EMPTY_CONTENT = {
@@ -60,19 +79,22 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const maxScrollSize = params.has("maxScrollSize")
         ? numberParam(params, "maxScrollSize", 10_000_000)
         : undefined;
+    const groups = params.get("groups") === "1";
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
 
-    const columns = useMemo<Column<FixtureRow>[]>(
-        () =>
-            Array.from({ length: columnCount }, (_, columnIndex) => ({
+    const columns = useMemo<ColumnOrGroup<FixtureRow>[]>(() => {
+        const leaves = Array.from(
+            { length: columnCount },
+            (_, columnIndex): Column<FixtureRow> => ({
                 key: `c${columnIndex}`,
                 name: `C${columnIndex}`,
                 width: 100,
                 getValue: (row) => `${row.index}:${columnIndex}`,
-            })),
-        [columnCount],
-    );
+            }),
+        );
+        return groups ? grouped(leaves) : leaves;
+    }, [columnCount, groups]);
     const rowHeight = useMemo(
         () =>
             variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
@@ -109,18 +131,27 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                             render={table ? <thead /> : undefined}
                             style={{ background: "white", zIndex: 1 }}
                         >
-                            <DataGrid.HeaderRow
-                                render={table ? <tr /> : undefined}
-                            >
-                                <DataGrid.HeaderCells<FixtureRow>>
-                                    {(cell) => (
-                                        <DataGrid.HeaderCell
-                                            cell={cell}
-                                            render={table ? <th /> : undefined}
-                                        />
-                                    )}
-                                </DataGrid.HeaderCells>
-                            </DataGrid.HeaderRow>
+                            <DataGrid.HeaderRows<FixtureRow>>
+                                {(row) => (
+                                    <DataGrid.HeaderRow
+                                        row={row}
+                                        render={table ? <tr /> : undefined}
+                                    >
+                                        <DataGrid.HeaderCells<FixtureRow>>
+                                            {(cell) => (
+                                                <DataGrid.HeaderCell
+                                                    cell={cell}
+                                                    render={
+                                                        table ? (
+                                                            <th />
+                                                        ) : undefined
+                                                    }
+                                                />
+                                            )}
+                                        </DataGrid.HeaderCells>
+                                    </DataGrid.HeaderRow>
+                                )}
+                            </DataGrid.HeaderRows>
                         </DataGrid.Header>
                         <DataGrid.Body render={table ? <tbody /> : undefined}>
                             <DataGrid.Rows<FixtureRow>>

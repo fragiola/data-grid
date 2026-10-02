@@ -204,6 +204,30 @@ describe("header rows and the rendered window", () => {
         expect(view().renderedColumns).toEqual({ start: 0, end: 4 });
         expect(box).toEqual({ top: 0, left: 0, width: 400, height: 30 });
     });
+
+    it("does not stretch a cut group's box to an active column far outside the window", () => {
+        const wide: ColumnOrGroup<Row>[] = [
+            {
+                key: "all",
+                children: Array.from({ length: 200_000 }, (_, i) =>
+                    column(`c${i}`),
+                ),
+            },
+        ];
+        const { model, view } = setup(wide);
+        // the active column stays rendered, far to the right; the view does not scroll there
+        model.run("active-position.set", { rowIndex: 0, columnIndex: 150_000 });
+        expect(view().columns).toContain(150_000);
+        const group = view().headerRows[0]?.cells[0];
+        if (!group) throw new Error("no group cell");
+        const box = headerCellBox(view(), group);
+        // cut to the rendered columns only
+        expect(box.width).toBeLessThanOrEqual(
+            view().columnAxis.offsetOf(view().renderedColumns.end) -
+                view().columnAxis.offsetOf(view().renderedColumns.start),
+        );
+        expect(box.width).toBeGreaterThan(0);
+    });
 });
 
 describe("the keyboard across header rows", () => {

@@ -23,9 +23,11 @@ import {
     useSyncExternalStore,
 } from "react";
 import {
-    type Column,
+    type ColumnOrGroup,
     DataGridContext,
     type DataGridContextValue,
+    HeaderRowContext,
+    RowContext,
     ViewContext,
 } from "./context";
 import {
@@ -64,12 +66,13 @@ type RowsProps<TRow> =
 
 export type RootProps<TRow> = DivPrimitiveProps<RootState> &
     RowsProps<TRow> & {
-        columns: readonly Column<TRow>[];
+        /** the columns, and the groups above them (nested to any depth) */
+        columns: readonly ColumnOrGroup<TRow>[];
         /** a row's key; without one, rows are keyed by their index */
         rowKey?: RowKeyGetter<TRow> | undefined;
         /** a row's height in pixels, or a function of its index (default 35) */
         rowHeight?: Size | undefined;
-        /** the header row's height in pixels (default 35); 0 for no header row */
+        /** a header row's height in pixels (default 35); 0 for no header */
         headerRowHeight?: number | undefined;
         /** the active cell, controlled (`null` for none); pair it with `onActivePositionChange` */
         activePosition?: CellPosition | null | undefined;
@@ -261,7 +264,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
     });
 
     useLayoutEffect(() => {
-        if (columns !== model.state.columns) {
+        if (columns !== model.state.columnEntries) {
             model.run("columns.set", { columns });
         }
     }, [model, columns]);
@@ -376,7 +379,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
             <ViewContext
                 value={view as unknown as GridView<unknown, ReactNode>}
             >
-                {element}
+                {/* a grid nested in a cell of another one is not inside the outer one's rows */}
+                <RowContext value={null}>
+                    <HeaderRowContext value={null}>{element}</HeaderRowContext>
+                </RowContext>
             </ViewContext>
         </DataGridContext>
     );

@@ -488,5 +488,228 @@ for (const kind of KINDS) {
             ).toBeGreaterThan(0);
             await check("scrolled sideways");
         });
+
+        test.describe("with column groups", () => {
+            const GROUPS = { rows: 1_000, columns: 60, groups: 1 };
+
+            test("aligns group cells over their columns while scrolling sideways, a cut group included", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, GROUPS);
+                let cut = 0;
+                for (const left of [0, 250, 1_730, 3_333, "end"] as const) {
+                    if (left !== 0) await scroll(page, viewport, 0, left);
+                    const groups = await page.evaluate(() => {
+                        const box = (element: Element) =>
+                            element.getBoundingClientRect();
+                        const row = document.querySelector(
+                            '[data-grid-part="row"]',
+                        );
+                        const bodyCell = (columnIndex: number) =>
+                            row?.querySelector(
+                                `[data-column-index="${columnIndex}"]`,
+                            );
+                        return [
+                            ...document.querySelectorAll(
+                                '[data-grid-part="header-cell"][data-group]',
+                            ),
+                        ].map((group) => {
+                            const start = Number(
+                                group.getAttribute("data-column-index"),
+                            );
+                            const span = Number(
+                                group.getAttribute("aria-colspan"),
+                            );
+                            const first = bodyCell(start);
+                            const last = bodyCell(start + span - 1);
+                            const leaf = document.querySelector(
+                                `[data-grid-part="header-cell"][data-row-index="-1"][data-column-index="${start}"]`,
+                            );
+                            const g = box(group);
+                            return {
+                                key: group.textContent,
+                                left: first ? box(first).left - g.left : null,
+                                right: last ? box(last).right - g.right : null,
+                                // the group sits right above its columns' header cells
+                                above: leaf ? box(leaf).top - g.bottom : null,
+                            };
+                        });
+                    });
+                    expect(groups.length, `at ${left}`).toBeGreaterThan(0);
+                    for (const group of groups) {
+                        if (group.left === null || group.right === null) cut++;
+                        for (const edge of [
+                            group.left,
+                            group.right,
+                            group.above,
+                        ]) {
+                            if (edge !== null) {
+                                expect(
+                                    Math.abs(edge),
+                                    `${group.key} at ${left}`,
+                                ).toBeLessThan(1);
+                            }
+                        }
+                    }
+                }
+                // some group was cut by the column window on the way
+                expect(cut).toBeGreaterThan(0);
+            });
+
+            test("moves up from a column to its group and back, and across header rows", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, GROUPS);
+                await page
+                    .locator(
+                        '[data-grid-part="header-cell"][data-row-index="-1"][data-column-index="1"]',
+                    )
+                    .click();
+                await page.keyboard.press("ArrowUp");
+                expect(await focused(page)).toMatchObject({
+                    row: "-2",
+                    column: "1",
+                });
+                await page.keyboard.press("ArrowRight");
+                expect(await focused(page)).toMatchObject({
+                    row: "-2",
+                    column: "5",
+                });
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("ArrowDown");
+                expect(await focused(page)).toMatchObject({
+                    row: "-1",
+                    column: "1",
+                });
+                // C0 spans both header rows: reached from the body, on the columns' row
+                await cell(page, 0, 0).click();
+                await page.keyboard.press("ArrowUp");
+                expect(await focused(page)).toMatchObject({
+                    row: "-2",
+                    column: "0",
+                });
+                expect(await active(page)).toEqual({
+                    rowIndex: -1,
+                    columnIndex: 0,
+                });
+                await page.keyboard.press("ArrowRight");
+                expect(await focused(page)).toMatchObject({
+                    row: "-1",
+                    column: "1",
+                });
+                // a group in view stays in view: Up does not scroll to its first column, and Down
+                // lands on its first column in view
+                await scroll(page, viewport, 0, 1_000);
+                await page
+                    .locator(
+                        '[data-grid-part="header-cell"][data-row-index="-1"][data-column-index="12"]',
+                    )
+                    .click();
+                const before = await viewport.evaluate(
+                    (element) => element.scrollLeft,
+                );
+                await page.keyboard.press("ArrowUp");
+                expect(await focused(page)).toMatchObject({
+                    row: "-2",
+                    column: "5",
+                });
+                await page.keyboard.press("ArrowDown");
+                expect(await focused(page)).toMatchObject({
+                    row: "-1",
+                    column: "10",
+                });
+                expect(
+                    await viewport.evaluate((element) => element.scrollLeft),
+                ).toBe(before);
+            });
+
+            test("takes a click anywhere on a column spanning header rows", async ({
+                page,
+            }) => {
+                await open(page, kind, GROUPS);
+                const spanning = page.locator(
+                    '[data-grid-part="header-cell"][data-row-index="-2"][data-column-index="0"]',
+                );
+                const box = await spanning.boundingBox();
+                if (!box) throw new Error("no box");
+                // its lower half lies in the columns' row band: that row must not cover it
+                await page.mouse.click(
+                    box.x + box.width / 2,
+                    box.y + box.height * 0.75,
+                );
+                expect(await focused(page)).toMatchObject({
+                    row: "-2",
+                    column: "0",
+                });
+                expect(await active(page)).toEqual({
+                    rowIndex: -2,
+                    columnIndex: 0,
+                });
+            });
+
+            test("counts and spans header rows in ARIA, and spans table cells", async ({
+                page,
+            }) => {
+                await open(page, kind, GROUPS);
+                const grid = page.locator('[data-grid-part="grid"]');
+                await expect(grid).toHaveAttribute("aria-rowcount", "1002");
+                await expect(grid).toHaveAttribute("aria-colcount", "60");
+                const rows = page.locator('[data-grid-part="header-row"]');
+                await expect(rows).toHaveCount(2);
+                expect(
+                    await rows.evaluateAll((all) =>
+                        all.map((row) => row.getAttribute("aria-rowindex")),
+                    ),
+                ).toEqual(["1", "2"]);
+                const header = (row: number, column: number) =>
+                    page.locator(
+                        `[data-grid-part="header-cell"][data-row-index="${row}"][data-column-index="${column}"]`,
+                    );
+                const group = header(-2, 1);
+                await expect(group).toHaveAttribute("aria-colindex", "2");
+                await expect(group).toHaveAttribute("aria-colspan", "4");
+                await expect(group).not.toHaveAttribute("aria-rowspan");
+                await expect(group).toHaveAttribute("data-group", "");
+                const spanning = header(-2, 0);
+                await expect(spanning).toHaveAttribute("aria-colindex", "1");
+                await expect(spanning).toHaveAttribute("aria-rowspan", "2");
+                await expect(spanning).not.toHaveAttribute("data-group");
+                const leaf = header(-1, 1);
+                await expect(leaf).toHaveAttribute("aria-colindex", "2");
+                await expect(leaf).not.toHaveAttribute("aria-colspan");
+                await expect(
+                    page.locator('[data-grid-part="row"]').first(),
+                ).toHaveAttribute("aria-rowindex", "3");
+                if (kind === "table") {
+                    expect(
+                        await group.evaluate((element) => element.tagName),
+                    ).toBe("TH");
+                    await expect(group).toHaveAttribute("colspan", "4");
+                    await expect(spanning).toHaveAttribute("rowspan", "2");
+                    await expect(leaf).not.toHaveAttribute("colspan");
+                } else {
+                    await expect(group).not.toHaveAttribute("colspan");
+                }
+            });
+
+            test("does not render React while scrolling inside the overscan", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...GROUPS,
+                    rows: 100_000,
+                });
+                await scroll(page, viewport, 32 * 1_000, 1_000);
+                const before = await page.evaluate(() => window.commits);
+                // two rows down and a column right: inside the overscan
+                await scroll(page, viewport, 32 * 1_002, 1_100);
+                expect(await page.evaluate(() => window.commits)).toBe(before);
+                // far to the right: a new column window renders
+                await scroll(page, viewport, 32 * 1_002, 3_000);
+                expect(
+                    await page.evaluate(() => window.commits),
+                ).toBeGreaterThan(before);
+            });
+        });
     });
 }
