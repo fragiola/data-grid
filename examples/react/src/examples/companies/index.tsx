@@ -3,7 +3,7 @@
 import {
     type Column,
     DataGrid,
-    type HeaderCellInfo,
+    type SortColumn,
 } from "@fragiola/data-grid-react";
 import {
     AtSign,
@@ -33,11 +33,9 @@ import {
     isSortKey,
     SelectAllHeader,
     SelectCell,
-    type Sort,
-    SortHeader,
     type SortKey,
+    SortLabel,
     TableProvider,
-    useAriaSort,
 } from "./state";
 import * as styles from "./styles";
 
@@ -49,7 +47,7 @@ const SORT_LABELS: Record<SortKey, string> = {
     country: "Primary location",
 };
 
-/** Sorting is the app's: here, a comparator per column over the rows it holds. */
+/** Ordering the rows is the app's: here, a comparator per column over the rows it holds. */
 function compare(key: SortKey, a: Company, b: Company): number {
     switch (key) {
         case "employees":
@@ -86,14 +84,14 @@ const columns: Column<Company>[] = [
     {
         key: "name",
         width: 220,
-        renderHeaderCell: ({ columnIndex }) => (
-            <SortHeader
-                at={{ rowIndex: -1, columnIndex }}
-                sortKey="name"
+        sortable: true,
+        renderHeaderCell: () => (
+            <SortLabel
+                columnKey="name"
                 icon={<Building2 aria-hidden className={styles.icon} />}
             >
                 Company
-            </SortHeader>
+            </SortLabel>
         ),
         renderCell: ({ row }) => (
             <span className={styles.company}>
@@ -111,14 +109,14 @@ const columns: Column<Company>[] = [
     {
         key: "domain",
         width: 170,
-        renderHeaderCell: ({ columnIndex }) => (
-            <SortHeader
-                at={{ rowIndex: -1, columnIndex }}
-                sortKey="domain"
+        sortable: true,
+        renderHeaderCell: () => (
+            <SortLabel
+                columnKey="domain"
                 icon={<Globe aria-hidden className={styles.icon} />}
             >
                 Domain
-            </SortHeader>
+            </SortLabel>
         ),
         renderCell: ({ row }) => (
             <span className={styles.outlineChip}>{row.domain}</span>
@@ -177,14 +175,14 @@ const columns: Column<Company>[] = [
     {
         key: "employees",
         width: 150,
-        renderHeaderCell: ({ columnIndex }) => (
-            <SortHeader
-                at={{ rowIndex: -1, columnIndex }}
-                sortKey="employees"
+        sortable: true,
+        renderHeaderCell: () => (
+            <SortLabel
+                columnKey="employees"
                 icon={<Users aria-hidden className={styles.icon} />}
             >
                 Employees
-            </SortHeader>
+            </SortLabel>
         ),
         renderCell: ({ row }) => (
             <span
@@ -199,14 +197,14 @@ const columns: Column<Company>[] = [
     {
         key: "arr",
         width: 160,
-        renderHeaderCell: ({ columnIndex }) => (
-            <SortHeader
-                at={{ rowIndex: -1, columnIndex }}
-                sortKey="arr"
+        sortable: true,
+        renderHeaderCell: () => (
+            <SortLabel
+                columnKey="arr"
                 icon={<DollarSign aria-hidden className={styles.icon} />}
             >
                 Estimated ARR
-            </SortHeader>
+            </SortLabel>
         ),
         renderCell: ({ row }) =>
             row.arr ? (
@@ -218,14 +216,14 @@ const columns: Column<Company>[] = [
     {
         key: "country",
         width: 210,
-        renderHeaderCell: ({ columnIndex }) => (
-            <SortHeader
-                at={{ rowIndex: -1, columnIndex }}
-                sortKey="country"
+        sortable: true,
+        renderHeaderCell: () => (
+            <SortLabel
+                columnKey="country"
                 icon={<MapPin aria-hidden className={styles.icon} />}
             >
                 Primary location
-            </SortHeader>
+            </SortLabel>
         ),
         renderCell: ({ row, rowIndex, columnIndex }) => (
             <CellLink
@@ -243,17 +241,26 @@ export default function Companies() {
     const [selected, setSelected] = useState<ReadonlySet<number>>(
         () => new Set(),
     );
-    const [sort, setSort] = useState<Sort>({
-        key: "name",
-        direction: "ascending",
-    });
+    // the grid keeps the sort (controlled here, so the toolbar's select can set it too); the app
+    // orders the rows by it: the first column first, the next ones breaking ties
+    const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([
+        { columnKey: "name", direction: "ascending" },
+    ]);
 
-    const rows = useMemo(() => {
-        const sign = sort.direction === "ascending" ? 1 : -1;
-        return [...all].sort(
-            (a, b) => sign * compare(sort.key, a, b) || a.id - b.id,
-        );
-    }, [all, sort]);
+    const rows = useMemo(
+        () =>
+            [...all].sort((a, b) => {
+                for (const { columnKey, direction } of sortColumns) {
+                    if (!isSortKey(columnKey)) continue;
+                    const order = compare(columnKey, a, b);
+                    if (order !== 0) {
+                        return direction === "ascending" ? order : -order;
+                    }
+                }
+                return a.id - b.id;
+            }),
+        [all, sortColumns],
+    );
     const visibleIds = useMemo(() => rows.map((row) => row.id), [rows]);
 
     const toggle = useCallback((id: number) => {
@@ -270,27 +277,14 @@ export default function Companies() {
                 : new Set(visibleIds),
         );
     }, [visibleIds]);
-    const sortBy = useCallback((key: SortKey) => {
-        setSort((current) =>
-            current.key === key
-                ? {
-                      key,
-                      direction:
-                          current.direction === "ascending"
-                              ? "descending"
-                              : "ascending",
-                  }
-                : { key, direction: "ascending" },
-        );
-    }, []);
     const deleteSelected = () => {
         setAll((current) => current.filter((row) => !selected.has(row.id)));
         setSelected(new Set());
     };
 
     const table = useMemo(
-        () => ({ selected, visibleIds, toggle, toggleAll, sort, sortBy }),
-        [selected, visibleIds, toggle, toggleAll, sort, sortBy],
+        () => ({ selected, visibleIds, toggle, toggleAll }),
+        [selected, visibleIds, toggle, toggleAll],
     );
 
     return (
@@ -299,10 +293,13 @@ export default function Companies() {
                 <div className={styles.toolbar}>
                     <Select.Root
                         items={SORT_LABELS}
-                        value={sort.key}
+                        value={sortColumns[0]?.columnKey ?? null}
                         onValueChange={(key) => {
-                            if (isSortKey(key))
-                                setSort({ key, direction: "ascending" });
+                            if (isSortKey(key)) {
+                                setSortColumns([
+                                    { columnKey: key, direction: "ascending" },
+                                ]);
+                            }
                         }}
                     >
                         <Select.Trigger
@@ -339,6 +336,8 @@ export default function Companies() {
                     rowKey={(row) => row.id}
                     rowHeight={44}
                     headerRowHeight={40}
+                    sortColumns={sortColumns}
+                    onSortColumnsChange={setSortColumns}
                     className={styles.root}
                 >
                     <DataGrid.Grid
@@ -348,7 +347,12 @@ export default function Companies() {
                         <DataGrid.Header className={styles.header}>
                             <DataGrid.HeaderRow className={styles.headerRow}>
                                 <DataGrid.HeaderCells<Company>>
-                                    {(cell) => <HeaderCell cell={cell} />}
+                                    {(cell) => (
+                                        <DataGrid.HeaderCell
+                                            cell={cell}
+                                            className={styles.headerCell}
+                                        />
+                                    )}
                                 </DataGrid.HeaderCells>
                             </DataGrid.HeaderRow>
                         </DataGrid.Header>
@@ -378,16 +382,5 @@ export default function Companies() {
                 </DataGrid.Root>
             </div>
         </TableProvider>
-    );
-}
-
-/** A header cell with its `aria-sort`, read from the app's sort. */
-function HeaderCell({ cell }: { cell: HeaderCellInfo<Company> }) {
-    return (
-        <DataGrid.HeaderCell
-            cell={cell}
-            aria-sort={useAriaSort(cell.key)}
-            className={styles.headerCell}
-        />
     );
 }

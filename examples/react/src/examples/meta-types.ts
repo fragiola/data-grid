@@ -12,6 +12,7 @@ export const CATEGORIES = [
     "virtualization",
     "data-loading",
     "keyboard",
+    "row-operations",
     "styling",
     "real-world",
 ] as const;
@@ -23,6 +24,7 @@ export const CATEGORY_TITLES: Record<Category, string> = {
     virtualization: "Virtualization",
     "data-loading": "Data loading",
     keyboard: "Keyboard",
+    "row-operations": "Row operations",
     styling: "Styling",
     "real-world": "Real-world",
 };
@@ -59,6 +61,7 @@ export const DEFAULT_HEIGHT: Record<Category, number> = {
     virtualization: 520,
     "data-loading": 520,
     keyboard: 480,
+    "row-operations": 480,
     styling: 420,
     "real-world": 600,
 };
