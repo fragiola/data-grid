@@ -1,0 +1,30 @@
+---
+title: Installation
+description: Install the React package, check the peer dependencies, and give the grid a size to scroll in.
+---
+
+## Install the package
+
+```sh title="Terminal"
+pnpm add @fragiola/data-grid-react
+```
+
+The core, `@fragiola/data-grid`, comes along: import its types and helpers from either package.
+
+## Peer dependencies
+
+The React package needs React 19 (`react` and `react-dom`). It has no other runtime
+dependency, and the core has none at all.
+
+## No stylesheet
+
+There is nothing to import for styles: the primitives set only the inline style they need to
+place things (positions and sizes). Style the parts with your own classes, through `className`,
+`style` or `render`. See [Styling with Tailwind](/docs/guides/styling-tailwind) and
+[Styling with plain CSS](/docs/guides/styling-css).
+
+<Callout type="info" title="A size to scroll in">
+`DataGrid.Root` is the scroll container. Give it a height (and a width, or let it fill its
+parent), or it grows with its content and nothing is virtualized. See
+[Sizing the grid](/docs/getting-started/sizing).
+</Callout>

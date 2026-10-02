@@ -1,0 +1,59 @@
+---
+title: Limitations and roadmap
+description: What is not built yet, what the examples do meanwhile, and the order the next steps will come in.
+---
+
+This is the walking skeleton: the bets are proven (virtualization on both axes, scroll scaling,
+windows, the keyboard, any structure), and much of a full grid is still to come.
+
+## The gaps
+
+| missing | what the examples do meanwhile |
+| --- | --- |
+| **Pinned columns**: a row-number column scrolls away with the rest. | Nothing: the [`large-dataset`](/examples/large-dataset) row column scrolls. |
+| The header needs a **background and a `z-index`** to cover the rows that scroll under it. | `z-10` and an opaque background on `Header`. |
+| Rows loaded by window render once `getRow` **changes**: a new function per arrival. | A `getRow` memoised on the cache's version. |
+| A component **outside** the grid that shows its windows re-renders the grid if its state lives in the grid's parent. | A small external store the callbacks write to ([`large-dataset`](/examples/large-dataset)). |
+| No **column alignment** hint: numeric columns align through their cells' classes. | `justify-end` on the cells of numeric grids. |
+
+## The roadmap
+
+The next steps, each its own release, in this order:
+
+<Steps>
+
+<Step>
+
+## Row operations
+
+Sorting (single and multi), filtering and pagination, as controlled state for a server, and as
+an opt-in local pipeline for data in memory, which a server-driven grid never pays for.
+
+</Step>
+
+<Step>
+
+## Columns
+
+Pinned columns (start and end), column groups with multi-row headers, column spans, reordering
+by drag and keyboard, resizing with minimum and maximum widths, automatic widths.
+
+</Step>
+
+<Step>
+
+## Selection and editing
+
+Row and cell-range selection, a selection column, editing, copy and paste, fill, summary rows.
+
+</Step>
+
+<Step>
+
+## Rows beyond a flat list
+
+Row grouping, tree data, master and detail, heights measured from the content, row reordering.
+
+</Step>
+
+</Steps>

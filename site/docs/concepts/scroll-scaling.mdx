@@ -1,0 +1,33 @@
+---
+title: Scroll scaling
+description: How the grid represents a dataset larger than the browser allows, keeping the scrollbar's ends and every small move exact.
+---
+
+A browser caps an element's size: about 33.5 million pixels in Chromium and WebKit, about 17.9
+million in Firefox. A hundred million rows of 32 pixels need 3.2 billion. The grid keeps the
+whole dataset in the scrollbar anyway.
+
+## The physical and the virtual
+
+When an axis's size passes a cap (10 million pixels by default, `maxScrollSize` to change it),
+the scroll container is given the capped, **physical** size, and the engine maps it onto the
+**virtual** one, the dataset's:
+
+- **Jumps are proportional.** Dragging the thumb, clicking the track or a touch fling lands at
+  the same fraction of the dataset: the end of the scrollbar is the last row.
+- **Moves are exact.** The wheel and the keyboard move the content by exactly their delta: one
+  ArrowDown is one row, anywhere in a hundred million.
+
+The rendered rows are translated so that what is on screen is the virtual offset's content,
+wherever the physical scroll stands.
+
+## When it applies
+
+Only past the cap. Below it, the mapping is the identity and the browser's own scroll is left
+alone, smooth scrolling included. Both axes work the same way: a million columns of 100 pixels
+scale too.
+
+<Callout type="info" title="The wheel under scaling">
+While an axis is scaled, the grid moves the content itself for the wheel, so a wheel tick moves
+it by the tick's distance and not by thousands of rows.
+</Callout>

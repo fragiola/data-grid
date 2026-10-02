@@ -1,0 +1,80 @@
+{
+    "sections": [
+        {
+            "label": "Getting started",
+            "pages": [
+                {
+                    "label": "Introduction",
+                    "path": "getting-started/introduction"
+                },
+                {
+                    "label": "Installation",
+                    "path": "getting-started/installation"
+                },
+                {
+                    "label": "Your first grid",
+                    "path": "getting-started/first-grid"
+                },
+                { "label": "Sizing the grid", "path": "getting-started/sizing" }
+            ]
+        },
+        {
+            "label": "Concepts",
+            "collapsible": true,
+            "defaultOpen": true,
+            "pages": [
+                {
+                    "label": "Model and engine",
+                    "path": "concepts/model-and-engine"
+                },
+                {
+                    "label": "The primitive contract",
+                    "path": "concepts/primitive-contract"
+                },
+                {
+                    "label": "State attributes",
+                    "path": "concepts/state-attributes"
+                },
+                {
+                    "label": "Virtualization and windows",
+                    "path": "concepts/virtualization"
+                },
+                {
+                    "label": "Scroll scaling",
+                    "path": "concepts/scroll-scaling"
+                },
+                { "label": "Loading data", "path": "concepts/data-loading" },
+                {
+                    "label": "Keyboard and accessibility",
+                    "path": "concepts/keyboard"
+                },
+                { "label": "Tables or divs", "path": "concepts/tables-or-divs" }
+            ]
+        },
+        {
+            "label": "Guides",
+            "collapsible": true,
+            "pages": [
+                {
+                    "label": "Styling with Tailwind",
+                    "path": "guides/styling-tailwind"
+                },
+                {
+                    "label": "Styling with plain CSS",
+                    "path": "guides/styling-css"
+                }
+            ]
+        },
+        {
+            "label": "Project",
+            "pages": [
+                { "label": "Limitations and roadmap", "path": "limitations" },
+                {
+                    "label": "Found a problem?",
+                    "href": "https://github.com/fragiola/data-grid/issues",
+                    "external": true
+                }
+            ]
+        }
+    ]
+}

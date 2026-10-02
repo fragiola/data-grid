@@ -41,9 +41,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    declarative props, controlled (`activePosition` + `onActivePositionChange`) or uncontrolled
    (`defaultActivePosition`), and maps them onto commands; `useDataGrid()` returns the model and
    the engine. **Names say what they take**: an id field is `<entity>Id`, an index is
-   `<entity>Index` (`rowIndex`, `columnIndex`); a key and its payload read as one sentence
+   `<entity>Index` (`rowIndex`, `columnIndex`), except a plain `index` (or `key`) when it is the
+   index of what the key returns (`row-by { index }`, `column-by { key }`, as Dockable's
+   `node-by { id }`); a key and its payload read as one sentence
    (`model.run("active-position.set", { rowIndex, columnIndex })`); a `get` key names its result,
-   with `-by` when its payload selects (`column-by { key }`).
+   with `-by` when its payload selects (`row-key-by { rowIndex }`).
 4. **The primitive contract is Dockable's (D4)**, below.
 5. **Structure is the consumer's (D5).** The same primitives render `table/thead/tbody/tr/th/td` or
    `div`s (or anything through `render`). Two unstyled fixtures, one table and one div, are driven
@@ -60,9 +62,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    both axes alike.
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
    the layers' offsets imperatively; React never reconciles what the engine writes.
-10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, width, getValue?,
-    renderHeaderCell?, renderCell?, meta? }`; a cell renders its column's renderer when it has no
-    children. No column helper, no feature registry, no `flexRender`.
+10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
+    renderHeaderCell?, renderCell?, meta? }`. Without children, a header cell renders
+    `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
+    up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
+    no feature registry, no `flexRender`.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
@@ -85,11 +89,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm check` | Biome lint + format + assist (non-mutating) |
 | `pnpm check:fix` | Biome check with auto-fix |
 | `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit) |
-| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react` |
+| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `site` |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
 | `pnpm e2e` | Playwright: the playground (Chromium and Firefox) and the examples app (Chromium) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
+| `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
+| `pnpm site:dev --base /data-grid --port <n>` | the examples app with hot reload, under the base `www` proxies in dev |
 
 ## Repository layout
 
@@ -102,6 +108,8 @@ apps/playground/    src/                       the shell: catalog, sidebar, tool
 examples/react/     src/examples/<slug>/       the site's examples (the embed app, Vite)
                     src/components, lib, …     Fragiola UI, vendored (scripts/vendor-fragiola.ts)
                     e2e/                       Playwright specs, also inside an iframe
+site/               docs/                      the pages fragiola.com/data-grid serves
+                    export.ts, contract.ts     `pnpm site:export` and its validation
 docs/                                          reports
 ```
 
@@ -154,14 +162,26 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
-- **Hooks have one shape.** `useDataGrid()` is `{ model, engine }`; a part hook returns
-  `{ state, props }`.
+- **Hooks have one shape.** `useDataGrid()` is `{ model, engine }`; a part hook (`useRow`,
+  `useCell`, `useHeaderCell`) returns `{ state, props }`, the structural style in `props.style`.
+- **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
+  consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
+  before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the
+  viewport (a menu portalled out of a cell) are never the grid's.
+- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's.
+- **The root is no tab stop** (`tabIndex={-1}`, some browsers make a scroll container one): the
+  grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.
 
 ## Site
 
 The docs and examples are served by `fragiola.com/data-grid`, built by the `www` repo from this
-repo's site export (`../www/CONTRACT.md`, v1.2). Examples import internal modules through `#/…`
+repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: the pages
+(`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
+and the examples app (`examples/react`, built for `<base>/embed/react/`). `www` owns the shell,
+the gallery chrome, the code panel and search. A page's `title` is at most 60 characters and
+never repeats "Data Grid"; its `description` is 50–160 characters, plain words, no `: ` (YAML);
+a page body has no `#` and never skips a heading level; `pnpm site:export` checks all of it. Examples import internal modules through `#/…`
 (never `@/…`). Every HTML file of the examples app carries
 `<meta name="robots" content="noindex">`.
 

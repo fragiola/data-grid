@@ -1,0 +1,106 @@
+---
+title: Your first grid
+description: From an array of rows and a list of columns to a scrolling, keyboard-ready grid, then styled and rendered as a table.
+---
+
+This page builds the grid of the [`hello-grid`](/examples/hello-grid) example, step by step.
+
+<Steps>
+
+<Step>
+
+## Describe the columns
+
+A column is a plain object, typed by your row. `key` names it (and reads `row[key]` by default),
+`name` is the header's text, `width` is in pixels.
+
+```tsx title="columns.ts"
+import type { Column } from "@fragiola/data-grid-react";
+
+interface Person {
+    id: number;
+    name: string;
+    email: string;
+    salary: number;
+}
+
+export const columns: Column<Person>[] = [
+    { key: "id", name: "#", width: 64 },
+    { key: "name", name: "Name", width: 180 },
+    { key: "email", name: "Email", width: 260 },
+    {
+        key: "salary",
+        name: "Salary",
+        width: 120,
+        renderCell: ({ row }) => `$${row.salary.toLocaleString()}`,
+    },
+];
+```
+
+</Step>
+
+<Step>
+
+## Render the grid
+
+`Root` takes the data; `Grid`, `Header` and `Body` are the structure. With no children, the header
+renders a cell per column and the body a row per row, each with its cells.
+
+```tsx title="people-grid.tsx"
+import { DataGrid } from "@fragiola/data-grid-react";
+
+export function PeopleGrid({ people }: { people: Person[] }) {
+    return (
+        <DataGrid.Root columns={columns} rows={people} rowKey={(row) => row.id} style={{ height: 400 }}>
+            <DataGrid.Grid aria-label="People">
+                <DataGrid.Header />
+                <DataGrid.Body />
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
+```
+
+It already scrolls, renders only the rows in view, and answers the arrow keys. It has no look:
+the next step gives it one.
+
+</Step>
+
+<Step>
+
+## Style the parts
+
+Every part takes `className` (a string, or a function of its state), and exposes its state as
+`data-*` attributes. Write the parts out to style each one.
+
+```tsx title="people-grid.tsx"
+<DataGrid.Body>
+    <DataGrid.Rows<Person>>
+        {(row) => (
+            <DataGrid.Row row={row} className="border-b">
+                <DataGrid.Cells<Person>>
+                    {(cell) => (
+                        <DataGrid.Cell cell={cell} className="px-3 data-active:outline-2" />
+                    )}
+                </DataGrid.Cells>
+            </DataGrid.Row>
+        )}
+    </DataGrid.Rows>
+</DataGrid.Body>
+```
+
+The header needs a background and a `z-index`: it stays at the top while the rows scroll under it.
+
+</Step>
+
+<Step>
+
+## Render it as a table, if you like
+
+`render` swaps the element of any part, so the same grid can be a real table. See
+[Tables or divs](/docs/concepts/tables-or-divs) and the [`table-elements`](/examples/table-elements)
+example.
+
+</Step>
+
+</Steps>

@@ -7,7 +7,12 @@ import { collectErrors, EXAMPLES, openExample, reset, THEMES } from "./helpers";
 // `E2E_ALL_THEMES=1` runs every example in every theme.
 
 /** Examples run in every theme, chosen so that together they cover what a theme can break. */
-const REPRESENTATIVE: string[] = [];
+const REPRESENTATIVE: string[] = [
+    "hello-grid", // the baseline: header, rows, the active cell
+    "table-elements", // the same look on table elements
+    "windowed-loading", // placeholders and the request log beside the grid
+    "keyboard-navigation", // the app's panel and buttons (Fragiola UI) around the grid
+];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));
 const missing = REPRESENTATIVE.filter((slug) => !slugs.has(slug));

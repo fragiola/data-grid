@@ -1,0 +1,51 @@
+---
+title: Styling with plain CSS
+description: Style the grid from a stylesheet with attribute selectors, or with classes passed to each part, and no build step.
+---
+
+Every part carries `data-grid-part`, its indexes and its state, so a stylesheet can style a grid
+without a single class.
+
+```css title="grid.css"
+[data-grid-part="root"] {
+    block-size: 24rem;
+    border: 1px solid #d4d4d8;
+    border-radius: 8px;
+    font: 14px/1.4 system-ui, sans-serif;
+}
+
+/* opaque, and above the rows: they scroll under it */
+[data-grid-part="header"] {
+    background: #fafafa;
+    z-index: 1;
+}
+
+[data-grid-part="header-cell"],
+[data-grid-part="cell"] {
+    display: flex;
+    align-items: center;
+    padding-inline: 12px;
+    border-inline-end: 1px solid #e4e4e7;
+}
+
+[data-grid-part="row"] {
+    border-block-end: 1px solid #e4e4e7;
+}
+
+[data-grid-part="cell"]:focus-visible,
+[data-grid-part="cell"][data-active] {
+    outline: 2px solid #2563eb;
+    outline-offset: -2px;
+}
+```
+
+## Several grids on a page
+
+Scope the selectors under a class on the root (`.people [data-grid-part="cell"]`), or pass a
+class to each part with `className`.
+
+## What not to override
+
+The parts' positions and sizes are inline and win over your stylesheet's `position`, `top`,
+`left`, `width` and `height`. Pad a cell, border it, color it: its box stays where the engine
+puts it.
