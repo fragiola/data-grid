@@ -15,7 +15,10 @@
                     "label": "Your first grid",
                     "path": "getting-started/first-grid"
                 },
-                { "label": "Sizing the grid", "path": "getting-started/sizing" }
+                {
+                    "label": "Sizing the grid",
+                    "path": "getting-started/sizing"
+                }
             ]
         },
         {
@@ -43,12 +46,18 @@
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },
-                { "label": "Loading data", "path": "concepts/data-loading" },
+                {
+                    "label": "Loading data",
+                    "path": "concepts/data-loading"
+                },
                 {
                     "label": "Keyboard and accessibility",
                     "path": "concepts/keyboard"
                 },
-                { "label": "Tables or divs", "path": "concepts/tables-or-divs" }
+                {
+                    "label": "Tables or divs",
+                    "path": "concepts/tables-or-divs"
+                }
             ]
         },
         {
@@ -62,13 +71,20 @@
                 {
                     "label": "Styling with plain CSS",
                     "path": "guides/styling-css"
+                },
+                {
+                    "label": "Nested grids",
+                    "path": "guides/nested-grids"
                 }
             ]
         },
         {
             "label": "Project",
             "pages": [
-                { "label": "Limitations and roadmap", "path": "limitations" },
+                {
+                    "label": "Limitations and roadmap",
+                    "path": "limitations"
+                },
                 {
                     "label": "Found a problem?",
                     "href": "https://github.com/fragiola/data-grid/issues",

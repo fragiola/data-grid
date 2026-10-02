@@ -169,6 +169,10 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the
   viewport (a menu portalled out of a cell) are never the grid's.
 - **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's.
+- **A grid owns only its own cells (Epic #12, E4).** Every cell lookup and focus decision of an
+  engine considers only cells whose nearest attached viewport is its own (a registry of attached
+  viewports, across engines). A grid nested in a cell is its own grid; to the outer grid, focus
+  inside it is focus inside the cell that holds it, and its keys are never the outer grid's.
 - **The root is no tab stop** (`tabIndex={-1}`, some browsers make a scroll container one): the
   grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.

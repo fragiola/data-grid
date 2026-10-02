@@ -221,6 +221,29 @@ function indexes(start: number, end: number, extra: number | null): number[] {
     return list;
 }
 
+/**
+ * Every attached viewport, across engines: a grid nested in a cell of another one is its own grid,
+ * and an engine tells its cells from a nested grid's by the nearest viewport above them.
+ */
+const VIEWPORTS = new WeakSet<Element>();
+
+function isElement(target: unknown): target is Element {
+    return (
+        typeof target === "object" &&
+        target !== null &&
+        "nodeType" in target &&
+        target.nodeType === 1
+    );
+}
+
+/** The nearest attached viewport at or above `element`: the grid it belongs to. */
+function ownerViewport(element: Element): Element | null {
+    for (let node: Element | null = element; node; node = node.parentElement) {
+        if (VIEWPORTS.has(node)) return node;
+    }
+    return null;
+}
+
 /** The cell elements carry their indexes: the engine finds one to focus by them. */
 function cellSelector({ rowIndex, columnIndex }: CellPosition): string {
     return `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`;
@@ -578,9 +601,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pendingFocus = false;
             return;
         }
-        const cell = viewport.querySelector<HTMLElement>(
-            cellSelector(position),
-        );
+        // its own cell: a nested grid may have one at the same indexes
+        const owned = viewport;
+        const cell = [
+            ...viewport.querySelectorAll<HTMLElement>(cellSelector(position)),
+        ].find((element) => ownerViewport(element) === owned);
         if (!cell) return;
         pendingFocus = false;
         const doc = viewport.ownerDocument;
@@ -609,24 +634,33 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return { rowIndex, columnIndex: columnWindow.visible.start };
     }
 
+    /** Whether an event comes from this grid itself, not from a grid nested in one of its cells. */
     function inViewport(target: EventTarget | null): boolean {
         return Boolean(
-            viewport &&
-                target &&
-                typeof target === "object" &&
-                "nodeType" in target &&
-                viewport.contains(target as unknown as Element),
+            viewport && isElement(target) && ownerViewport(target) === viewport,
         );
     }
 
+    /**
+     * The cell of this grid an event happened in. Inside a nested grid, it is the cell of this
+     * grid that holds the nested one: the nested grid's own cells are not this grid's.
+     */
     function cellOf(target: EventTarget | null): CellPosition | null {
-        if (!viewport || !target || typeof target !== "object") return null;
-        if (!("closest" in target) || typeof target.closest !== "function")
-            return null;
-        const cell = (target as Element).closest(
-            "[data-row-index][data-column-index]",
-        );
-        if (!cell || !viewport.contains(cell)) return null;
+        if (!viewport || !isElement(target)) return null;
+        let cell: Element | null = null;
+        let node: Element | null = target;
+        for (; node && node !== viewport; node = node.parentElement) {
+            // below another grid's viewport: whatever was found belongs to that grid
+            if (VIEWPORTS.has(node)) cell = null;
+            else if (
+                !cell &&
+                node.hasAttribute("data-row-index") &&
+                node.hasAttribute("data-column-index")
+            ) {
+                cell = node;
+            }
+        }
+        if (node !== viewport || !cell) return null;
         const rowIndex = Number(cell.getAttribute("data-row-index"));
         const columnIndex = Number(cell.getAttribute("data-column-index"));
         if (!Number.isInteger(rowIndex) || !Number.isInteger(columnIndex))
@@ -778,6 +812,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (viewport === element && detachViewport) return detachViewport;
             detachViewport?.();
             viewport = element;
+            VIEWPORTS.add(element);
             const view = element.ownerDocument.defaultView;
             readSize();
             const observer =
@@ -845,6 +880,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 pendingFocus = false;
                 if (viewport === element) {
                     // the committed view stays: a re-attach (StrictMode) shows the same layers
+                    VIEWPORTS.delete(element);
                     viewport = null;
                     detachViewport = null;
                 }
