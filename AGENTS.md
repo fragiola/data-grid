@@ -68,7 +68,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
-    renderHeaderCell?, renderCell?, sortable?, meta? }`. Without children, a header cell renders
+    renderHeaderCell?, renderCell?, sortable?, pinned?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -86,7 +86,15 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     header cell toggles it (ascending, descending, none; Ctrl/⌘ adds it); a control inside the
     cell (or a widget holding controls), a drag and a held key's repeats are not a sort. `aria-sort` on the first
     sorted column only; `data-sortable`, `data-sort`, `data-sort-priority`. The grid never orders
-    the rows: the app does.
+    the rows: the app does. **Pinned columns (Epic #31, P1–P7):** `pinned: "start"` on the
+    leading columns (`columnsError` refuses one after an unpinned column, and a group mixing
+    both). They are always rendered (first in `view.columns` and each header row); the column
+    window covers the view right of them; scrolling a cell into view leaves it right of them.
+    A pinned cell (`data-pinned="start"`, `data-pinned-edge` on the last) registers as the
+    engine's `pinned` element, which writes its `transform` (`virtualX − columnBase`, small under
+    scaling too); rows and header rows start at `rowLeft` (−the pinned width) so their box holds
+    the pinned cells. Stacking is the consumer's. Pinned columns as wide as the view scroll with
+    the rest until it is wider.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
@@ -175,7 +183,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
 - **Structural inline style only**: `position`, `top`/`left`/`width`/`height`/`inset`,
-  `transform` on the layers, `display` (also to make table parts positionable), `overflow` on the
+  `transform` on the layers and on pinned cells, `display` (also to make table parts positionable), `overflow` on the
   viewport, `contain`, `box-sizing`, and `z-index` between header rows (with column groups, an
   upper row stays above the next, which a column spanning rows reaches into). Nothing cosmetic.
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`): `data-active`,
@@ -193,7 +201,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `onClick`, the same way. Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
-- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's. The
+- **The layers' `transform` is the engine's**: `Body`, `HeaderRow` and a pinned column's
+  `Cell`/`HeaderCell` drop a consumer's. The
   header layer has an element per header row: the engine writes the same transform to each.
 - **Header rows render through `HeaderRows` (Epic #13, G6)**, a children function over the
   header rows that `Header` renders by default; each `HeaderRow` takes its `row`, `HeaderCells`
