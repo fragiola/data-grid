@@ -9,6 +9,7 @@ import { collectErrors, EXAMPLES, openExample, reset, THEMES } from "./helpers";
 /** Examples run in every theme, chosen so that together they cover what a theme can break. */
 const REPRESENTATIVE: string[] = [
     "hello-grid", // the baseline: header, rows, the active cell
+    "styling-showcase", // presets made of palettes and fixed colours
     "table-elements", // the same look on table elements
     "windowed-loading", // placeholders and the request log beside the grid
     "keyboard-navigation", // the app's panel and buttons (Fragiola UI) around the grid

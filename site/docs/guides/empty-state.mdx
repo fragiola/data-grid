@@ -1,0 +1,82 @@
+---
+title: Empty state
+description: Show your own content, an illustration, a message or an action, in the body of a grid that has no rows.
+---
+
+A grid with no rows still renders its header. `DataGrid.Empty` renders its children in the body
+area while there are no rows, and nothing once there are.
+
+<Example id="empty-state" />
+
+## The part
+
+Place `Empty` inside `Grid`, after the `Header`. It sits right below the header, as large as the
+visible body, and stays in view when the grid scrolls sideways (wide columns still scroll their
+header). It has no text and no role of its own: what it says is yours.
+
+```tsx title="people.tsx"
+<DataGrid.Root columns={columns} rows={rows}>
+    <DataGrid.Grid aria-label="People">
+        <DataGrid.Header />
+        <DataGrid.Body />
+        <DataGrid.Empty>
+            <div role="row" className="h-full">
+                <div role="gridcell" className="flex h-full flex-col items-center justify-center gap-3">
+                    <p>No people yet</p>
+                    <button type="button" onClick={addSampleRows}>
+                        Add sample rows
+                    </button>
+                </div>
+            </div>
+        </DataGrid.Empty>
+    </DataGrid.Grid>
+</DataGrid.Root>
+```
+
+Its inline style is structural, and wins over yours: `position: sticky`, `left`, its width and
+height, `display: block` and `box-sizing`. So lay the content out in an element of your own
+inside it, at its full height, as above. Inside a grid, content belongs in a row and a cell:
+the `role="row"` and `role="gridcell"` wrappers keep the grid's structure valid. Paint `Empty` itself as you like (a background, a
+border).
+
+## As a table
+
+Inside a `<table>`, render `Empty` as a `<tbody>` holding one row and one cell, so the markup stays
+valid. Give the row and the cell the full height, and lay the content out in the cell:
+
+```tsx title="table.tsx"
+<DataGrid.Empty render={<tbody />}>
+    <tr className="block h-full">
+        <td className="grid h-full place-items-center">No people yet</td>
+    </tr>
+</DataGrid.Empty>
+```
+
+## Styling the rest of the grid
+
+`Root` and `Grid` carry `data-empty` while there are no rows, so any part can change with it. With
+Tailwind, `in-data-empty:` styles an element inside an empty grid:
+
+```css title="grid.css"
+[data-grid-part="grid"][data-empty] [data-grid-part="header-row"] {
+    border-bottom-color: transparent;
+}
+```
+
+## The keyboard
+
+With no rows, nothing in the body can be active, and the grid stays a tab stop. Tabbing into
+it focuses the first header cell. If a cell was active when the rows went away, the active
+cell moves to the header cell of its column. Tab then reaches the controls inside `Empty`. An
+action that brings rows back removes itself with the empty state: move focus to the grid (a `ref`
+on `Grid`) in its handler, as the example does, so it is not lost.
+
+The grid takes keys only from its cells, from itself and from its viewport. The arrows, Home,
+End and Page keys pressed on a control inside `Empty` stay with that control.
+
+## Accessibility
+
+`Empty` sits inside the grid element and has no role of its own. Put its content in a row and a
+cell (`role="row"` and `role="gridcell"` on divs, `tr` and `td` in a table), as above: a grid owns
+only rows. Keep the message short and the action a real button. To announce that the grid has
+just been emptied, use a live region of your own, outside the grid.

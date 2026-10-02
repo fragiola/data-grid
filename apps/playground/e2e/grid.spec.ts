@@ -414,5 +414,79 @@ for (const kind of KINDS) {
                 expect(a?.height).toBe(24 + ((index * 7) % 25));
             }
         });
+
+        test("shows the empty state below the header, in view while scrolling sideways", async ({
+            page,
+        }) => {
+            const viewport = await open(page, kind, { rows: 0, columns: 30 });
+            const empty = page.locator('[data-grid-part="empty"]');
+            await expect(empty).toBeVisible();
+            await expect(empty).toContainText("No rows");
+            for (const part of ["root", "grid"]) {
+                await expect(
+                    page.locator(`[data-grid-part="${part}"]`),
+                ).toHaveAttribute("data-empty", "");
+            }
+            await expect(page.locator('[data-grid-part="row"]')).toHaveCount(0);
+            /** the empty state's box, and its text's centre, relative to the visible area */
+            const measure = () =>
+                viewport.evaluate((element) => {
+                    const port = element.getBoundingClientRect();
+                    const inner = {
+                        x: port.x + element.clientLeft,
+                        y: port.y + element.clientTop,
+                        width: element.clientWidth,
+                        height: element.clientHeight,
+                    };
+                    const header = element
+                        .querySelector('[data-grid-part="header"]')
+                        ?.getBoundingClientRect();
+                    const box = element
+                        .querySelector('[data-grid-part="empty"]')
+                        ?.getBoundingClientRect();
+                    // the glyphs themselves: the text node, not an element around it
+                    const walker = document.createTreeWalker(
+                        element.querySelector('[data-grid-part="empty"]') ??
+                            element,
+                        NodeFilter.SHOW_TEXT,
+                    );
+                    let text: Node | null = walker.nextNode();
+                    while (text && text.textContent?.trim() !== "No rows") {
+                        text = walker.nextNode();
+                    }
+                    const range = document.createRange();
+                    range.selectNodeContents(text ?? element);
+                    const glyphs = range.getBoundingClientRect();
+                    return {
+                        top: (box?.y ?? 0) - (header?.bottom ?? 0),
+                        left: (box?.x ?? 0) - inner.x,
+                        right: inner.x + inner.width - (box?.right ?? 0),
+                        bottom: inner.y + inner.height - (box?.bottom ?? 0),
+                        textX:
+                            glyphs.x +
+                            glyphs.width / 2 -
+                            (inner.x + inner.width / 2),
+                        textY:
+                            glyphs.y +
+                            glyphs.height / 2 -
+                            ((header?.bottom ?? 0) + (box?.bottom ?? 0)) / 2,
+                    };
+                });
+            const check = async (when: string) => {
+                const at = await measure();
+                // it fills the visible body exactly, its content centred by the app's style
+                for (const [edge, value] of Object.entries(at)) {
+                    expect(Math.abs(value), `${when}: ${edge}`).toBeLessThan(
+                        1.5,
+                    );
+                }
+            };
+            await check("at the start");
+            await scroll(page, viewport, 0, 1_000);
+            expect(
+                await viewport.evaluate((element) => element.scrollLeft),
+            ).toBeGreaterThan(0);
+            await check("scrolled sideways");
+        });
     });
 }

@@ -27,6 +27,7 @@ looking for its feature would search, and `order` is its place inside the catego
 | `data-loading` | where rows come from: infinite loading, loading by window, tiles |
 | `keyboard` | the active cell and the keys that move it, and replacing them |
 | `styling` | how the grid looks when it is not about one feature, the unstyled grid |
+| `real-world` | tables that look like products: rich cells, selection, sorting and filters written in the app |
 
 ## Adding an example
 

@@ -68,6 +68,13 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     /** the body's physical height (the sizer is `headerHeight + height`) */
     readonly height: number;
     readonly headerHeight: number;
+    /**
+     * the viewport's visible width (what an empty grid's placeholder spans); a resize alone
+     * publishes a new view only while the grid has no rows
+     */
+    readonly viewportWidth: number;
+    /** the visible body's height, below the header (what an empty grid's placeholder fills); as above */
+    readonly viewportBodyHeight: number;
     readonly headerRowCount: number;
     readonly rowCount: number;
     readonly columnCount: number;
@@ -221,6 +228,29 @@ function indexes(start: number, end: number, extra: number | null): number[] {
     return list;
 }
 
+/**
+ * Every attached viewport, across engines: a grid nested in a cell of another one is its own grid,
+ * and an engine tells its cells from a nested grid's by the nearest viewport above them.
+ */
+const VIEWPORTS = new WeakSet<Element>();
+
+function isElement(target: unknown): target is Element {
+    return (
+        typeof target === "object" &&
+        target !== null &&
+        "nodeType" in target &&
+        target.nodeType === 1
+    );
+}
+
+/** The nearest attached viewport at or above `element`: the grid it belongs to. */
+function ownerViewport(element: Element): Element | null {
+    for (let node: Element | null = element; node; node = node.parentElement) {
+        if (VIEWPORTS.has(node)) return node;
+    }
+    return null;
+}
+
 /** The cell elements carry their indexes: the engine finds one to focus by them. */
 function cellSelector({ rowIndex, columnIndex }: CellPosition): string {
     return `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`;
@@ -299,6 +329,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             width: columnsX.mapping.physicalSize,
             height: rowsY.mapping.physicalSize,
             headerHeight: headerHeight(),
+            viewportWidth: width,
+            viewportBodyHeight: bodyHeight(),
             headerRowCount: state.headerRowHeight > 0 ? 1 : 0,
             rowCount: state.rowCount,
             columnCount: state.columns.length,
@@ -326,6 +358,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.width !== next.width ||
             current.height !== next.height ||
             current.headerHeight !== next.headerHeight ||
+            // the visible area matters only to an empty grid: a resize alone renders nothing else
+            ((current.rowCount === 0 || next.rowCount === 0) &&
+                (current.viewportWidth !== next.viewportWidth ||
+                    current.viewportBodyHeight !== next.viewportBodyHeight)) ||
             current.rowAxis !== next.rowAxis ||
             current.columnAxis !== next.columnAxis ||
             current.columnDefs !== next.columnDefs ||
@@ -481,7 +517,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Under scaling, the wheel moves the content by exactly its delta (the native scroll would not). */
     function onWheel(event: WheelEvent) {
-        if (!viewport || event.ctrlKey) return;
+        // a wheel over a grid nested in a cell is that grid's (or the browser's, which chains it)
+        if (
+            !viewport ||
+            event.ctrlKey ||
+            event.defaultPrevented ||
+            !inViewport(event.target)
+        ) {
+            return;
+        }
         const yScaled = rowsY.mapping.scaled;
         const xScaled = columnsX.mapping.scaled;
         if (!yScaled && !xScaled) return;
@@ -578,9 +622,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pendingFocus = false;
             return;
         }
-        const cell = viewport.querySelector<HTMLElement>(
-            cellSelector(position),
-        );
+        // its own cell: a nested grid may have one at the same indexes
+        const owned = viewport;
+        const cell = [
+            ...viewport.querySelectorAll<HTMLElement>(cellSelector(position)),
+        ].find((element) => ownerViewport(element) === owned);
         if (!cell) return;
         pendingFocus = false;
         const doc = viewport.ownerDocument;
@@ -609,24 +655,42 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return { rowIndex, columnIndex: columnWindow.visible.start };
     }
 
+    /** Whether an event comes from this grid itself, not from a grid nested in one of its cells. */
     function inViewport(target: EventTarget | null): boolean {
         return Boolean(
-            viewport &&
-                target &&
-                typeof target === "object" &&
-                "nodeType" in target &&
-                viewport.contains(target as unknown as Element),
+            viewport && isElement(target) && ownerViewport(target) === viewport,
         );
     }
 
+    /** Whether a key from `target` is the grid's: from one of its cells, its viewport or a layer. */
+    function ownsKeysOf(target: EventTarget | null): boolean {
+        if (target === viewport) return true;
+        for (const layer of Object.values(layers)) {
+            if (target === layer) return true;
+        }
+        return cellOf(target) !== null;
+    }
+
+    /**
+     * The cell of this grid an event happened in. Inside a nested grid, it is the cell of this
+     * grid that holds the nested one: the nested grid's own cells are not this grid's.
+     */
     function cellOf(target: EventTarget | null): CellPosition | null {
-        if (!viewport || !target || typeof target !== "object") return null;
-        if (!("closest" in target) || typeof target.closest !== "function")
-            return null;
-        const cell = (target as Element).closest(
-            "[data-row-index][data-column-index]",
-        );
-        if (!cell || !viewport.contains(cell)) return null;
+        if (!viewport || !isElement(target)) return null;
+        let cell: Element | null = null;
+        let node: Element | null = target;
+        for (; node && node !== viewport; node = node.parentElement) {
+            // below another grid's viewport: whatever was found belongs to that grid
+            if (VIEWPORTS.has(node)) cell = null;
+            else if (
+                !cell &&
+                node.hasAttribute("data-row-index") &&
+                node.hasAttribute("data-column-index")
+            ) {
+                cell = node;
+            }
+        }
+        if (node !== viewport || !cell) return null;
         const rowIndex = Number(cell.getAttribute("data-row-index"));
         const columnIndex = Number(cell.getAttribute("data-column-index"));
         if (!Number.isInteger(rowIndex) || !Number.isInteger(columnIndex))
@@ -694,13 +758,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     function keydown(event: KeyboardEvent): boolean {
-        // a key typed into a field inside a cell is the field's, and a key from outside the grid
-        // (a menu portalled out of a cell, whose events still bubble through the cell) is not ours
+        // a key typed into a field inside a cell is the field's, a key from outside the grid (a
+        // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
+        // and neither is one from the app's content beside the cells (an empty state's action)
         if (
             event.defaultPrevented ||
             event.altKey ||
             isEditable(event.target) ||
-            !inViewport(event.target)
+            !inViewport(event.target) ||
+            !ownsKeysOf(event.target)
         ) {
             return false;
         }
@@ -778,6 +844,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (viewport === element && detachViewport) return detachViewport;
             detachViewport?.();
             viewport = element;
+            VIEWPORTS.add(element);
             const view = element.ownerDocument.defaultView;
             readSize();
             const observer =
@@ -845,6 +912,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 pendingFocus = false;
                 if (viewport === element) {
                     // the committed view stays: a re-attach (StrictMode) shows the same layers
+                    VIEWPORTS.delete(element);
                     viewport = null;
                     detachViewport = null;
                 }

@@ -35,6 +35,7 @@ export type {
     BodyProps,
     CellProps,
     CellsProps,
+    EmptyProps,
     GridProps,
     GridState,
     HeaderCellProps,

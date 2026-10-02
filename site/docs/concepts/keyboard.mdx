@@ -25,6 +25,13 @@ Moves stop at the edges. A click or a Tab into a cell makes it active.
 While no cell is active, the grid is the tab stop; focusing it activates the first cell in view.
 Then the active cell is (`tabIndex` 0, the others -1), so Tab moves past the grid in one step.
 
+## Whose key it is
+
+The grid takes keys pressed on its cells (and on controls inside them, except fields you type
+in), on the grid itself and on its scroll container. A key pressed on your own content beside
+the cells, such as a button in [`DataGrid.Empty`](/docs/guides/empty-state), or in a menu
+portalled out of a cell, stays with that content.
+
 ## Replacing a key
 
 A cell's `onKeyDown` runs before the grid's: `preventDefault` cancels the grid's handling, and

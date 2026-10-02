@@ -9,7 +9,7 @@ present (empty) or absent, never `"false"`.
 ## Parts
 
 Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
-`body`, `row` or `cell`. Rows and cells carry their indexes: `data-row-index` (the header row is
+`body`, `row`, `cell` or `empty`. Rows and cells carry their indexes: `data-row-index` (the header row is
 `-1`) and `data-column-index`. Tests select by them, never by class names.
 
 ## States
@@ -19,6 +19,7 @@ Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `he
 | `data-active` | cell, header cell | it is the active cell |
 | `data-active` | row | it holds the active cell |
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
+| `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 
 ## ARIA
 
@@ -46,4 +47,4 @@ Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `he
 }
 ```
 
-With Tailwind: `data-active:outline-2`, `data-loading:opacity-50`.
+With Tailwind: `data-active:outline-2`, `data-loading:opacity-50`, `in-data-empty:hidden`.

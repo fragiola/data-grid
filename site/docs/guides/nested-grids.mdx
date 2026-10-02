@@ -1,0 +1,61 @@
+---
+title: Nested grids
+description: Put a grid inside a cell of another grid. Each keeps its own active cell, keys and focus, and Tab moves between them.
+---
+
+A cell can render anything, including another `DataGrid.Root`. The two grids stay independent:
+each has its own model and engine, and each looks only at its own cells.
+
+<Example id="nested-grid" />
+
+## Giving the cell room
+
+The outer grid sizes its rows, so make the rows that hold a grid tall enough (`rowHeight`, a
+number or a function of the index), and give the inner root a size, as any grid needs.
+
+```tsx title="orders.tsx"
+const columns: Column<Order>[] = [
+    { key: "id", name: "Order", width: 90 },
+    { key: "items", name: "Items", width: 320, renderCell: ({ row }) => <Items order={row} /> },
+];
+
+<DataGrid.Root columns={columns} rows={orders} rowHeight={124}>…</DataGrid.Root>
+```
+
+## What each grid owns
+
+- **Keys.** A key pressed in the inner grid is the inner grid's. The outer grid never moves
+  for it, even when the inner grid leaves it unhandled.
+- **The active cell.** Clicking a cell of the inner grid makes it active there, and makes the
+  outer cell that holds the inner grid active in the outer grid.
+- **Focus.** Each grid restores focus to its own cells only, even when both have a cell at the
+  same row and column.
+
+## Tab
+
+Every grid is a tab stop: the active cell, or the grid itself before one is active. So by
+default, Tab visits each rendered nested grid in page order before it leaves the outer grid.
+
+To keep a single stop, render the inner grid's tab stops only while the outer cell holding it is
+active (the grid, its header cells and its cells). A `tabIndex` you pass to a part overrides the
+grid's own. Then Tab moves from the active
+outer cell into its inner grid, and Shift+Tab moves back. The example does this:
+
+```tsx title="items.tsx"
+function Items({ order, rowIndex, columnIndex }: ItemsProps) {
+    // the outer grid's view: this renders in its cell, outside the inner root
+    const { active } = useGridView();
+    const reachable = active?.rowIndex === rowIndex && active.columnIndex === columnIndex;
+    const tabIndex = reachable ? undefined : -1;
+    return (
+        <DataGrid.Root columns={itemColumns} rows={order.items}>
+            <DataGrid.Grid aria-label={`Items of order ${order.id}`} tabIndex={tabIndex}>
+                …
+                <DataGrid.HeaderCell cell={cell} tabIndex={tabIndex} />
+                …
+                <DataGrid.Cell cell={cell} tabIndex={tabIndex} />
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
+```

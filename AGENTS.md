@@ -158,7 +158,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `transform` on the layers, `display` (also to make table parts positionable), `overflow` on the
   viewport, `contain`, `box-sizing`. Nothing cosmetic.
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`): `data-active`,
-  `data-loading`, … Every part carries `data-grid-part` and, for rows and cells,
+  `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
@@ -167,8 +167,18 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
   before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the
-  viewport (a menu portalled out of a cell) are never the grid's.
+  viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
+  control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
 - **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's.
+- **A grid owns only its own cells (Epic #12, E4).** Every cell lookup and focus decision of an
+  engine considers only cells whose nearest attached viewport is its own (a registry of attached
+  viewports, across engines). A grid nested in a cell is its own grid; to the outer grid, focus
+  inside it is focus inside the cell that holds it, and its keys (and wheel) are never the outer
+  grid's. The registry is module state: nesting needs one copy of `@fragiola/data-grid` in the app.
+- **`Empty` renders only while there are no rows (Epic #12, E3).** It sits in the body area (in
+  the flow after `Header`, sticky on the left, as large as the visible body), has no text or role
+  of its own, and `Root` and `Grid` carry `data-empty` meanwhile. With no rows, the grid's sizer
+  spans at least the visible area (the view's `viewportWidth`/`viewportBodyHeight`).
 - **The root is no tab stop** (`tabIndex={-1}`, some browsers make a scroll container one): the
   grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.
