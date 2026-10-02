@@ -2,6 +2,25 @@
 
 export { type Axis, createAxis, type Size } from "./axis/axis";
 export {
+    ariaRowCount,
+    ariaRowIndex,
+    columnLeft,
+    createDataGridEngine,
+    type DataGridEngine,
+    type DataGridEngineOptions,
+    type EngineActionKey,
+    type EngineActionMap,
+    type EngineAdapter,
+    type EngineEventKey,
+    type EngineEventMap,
+    type EngineLayer,
+    type EngineQueryKey,
+    type EngineQueryMap,
+    type GridView,
+    renderedWidth,
+    rowTop,
+} from "./engine/engine";
+export {
     COMMANDS,
     cellValue,
     createDataGridModel,
