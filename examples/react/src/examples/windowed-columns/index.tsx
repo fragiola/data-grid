@@ -4,14 +4,9 @@ import {
     type AxisWindow,
     type Column,
     DataGrid,
+    useDataGridRef,
 } from "@fragiola/data-grid-react";
-import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    useSyncExternalStore,
-} from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { formatNumber, measurement } from "../_kit/data";
 import { createFakeApi, type FakeApi } from "../_kit/fake-api";
 import * as styles from "./styles";
@@ -25,6 +20,9 @@ const TILE = { rows: 50, columns: 20 };
 interface Row {
     index: number;
 }
+
+/** Every row exists from the start: the same getter for the grid's whole life. */
+const getRow = (index: number): Row => ({ index });
 
 const EMPTY: AxisWindow = {
     visible: { start: 0, end: 0 },
@@ -54,17 +52,15 @@ export default function WindowedColumns() {
         ),
     );
     const [columns] = useState(() => columnsFor(tiles));
-    const version = useSyncExternalStore(
-        tiles.subscribe,
-        () => tiles.version,
-        () => tiles.version,
-    );
-    // a new getter when a tile arrives: the grid renders its cells
-    // biome-ignore lint/correctness/useExhaustiveDependencies: `version` is what makes it new
-    const getRow = useMemo(
+    const gridRef = useDataGridRef<Row>();
+    // a tile that arrives fills the cells of its rows: the grid is told which, and renders them
+    // only if they are on screen
+    useEffect(
         () =>
-            (index: number): Row => ({ index }),
-        [version],
+            tiles.subscribe((rows) =>
+                gridRef.current?.model.run("rows.changed", rows),
+            ),
+        [tiles, gridRef],
     );
     // both windows, kept to ask for the tiles once the scroll settles
     const windows = useRef({ rows: EMPTY, columns: EMPTY });
@@ -90,6 +86,7 @@ export default function WindowedColumns() {
                     columns={columns}
                     rowCount={ROWS}
                     getRow={getRow}
+                    gridRef={gridRef}
                     rowHeight={32}
                     onRowWindowChange={(rows) => {
                         windows.current.rows = rows;

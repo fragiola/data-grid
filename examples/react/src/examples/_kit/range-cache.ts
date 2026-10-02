@@ -7,10 +7,10 @@ export interface RangeCache<T> {
     get(index: number): T | undefined;
     /** loads the blocks covering `[start, end)` that are neither loaded nor loading */
     ensure(start: number, end: number): void;
-    /** bumps on every block that arrives: a new value means new items to render */
-    readonly version: number;
-    /** listens to blocks arriving; returns the unsubscription */
-    subscribe(listener: () => void): () => void;
+    /** listens to blocks arriving, with the range of items each brings; returns the unsubscription */
+    subscribe(
+        listener: (range: { start: number; end: number }) => void,
+    ): () => void;
 }
 
 /**
@@ -24,8 +24,9 @@ export function createRangeCache<T>(
 ): RangeCache<T> {
     const blocks = new Map<number, T[]>();
     const loading = new Set<number>();
-    const listeners = new Set<() => void>();
-    let version = 0;
+    const listeners = new Set<
+        (range: { start: number; end: number }) => void
+    >();
 
     return {
         get(index) {
@@ -40,20 +41,19 @@ export function createRangeCache<T>(
                 if (blocks.has(block) || loading.has(block)) continue;
                 loading.add(block);
                 const from = block * blockSize;
-                load(from, Math.min(from + blockSize, total)).then(
+                const to = Math.min(from + blockSize, total);
+                load(from, to).then(
                     (items) => {
                         loading.delete(block);
                         blocks.set(block, items);
-                        version += 1;
-                        for (const listener of listeners) listener();
+                        for (const listener of listeners) {
+                            listener({ start: from, end: to });
+                        }
                     },
                     // a failed block is asked for again the next time it is in view
                     () => loading.delete(block),
                 );
             }
-        },
-        get version() {
-            return version;
         },
         subscribe(listener) {
             listeners.add(listener);

@@ -1,13 +1,11 @@
 "use client";
 
-import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    useSyncExternalStore,
-} from "react";
+    type Column,
+    DataGrid,
+    useDataGridRef,
+} from "@fragiola/data-grid-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { formatMoney, formatNumber, type Person, person } from "../_kit/data";
 import { createFakeApi, type FakeApi } from "../_kit/fake-api";
 import { createRangeCache } from "../_kit/range-cache";
@@ -37,16 +35,15 @@ export default function WindowedLoading() {
             api.fetchRows(start, end, person),
         ),
     );
-    const version = useSyncExternalStore(
-        cache.subscribe,
-        () => cache.version,
-        () => cache.version,
-    );
-    // a new getter when rows arrive: the grid renders them in place of their placeholders
-    // biome-ignore lint/correctness/useExhaustiveDependencies: `version` is what makes it new
-    const getRow = useMemo(
-        () => (index: number) => cache.get(index),
-        [cache, version],
+    const gridRef = useDataGridRef<Person>();
+    // rows that arrive replace their placeholders: the grid is told which, and renders them only
+    // if they are on screen. The getter stays the same
+    useEffect(
+        () =>
+            cache.subscribe((range) =>
+                gridRef.current?.model.run("rows.changed", range),
+            ),
+        [cache, gridRef],
     );
     // load what is rendered once the scroll settles: a thumb dragged across the dataset asks
     // only for where it stops, never for the rows it passed
@@ -60,7 +57,8 @@ export default function WindowedLoading() {
                 <DataGrid.Root
                     columns={columns}
                     rowCount={TOTAL}
-                    getRow={getRow}
+                    getRow={cache.get}
+                    gridRef={gridRef}
                     rowKey={(row) => row.id}
                     rowHeight={36}
                     onRowWindowChange={({ rendered }) => {

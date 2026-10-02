@@ -9,8 +9,8 @@ export interface TileCache {
     get(rowIndex: number, columnIndex: number): number | undefined;
     /** fetches the tiles covering the rendered rows and columns that are not loaded or loading */
     ensure(rows: Range, columns: Range): void;
-    readonly version: number;
-    subscribe(listener: () => void): () => void;
+    /** listens to tiles arriving, with the rows each covers; returns the unsubscription */
+    subscribe(listener: (rows: Range) => void): () => void;
 }
 
 export function createTileCache(
@@ -21,8 +21,7 @@ export function createTileCache(
 ): TileCache {
     const tiles = new Map<string, number[][]>();
     const loading = new Set<string>();
-    const listeners = new Set<() => void>();
-    let version = 0;
+    const listeners = new Set<(rows: Range) => void>();
     const id = (rowBlock: number, columnBlock: number) =>
         `${rowBlock}:${columnBlock}`;
 
@@ -64,17 +63,16 @@ export function createTileCache(
                         (tile) => {
                             loading.delete(key);
                             tiles.set(key, tile);
-                            version += 1;
-                            for (const listener of listeners) listener();
+                            const [start, end] = rowRange;
+                            for (const listener of listeners) {
+                                listener({ start, end });
+                            }
                         },
                         // a failed tile is asked for again the next time it is in view
                         () => loading.delete(key),
                     );
                 }
             }
-        },
-        get version() {
-            return version;
         },
         subscribe(listener) {
             listeners.add(listener);
