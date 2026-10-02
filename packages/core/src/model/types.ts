@@ -56,6 +56,11 @@ export interface Column<TRow, TNode = unknown> {
      * the sort; the app orders the rows
      */
     readonly sortable?: boolean | undefined;
+    /**
+     * `"start"`: the column stays at the visible start while the others scroll sideways. Pinned
+     * columns come first, and a group's columns are all pinned or none
+     */
+    readonly pinned?: "start" | undefined;
     /** anything the app wants to keep on the column */
     readonly meta?: Readonly<Record<string, unknown>> | undefined;
     /** a column has no children: an entry with children is a {@link ColumnGroup} */
@@ -85,6 +90,8 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly renderCell?: never;
     /** a group is never sorted: its columns are */
     readonly sortable?: never;
+    /** a group is pinned by its columns */
+    readonly pinned?: never;
 }
 
 /** A sort's direction: the values of `aria-sort`. */
