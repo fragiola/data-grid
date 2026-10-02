@@ -7,6 +7,7 @@ import {
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
+    cloneElement,
     isValidElement,
     type ReactNode,
     useCallback,
@@ -57,25 +58,37 @@ function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
 type LayerStyle<State> = DivPrimitiveProps<State>["style"];
 
 /**
- * A layer's props without a `transform` in their style: the engine writes the layer's transform
- * itself, after every commit, so a consumer's would hide the rows.
+ * A layer's props (or a pinned cell's) without a `transform` in their style, nor in their
+ * `render` element's: the engine writes that transform itself, so a consumer's would move the
+ * rows, or let a pinned cell scroll away.
  */
-function withoutTransform<State, P extends { style?: LayerStyle<State> }>(
-    props: P,
-): P {
-    const { style } = props;
-    if (style === undefined) return props;
+function withoutTransform<
+    State,
+    P extends { style?: LayerStyle<State>; render?: unknown },
+>(props: P): P {
     const strip = (value: React.CSSProperties | undefined) => {
         if (!value || !("transform" in value)) return value;
         const { transform: _, ...rest } = value;
         return rest;
     };
+    const { style, render } = props;
+    const element = isValidElement<{ style?: React.CSSProperties }>(render)
+        ? render
+        : undefined;
+    const renderStyle = element?.props.style;
     return {
         ...props,
-        style:
-            typeof style === "function"
-                ? (state: State) => strip(style(state))
-                : strip(style),
+        ...(style === undefined
+            ? {}
+            : {
+                  style:
+                      typeof style === "function"
+                          ? (state: State) => strip(style(state))
+                          : strip(style),
+              }),
+        ...(element && renderStyle && "transform" in renderStyle
+            ? { render: cloneElement(element, { style: strip(renderStyle) }) }
+            : {}),
     };
 }
 

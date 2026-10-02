@@ -169,6 +169,43 @@ describe("pinned cells", () => {
         );
     });
 
+    it("drop a transform on their render element too", () => {
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+                <DataGrid.Grid>
+                    <DataGrid.Body>
+                        <DataGrid.Rows<Row>>
+                            {(row) => (
+                                <DataGrid.Row row={row}>
+                                    <DataGrid.Cells<Row>>
+                                        {(cell) => (
+                                            <DataGrid.Cell
+                                                cell={cell}
+                                                render={
+                                                    <div
+                                                        style={{
+                                                            transform:
+                                                                "scale(3)",
+                                                            color: "red",
+                                                        }}
+                                                    />
+                                                }
+                                            />
+                                        )}
+                                    </DataGrid.Cells>
+                                </DataGrid.Row>
+                            )}
+                        </DataGrid.Rows>
+                    </DataGrid.Body>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const a = cellAt(container, 0, 0);
+        expect(a.style.transform).toContain("translate3d");
+        expect(a.style.color).toBe("red");
+        expect(cellAt(container, 0, 2).style.transform).toBe("scale(3)");
+    });
+
     it("render far from the column window, as table cells too", () => {
         const { container } = render(<Grid table />);
         const root = container.querySelector(

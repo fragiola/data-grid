@@ -4,6 +4,7 @@ import {
     ariaRowIndex,
     cellValue,
     columnLeft,
+    columnPinning,
     EMPTY_WINDOW,
     type GridView,
     headerCellBox,
@@ -182,8 +183,7 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
     const active =
         view.active?.rowIndex === cell.rowIndex &&
         view.active.columnIndex === cell.columnIndex;
-    const pinned = cell.columnIndex < view.pinnedColumnCount;
-    const pinnedEdge = cell.columnIndex === view.pinnedColumnCount - 1;
+    const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -278,9 +278,11 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
     const group = cell.group !== undefined;
     const box = headerCellBox(view, cell);
     const sort = headerCellSort(view, cell);
-    const end = cell.columnIndex + cell.columnSpan;
-    const pinned = end <= view.pinnedColumnCount;
-    const pinnedEdge = pinned && end === view.pinnedColumnCount;
+    const { pinned, pinnedEdge } = columnPinning(
+        view,
+        cell.columnIndex,
+        cell.columnSpan,
+    );
     return {
         state: {
             rowIndex: cell.rowIndex,

@@ -6,6 +6,7 @@ export {
     ariaRowCount,
     ariaRowIndex,
     columnLeft,
+    columnPinning,
     createDataGridEngine,
     type DataGridEngine,
     type DataGridEngineOptions,

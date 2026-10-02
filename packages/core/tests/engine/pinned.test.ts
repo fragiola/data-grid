@@ -292,6 +292,22 @@ describe("bringing a cell into view", () => {
         expect(scroll.left).toBe(0);
     });
 
+    it("moves nothing for a column already in view, under scaled scroll too", () => {
+        const wide: Column<Row>[] = Array.from({ length: 1_000 }, (_, i) =>
+            column(`c${i}`, i < 2),
+        );
+        const { engine, scroll, scrollLeft, commit } = setup({
+            columns: wide,
+            maxScrollSize: 20_000,
+        });
+        scrollLeft(7_777);
+        const visible = engine.get("column-window").visible;
+        const before = scroll.left;
+        engine.run("scroll-to-cell", { columnIndex: visible.start + 1 });
+        commit();
+        expect(scroll.left).toBe(before);
+    });
+
     it("never scrolls sideways for a pinned column", () => {
         const { engine, scroll, scrollLeft, commit } = setup();
         scrollLeft(1_500);

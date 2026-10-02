@@ -84,6 +84,9 @@ export function columnsError(entries: unknown): string | null {
             if (!Array.isArray(children)) {
                 return `group "${key}" has children that are not an array`;
             }
+            if (Reflect.get(entry, "pinned") !== undefined) {
+                return `group "${key}" is pinned: a group is pinned by its columns`;
+            }
             const before = unpinnedSeen;
             const below = visit(children);
             if (typeof below === "string") return below;
