@@ -1,0 +1,88 @@
+---
+title: Sorting
+description: Sortable columns toggled from the header by mouse or keyboard, the sort kept by the grid, the rows ordered by your app.
+---
+
+The grid keeps which columns are sorted, in which direction and in which order, toggles them from
+the header and shows them in ARIA and `data-*`. It never reorders your rows: you sort what you
+pass, in the browser or on your server.
+
+<Example id="sorting" />
+
+## Sortable columns
+
+A column with `sortable: true` sorts the grid. A group never does: its columns can.
+
+```tsx title="columns.tsx"
+const columns: Column<Person>[] = [
+    { key: "name", name: "Name", width: 180, sortable: true },
+    { key: "email", name: "Email", width: 260 },
+    { key: "salary", name: "Salary", width: 130, sortable: true },
+];
+```
+
+## The sort
+
+The sort is a list of `{ columnKey, direction }`, the first column first; `direction` is
+`"ascending"` or `"descending"`, the values of `aria-sort`. Like the active cell, it is
+controlled or not:
+
+- `sortColumns` with `onSortColumnsChange`: a change is asked for, and only the prop applies it;
+- `defaultSortColumns`: the grid starts from it, applies changes and tells
+  `onSortColumnsChange`.
+
+```tsx title="people.tsx"
+const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([]);
+const rows = useMemo(() => sortRows(people, sortColumns), [sortColumns]);
+
+<DataGrid.Root
+    columns={columns}
+    rows={rows}
+    sortColumns={sortColumns}
+    onSortColumnsChange={setSortColumns}
+>
+    {/* … */}
+</DataGrid.Root>
+```
+
+A sort naming a column that is not sortable keeps the rest: the grid leaves that entry out and
+tells `onSortColumnsChange`. When the columns change, a sorted column that is gone (or no longer
+sortable) leaves the sort the same way.
+
+## From the header
+
+A click on a sortable column's header cell, or Enter or Space while it is the active cell,
+toggles it: ascending, descending, not sorted. Alone, the column becomes the only sorted one;
+with Ctrl (⌘ on a Mac), it is added last, or cycles in place, and the others stay.
+
+The grid acts **after** your handlers, as for its keys: `preventDefault` in an `onClick` or
+`onKeyDown` on the header cell, on `Root` or on its `render` element cancels the toggle. A click
+or a key on a control inside the header cell (a button, a link, a menu trigger) is the
+control's, never a sort, and neither is a drag across the header's text or the second click of a
+double click.
+
+The same changes go through the model, for a toolbar or a menu of your own:
+`model.run("sort-columns.toggle", { columnKey: "name", multi: true })`,
+`model.run("sort-columns.set", { sortColumns: [] })`, reached with
+[`useDataGrid()` or a `gridRef`](/docs/concepts/model-and-engine#from-outside-the-root).
+A middleware can refuse or rewrite them.
+
+## What it shows
+
+| on a header cell | when |
+| --- | --- |
+| `data-sortable` | its column is sortable |
+| `data-sort` | `ascending` or `descending`, while its column is sorted |
+| `data-sort-priority` | its column's place in the sort, 1-based |
+| `aria-sort` | on the first sorted column only |
+
+ARIA 1.2 asks for `aria-sort` on one header at a time, so a sort on several columns announces
+its first one; the others are in `data-sort`. Indicators are yours: draw an arrow from
+`data-sort` in CSS, or from the header cell's state (`sortable`, `sortDirection`,
+`sortPriority`) in a `render` function, as the example does.
+
+## Rows stay yours
+
+The grid shows the rows it is given, in that order: sorting them is your app's, so a server-side
+sort works the same as an in-memory one. The active cell keeps its position when the rows change
+order: it stays on the same row index and column, not on the same record.

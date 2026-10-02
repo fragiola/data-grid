@@ -22,6 +22,9 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
+| `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
+| `data-sort` | header cell | `ascending` or `descending`, while its column is sorted |
+| `data-sort-priority` | header cell | its column's place in the sort, 1-based |
 
 ## ARIA
 
@@ -34,6 +37,7 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `aria-colindex` | cell, header cell | 1-based (a group's first column) |
 | `aria-colspan` | header cell | the columns a group spans, when more than one |
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |
+| `aria-sort` | header cell | the first sorted column's direction |
 
 ## Styling a state
 
