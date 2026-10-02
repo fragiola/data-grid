@@ -4,8 +4,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
     type Column,
+    type ColumnOrGroup,
     DataGrid,
     type DataGridContextValue,
+    type HeaderCellState,
     type RootProps,
     useDataGrid,
 } from "../src";
@@ -72,6 +74,7 @@ const STRUCTURAL = new Set([
     "overflow",
     "contain",
     "box-sizing",
+    "z-index",
 ]);
 
 type DivGridProps = Pick<
@@ -633,6 +636,329 @@ describe("the empty state", () => {
         expect(empty).not.toHaveAttribute("role");
         expect(empty?.textContent).toBe("");
         expect(container.querySelectorAll("[aria-label]")).toHaveLength(0);
+    });
+});
+
+describe("column groups", () => {
+    // "id" spans both header rows; "person" groups name and age; "label" stays a column of its row
+    const groupedColumns: ColumnOrGroup<Person>[] = [
+        { key: "id", name: "#", width: 50 },
+        {
+            key: "person",
+            name: "Person",
+            children: [
+                { key: "name", name: "Name", width: 200 },
+                { key: "age", name: "Age", width: 100 },
+            ],
+        },
+    ];
+
+    function GroupedGrid({ table = false }: { table?: boolean }) {
+        return (
+            <DataGrid.Root
+                columns={groupedColumns}
+                rows={people}
+                rowHeight={20}
+            >
+                <DataGrid.Grid
+                    aria-label="People"
+                    render={table ? <table /> : undefined}
+                >
+                    <DataGrid.Header render={table ? <thead /> : undefined}>
+                        <DataGrid.HeaderRows<Person>>
+                            {(row) => (
+                                <DataGrid.HeaderRow
+                                    row={row}
+                                    render={table ? <tr /> : undefined}
+                                    className={(state) =>
+                                        `level${state.rowIndex}`
+                                    }
+                                >
+                                    <DataGrid.HeaderCells<Person>>
+                                        {(cell) => (
+                                            <DataGrid.HeaderCell
+                                                cell={cell}
+                                                render={
+                                                    table ? <th /> : undefined
+                                                }
+                                                className={(state) =>
+                                                    state.group
+                                                        ? "group"
+                                                        : "column"
+                                                }
+                                            />
+                                        )}
+                                    </DataGrid.HeaderCells>
+                                </DataGrid.HeaderRow>
+                            )}
+                        </DataGrid.HeaderRows>
+                    </DataGrid.Header>
+                    <DataGrid.Body render={table ? <tbody /> : undefined} />
+                </DataGrid.Grid>
+            </DataGrid.Root>
+        );
+    }
+
+    const headerCell = (container: HTMLElement, row: number, column: number) =>
+        container.querySelector<HTMLElement>(
+            `[data-grid-part="header-cell"][data-row-index="${row}"][data-column-index="${column}"]`,
+        );
+
+    it("renders a header row per level, the group spanning its columns", () => {
+        const { container } = render(<GroupedGrid />);
+        const rows = parts(container, "header-row");
+        expect(rows.map((row) => row.getAttribute("aria-rowindex"))).toEqual([
+            "1",
+            "2",
+        ]);
+        expect(rows.map((row) => row.className)).toEqual([
+            "level-2",
+            "level-1",
+        ]);
+        expect(rows.map((row) => [row.style.top, row.style.height])).toEqual([
+            ["0px", "35px"],
+            ["35px", "35px"],
+        ]);
+        // an upper row stays above the next: "id" reaches down into it
+        expect(rows.map((row) => row.style.zIndex)).toEqual(["2", "1"]);
+        expect(parts(container, "header")[0]?.style.height).toBe("70px");
+        expect(parts(container, "grid")[0]).toHaveAttribute(
+            "aria-rowcount",
+            "1002",
+        );
+        expect(
+            parts(rows[0] as HTMLElement, "header-cell").map(
+                (c) => c.textContent,
+            ),
+        ).toEqual(["#", "Person"]);
+        expect(
+            parts(rows[1] as HTMLElement, "header-cell").map(
+                (c) => c.textContent,
+            ),
+        ).toEqual(["Name", "Age"]);
+        const group = headerCell(container, -2, 1);
+        expect(group).toHaveAttribute("data-group", "");
+        expect(group).toHaveClass("group");
+        expect(group).toHaveAttribute("aria-colindex", "2");
+        expect(group).toHaveAttribute("aria-colspan", "2");
+        expect(group?.style.left).toBe("50px");
+        expect(group?.style.width).toBe("300px");
+        expect(group?.style.height).toBe("35px");
+        const id = headerCell(container, -2, 0);
+        expect(id).not.toHaveAttribute("data-group");
+        expect(id).toHaveClass("column");
+        expect(id).toHaveAttribute("aria-rowspan", "2");
+        expect(id?.style.height).toBe("70px");
+        // the body starts below both header rows: 165px of it in view
+        expect(parts(container, "row")[0]).toHaveAttribute(
+            "aria-rowindex",
+            "3",
+        );
+        expect(parts(container, "row")).toHaveLength(13);
+    });
+
+    it("keeps a single header row without a z-index", () => {
+        const { container } = render(<DivGrid />);
+        expect(parts(container, "header-row")[0]?.style.zIndex).toBe("");
+    });
+
+    it("keeps a nested grid's header rows its own", () => {
+        const { container } = render(
+            <DataGrid.Root columns={groupedColumns} rows={people}>
+                <DataGrid.Grid>
+                    <DataGrid.Header>
+                        <DataGrid.HeaderRows<Person>>
+                            {(row) => (
+                                <DataGrid.HeaderRow row={row}>
+                                    <DataGrid.HeaderCells<Person>>
+                                        {(cell) => (
+                                            <DataGrid.HeaderCell cell={cell}>
+                                                {cell.key === "id" ? (
+                                                    <DataGrid.Root
+                                                        columns={[
+                                                            {
+                                                                key: "x",
+                                                                name: "X",
+                                                                width: 40,
+                                                            },
+                                                        ]}
+                                                        rows={people.slice(
+                                                            0,
+                                                            2,
+                                                        )}
+                                                    >
+                                                        <DataGrid.Grid aria-label="inner">
+                                                            <DataGrid.Header>
+                                                                <DataGrid.HeaderRow />
+                                                            </DataGrid.Header>
+                                                        </DataGrid.Grid>
+                                                    </DataGrid.Root>
+                                                ) : (
+                                                    cell.key
+                                                )}
+                                            </DataGrid.HeaderCell>
+                                        )}
+                                    </DataGrid.HeaderCells>
+                                </DataGrid.HeaderRow>
+                            )}
+                        </DataGrid.HeaderRows>
+                    </DataGrid.Header>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const inner = container.querySelector(
+            '[aria-label="inner"]',
+        ) as HTMLElement;
+        expect(
+            parts(inner, "header-cell").map((cell) => cell.textContent),
+        ).toEqual(["X"]);
+    });
+
+    it("renders by default a header row per level, and only structural inline style", () => {
+        const { container } = render(
+            <DataGrid.Root columns={groupedColumns} rows={people}>
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        expect(parts(container, "header-row")).toHaveLength(2);
+        expect(parts(container, "header-cell")).toHaveLength(4);
+        for (const element of container.querySelectorAll<HTMLElement>(
+            "[data-grid-part]",
+        )) {
+            for (const property of [...element.style]) {
+                expect(
+                    STRUCTURAL.has(property),
+                    `${element.dataset.gridPart}: ${property}`,
+                ).toBe(true);
+            }
+        }
+    });
+
+    it("spans table cells: th gets colSpan and rowSpan, divs do not", () => {
+        const table = render(<GroupedGrid table />);
+        expect(headerCell(table.container, -2, 1)?.tagName).toBe("TH");
+        expect(headerCell(table.container, -2, 1)).toHaveAttribute(
+            "colspan",
+            "2",
+        );
+        expect(headerCell(table.container, -2, 0)).toHaveAttribute(
+            "rowspan",
+            "2",
+        );
+        expect(headerCell(table.container, -1, 1)).not.toHaveAttribute(
+            "colspan",
+        );
+        expect(table.container.querySelectorAll("thead > tr")).toHaveLength(2);
+        table.unmount();
+        const divs = render(<GroupedGrid />);
+        expect(headerCell(divs.container, -2, 1)).not.toHaveAttribute(
+            "colspan",
+        );
+    });
+
+    it("renders a group's renderHeaderCell, and hands a render function the spans", () => {
+        const rendered = vi.fn((props: object, _state: HeaderCellState) => (
+            <div {...props} />
+        ));
+        const columns: ColumnOrGroup<Person>[] = [
+            {
+                key: "person",
+                renderHeaderCell: ({ group, columnIndex, columnSpan }) => (
+                    <b>{`${group.key} ${columnIndex}+${columnSpan}`}</b>
+                ),
+                children: [
+                    { key: "name", width: 100 },
+                    { key: "age", width: 100 },
+                ],
+            },
+        ];
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={people}>
+                <DataGrid.Grid>
+                    <DataGrid.Header>
+                        <DataGrid.HeaderRows<Person>>
+                            {(row) => (
+                                <DataGrid.HeaderRow row={row}>
+                                    <DataGrid.HeaderCells<Person>>
+                                        {(cell) =>
+                                            cell.group ? (
+                                                <DataGrid.HeaderCell
+                                                    cell={cell}
+                                                />
+                                            ) : (
+                                                <DataGrid.HeaderCell
+                                                    cell={cell}
+                                                    render={rendered}
+                                                />
+                                            )
+                                        }
+                                    </DataGrid.HeaderCells>
+                                </DataGrid.HeaderRow>
+                            )}
+                        </DataGrid.HeaderRows>
+                    </DataGrid.Header>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        expect(headerCell(container, -2, 0)?.innerHTML).toBe(
+            "<b>person 0+2</b>",
+        );
+        expect(rendered.mock.calls[0]?.[1]).toMatchObject({
+            rowIndex: -1,
+            columnSpan: 1,
+            rowSpan: 1,
+            group: false,
+        });
+    });
+
+    it("marks the active cell: a group, and a column spanning header rows on any of them", () => {
+        const { container } = render(<GroupedGrid />);
+        const group = headerCell(container, -2, 1);
+        act(() => {
+            group?.focus();
+        });
+        expect(group).toHaveAttribute("data-active", "");
+        expect(group).toHaveAttribute("tabindex", "0");
+        // down to the group's first column, left to "id" on the columns' row: its one element
+        fireEvent.keyDown(group as HTMLElement, { key: "ArrowDown" });
+        const name = headerCell(container, -1, 1);
+        expect(name).toHaveAttribute("data-active", "");
+        fireEvent.keyDown(name as HTMLElement, { key: "ArrowLeft" });
+        const id = headerCell(container, -2, 0);
+        expect(id).toHaveAttribute("data-active", "");
+        expect(document.activeElement).toBe(id);
+        fireEvent.keyDown(id as HTMLElement, { key: "ArrowRight" });
+        expect(document.activeElement).toBe(name);
+    });
+
+    it("keeps the columns as given: no columns.set on mount, nor for the same array", () => {
+        let model: DataGridContextValue<Person>["model"] | undefined;
+        let firstHeader: unknown;
+        function Grab() {
+            model = useDataGrid<Person>().model;
+            // read while rendering, before the root's effects run
+            firstHeader ??= model.state.header;
+            return null;
+        }
+        const commands: string[] = [];
+        const { rerender } = render(
+            <DataGrid.Root columns={groupedColumns} rows={people}>
+                <Grab />
+            </DataGrid.Root>,
+        );
+        // a columns.set on mount would have laid the header out again
+        expect(model?.state.header).toBe(firstHeader);
+        model?.subscribe(({ command }) => commands.push(command));
+        rerender(
+            <DataGrid.Root columns={groupedColumns} rows={people}>
+                <Grab />
+            </DataGrid.Root>,
+        );
+        expect(model?.get("column-entries")).toBe(groupedColumns);
+        expect(commands).not.toContain("columns.set");
     });
 });
 

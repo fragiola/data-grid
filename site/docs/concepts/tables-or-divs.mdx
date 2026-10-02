@@ -32,6 +32,10 @@ against both structures.
 
 <Example id="table-elements" />
 
+With [column groups](/docs/concepts/column-groups), render the header rows through
+`DataGrid.HeaderRows` (each `HeaderRow` as a `<tr>`); a header cell rendered with
+`render={<th />}` gets `colSpan` and `rowSpan` with its spans.
+
 ## How a table is positioned
 
 A virtualized grid places rows and cells itself, which the table layout cannot do. So the

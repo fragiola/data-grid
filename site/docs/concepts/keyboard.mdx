@@ -10,7 +10,7 @@ it, the grid scrolls it into view and focuses it.
 
 | key | moves to |
 | --- | --- |
-| Arrows | the next cell in that direction (the header is row -1) |
+| Arrows | the next cell in that direction (header rows are -1 and above) |
 | Home, End | the row's first or last cell |
 | Ctrl+Home, Ctrl+End | the grid's first or last cell |
 | PageUp, PageDown | a page of rows up or down |
@@ -19,6 +19,10 @@ it, the grid scrolls it into view and focuses it.
 Moves stop at the edges. A click or a Tab into a cell makes it active.
 
 <Example id="keyboard-navigation" />
+
+With [column groups](/docs/concepts/column-groups), the header has several rows: Up from a column
+reaches the group above it, Down from a group its first column in view, and Left and Right move
+across the cells of a header row.
 
 ## One tab stop
 

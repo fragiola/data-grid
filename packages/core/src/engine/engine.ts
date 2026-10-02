@@ -1,12 +1,15 @@
 import { type Axis, createAxis } from "../axis/axis";
+import { headerCellsIn } from "../header/header";
 import type { DataGridModel } from "../model/model";
 import type {
     CellPosition,
     Column,
     DataGridState,
+    HeaderCellLayout,
+    HeaderLayout,
     RowSource,
 } from "../model/types";
-import type { Direction } from "../navigation/navigation";
+import { type Direction, sameCell } from "../navigation/navigation";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
@@ -45,6 +48,16 @@ export interface DataGridEngineOptions {
     endReachedThreshold?: number;
 }
 
+/** A header row a render shows: its index (-depth … -1) and its cells in the column window. */
+export interface HeaderRowView<TRow = unknown, TNode = unknown> {
+    readonly rowIndex: number;
+    /**
+     * the cells starting in this row that intersect the rendered columns (a group cut by the
+     * window included), plus the one holding the active column
+     */
+    readonly cells: readonly HeaderCellLayout<TRow, TNode>[];
+}
+
 /**
  * Everything a render of the grid needs. A new object only when what is rendered changes: the
  * rendered ranges, the sizes, the data, the columns or the active cell; scrolling inside the
@@ -67,7 +80,10 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly width: number;
     /** the body's physical height (the sizer is `headerHeight + height`) */
     readonly height: number;
+    /** the header's height: its rows times `headerRowHeight` */
     readonly headerHeight: number;
+    /** a header row's height */
+    readonly headerRowHeight: number;
     /**
      * the viewport's visible width (what an empty grid's placeholder spans); a resize alone
      * publishes a new view only while the grid has no rows
@@ -75,7 +91,12 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly viewportWidth: number;
     /** the visible body's height, below the header (what an empty grid's placeholder fills); as above */
     readonly viewportBodyHeight: number;
+    /** the header rows: the header's depth, 0 without a header */
     readonly headerRowCount: number;
+    /** the header rows to render, the top one first (none without a header) */
+    readonly headerRows: readonly HeaderRowView<TRow, TNode>[];
+    /** the header's layout, for the whole grid */
+    readonly header: HeaderLayout<TRow, TNode>;
     readonly rowCount: number;
     readonly columnCount: number;
     readonly rowAxis: Axis;
@@ -139,7 +160,7 @@ export type EngineLayer = "grid" | "header" | "body";
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {
     /** binds the engine to the scroll container; returns the unbinding (idempotent) */
     attach(viewport: HTMLElement): () => void;
-    /** registers a layer element; returns the unregistration */
+    /** registers a layer's element (the header layer has one per header row); returns the unregistration */
     registerLayer(layer: EngineLayer, element: HTMLElement): () => void;
     /** the view to render */
     getView(): GridView<TRow, TNode>;
@@ -263,7 +284,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 ): DataGridEngine<TRow, TNode> {
     let options = initialOptions;
     let viewport: HTMLElement | null = null;
-    const layers: Partial<Record<EngineLayer, HTMLElement>> = {};
+    /** the layers' elements: the header layer has one per header row */
+    const layers: Record<EngineLayer, Set<HTMLElement>> = {
+        grid: new Set(),
+        header: new Set(),
+        body: new Set(),
+    };
     let detachViewport: (() => void) | null = null;
 
     let state = model.state;
@@ -273,11 +299,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let height = 0;
 
     const maxScroll = () => options.maxScrollSize ?? DEFAULT_MAX_SCROLL_SIZE;
-    const headerHeight = () =>
-        state.headerRowHeight > 0 ? state.headerRowHeight : 0;
+    const headerRowCount = () =>
+        state.headerRowHeight > 0 ? state.header.depth : 0;
+    const headerHeight = () => headerRowCount() * state.headerRowHeight;
     const bodyHeight = () => Math.max(0, height - headerHeight());
     const rowsY = new ScrollAxisState(createScrollMapping(0, 0));
     const columnsX = new ScrollAxisState(createScrollMapping(0, 0));
+
+    /** the header rows last laid out, and what they were laid out for */
+    let headerRowsMemo: {
+        header: HeaderLayout<TRow, TNode>;
+        count: number;
+        start: number;
+        end: number;
+        extra: number | null;
+        rows: readonly HeaderRowView<TRow, TNode>[];
+    } | null = null;
 
     let rowWindow: AxisWindow = EMPTY_WINDOW;
     let columnWindow: AxisWindow = EMPTY_WINDOW;
@@ -307,10 +344,70 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         for (const listener of [...eventListeners[event]]) listener(value);
     }
 
+    /**
+     * The column rendered outside the window for the active cell: its own, or none for a header
+     * cell whose span reaches into the window (it is rendered with the window's cells).
+     */
+    function activeColumn(): number | null {
+        const active = state.activePosition;
+        if (!active) return null;
+        const { start, end } = columnWindow.rendered;
+        if (active.rowIndex < 0) {
+            const cell = state.header.cellAt(
+                active.rowIndex,
+                active.columnIndex,
+            );
+            if (
+                cell &&
+                cell.columnIndex < end &&
+                cell.columnIndex + cell.columnSpan > start
+            ) {
+                return null;
+            }
+        }
+        return active.columnIndex;
+    }
+
+    /** The header rows for the rendered columns: laid out again only when they change. */
+    function headerRowsFor(
+        count: number,
+        extra: number | null,
+    ): readonly HeaderRowView<TRow, TNode>[] {
+        const { start, end } = columnWindow.rendered;
+        const memo = headerRowsMemo;
+        if (
+            memo &&
+            memo.header === state.header &&
+            memo.count === count &&
+            memo.start === start &&
+            memo.end === end &&
+            memo.extra === extra
+        ) {
+            return memo.rows;
+        }
+        const rows =
+            count > 0
+                ? headerCellsIn(state.header, start, end, extra).map(
+                      (cells, level) => ({ rowIndex: level - count, cells }),
+                  )
+                : [];
+        headerRowsMemo = {
+            header: state.header,
+            count,
+            start,
+            end,
+            extra,
+            rows,
+        };
+        return rows;
+    }
+
     function makeView(): GridView<TRow, TNode> {
         const active = state.activePosition;
         const activeRow =
             active && active.rowIndex >= 0 ? active.rowIndex : null;
+        const extraColumn = activeColumn();
+        const rowsOfHeader = headerRowCount();
         return {
             rows: indexes(
                 rowWindow.rendered.start,
@@ -320,7 +417,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columns: indexes(
                 columnWindow.rendered.start,
                 columnWindow.rendered.end,
-                active ? active.columnIndex : null,
+                extraColumn,
             ),
             renderedRows: rowWindow.rendered,
             renderedColumns: columnWindow.rendered,
@@ -329,9 +426,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             width: columnsX.mapping.physicalSize,
             height: rowsY.mapping.physicalSize,
             headerHeight: headerHeight(),
+            headerRowHeight: state.headerRowHeight,
             viewportWidth: width,
             viewportBodyHeight: bodyHeight(),
-            headerRowCount: state.headerRowHeight > 0 ? 1 : 0,
+            headerRowCount: rowsOfHeader,
+            headerRows: headerRowsFor(rowsOfHeader, extraColumn),
+            header: state.header,
             rowCount: state.rowCount,
             columnCount: state.columns.length,
             rowAxis,
@@ -358,6 +458,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.width !== next.width ||
             current.height !== next.height ||
             current.headerHeight !== next.headerHeight ||
+            current.headerRowHeight !== next.headerRowHeight ||
+            current.header !== next.header ||
             // the visible area matters only to an empty grid: a resize alone renders nothing else
             ((current.rowCount === 0 || next.rowCount === 0) &&
                 (current.viewportWidth !== next.viewportWidth ||
@@ -453,13 +555,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
     }
 
-    const written: Partial<Record<EngineLayer, string>> = {};
+    const written = new WeakMap<HTMLElement, string>();
+    const gridLayers = (): ReadonlySet<Element> => layers.grid;
 
     function setTransform(layer: EngineLayer, transform: string) {
-        const element = layers[layer];
-        if (!element || written[layer] === transform) return;
-        written[layer] = transform;
-        element.style.transform = transform;
+        for (const element of layers[layer]) {
+            if (written.get(element) === transform) continue;
+            written.set(element, transform);
+            element.style.transform = transform;
+        }
     }
 
     /** The layers' offsets for the view on screen: what is in view is the virtual offset's content. */
@@ -608,6 +712,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         scrollWhenReady(moves);
     }
 
+    /**
+     * The column to scroll to for a cell: its own, or for a header cell spanning columns, none
+     * while any of them is in view, else the one nearest to the view.
+     */
+    function columnToScrollTo(position: CellPosition): number | undefined {
+        if (position.rowIndex >= 0) return position.columnIndex;
+        const cell = state.header.cellAt(
+            position.rowIndex,
+            position.columnIndex,
+        );
+        if (!cell || cell.columnSpan <= 1) return position.columnIndex;
+        const end = cell.columnIndex + cell.columnSpan;
+        const { start: from, end: to } = columnWindow.visible;
+        if (cell.columnIndex < to && end > from) return undefined;
+        return end <= from ? end - 1 : cell.columnIndex;
+    }
+
     // ── focus ────────────────────────────────────────────────────────────────
 
     function focusInside(): boolean {
@@ -622,10 +743,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pendingFocus = false;
             return;
         }
-        // its own cell: a nested grid may have one at the same indexes
+        // its own cell: a nested grid may have one at the same indexes; a header cell spanning
+        // rows carries its top row
         const owned = viewport;
         const cell = [
-            ...viewport.querySelectorAll<HTMLElement>(cellSelector(position)),
+            ...viewport.querySelectorAll<HTMLElement>(
+                cellSelector(elementPosition(position)),
+            ),
         ].find((element) => ownerViewport(element) === owned);
         if (!cell) return;
         pendingFocus = false;
@@ -640,6 +764,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // the engine scrolled it into view already, through the scaling-aware mapping
             cell.focus({ preventScroll: true });
         }
+    }
+
+    /** Where a cell's element is: a header cell's top row and first column. */
+    function elementPosition(position: CellPosition): CellPosition {
+        if (position.rowIndex >= 0) return position;
+        const cell = state.header.cellAt(
+            position.rowIndex,
+            position.columnIndex,
+        );
+        return cell
+            ? { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex }
+            : position;
     }
 
     /** The first cell in view: where focus lands when the grid itself gets it. */
@@ -665,9 +801,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** Whether a key from `target` is the grid's: from one of its cells, its viewport or a layer. */
     function ownsKeysOf(target: EventTarget | null): boolean {
         if (target === viewport) return true;
-        for (const layer of Object.values(layers)) {
-            if (target === layer) return true;
-        }
+        if (!isElement(target)) return false;
+        const owned: ReadonlySet<Element>[] = Object.values(layers);
+        if (owned.some((elements) => elements.has(target))) return true;
         return cellOf(target) !== null;
     }
 
@@ -727,22 +863,26 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // scroll would map to a far jump, so the engine makes the move, exact, instead
             scrollToCell({
                 rowIndex: cell.rowIndex >= 0 ? cell.rowIndex : undefined,
-                columnIndex: cell.columnIndex,
+                columnIndex: columnToScrollTo(cell),
             });
         }
         if (cell) {
             const active = state.activePosition;
-            if (
-                active?.rowIndex !== cell.rowIndex ||
-                active.columnIndex !== cell.columnIndex
-            ) {
+            // a header cell spanning rows is already active on any of its rows
+            if (!active || !sameCell(active, cell, state.header.cellAt)) {
                 model.run("active-position.set", cell);
             }
             return;
         }
         // the grid or the scroll container itself took focus (Tab into the grid; Firefox makes a
         // scroll container a tab stop): hand it to the active cell, or the first in view
-        if (event.target !== layers.grid && event.target !== viewport) return;
+        const target = event.target;
+        if (
+            target !== viewport &&
+            !(isElement(target) && gridLayers().has(target))
+        ) {
+            return;
+        }
         // a click on empty space focuses the container: that is no reason to activate a cell
         if (pointerDown) return;
         pendingFocus = true;
@@ -800,6 +940,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         model.run("active-position.move", {
             direction,
             pageSize: Math.max(1, visible - 1),
+            visibleColumns: columnWindow.visible,
         });
         // the move may have been refused or landed where it was: focus stays where it is
         flushFocus();
@@ -825,14 +966,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columnAxis = columnAxisOf(after);
             fresh = true;
         }
-        if (after.headerRowHeight !== before.headerRowHeight) fresh = true;
+        if (
+            after.headerRowHeight !== before.headerRowHeight ||
+            after.header !== before.header
+        ) {
+            fresh = true;
+        }
         relayout(fresh);
         const active = after.activePosition;
         if (active && active !== before.activePosition) {
             if (focusInside()) pendingFocus = true;
             scrollToCell({
                 rowIndex: active.rowIndex >= 0 ? active.rowIndex : undefined,
-                columnIndex: active.columnIndex,
+                columnIndex: columnToScrollTo(active),
             });
         }
     });
@@ -889,7 +1035,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                               state.activePosition.rowIndex >= 0
                                   ? state.activePosition.rowIndex
                                   : undefined,
-                          columnIndex: state.activePosition.columnIndex,
+                          columnIndex: columnToScrollTo(state.activePosition),
                       }
                     : null);
             pendingCellScroll = null;
@@ -921,14 +1067,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return detach;
         },
         registerLayer(layer, element) {
-            layers[layer] = element;
-            delete written[layer];
+            layers[layer].add(element);
+            written.delete(element);
             writeLayers();
             return () => {
-                if (layers[layer] === element) {
-                    delete layers[layer];
-                    delete written[layer];
-                }
+                layers[layer].delete(element);
+                written.delete(element);
             };
         },
         getView: () => view,
@@ -1042,12 +1186,64 @@ export function renderedWidth<TRow, TNode>(
     return view.columnAxis.offsetOf(last + 1) - view.columnBase;
 }
 
-/** The grid's `aria-rowcount`: the header row and every body row. */
+/**
+ * A header cell's box in the header layer: its row's top, its first column's left, as wide as its
+ * columns and as tall as its rows. When the columns' scroll is scaled, a group can be wider than a
+ * browser lays out: its box is then cut to the rendered columns (they reach past the view).
+ */
+export function headerCellBox<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: HeaderCellLayout<TRow, TNode>,
+): {
+    readonly top: number;
+    readonly left: number;
+    readonly width: number;
+    readonly height: number;
+} {
+    const axis = view.columnAxis;
+    const from = cell.columnIndex;
+    const to = cell.columnIndex + cell.columnSpan;
+    let start = axis.offsetOf(from);
+    let end = axis.offsetOf(to);
+    if (axis.totalSize > view.width) {
+        // the rendered columns it reaches into, or the active column it is rendered for
+        const rendered = view.renderedColumns;
+        const reaches = from < rendered.end && to > rendered.start;
+        const extra = view.columns.find(
+            (c) =>
+                (c < rendered.start || c >= rendered.end) &&
+                c >= from &&
+                c < to,
+        );
+        const clipFrom = reaches ? rendered.start : (extra ?? from);
+        const clipTo = reaches ? rendered.end : (extra ?? from) + 1;
+        start = Math.max(start, axis.offsetOf(clipFrom));
+        end = Math.min(end, axis.offsetOf(clipTo));
+    }
+    return {
+        top: (cell.rowIndex + view.headerRowCount) * view.headerRowHeight,
+        left: start - view.columnBase,
+        width: Math.max(0, end - start),
+        height: cell.rowSpan * view.headerRowHeight,
+    };
+}
+
+/** A header cell's `aria-colspan` and `aria-rowspan`, each only when it spans more than one. */
+export function ariaHeaderCellSpans<TRow, TNode>(
+    cell: HeaderCellLayout<TRow, TNode>,
+): { readonly "aria-colspan"?: number; readonly "aria-rowspan"?: number } {
+    return {
+        ...(cell.columnSpan > 1 ? { "aria-colspan": cell.columnSpan } : {}),
+        ...(cell.rowSpan > 1 ? { "aria-rowspan": cell.rowSpan } : {}),
+    };
+}
+
+/** The grid's `aria-rowcount`: the header rows and every body row. */
 export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
     return view.rowCount + view.headerRowCount;
 }
 
-/** A row's `aria-rowindex`: 1-based, the header row first (pass -1 for the header). */
+/** A row's `aria-rowindex`: 1-based, the header rows first (they are -depth … -1). */
 export function ariaRowIndex<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,

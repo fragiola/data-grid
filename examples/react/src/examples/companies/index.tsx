@@ -386,7 +386,7 @@ function HeaderCell({ cell }: { cell: HeaderCellInfo<Company> }) {
     return (
         <DataGrid.HeaderCell
             cell={cell}
-            aria-sort={useAriaSort(cell.column.key)}
+            aria-sort={useAriaSort(cell.key)}
             className={styles.headerCell}
         />
     );

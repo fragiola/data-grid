@@ -1,18 +1,23 @@
 import {
     type AxisWindow,
+    ariaHeaderCellSpans,
     ariaRowIndex,
     cellValue,
     columnLeft,
     type GridView,
+    headerCellBox,
     renderedWidth,
     rowAt,
     rowTop,
+    sameCell,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import { type ReactNode, useContext, useEffect, useState } from "react";
 import {
     type CellInfo,
     type HeaderCellInfo,
+    HeaderRowContext,
+    type HeaderRowInfo,
     type RowInfo,
     useDataGrid,
     ViewContext,
@@ -179,18 +184,40 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
     };
 }
 
-/** The header cells a render shows. */
-export function useHeaderCells<TRow = unknown>(): HeaderCellInfo<TRow>[] {
+/** The header rows a render shows, the top one first (none without a header). */
+export function useHeaderRows<
+    TRow = unknown,
+>(): readonly HeaderRowInfo<TRow>[] {
+    return useGridView<TRow>().headerRows;
+}
+
+/**
+ * The header cells a render shows in a header row: the given one, else the one rendering (inside
+ * `DataGrid.HeaderRow`), else the last (a grid without groups has only that one).
+ */
+export function useHeaderCells<TRow = unknown>(
+    row?: HeaderRowInfo<TRow>,
+): readonly HeaderCellInfo<TRow>[] {
     const view = useGridView<TRow>();
-    return view.columns.flatMap((columnIndex) => {
-        const column = view.columnDefs[columnIndex];
-        return column ? [{ columnIndex, column }] : [];
-    });
+    // the header row that provides it was rendered for this grid's row type
+    const rendering = useContext(
+        HeaderRowContext,
+    ) as HeaderRowInfo<TRow> | null;
+    const current =
+        row ?? rendering ?? view.headerRows[view.headerRows.length - 1];
+    return current?.cells ?? [];
 }
 
 /** The state of a header cell. */
 export interface HeaderCellState {
+    /** its (top) header row: -1 for the columns' row; above it for groups and for a column spanning rows */
+    readonly rowIndex: number;
+    /** its first column */
     readonly columnIndex: number;
+    readonly columnSpan: number;
+    readonly rowSpan: number;
+    /** it is a group's cell */
+    readonly group: boolean;
     /** it is the active cell */
     readonly active: boolean;
 }
@@ -201,27 +228,39 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
     props: Record<string, unknown> & { style: React.CSSProperties };
 } {
     const view = useGridView<TRow>();
+    // a column spanning header rows is active on any of them
     const active =
-        view.active?.rowIndex === -1 &&
-        view.active.columnIndex === cell.columnIndex;
+        view.active !== null && sameCell(view.active, cell, view.header.cellAt);
+    const group = cell.group !== undefined;
+    const box = headerCellBox(view, cell);
     return {
-        state: { columnIndex: cell.columnIndex, active },
+        state: {
+            rowIndex: cell.rowIndex,
+            columnIndex: cell.columnIndex,
+            columnSpan: cell.columnSpan,
+            rowSpan: cell.rowSpan,
+            group,
+            active,
+        },
         props: {
             role: "columnheader",
             "aria-colindex": cell.columnIndex + 1,
+            ...ariaHeaderCellSpans(cell),
             tabIndex: active ? 0 : -1,
             ...dataAttributes({
                 "grid-part": "header-cell",
-                "row-index": -1,
+                "row-index": cell.rowIndex,
                 "column-index": cell.columnIndex,
                 active,
+                group,
             }),
             style: {
+                // at its row's top: a cell spanning rows reaches down past it
                 position: "absolute",
                 top: 0,
-                left: columnLeft(view, cell.columnIndex),
-                width: view.columnAxis.sizeOf(cell.columnIndex),
-                height: view.headerHeight,
+                left: box.left,
+                width: box.width,
+                height: box.height,
                 boxSizing: "border-box",
             },
         },

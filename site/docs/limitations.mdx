@@ -20,6 +20,8 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 | Every **nested grid** is a tab stop by default, and its rows have the outer row's fixed height (no master and detail yet). | The inner grid's tab stops only while the outer cell holding it is active ([Nested grids](/docs/guides/nested-grids)); a row height that fits the inner grid. |
 | A wheel over a nested grid that has reached its end chains to the outer grid natively: under the outer grid's **scroll scaling**, that step is a scaled jump. | Nothing: nested grids in the examples are not scaled. |
 | `DataGrid.Empty` has **no structure of its own**: inside a grid, its content needs a row and a cell. | `role="row"` and `role="gridcell"` wrappers, or `tr` and `td` in a table ([Empty state](/docs/guides/empty-state)). |
+| A **group's label** scrolls with its group: in a group wider than the view, it can be out of sight (no sticky labels yet). Under scaled column scroll, a group's cell is cut to the rendered columns, so its label moves with the column window. | A label centred on the group, groups no wider than a few views ([`grouped-headers`](/examples/grouped-headers)). |
+| Groups cannot be **collapsed**, and the body has no **column spans**. | Nothing yet: both are later steps of the Columns roadmap. |
 
 ## The roadmap
 
@@ -40,8 +42,9 @@ an opt-in local pipeline for data in memory, which a server-driven grid never pa
 
 ## Columns
 
-Pinned columns (start and end), column groups with multi-row headers, column spans, reordering
-by drag and keyboard, resizing with minimum and maximum widths, automatic widths.
+Started: [column groups](/docs/concepts/column-groups) with multi-row headers. Next: pinned
+columns (start and end), column spans in the body, sticky group labels, collapsing groups,
+reordering by drag and keyboard, resizing with minimum and maximum widths, automatic widths.
 
 </Step>
 

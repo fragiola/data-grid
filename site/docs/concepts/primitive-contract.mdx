@@ -3,8 +3,8 @@ title: The primitive contract
 description: The rules every part follows, render instead of asChild, merged refs and handlers, class and style functions, and structural style only.
 ---
 
-Every part of `DataGrid` (`Root`, `Grid`, `Header`, `HeaderRow`, `HeaderCell`, `Body`, `Row`,
-`Cell`, `Empty`) follows the same rules.
+Every part of `DataGrid` (`Root`, `Grid`, `Header`, `HeaderRows`, `HeaderRow`, `HeaderCell`,
+`Body`, `Row`, `Cell`, `Empty`) follows the same rules.
 
 ## `render`, never `asChild`
 
@@ -41,7 +41,9 @@ Both take a value, or a function of the part's state:
 ## Structural style only
 
 The only inline style a part sets is what places it: `position`, `top`, `left`, `width`,
-`height`, the layers' `transform`, `display`, the root's `overflow`, `box-sizing`. Your style is
+`height`, the layers' `transform`, `display`, the root's `overflow`, `box-sizing`, and with
+[column groups](/docs/concepts/column-groups) a `z-index` between header rows (an upper row stays
+above the next). Your style is
 merged under these keys, which always win. Nothing cosmetic is ever set: see the
 [`unstyled`](/examples/unstyled) example.
 
@@ -52,5 +54,6 @@ name the grid yourself (`<DataGrid.Grid aria-label="People">`).
 
 ## The recursion is yours
 
-`Rows`, `Cells` and `HeaderCells` take a function that renders each item, so every row and cell
-is written by you. Without it, they render the default `Row`, `Cell` and `HeaderCell`.
+`Rows`, `Cells`, `HeaderRows` and `HeaderCells` take a function that renders each item, so every
+row and cell is written by you. Without it, they render the default `Row`, `Cell`, `HeaderRow`
+and `HeaderCell`.

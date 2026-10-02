@@ -1,13 +1,22 @@
 import {
     ariaRowCount,
+    ariaRowIndex,
     type EngineLayer,
     renderedWidth,
 } from "@fragiola/data-grid";
 import type * as React from "react";
-import { type ReactNode, useCallback, useLayoutEffect } from "react";
+import {
+    isValidElement,
+    type ReactNode,
+    useCallback,
+    useContext,
+    useLayoutEffect,
+} from "react";
 import {
     type CellInfo,
     type HeaderCellInfo,
+    HeaderRowContext,
+    type HeaderRowInfo,
     RowContext,
     type RowInfo,
     useDataGrid,
@@ -22,6 +31,7 @@ import {
     useGridView,
     useHeaderCell,
     useHeaderCells,
+    useHeaderRows,
     useRow,
     useRows,
 } from "./hooks";
@@ -49,9 +59,9 @@ type LayerStyle<State> = DivPrimitiveProps<State>["style"];
  * A layer's props without a `transform` in their style: the engine writes the layer's transform
  * itself, after every commit, so a consumer's would hide the rows.
  */
-function withoutTransform<
-    P extends { style?: LayerStyle<Record<string, never>> },
->(props: P): P {
+function withoutTransform<State, P extends { style?: LayerStyle<State> }>(
+    props: P,
+): P {
     const { style } = props;
     if (style === undefined) return props;
     const strip = (value: React.CSSProperties | undefined) => {
@@ -63,7 +73,7 @@ function withoutTransform<
         ...props,
         style:
             typeof style === "function"
-                ? (state: Record<string, never>) => strip(style(state))
+                ? (state: State) => strip(style(state))
                 : strip(style),
     };
 }
@@ -130,12 +140,13 @@ export type HeaderProps = DivPrimitiveProps<Record<string, never>> & {
 };
 
 /**
- * The header (`role="rowgroup"`): sticky at the viewport's top, as tall as the header row. A
- * `<thead>` through `render`. Nothing renders without a header row. Stacking is the consumer's:
- * give it a background and a `z-index` so rows scroll under it.
+ * The header (`role="rowgroup"`): sticky at the viewport's top, as tall as its header rows. A
+ * `<thead>` through `render`. Nothing renders without a header. Stacking is the consumer's: give
+ * it a background and a `z-index` so rows scroll under it. Without children, a header row per
+ * level (`DataGrid.HeaderRows`).
  */
 export function Header(props: HeaderProps) {
-    const { children = <HeaderRow />, ...rest } = props;
+    const { children = <HeaderRows />, ...rest } = props;
     const view = useGridView();
     const element = useRenderElement("div", rest, {
         state: {},
@@ -155,29 +166,85 @@ export function Header(props: HeaderProps) {
     return view.headerRowCount > 0 ? element : null;
 }
 
-export type HeaderRowProps = DivPrimitiveProps<Record<string, never>> & {
-    children?: ReactNode;
-};
+export interface HeaderRowsProps<TRow> {
+    /** renders a header row; without it, `<DataGrid.HeaderRow row={row} />` */
+    children?: (row: HeaderRowInfo<TRow>) => ReactNode;
+}
 
-/** The header row (`role="row"`), the layer the engine moves with the columns. A `<tr>`. */
-export function HeaderRow(props: HeaderRowProps) {
-    const { children = <HeaderCells />, ...rest } = withoutTransform(props);
-    const view = useGridView();
+/**
+ * The header rows, the top one first: one without column groups, one per level with them (the
+ * columns' row last).
+ */
+export function HeaderRows<TRow = unknown>({
+    children,
+}: HeaderRowsProps<TRow>) {
+    const rows = useHeaderRows<TRow>();
+    return rows.map((row) => (
+        <HeaderRowContext key={row.rowIndex} value={row as HeaderRowInfo}>
+            {children ? children(row) : <HeaderRow row={row} />}
+        </HeaderRowContext>
+    ));
+}
+
+/** The state of a header row. */
+export interface HeaderRowState {
+    /** -1 for the columns' row, above it for groups */
+    readonly rowIndex: number;
+}
+
+export type HeaderRowProps<TRow = unknown> =
+    DivPrimitiveProps<HeaderRowState> & {
+        /**
+         * its header row; without it, the one `HeaderRows` renders, else the columns' row (with
+         * column groups, render the rows through `HeaderRows`: a column spanning header rows is
+         * in the top one)
+         */
+        row?: HeaderRowInfo<TRow> | undefined;
+        children?: ReactNode;
+    };
+
+/**
+ * A header row (`role="row"`), one of the layers the engine moves with the columns. A `<tr>`.
+ * Without children, its header cells.
+ */
+export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
+    const {
+        row: given,
+        children = <HeaderCells />,
+        ...rest
+    } = withoutTransform<HeaderRowState, HeaderRowProps<TRow>>(props);
+    const view = useGridView<TRow>();
+    // the header rows that provide it were rendered for this grid's row type
+    const rendering = useContext(
+        HeaderRowContext,
+    ) as HeaderRowInfo<TRow> | null;
+    const row =
+        given ?? rendering ?? view.headerRows[view.headerRows.length - 1];
+    const rowIndex = row?.rowIndex ?? -1;
     return useRenderElement("div", rest, {
-        state: {},
+        state: { rowIndex },
         ref: useLayer("header"),
         props: {
             role: "row",
-            "aria-rowindex": 1,
+            "aria-rowindex": ariaRowIndex(view, rowIndex),
             ...dataAttributes({ "grid-part": "header-row" }),
-            children,
+            children: (
+                <HeaderRowContext
+                    value={(row as HeaderRowInfo | undefined) ?? null}
+                >
+                    {children}
+                </HeaderRowContext>
+            ),
         },
         style: {
             position: "absolute",
-            top: 0,
+            top: (rowIndex + view.headerRowCount) * view.headerRowHeight,
             left: 0,
             width: renderedWidth(view),
-            height: view.headerHeight,
+            height: view.headerRowHeight,
+            // with several rows, an upper one stays above the next: a cell spanning down from it
+            // is not covered by the row it reaches into
+            ...(view.headerRowCount > 1 ? { zIndex: -rowIndex } : {}),
             boxSizing: "border-box",
         },
     });
@@ -188,13 +255,16 @@ export interface HeaderCellsProps<TRow> {
     children?: (cell: HeaderCellInfo<TRow>) => ReactNode;
 }
 
-/** The header cells of the rendered columns (the column window, plus the active column). */
+/**
+ * A header row's cells: groups and columns intersecting the column window (a group cut by it
+ * included), plus the one holding the active column.
+ */
 export function HeaderCells<TRow = unknown>({
     children,
 }: HeaderCellsProps<TRow>) {
     const cells = useHeaderCells<TRow>();
     return cells.map((cell) => (
-        <HeaderCellSlot key={cell.column.key}>
+        <HeaderCellSlot key={cell.key}>
             {children ? children(cell) : <HeaderCell cell={cell} />}
         </HeaderCellSlot>
     ));
@@ -206,29 +276,56 @@ function HeaderCellSlot({ children }: { children: ReactNode }) {
 
 export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
     cell: HeaderCellInfo<TRow>;
-    /** without children: the column's `renderHeaderCell`, else its `name` */
+    /** without children: the group's or the column's `renderHeaderCell`, else its `name` */
     children?: ReactNode;
 };
 
-/** A header cell (`role="columnheader"`). A `<th>` through `render`. */
+/** Whether a `render` element is a table cell, which takes `colSpan` and `rowSpan`. */
+function isTableCell(render: unknown): boolean {
+    return (
+        isValidElement(render) && (render.type === "th" || render.type === "td")
+    );
+}
+
+/**
+ * A header cell (`role="columnheader"`), a group's or a column's. A `<th>` through `render`, which
+ * then gets `colSpan`/`rowSpan` too (a render function finds them in the state).
+ */
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
     const { cell, children, ...rest } = props;
     const { state, props: own } = useHeaderCell(cell);
     const { style, ...cellProps } = own;
-    const content =
-        children !== undefined
-            ? children
-            : cell.column.renderHeaderCell
-              ? cell.column.renderHeaderCell({
-                    column: cell.column,
-                    columnIndex: cell.columnIndex,
-                })
-              : cell.column.name;
+    const content = children !== undefined ? children : headerCellContent(cell);
+    const spans = isTableCell(rest.render)
+        ? {
+              ...(cell.columnSpan > 1 ? { colSpan: cell.columnSpan } : {}),
+              ...(cell.rowSpan > 1 ? { rowSpan: cell.rowSpan } : {}),
+          }
+        : {};
     return useRenderElement("div", rest, {
         state,
-        props: { ...cellProps, children: content },
+        props: { ...cellProps, ...spans, children: content },
         style,
     });
+}
+
+/** What a header cell shows without children: its renderer's output, else its name. */
+function headerCellContent<TRow>(cell: HeaderCellInfo<TRow>): ReactNode {
+    if (cell.group) {
+        return cell.group.renderHeaderCell
+            ? cell.group.renderHeaderCell({
+                  group: cell.group,
+                  columnIndex: cell.columnIndex,
+                  columnSpan: cell.columnSpan,
+              })
+            : cell.group.name;
+    }
+    return cell.column.renderHeaderCell
+        ? cell.column.renderHeaderCell({
+              column: cell.column,
+              columnIndex: cell.columnIndex,
+          })
+        : cell.column.name;
 }
 
 // ── the empty state ──────────────────────────────────────────────────────────
@@ -272,7 +369,10 @@ export type BodyProps = DivPrimitiveProps<Record<string, never>> & {
 
 /** The body (`role="rowgroup"`), the layer the engine moves with the rows. A `<tbody>`. */
 export function Body(props: BodyProps) {
-    const { children = <Rows />, ...rest } = withoutTransform(props);
+    const { children = <Rows />, ...rest } = withoutTransform<
+        Record<string, never>,
+        BodyProps
+    >(props);
     const view = useGridView();
     return useRenderElement("div", rest, {
         state: {},

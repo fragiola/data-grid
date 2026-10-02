@@ -43,6 +43,10 @@
                     "path": "concepts/virtualization"
                 },
                 {
+                    "label": "Column groups",
+                    "path": "concepts/column-groups"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

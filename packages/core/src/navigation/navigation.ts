@@ -35,17 +35,42 @@ export const DIRECTIONS: readonly Direction[] = [
     "page-down",
 ];
 
+/** A header cell's place: its position (its top row, its first column) and its spans. */
+export interface HeaderCellSpan {
+    readonly rowIndex: number;
+    readonly columnIndex: number;
+    readonly rowSpan: number;
+    readonly columnSpan: number;
+}
+
 /** What a move is bounded by. */
 export interface GridBounds {
     readonly rowCount: number;
     readonly columnCount: number;
-    /** 1 when the grid has a header row (row -1), 0 without */
+    /** the header rows (-1 and above), 0 without a header */
     readonly headerRowCount: number;
+    /**
+     * the header cell covering a header position (column groups span columns, a shallow column
+     * spans rows); without it, every header cell is one column and one row
+     */
+    readonly headerCellAt?:
+        | ((
+              rowIndex: number,
+              columnIndex: number,
+          ) => HeaderCellSpan | undefined)
+        | undefined;
+    /** the columns in view: a move down from a group lands on its first one in view */
+    readonly visibleColumns?:
+        | { readonly start: number; readonly end: number }
+        | undefined;
 }
 
 /**
  * The cell a move lands on, from `position`. Moves never wrap and stop at the edges; a page moves
- * `pageSize` rows (at least one). Row -1 is the header.
+ * `pageSize` rows (at least one). Header rows are -1 and above (G4). A header cell's position is
+ * its first column, on its row: a group's own row, or for a column spanning header rows (G2), the
+ * row it was reached on, so the arrows walk every header row from end to end. Up from a column
+ * reaches the group above it, Down from a group its first column in view.
  */
 export function nextPosition(
     position: CellPosition,
@@ -59,32 +84,75 @@ export function nextPosition(
     const page = Math.max(1, Math.floor(pageSize));
     const row = (index: number) => Math.min(Math.max(index, firstRow), lastRow);
     const column = (index: number) => Math.min(Math.max(index, 0), lastColumn);
-    const { rowIndex, columnIndex } = position;
+    /** the cell holding a position: a header cell's span, or the body cell itself */
+    const spanAt = (rowIndex: number, columnIndex: number): HeaderCellSpan => {
+        const r = row(rowIndex);
+        const c = column(columnIndex);
+        const header = r < 0 ? bounds.headerCellAt?.(r, c) : undefined;
+        return (
+            header ?? { rowIndex: r, columnIndex: c, rowSpan: 1, columnSpan: 1 }
+        );
+    };
+    /** the position of the cell holding a position: its first column, on that row */
+    const at = (rowIndex: number, columnIndex: number): CellPosition => {
+        const r = row(rowIndex);
+        return { rowIndex: r, columnIndex: spanAt(r, columnIndex).columnIndex };
+    };
+    const here = spanAt(position.rowIndex, position.columnIndex);
+    const stay = at(position.rowIndex, position.columnIndex);
+    const top = here.rowIndex;
+    const bottom = here.rowIndex + here.rowSpan - 1;
+    /** where a move down from a group lands: its first column in view, else its first column */
+    const columnBelow = () => {
+        const visible = bounds.visibleColumns;
+        const end = here.columnIndex + here.columnSpan;
+        return visible &&
+            visible.start > here.columnIndex &&
+            visible.start < end
+            ? visible.start
+            : here.columnIndex;
+    };
     switch (direction) {
         case "up":
-            return { rowIndex: row(rowIndex - 1), columnIndex };
+            return top - 1 < firstRow ? stay : at(top - 1, here.columnIndex);
         case "down":
-            return { rowIndex: row(rowIndex + 1), columnIndex };
+            return bottom + 1 > lastRow ? stay : at(bottom + 1, columnBelow());
         case "left":
-            return { rowIndex, columnIndex: column(columnIndex - 1) };
-        case "right":
-            return { rowIndex, columnIndex: column(columnIndex + 1) };
+            return here.columnIndex - 1 < 0
+                ? stay
+                : at(stay.rowIndex, here.columnIndex - 1);
+        case "right": {
+            const next = here.columnIndex + here.columnSpan;
+            return next > lastColumn ? stay : at(stay.rowIndex, next);
+        }
         case "row-start":
-            return { rowIndex, columnIndex: 0 };
+            return at(stay.rowIndex, 0);
         case "row-end":
-            return { rowIndex, columnIndex: lastColumn };
+            return at(stay.rowIndex, lastColumn);
         case "grid-start":
-            return { rowIndex: firstRow, columnIndex: 0 };
+            return at(firstRow, 0);
         case "grid-end":
-            return { rowIndex: lastRow, columnIndex: lastColumn };
+            return at(lastRow, lastColumn);
         case "page-up":
             // a page up stops at the first row: the header is reached with ArrowUp
-            return {
-                rowIndex:
-                    rowIndex < 0 ? rowIndex : row(Math.max(rowIndex - page, 0)),
-                columnIndex,
-            };
+            return stay.rowIndex < 0
+                ? stay
+                : at(Math.max(stay.rowIndex - page, 0), here.columnIndex);
         case "page-down":
-            return { rowIndex: row(rowIndex + page), columnIndex };
+            return at(bottom + page, columnBelow());
     }
+}
+
+/** Whether two positions are the same cell: a header cell spanning rows has one per row. */
+export function sameCell(
+    a: CellPosition,
+    b: CellPosition,
+    headerCellAt?: GridBounds["headerCellAt"],
+): boolean {
+    if (a.rowIndex === b.rowIndex && a.columnIndex === b.columnIndex) {
+        return true;
+    }
+    if (a.rowIndex >= 0 || b.rowIndex >= 0 || !headerCellAt) return false;
+    const cell = headerCellAt(a.rowIndex, a.columnIndex);
+    return Boolean(cell && cell === headerCellAt(b.rowIndex, b.columnIndex));
 }

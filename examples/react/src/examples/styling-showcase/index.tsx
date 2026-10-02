@@ -96,9 +96,7 @@ export default function StylingShowcase() {
                                         className={(state) =>
                                             preset.headerCell(
                                                 state,
-                                                styles.columnKey(
-                                                    cell.column.key,
-                                                ),
+                                                styles.columnKey(cell.key),
                                             )
                                         }
                                     />
