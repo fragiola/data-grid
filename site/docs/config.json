@@ -75,6 +75,10 @@
                 {
                     "label": "Nested grids",
                     "path": "guides/nested-grids"
+                },
+                {
+                    "label": "Empty state",
+                    "path": "guides/empty-state"
                 }
             ]
         },

@@ -358,7 +358,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
             state: {},
             ref,
             props: {
-                ...dataAttributes({ "grid-part": "root" }),
+                ...dataAttributes({
+                    "grid-part": "root",
+                    empty: view.rowCount === 0,
+                }),
                 // a scroll container is a tab stop in some browsers: the grid has its own
                 tabIndex: -1,
                 onKeyDown: handleKeyDown,

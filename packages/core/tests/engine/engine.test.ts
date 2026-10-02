@@ -235,6 +235,27 @@ describe("windows", () => {
         expect(engine.get("row-window").visible).toEqual({ start: 0, end: 20 });
     });
 
+    it("report the visible area in the view, so an empty grid can fill it, and follow a resize", () => {
+        const { size, view } = setup({ rows: 0 });
+        // 500 × 230, 30px of header: the visible body is 500 × 200
+        expect(view().rowCount).toBe(0);
+        expect(view().viewportWidth).toBe(500);
+        expect(view().viewportBodyHeight).toBe(200);
+        size.width = 640;
+        size.height = 330;
+        resize?.();
+        expect(view().viewportWidth).toBe(640);
+        expect(view().viewportBodyHeight).toBe(300);
+    });
+
+    it("publish no new view for a resize alone while there are rows", () => {
+        const { size, view } = setup({ width: 550 });
+        const first = view();
+        size.width = 551; // the same column window (5.5 → 5.51 columns)
+        resize?.();
+        expect(view()).toBe(first);
+    });
+
     it("tell when the view's last rows near the end, once per row count", () => {
         const { engine, model, scrollTo, render } = setup({ rows: 100 });
         const reached = events(engine, "rows-end-reached");
@@ -473,6 +494,30 @@ describe("the keyboard", () => {
         const event = keyEvent("ArrowDown");
         expect(engine.adapter.keydown(event)).toBe(true);
         expect(active(model)).toEqual({ rowIndex: 5, columnIndex: 5 });
+    });
+});
+
+describe("keys from the app's content", () => {
+    it("leaves a key from a control beside the cells (an empty state's action) to the control", () => {
+        const { engine, model, grid } = setup({ rows: 0 });
+        const action = document.createElement("button");
+        grid.append(action);
+        const from = (target: Element, name: string) => {
+            const event = new KeyboardEvent("keydown", {
+                key: name,
+                cancelable: true,
+            });
+            Object.defineProperty(event, "target", { value: target });
+            return { handled: engine.adapter.keydown(event), event };
+        };
+        for (const name of ["ArrowRight", "End", "PageDown"]) {
+            const { handled, event } = from(action, name);
+            expect(handled, name).toBe(false);
+            expect(event.defaultPrevented, name).toBe(false);
+        }
+        expect(model.get("active-position")).toBeNull();
+        // the grid itself still takes them
+        expect(from(grid, "ArrowRight").handled).toBe(true);
     });
 });
 

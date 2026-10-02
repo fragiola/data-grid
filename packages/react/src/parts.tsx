@@ -91,6 +91,7 @@ export function Grid(props: GridProps) {
     useLayoutEffect(() => {
         engine.adapter.commit(view);
     }, [engine, view]);
+    const empty = view.rowCount === 0;
     return useRenderElement("div", rest, {
         state: { rowCount: view.rowCount, columnCount: view.columnCount },
         ref: useLayer("grid"),
@@ -99,14 +100,21 @@ export function Grid(props: GridProps) {
             "aria-rowcount": ariaRowCount(view),
             "aria-colcount": view.columnCount,
             tabIndex: view.active ? -1 : 0,
-            ...dataAttributes({ "grid-part": "grid" }),
+            ...dataAttributes({ "grid-part": "grid", empty }),
             children,
         },
         style: {
             position: "relative",
             display: "block",
-            width: view.width,
-            height: view.headerHeight + view.height,
+            // without rows, the sizer still spans the visible area: the empty state has room
+            width: empty
+                ? Math.max(view.width, view.viewportWidth)
+                : view.width,
+            height:
+                view.headerHeight +
+                (empty
+                    ? Math.max(view.height, view.viewportBodyHeight)
+                    : view.height),
             // clips the rendered rows to the sizer without being a scroll container (sticky
             // headers stick to the viewport)
             overflow: "clip",
@@ -221,6 +229,39 @@ export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
         props: { ...cellProps, children: content },
         style,
     });
+}
+
+// ── the empty state ──────────────────────────────────────────────────────────
+
+export type EmptyProps = DivPrimitiveProps<Record<string, never>> & {
+    children?: ReactNode;
+};
+
+/**
+ * What the grid shows while it has no rows: its children, in the body area (below the header, as
+ * large as the visible body), staying in view when the grid scrolls sideways. Nothing renders
+ * while there are rows. It has no text of its own. Place it after the `Header`: it sits in the flow
+ * below it. As a table, render it as a `<tbody>` holding a row and a cell.
+ */
+export function Empty(props: EmptyProps) {
+    const { children, ...rest } = props;
+    const view = useGridView();
+    const element = useRenderElement("div", rest, {
+        state: {},
+        props: {
+            ...dataAttributes({ "grid-part": "empty" }),
+            children,
+        },
+        style: {
+            position: "sticky",
+            left: 0,
+            display: "block",
+            width: view.viewportWidth,
+            height: view.viewportBodyHeight,
+            boxSizing: "border-box",
+        },
+    });
+    return view.rowCount === 0 ? element : null;
 }
 
 // ── the body ─────────────────────────────────────────────────────────────────

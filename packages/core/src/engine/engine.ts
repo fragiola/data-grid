@@ -68,6 +68,13 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     /** the body's physical height (the sizer is `headerHeight + height`) */
     readonly height: number;
     readonly headerHeight: number;
+    /**
+     * the viewport's visible width (what an empty grid's placeholder spans); a resize alone
+     * publishes a new view only while the grid has no rows
+     */
+    readonly viewportWidth: number;
+    /** the visible body's height, below the header (what an empty grid's placeholder fills); as above */
+    readonly viewportBodyHeight: number;
     readonly headerRowCount: number;
     readonly rowCount: number;
     readonly columnCount: number;
@@ -322,6 +329,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             width: columnsX.mapping.physicalSize,
             height: rowsY.mapping.physicalSize,
             headerHeight: headerHeight(),
+            viewportWidth: width,
+            viewportBodyHeight: bodyHeight(),
             headerRowCount: state.headerRowHeight > 0 ? 1 : 0,
             rowCount: state.rowCount,
             columnCount: state.columns.length,
@@ -349,6 +358,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.width !== next.width ||
             current.height !== next.height ||
             current.headerHeight !== next.headerHeight ||
+            // the visible area matters only to an empty grid: a resize alone renders nothing else
+            ((current.rowCount === 0 || next.rowCount === 0) &&
+                (current.viewportWidth !== next.viewportWidth ||
+                    current.viewportBodyHeight !== next.viewportBodyHeight)) ||
             current.rowAxis !== next.rowAxis ||
             current.columnAxis !== next.columnAxis ||
             current.columnDefs !== next.columnDefs ||
@@ -641,6 +654,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
     }
 
+    /** Whether a key from `target` is the grid's: from one of its cells, its viewport or a layer. */
+    function ownsKeysOf(target: EventTarget | null): boolean {
+        if (target === viewport) return true;
+        for (const layer of Object.values(layers)) {
+            if (target === layer) return true;
+        }
+        return cellOf(target) !== null;
+    }
+
     /**
      * The cell of this grid an event happened in. Inside a nested grid, it is the cell of this
      * grid that holds the nested one: the nested grid's own cells are not this grid's.
@@ -728,13 +750,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     function keydown(event: KeyboardEvent): boolean {
-        // a key typed into a field inside a cell is the field's, and a key from outside the grid
-        // (a menu portalled out of a cell, whose events still bubble through the cell) is not ours
+        // a key typed into a field inside a cell is the field's, a key from outside the grid (a
+        // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
+        // and neither is one from the app's content beside the cells (an empty state's action)
         if (
             event.defaultPrevented ||
             event.altKey ||
             isEditable(event.target) ||
-            !inViewport(event.target)
+            !inViewport(event.target) ||
+            !ownsKeysOf(event.target)
         ) {
             return false;
         }

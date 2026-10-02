@@ -10,7 +10,8 @@ import { createRoot } from "react-dom/client";
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
 // divs (`div`), configured by the query string, so one spec runs against both.
 //
-//   ?rows=1000000        the row count (rows are computed from their index, nothing is stored)
+//   ?rows=1000000        the row count (rows are computed from their index, nothing is stored);
+//                        0 shows the empty state
 //   &columns=1000        the column count (100px each)
 //   &rowHeight=32        a row's height; &variable=1 makes it vary by index (24–48px)
 //   &maxScrollSize=…     the scroll scaling cap
@@ -41,6 +42,14 @@ function Expose() {
 }
 
 const getRow = (index: number): FixtureRow => ({ index });
+
+// The empty state's content, centred in it (the part's own display is structural: a block)
+const EMPTY_ROW = { display: "block", height: "100%" } as const;
+const EMPTY_CONTENT = {
+    display: "grid",
+    height: "100%",
+    placeItems: "center",
+} as const;
 
 function Fixture({ kind }: { kind: "table" | "div" }) {
     const params = new URLSearchParams(location.search);
@@ -136,6 +145,15 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 )}
                             </DataGrid.Rows>
                         </DataGrid.Body>
+                        <DataGrid.Empty render={table ? <tbody /> : undefined}>
+                            {table ? (
+                                <tr style={EMPTY_ROW}>
+                                    <td style={EMPTY_CONTENT}>No rows</td>
+                                </tr>
+                            ) : (
+                                <div style={EMPTY_CONTENT}>No rows</div>
+                            )}
+                        </DataGrid.Empty>
                     </DataGrid.Grid>
                 </DataGrid.Root>
             </Profiler>

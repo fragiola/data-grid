@@ -503,6 +503,120 @@ describe("the active cell", () => {
     });
 });
 
+describe("the empty state", () => {
+    function EmptyGrid({ rows }: { rows: Person[] }) {
+        return (
+            <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+                <DataGrid.Grid aria-label="People">
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                    <DataGrid.Empty className="empty">
+                        <p>No people</p>
+                    </DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>
+        );
+    }
+
+    it("renders its children only while there are no rows, and marks the root and the grid", () => {
+        const { container, rerender } = render(<EmptyGrid rows={[]} />);
+        const [empty] = parts(container, "empty");
+        expect(empty?.textContent).toBe("No people");
+        expect(empty).toHaveClass("empty");
+        expect(parts(container, "root")[0]).toHaveAttribute("data-empty", "");
+        expect(parts(container, "grid")[0]).toHaveAttribute("data-empty", "");
+        expect(parts(container, "row")).toHaveLength(0);
+        // the header stays: the columns are still there
+        expect(parts(container, "header-cell")).toHaveLength(3);
+
+        rerender(<EmptyGrid rows={people.slice(0, 3)} />);
+        expect(parts(container, "empty")).toHaveLength(0);
+        expect(parts(container, "root")[0]).not.toHaveAttribute("data-empty");
+        expect(parts(container, "grid")[0]).not.toHaveAttribute("data-empty");
+        expect(parts(container, "row")).toHaveLength(3);
+    });
+
+    it("fills the visible body below the header, and stays in view sideways", () => {
+        const { container } = render(<EmptyGrid rows={[]} />);
+        const [empty] = parts(container, "empty");
+        // the viewport is 400 × 235, the header 35 high
+        expect(empty?.style.position).toBe("sticky");
+        expect(empty?.style.left).toBe("0px");
+        expect(empty?.style.width).toBe("400px");
+        expect(empty?.style.height).toBe("200px");
+        for (const property of [...(empty?.style ?? [])]) {
+            expect(STRUCTURAL.has(property), property).toBe(true);
+        }
+        // the grid is at least as large as the visible area, so the empty state has room
+        const [grid] = parts(container, "grid");
+        expect(grid?.style.width).toBe("450px");
+        expect(grid?.style.height).toBe("235px");
+    });
+
+    it("follows the primitive contract: render, ref, handlers, className and style", () => {
+        const ref = createRef<HTMLTableSectionElement>();
+        const onClick = vi.fn();
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid render={<table />}>
+                    <DataGrid.Body render={<tbody />} />
+                    <DataGrid.Empty
+                        ref={ref}
+                        render={<tbody />}
+                        id="nothing"
+                        onClick={onClick}
+                        className={() => "from-a-function"}
+                        style={{ color: "red", position: "static", width: 1 }}
+                    >
+                        <tr>
+                            <td>No people</td>
+                        </tr>
+                    </DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [empty] = parts(container, "empty");
+        expect(empty?.tagName).toBe("TBODY");
+        expect(ref.current).toBe(empty);
+        expect(empty).toHaveAttribute("id", "nothing");
+        expect(empty).toHaveClass("from-a-function");
+        // the consumer's style is merged under the structural one
+        expect(empty?.style.color).toBe("red");
+        expect(empty?.style.position).toBe("sticky");
+        expect(empty?.style.width).toBe("400px");
+        fireEvent.click(screen.getByText("No people"));
+        expect(onClick).toHaveBeenCalledTimes(1);
+
+        const rendered = vi.fn((props: object) => <div {...props} />);
+        render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid>
+                    <DataGrid.Empty render={rendered} />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        expect(rendered).toHaveBeenCalled();
+        expect(rendered.mock.calls[0]?.[0]).toMatchObject({
+            "data-grid-part": "empty",
+        });
+    });
+
+    it("sets no role, text or name of its own", () => {
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid>
+                    <DataGrid.Body />
+                    <DataGrid.Empty />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [empty] = parts(container, "empty");
+        expect(empty).not.toHaveAttribute("role");
+        expect(empty?.textContent).toBe("");
+        expect(container.querySelectorAll("[aria-label]")).toHaveLength(0);
+    });
+});
+
 describe("regressions", () => {
     it("goes back to the default row height when the prop is removed", () => {
         const { container, rerender } = render(
