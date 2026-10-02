@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { listExampleSlugs } from "../../examples/react/scripts/examples-lib.ts";
 import {
     anchorsOf,
     noindexProblem,
@@ -45,7 +46,9 @@ describe("the site export", () => {
             section.pages.filter((entry) => "path" in entry),
         );
         expect(site.pages.size).toBe(listed.length + 1);
-        expect(site.manifests.get("react")?.examples).toHaveLength(11);
+        expect(site.manifests.get("react")?.examples).toHaveLength(
+            listExampleSlugs().length,
+        );
     });
 
     it("passes the contract checks", () => {
