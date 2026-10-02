@@ -517,7 +517,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Under scaling, the wheel moves the content by exactly its delta (the native scroll would not). */
     function onWheel(event: WheelEvent) {
-        if (!viewport || event.ctrlKey) return;
+        // a wheel over a grid nested in a cell is that grid's (or the browser's, which chains it)
+        if (
+            !viewport ||
+            event.ctrlKey ||
+            event.defaultPrevented ||
+            !inViewport(event.target)
+        ) {
+            return;
+        }
         const yScaled = rowsY.mapping.scaled;
         const xScaled = columnsX.mapping.scaled;
         if (!yScaled && !xScaled) return;

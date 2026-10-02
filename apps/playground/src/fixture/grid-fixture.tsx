@@ -151,7 +151,13 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                     <td style={EMPTY_CONTENT}>No rows</td>
                                 </tr>
                             ) : (
-                                <div style={EMPTY_CONTENT}>No rows</div>
+                                // biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's row, the grid owns focus
+                                <div role="row" style={EMPTY_ROW}>
+                                    {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's cell, the grid owns focus */}
+                                    <div role="gridcell" style={EMPTY_CONTENT}>
+                                        No rows
+                                    </div>
+                                </div>
                             )}
                         </DataGrid.Empty>
                     </DataGrid.Grid>

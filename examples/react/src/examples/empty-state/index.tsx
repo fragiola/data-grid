@@ -2,7 +2,7 @@
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import { Plus, Trash2, UsersRound } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { type Person, people } from "../_kit/data";
 import * as styles from "./styles";
@@ -19,6 +19,7 @@ const columns: Column<Person>[] = [
 
 export default function EmptyState() {
     const [rows, setRows] = useState<Person[]>([]);
+    const grid = useRef<HTMLDivElement>(null);
     return (
         <div className={styles.frame}>
             <div className={styles.toolbar}>
@@ -42,7 +43,11 @@ export default function EmptyState() {
                 rowHeight={36}
                 className={styles.root}
             >
-                <DataGrid.Grid aria-label="People" className={styles.grid}>
+                <DataGrid.Grid
+                    ref={grid}
+                    aria-label="People"
+                    className={styles.grid}
+                >
                     <DataGrid.Header className={styles.header}>
                         <DataGrid.HeaderRow className={styles.headerRow}>
                             <DataGrid.HeaderCells<Person>>
@@ -72,22 +77,37 @@ export default function EmptyState() {
                         </DataGrid.Rows>
                     </DataGrid.Body>
                     <DataGrid.Empty>
-                        <div className={styles.empty} data-testid="empty">
-                            <div className={styles.illustration}>
-                                <UsersRound aria-hidden />
-                            </div>
-                            <p className={styles.emptyTitle}>No people yet</p>
-                            <p className={styles.emptyText}>
-                                Add a few sample rows to see the grid fill up,
-                                then clear them to come back here.
-                            </p>
-                            <Clickable.Button
-                                size="sm"
-                                onClick={() => setRows(SAMPLE)}
+                        {/* a row and a cell: inside the grid, content sits in its structure */}
+                        {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's row, the grid owns focus */}
+                        <div role="row" className={styles.emptyRow}>
+                            {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's cell, the grid owns focus */}
+                            <div
+                                role="gridcell"
+                                className={styles.empty}
+                                data-testid="empty"
                             >
-                                <Plus aria-hidden />
-                                Add sample rows
-                            </Clickable.Button>
+                                <div className={styles.illustration}>
+                                    <UsersRound aria-hidden />
+                                </div>
+                                <p className={styles.emptyTitle}>
+                                    No people yet
+                                </p>
+                                <p className={styles.emptyText}>
+                                    Add a few sample rows to see the grid fill
+                                    up, then clear them to come back here.
+                                </p>
+                                <Clickable.Button
+                                    size="sm"
+                                    onClick={() => {
+                                        setRows(SAMPLE);
+                                        // the button goes away with the empty state: keep focus in the grid
+                                        grid.current?.focus();
+                                    }}
+                                >
+                                    <Plus aria-hidden />
+                                    Add sample rows
+                                </Clickable.Button>
+                            </div>
                         </div>
                     </DataGrid.Empty>
                 </DataGrid.Grid>

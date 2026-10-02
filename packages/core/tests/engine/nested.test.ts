@@ -29,11 +29,12 @@ const COLUMNS: Column<Row>[] = [
 ];
 
 /** An engine on a viewport jsdom cannot lay out: a fixed client size, scroll offsets kept. */
-function grid(parent: Element) {
+function grid(parent: Element, rowCount = 5) {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const model = createDataGridModel<Row>({
         columns: COLUMNS,
-        rows: Array.from({ length: 5 }, (_, id) => ({ id })),
+        rowCount,
+        getRow: (id) => ({ id }),
         rowHeight: 20,
         headerRowHeight: 20,
     });
@@ -161,5 +162,30 @@ describe("nested grids", () => {
         // focus stays in the inner grid: not pulled to the decoy at (0, 1) in the first grid
         expect(document.activeElement).toBe(innerCell);
         expect(document.activeElement).not.toBe(decoy);
+    });
+
+    it("leave a wheel over the inner grid to it, even when the outer grid is scaled", () => {
+        // a million rows of 20px: the outer grid scales its scroll, and handles the wheel itself
+        const outer = grid(document.body, 1_000_000);
+        const own = outer.cell(1, 0);
+        const inner = grid(outer.cell(0, 1));
+        const innerCell = inner.cell(0, 0);
+        for (const engine of [outer.engine, inner.engine]) {
+            engine.adapter.commit(engine.adapter.getView());
+        }
+        const wheel = (target: Element) => {
+            const event = new WheelEvent("wheel", {
+                deltaY: 100,
+                bubbles: true,
+                cancelable: true,
+            });
+            target.dispatchEvent(event);
+            return event;
+        };
+        expect(wheel(innerCell).defaultPrevented).toBe(false);
+        expect(outer.viewport.scrollTop).toBe(0);
+        // over its own cells, the outer grid takes the wheel
+        expect(wheel(own).defaultPrevented).toBe(true);
+        expect(outer.viewport.scrollTop).toBeGreaterThan(0);
     });
 });

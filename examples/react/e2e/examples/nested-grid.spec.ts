@@ -17,7 +17,7 @@ test("keys inside an order's items move only that grid", async ({ page }) => {
     // the orders grid stays on the cell that holds the items
     const orders = page.getByRole("grid", { name: "Orders" });
     const active = await orders
-        .locator("[data-active]")
+        .locator('[data-grid-part="cell"][data-active]')
         .evaluateAll((cells) =>
             cells
                 .filter(
@@ -31,7 +31,7 @@ test("keys inside an order's items move only that grid", async ({ page }) => {
                     cell.getAttribute("data-column-index"),
                 ]),
         );
-    expect(active).toContainEqual(["0", "2"]);
+    expect(active).toEqual([["0", "2"]]);
 });
 
 test("Tab enters the items from their order's cell, and Shift+Tab returns", async ({

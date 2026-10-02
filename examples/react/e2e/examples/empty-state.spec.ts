@@ -46,6 +46,12 @@ test("the action brings the rows back, and clearing empties the grid again", asy
     await addRows(page).click();
     await expect(page.getByTestId("row-count")).toHaveText("50 people");
     await expect(empty(page)).toHaveCount(0);
+    // the action went away with the empty state: focus stayed in the grid
+    expect(
+        await page
+            .locator('[data-grid-part="root"]')
+            .evaluate((root) => root.contains(document.activeElement)),
+    ).toBe(true);
     await expect(grid(page)).not.toHaveAttribute("data-empty");
     await expect(cell(page, 0, 1)).toBeVisible();
 

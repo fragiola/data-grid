@@ -44,6 +44,8 @@ export const cell = cn(
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
+export const emptyRow = "block h-full";
+
 /** inside the empty area (its display is the grid's): the content centred in the visible body */
 export const empty =
     "flex h-full flex-col items-center justify-center gap-3 p-6 text-center";

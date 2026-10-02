@@ -1,5 +1,6 @@
 "use client";
 
+import { useGridView } from "@fragiola/data-grid-react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -55,11 +56,38 @@ function useTable(): TableState {
     return value;
 }
 
+/** Where a control sits: its cell (the header row is -1). */
+export interface CellAt {
+    rowIndex: number;
+    columnIndex: number;
+}
+
+/**
+ * A control inside a cell is a tab stop only while its cell is active: Tab leaves the grid in
+ * one step, and the arrows reach the cell (then Space or Enter, or Tab into the control).
+ */
+export function useCellTabIndex({ rowIndex, columnIndex }: CellAt) {
+    const { active } = useGridView();
+    // explicit: an `undefined` would override a component's own default (Base UI's checkbox)
+    return active?.rowIndex === rowIndex && active.columnIndex === columnIndex
+        ? 0
+        : -1;
+}
+
 /** A row's checkbox. */
-export function SelectCell({ id, name }: { id: number; name: string }) {
+export function SelectCell({
+    id,
+    name,
+    at,
+}: {
+    id: number;
+    name: string;
+    at: CellAt;
+}) {
     const { selected, toggle } = useTable();
     return (
         <Checkbox.Root
+            tabIndex={useCellTabIndex(at)}
             aria-label={`Select ${name}`}
             checked={selected.has(id)}
             onCheckedChange={() => toggle(id)}
@@ -70,11 +98,12 @@ export function SelectCell({ id, name }: { id: number; name: string }) {
 }
 
 /** The header's checkbox: every row, some (indeterminate) or none. */
-export function SelectAllHeader() {
+export function SelectAllHeader({ at }: { at: CellAt }) {
     const { selected, visibleIds, toggleAll } = useTable();
     const count = visibleIds.filter((id) => selected.has(id)).length;
     return (
         <Checkbox.Root
+            tabIndex={useCellTabIndex(at)}
             aria-label="Select all"
             checked={count > 0 && count === visibleIds.length}
             indeterminate={count > 0 && count < visibleIds.length}
@@ -89,10 +118,12 @@ export function SelectAllHeader() {
 export function SortHeader({
     sortKey,
     icon,
+    at,
     children,
 }: {
     sortKey: SortKey;
     icon: ReactNode;
+    at: CellAt;
     children: ReactNode;
 }) {
     const { sort, sortBy } = useTable();
@@ -100,6 +131,7 @@ export function SortHeader({
     return (
         <button
             type="button"
+            tabIndex={useCellTabIndex(at)}
             className={styles.sortButton}
             onClick={() => sortBy(sortKey)}
         >
@@ -112,6 +144,29 @@ export function SortHeader({
                     <ArrowDown aria-hidden className={styles.sortIcon} />
                 ))}
         </button>
+    );
+}
+
+/** A link out of a cell. */
+export function CellLink({
+    href,
+    at,
+    children,
+}: {
+    href: string;
+    at: CellAt;
+    children: ReactNode;
+}) {
+    return (
+        <a
+            className={styles.link}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            tabIndex={useCellTabIndex(at)}
+        >
+            {children}
+        </a>
     );
 }
 

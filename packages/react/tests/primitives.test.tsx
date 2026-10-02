@@ -601,6 +601,25 @@ describe("the empty state", () => {
         });
     });
 
+    it("spans the visible width when the columns are narrower", () => {
+        const narrow: Column<Person>[] = [
+            { key: "name", width: 100 },
+            { key: "age", width: 50 },
+        ];
+        const { container } = render(
+            <DataGrid.Root columns={narrow} rows={[]}>
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                    <DataGrid.Empty />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        // 150px of columns in a 400px viewport: the grid, and the empty state, are 400px wide
+        expect(parts(container, "grid")[0]?.style.width).toBe("400px");
+        expect(parts(container, "empty")[0]?.style.width).toBe("400px");
+    });
+
     it("sets no role, text or name of its own", () => {
         const { container } = render(
             <DataGrid.Root columns={columns} rows={[]}>

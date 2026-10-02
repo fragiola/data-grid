@@ -173,7 +173,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **A grid owns only its own cells (Epic #12, E4).** Every cell lookup and focus decision of an
   engine considers only cells whose nearest attached viewport is its own (a registry of attached
   viewports, across engines). A grid nested in a cell is its own grid; to the outer grid, focus
-  inside it is focus inside the cell that holds it, and its keys are never the outer grid's.
+  inside it is focus inside the cell that holds it, and its keys (and wheel) are never the outer
+  grid's. The registry is module state: nesting needs one copy of `@fragiola/data-grid` in the app.
 - **`Empty` renders only while there are no rows (Epic #12, E3).** It sits in the body area (in
   the flow after `Header`, sticky on the left, as large as the visible body), has no text or role
   of its own, and `Root` and `Grid` carry `data-empty` meanwhile. With no rows, the grid's sizer

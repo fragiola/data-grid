@@ -20,11 +20,13 @@ header). It has no text and no role of its own: what it says is yours.
         <DataGrid.Header />
         <DataGrid.Body />
         <DataGrid.Empty>
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-                <p>No people yet</p>
-                <button type="button" onClick={addSampleRows}>
-                    Add sample rows
-                </button>
+            <div role="row" className="h-full">
+                <div role="gridcell" className="flex h-full flex-col items-center justify-center gap-3">
+                    <p>No people yet</p>
+                    <button type="button" onClick={addSampleRows}>
+                        Add sample rows
+                    </button>
+                </div>
             </div>
         </DataGrid.Empty>
     </DataGrid.Grid>
@@ -33,7 +35,8 @@ header). It has no text and no role of its own: what it says is yours.
 
 Its inline style is structural, and wins over yours: `position: sticky`, `left`, its width and
 height, `display: block` and `box-sizing`. So lay the content out in an element of your own
-inside it, at its full height, as above. Paint `Empty` itself as you like (a background, a
+inside it, at its full height, as above. Inside a grid, content belongs in a row and a cell:
+the `role="row"` and `role="gridcell"` wrappers keep the grid's structure valid. Paint `Empty` itself as you like (a background, a
 border).
 
 ## As a table
@@ -64,14 +67,16 @@ Tailwind, `in-data-empty:` styles an element inside an empty grid:
 
 With no rows, nothing in the body can be active, and the grid stays a tab stop. Tabbing into
 it focuses the first header cell. If a cell was active when the rows went away, the active
-cell moves to the header cell of its column. Tab then reaches the controls inside `Empty`.
+cell moves to the header cell of its column. Tab then reaches the controls inside `Empty`. An
+action that brings rows back removes itself with the empty state: move focus to the grid (a `ref`
+on `Grid`) in its handler, as the example does, so it is not lost.
 
 The grid takes keys only from its cells, from itself and from its viewport. The arrows, Home,
 End and Page keys pressed on a control inside `Empty` stay with that control.
 
 ## Accessibility
 
-`Empty` sits inside the grid element, and `aria-rowcount` counts only the header row, so
-assistive technology reads a grid with no data rows, followed by your content. Keep the message
-short and the action a real button. To announce that the grid has just been emptied, use a live
-region of your own, outside the grid.
+`Empty` sits inside the grid element and has no role of its own. Put its content in a row and a
+cell (`role="row"` and `role="gridcell"` on divs, `tr` and `td` in a table), as above: a grid owns
+only rows. Keep the message short and the action a real button. To announce that the grid has
+just been emptied, use a live region of your own, outside the grid.

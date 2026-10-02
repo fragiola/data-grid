@@ -444,12 +444,17 @@ for (const kind of KINDS) {
                     const box = element
                         .querySelector('[data-grid-part="empty"]')
                         ?.getBoundingClientRect();
+                    // the glyphs themselves: the text node, not an element around it
+                    const walker = document.createTreeWalker(
+                        element.querySelector('[data-grid-part="empty"]') ??
+                            element,
+                        NodeFilter.SHOW_TEXT,
+                    );
+                    let text: Node | null = walker.nextNode();
+                    while (text && text.textContent?.trim() !== "No rows") {
+                        text = walker.nextNode();
+                    }
                     const range = document.createRange();
-                    const text = [
-                        ...(element
-                            .querySelector('[data-grid-part="empty"]')
-                            ?.querySelectorAll("*") ?? []),
-                    ].find((node) => node.textContent === "No rows");
                     range.selectNodeContents(text ?? element);
                     const glyphs = range.getBoundingClientRect();
                     return {

@@ -29,6 +29,7 @@ import {
 } from "../_kit/companies";
 import { hash } from "../_kit/data";
 import {
+    CellLink,
     isSortKey,
     SelectAllHeader,
     SelectCell,
@@ -71,14 +72,23 @@ const columns: Column<Company>[] = [
     {
         key: "select",
         width: 48,
-        renderHeaderCell: () => <SelectAllHeader />,
-        renderCell: ({ row }) => <SelectCell id={row.id} name={row.name} />,
+        renderHeaderCell: ({ columnIndex }) => (
+            <SelectAllHeader at={{ rowIndex: -1, columnIndex }} />
+        ),
+        renderCell: ({ row, rowIndex, columnIndex }) => (
+            <SelectCell
+                id={row.id}
+                name={row.name}
+                at={{ rowIndex, columnIndex }}
+            />
+        ),
     },
     {
         key: "name",
         width: 220,
-        renderHeaderCell: () => (
+        renderHeaderCell: ({ columnIndex }) => (
             <SortHeader
+                at={{ rowIndex: -1, columnIndex }}
                 sortKey="name"
                 icon={<Building2 aria-hidden className={styles.icon} />}
             >
@@ -101,8 +111,9 @@ const columns: Column<Company>[] = [
     {
         key: "domain",
         width: 170,
-        renderHeaderCell: () => (
+        renderHeaderCell: ({ columnIndex }) => (
             <SortHeader
+                at={{ rowIndex: -1, columnIndex }}
                 sortKey="domain"
                 icon={<Globe aria-hidden className={styles.icon} />}
             >
@@ -166,8 +177,9 @@ const columns: Column<Company>[] = [
     {
         key: "employees",
         width: 150,
-        renderHeaderCell: () => (
+        renderHeaderCell: ({ columnIndex }) => (
             <SortHeader
+                at={{ rowIndex: -1, columnIndex }}
                 sortKey="employees"
                 icon={<Users aria-hidden className={styles.icon} />}
             >
@@ -187,8 +199,9 @@ const columns: Column<Company>[] = [
     {
         key: "arr",
         width: 160,
-        renderHeaderCell: () => (
+        renderHeaderCell: ({ columnIndex }) => (
             <SortHeader
+                at={{ rowIndex: -1, columnIndex }}
                 sortKey="arr"
                 icon={<DollarSign aria-hidden className={styles.icon} />}
             >
@@ -205,23 +218,22 @@ const columns: Column<Company>[] = [
     {
         key: "country",
         width: 210,
-        renderHeaderCell: () => (
+        renderHeaderCell: ({ columnIndex }) => (
             <SortHeader
+                at={{ rowIndex: -1, columnIndex }}
                 sortKey="country"
                 icon={<MapPin aria-hidden className={styles.icon} />}
             >
                 Primary location
             </SortHeader>
         ),
-        renderCell: ({ row }) => (
-            <a
-                className={styles.link}
+        renderCell: ({ row, rowIndex, columnIndex }) => (
+            <CellLink
                 href={`https://en.wikipedia.org/wiki/${encodeURIComponent(row.country)}`}
-                target="_blank"
-                rel="noreferrer"
+                at={{ rowIndex, columnIndex }}
             >
                 {row.country}
-            </a>
+            </CellLink>
         ),
     },
 ];

@@ -15,6 +15,11 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 | Rows loaded by window render once `getRow` **changes**: a new function per arrival. | A `getRow` memoised on the cache's version. |
 | A component **outside** the grid that shows its windows re-renders the grid if its state lives in the grid's parent. | A small external store the callbacks write to ([`large-dataset`](/examples/large-dataset)). |
 | No **column alignment** hint: numeric columns align through their cells' classes. | `justify-end` on the cells of numeric grids. |
+| No built-in **selection, sorting or filtering**: the grid shows the rows it is given. | The app keeps that state and passes the rows: [`companies`](/examples/companies) selects and sorts, [`tasks`](/examples/tasks) filters by facets. |
+| **Controls inside cells** (a checkbox, a link, a button) are tab stops of their own: Tab walks through them before it leaves the grid. | A `tabIndex` of -1 unless their cell is active, read from `useGridView().active` ([`companies`](/examples/companies)). |
+| Every **nested grid** is a tab stop by default, and its rows have the outer row's fixed height (no master and detail yet). | The inner grid's tab stops only while the outer cell holding it is active ([Nested grids](/docs/guides/nested-grids)); a row height that fits the inner grid. |
+| A wheel over a nested grid that has reached its end chains to the outer grid natively: under the outer grid's **scroll scaling**, that step is a scaled jump. | Nothing: nested grids in the examples are not scaled. |
+| `DataGrid.Empty` has **no structure of its own**: inside a grid, its content needs a row and a cell. | `role="row"` and `role="gridcell"` wrappers, or `tr` and `td` in a table ([Empty state](/docs/guides/empty-state)). |
 
 ## The roadmap
 

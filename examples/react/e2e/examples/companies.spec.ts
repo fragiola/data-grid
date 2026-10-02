@@ -90,3 +90,30 @@ test("sorts from the toolbar's select", async ({ page }) => {
         /.*/,
     );
 });
+
+test("in-cell controls are tab stops only in the active cell: Tab leaves the grid in one step", async ({
+    page,
+}) => {
+    await openExample(page, "companies");
+    const root = page.locator('[data-grid-part="root"]');
+    const focusInGrid = () =>
+        root.evaluate((element) => element.contains(document.activeElement));
+    await bodyRows(page).first().locator('[data-column-index="2"]').click();
+    await page.keyboard.press("Tab");
+    expect(await focusInGrid()).toBe(false);
+
+    // the arrows reach the checkbox's cell, then Tab enters it and Space toggles it
+    await bodyRows(page).first().locator('[data-column-index="2"]').click();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Tab");
+    const checkbox = bodyRows(page).first().getByRole("checkbox");
+    await expect(checkbox).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(page.getByTestId("selected-count")).toHaveText(
+        "1 selected · 500 companies",
+    );
+    // and Tab from the control leaves the grid too
+    await page.keyboard.press("Tab");
+    expect(await focusInGrid()).toBe(false);
+});

@@ -37,7 +37,8 @@ Every grid is a tab stop: the active cell, or the grid itself before one is acti
 default, Tab visits each rendered nested grid in page order before it leaves the outer grid.
 
 To keep a single stop, render the inner grid's tab stops only while the outer cell holding it is
-active. A `tabIndex` you pass to a part overrides the grid's own. Then Tab moves from the active
+active (the grid, its header cells and its cells). A `tabIndex` you pass to a part overrides the
+grid's own. Then Tab moves from the active
 outer cell into its inner grid, and Shift+Tab moves back. The example does this:
 
 ```tsx title="items.tsx"
@@ -49,6 +50,8 @@ function Items({ order, rowIndex, columnIndex }: ItemsProps) {
     return (
         <DataGrid.Root columns={itemColumns} rows={order.items}>
             <DataGrid.Grid aria-label={`Items of order ${order.id}`} tabIndex={tabIndex}>
+                …
+                <DataGrid.HeaderCell cell={cell} tabIndex={tabIndex} />
                 …
                 <DataGrid.Cell cell={cell} tabIndex={tabIndex} />
             </DataGrid.Grid>
