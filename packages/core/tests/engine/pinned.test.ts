@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     type Column,
     type ColumnOrGroup,
+    columnLeft,
     columnsError,
     createDataGridEngine,
     createDataGridModel,
     headerCellBox,
+    rowLeft,
 } from "../../src";
 
 // Pinned columns at the start (Epic #31, P1–P7): the leading `pinned: "start"` columns are always
@@ -18,7 +20,12 @@ interface Row {
     id: number;
 }
 
+let resize: (() => void) | null = null;
+
 class FakeResizeObserver {
+    constructor(callback: () => void) {
+        resize = callback;
+    }
     observe() {}
     disconnect() {}
 }
@@ -105,6 +112,11 @@ function setup(
         model,
         engine,
         view,
+        size,
+        resize: () => {
+            resize?.();
+            commit();
+        },
         scroll,
         scrollLeft,
         commit,
@@ -199,22 +211,34 @@ describe("placement", () => {
     it("moves a pinned cell back by what its layer scrolled, without a new view", () => {
         const { view, scrollLeft, pinnedCell, body } = setup();
         const cell = pinnedCell();
-        expect(cell.style.transform).toBe("translate3d(0px, 0px, 0px)");
+        // the rendered columns start at column 2 (200px): the layer is moved right by that much
+        expect(cell.style.transform).toBe("translate3d(-200px, 0px, 0px)");
         const before = view();
         scrollLeft(50);
         // inside the overscan: the same view, only the engine's writes moved
         expect(view()).toBe(before);
-        expect(cell.style.transform).toBe("translate3d(50px, 0px, 0px)");
+        expect(cell.style.transform).toBe("translate3d(-150px, 0px, 0px)");
         // where the browser shows column 1: its left in the layer, moved by the layer and by its
         // own transform, less the scroll: its offset from the view's start
         const layerX = Number(
             /translate3d\(([-\d.]+)px/.exec(body.style.transform)?.[1],
         );
-        const inLayer = view().columnAxis.offsetOf(1) - view().columnBase;
-        expect(inLayer + layerX + 50 - 50).toBe(100);
+        const ownX = Number(
+            /translate3d\(([-\d.]+)px/.exec(cell.style.transform)?.[1],
+        );
+        // a pinned cell sits at its own offset after the row's start, which is the pinned
+        // columns' width before the layer
+        expect(rowLeft(view())).toBe(-200);
+        expect(columnLeft(view(), 1)).toBe(300);
+        expect(
+            rowLeft(view()) + columnLeft(view(), 1) + layerX + ownX - 50,
+        ).toBe(100);
+        // and a column that scrolls, where it always was
+        const scrolling = columnLeft(view(), 3);
+        expect(rowLeft(view()) + scrolling + layerX - 50).toBe(300 - 50);
         // a cell registered later starts where the others are
         expect(pinnedCell().style.transform).toBe(
-            "translate3d(50px, 0px, 0px)",
+            "translate3d(-150px, 0px, 0px)",
         );
     });
 
@@ -236,14 +260,17 @@ describe("placement", () => {
             const ownX = Number(
                 /translate3d\(([-\d.]+)px/.exec(cell.style.transform)?.[1],
             );
+            // no number near the browser's limits: the base follows the view
+            expect(Math.abs(ownX)).toBeLessThan(10_000);
             for (const columnIndex of [0, 1]) {
-                const inLayer =
-                    view().columnAxis.offsetOf(columnIndex) - view().columnBase;
                 // where the browser shows it: in the layer, moved by both, less the scroll
-                expect(inLayer + layerX + ownX - left).toBeCloseTo(
-                    columnIndex * 100,
-                    5,
-                );
+                expect(
+                    rowLeft(view()) +
+                        columnLeft(view(), columnIndex) +
+                        layerX +
+                        ownX -
+                        left,
+                ).toBeCloseTo(columnIndex * 100, 5);
             }
         }
     });
@@ -290,6 +317,36 @@ describe("bringing a cell into view", () => {
         commit();
         // column 0 is pinned: in view wherever the scroll is
         expect(scroll.left).toBe(4_500);
+    });
+});
+
+describe("a view too narrow for the pinned columns", () => {
+    it("lets them scroll with the rest until it is wider again", () => {
+        // 200px of pinned columns in a 150px view: nothing would be left to scroll
+        const { engine, view, size, resize } = setup({ width: 150 });
+        expect(view().pinnedColumnCount).toBe(0);
+        expect(view().pinnedWidth).toBe(0);
+        expect(engine.get("column-window").visible.start).toBe(0);
+        size.width = 500;
+        resize();
+        expect(view().pinnedColumnCount).toBe(2);
+        expect(engine.get("column-window").visible).toEqual({
+            start: 2,
+            end: 5,
+        });
+    });
+});
+
+describe("a pinned cell let go", () => {
+    it("keeps no transform of the engine's", () => {
+        const { engine, scrollLeft, body } = setup();
+        const element = document.createElement("div");
+        body.append(element);
+        const release = engine.adapter.registerLayer("pinned", element);
+        scrollLeft(50);
+        expect(element.style.transform).not.toBe("");
+        release();
+        expect(element.style.transform).toBe("");
     });
 });
 

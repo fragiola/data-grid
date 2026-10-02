@@ -376,9 +376,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let state = model.state;
     let rowAxis = rowAxisOf(state);
     let columnAxis = columnAxisOf(state);
-    let pinnedCount = pinnedColumnCount(state.columns);
-    let pinnedWidth = columnAxis.offsetOf(pinnedCount);
     let width = 0;
+    /** the pinned columns in effect, and their width */
+    let pinnedCount = 0;
+    let pinnedWidth = 0;
+    updatePinning();
     let height = 0;
 
     const maxScroll = () => options.maxScrollSize ?? DEFAULT_MAX_SCROLL_SIZE;
@@ -396,6 +398,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         start: number;
         end: number;
         extra: number | null;
+        pinned: number;
         rows: readonly HeaderRowView<TRow, TNode>[];
     } | null = null;
 
@@ -483,7 +486,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             memo.count === count &&
             memo.start === start &&
             memo.end === end &&
-            memo.extra === extra
+            memo.extra === extra &&
+            memo.pinned === pinnedCount
         ) {
             return memo.rows;
         }
@@ -505,6 +509,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             start,
             end,
             extra,
+            pinned: pinnedCount,
             rows,
         };
         return rows;
@@ -698,9 +703,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const y = rowsY.layerOffset(committed.rowBase, viewport.scrollTop);
         setTransform("body", `translate3d(${x}px, ${y}px, 0px)`);
         setTransform("header", `translate3d(${x}px, 0px, 0px)`);
-        // a pinned cell moves back by what its layer scrolled: it stays at its own offset from the
-        // view's start (pinned columns come first), scaled or not
-        setTransform("pinned", `translate3d(${columnsX.virtual}px, 0px, 0px)`);
+        // a pinned cell sits at its own offset in the layer (`columnLeft`) and moves back by what
+        // the layer moved: it stays at that offset from the view's start, scaled or not. Both
+        // numbers stay small (the base follows the view): CSS never sees an offset near its limits
+        setTransform(
+            "pinned",
+            `translate3d(${columnsX.virtual - committed.columnBase}px, 0px, 0px)`,
+        );
     }
 
     /**
@@ -725,6 +734,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (!viewport) return;
         width = viewport.clientWidth;
         height = viewport.clientHeight;
+        updatePinning();
+    }
+
+    /**
+     * The pinned columns in effect: the leading `pinned` ones, while they leave part of the view
+     * to scroll. As wide as the view or wider (a narrow screen), they would hide every other
+     * column: they scroll with the rest until the view is wider again.
+     */
+    function updatePinning() {
+        const count = pinnedColumnCount(state.columns);
+        const pinned = columnAxis.offsetOf(count);
+        const fits = width === 0 || pinned < width;
+        pinnedCount = fits ? count : 0;
+        pinnedWidth = fits ? pinned : 0;
     }
 
     /** The sizes or the content changed: remap, then update; scroll once the sizer has its size. */
@@ -1190,8 +1213,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (after.columns !== before.columns) {
             columnAxis = columnAxisOf(after);
-            pinnedCount = pinnedColumnCount(after.columns);
-            pinnedWidth = columnAxis.offsetOf(pinnedCount);
+            updatePinning();
             fresh = true;
         }
         if (
@@ -1301,6 +1323,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
+                // a cell no longer pinned (its column was unpinned) keeps no offset of the engine's
+                if (layer === "pinned") element.style.transform = "";
             };
         },
         getView: () => view,
@@ -1398,21 +1422,42 @@ export function rowTop<TRow, TNode>(
     return view.rowAxis.offsetOf(rowIndex) - view.rowBase;
 }
 
-/** A column's left in its layer (the same in the header and in every row). */
+/**
+ * A row's left in its layer (a header row's too): with pinned columns, it starts their width
+ * before the layer, so its box holds them wherever the engine keeps them (a row's background,
+ * its hover, its `overflow`). 0 without.
+ */
+export function rowLeft<TRow, TNode>(view: GridView<TRow, TNode>): number {
+    return -view.pinnedWidth;
+}
+
+/** A column's left in its row (the same in the header rows and in every row). */
 export function columnLeft<TRow, TNode>(
     view: GridView<TRow, TNode>,
     columnIndex: number,
 ): number {
-    return view.columnAxis.offsetOf(columnIndex) - view.columnBase;
+    const offset = view.columnAxis.offsetOf(columnIndex);
+    // a pinned column at its own offset (the engine's transform keeps it in view), the others
+    // from the base; both after the row's start (`rowLeft`)
+    return (
+        (columnIndex < view.pinnedColumnCount
+            ? offset
+            : offset - view.columnBase) + view.pinnedWidth
+    );
 }
 
-/** The width of a row's rendered cells: from the layer's start to the last rendered column's end. */
+/**
+ * The width of a row's rendered cells: from the row's start (`rowLeft`) to the last rendered
+ * column's end.
+ */
 export function renderedWidth<TRow, TNode>(
     view: GridView<TRow, TNode>,
 ): number {
     const last = view.columns[view.columns.length - 1];
     if (last === undefined) return 0;
-    return view.columnAxis.offsetOf(last + 1) - view.columnBase;
+    return (
+        view.columnAxis.offsetOf(last + 1) - view.columnBase + view.pinnedWidth
+    );
 }
 
 /**
@@ -1452,7 +1497,10 @@ export function headerCellBox<TRow, TNode>(
     }
     return {
         top: (cell.rowIndex + view.headerRowCount) * view.headerRowHeight,
-        left: start - view.columnBase,
+        // in its header row, as `columnLeft`: a pinned cell at its own offset
+        left:
+            (to <= view.pinnedColumnCount ? start : start - view.columnBase) +
+            view.pinnedWidth,
         width: Math.max(0, end - start),
         height: cell.rowSpan * view.headerRowHeight,
     };

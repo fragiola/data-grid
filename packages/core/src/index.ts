@@ -23,6 +23,7 @@ export {
     headerCellBox,
     headerCellSort,
     renderedWidth,
+    rowLeft,
     rowTop,
 } from "./engine/engine";
 export {
