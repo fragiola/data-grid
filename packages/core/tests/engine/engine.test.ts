@@ -86,6 +86,7 @@ function setup(
     const grid = document.createElement("div");
     const header = document.createElement("div");
     const body = document.createElement("div");
+    body.dataset.layer = "body";
     element.append(grid);
     grid.append(header, body);
     const detach = engine.adapter.attach(element);
@@ -152,6 +153,21 @@ function events<K extends keyof EngineEventMap>(
     const seen: EngineEventMap[K][] = [];
     engine.subscribe(event, (value) => seen.push(value));
     return seen;
+}
+
+/** A keydown as the adapter gets it: from an element inside the grid (the body layer). */
+function keyEvent(name: string, init: KeyboardEventInit = {}): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", {
+        key: name,
+        cancelable: true,
+        ...init,
+    });
+    const target = document.querySelector('[data-layer="body"]');
+    Object.defineProperty(event, "target", {
+        value: target,
+        configurable: true,
+    });
+    return event;
 }
 
 function key(
@@ -363,13 +379,7 @@ describe("the keyboard", () => {
         const { model, engine, element } = setup();
         model.run("active-position.set", { rowIndex: 50, columnIndex: 10 });
         const keydown = (name: string, init: KeyboardEventInit = {}) =>
-            engine.adapter.keydown(
-                new KeyboardEvent("keydown", {
-                    key: name,
-                    cancelable: true,
-                    ...init,
-                }),
-            );
+            engine.adapter.keydown(keyEvent(name, init));
         const at = () => [active(model)?.rowIndex, active(model)?.columnIndex];
         expect(keydown("ArrowDown")).toBe(true);
         expect(at()).toEqual([51, 10]);
@@ -400,26 +410,17 @@ describe("the keyboard", () => {
     it("prevents the default of a key it handles, and skips keys already handled or typed in a field", () => {
         const { model, engine } = setup();
         model.run("active-position.set", { rowIndex: 5, columnIndex: 5 });
-        const handled = new KeyboardEvent("keydown", {
-            key: "ArrowDown",
-            cancelable: true,
-        });
+        const handled = keyEvent("ArrowDown");
         engine.adapter.keydown(handled);
         expect(handled.defaultPrevented).toBe(true);
 
-        const cancelled = new KeyboardEvent("keydown", {
-            key: "ArrowDown",
-            cancelable: true,
-        });
+        const cancelled = keyEvent("ArrowDown");
         cancelled.preventDefault();
         expect(engine.adapter.keydown(cancelled)).toBe(false);
 
         const input = document.createElement("input");
         document.body.append(input);
-        const typed = new KeyboardEvent("keydown", {
-            key: "ArrowLeft",
-            cancelable: true,
-        });
+        const typed = keyEvent("ArrowLeft");
         Object.defineProperty(typed, "target", { value: input });
         expect(engine.adapter.keydown(typed)).toBe(false);
         expect(active(model)).toEqual({ rowIndex: 6, columnIndex: 5 });
@@ -428,9 +429,7 @@ describe("the keyboard", () => {
     it("starts at the first cell in view when nothing is active", () => {
         const { model, engine, scrollTo } = setup();
         scrollTo(400, 300);
-        engine.adapter.keydown(
-            new KeyboardEvent("keydown", { key: "ArrowDown" }),
-        );
+        engine.adapter.keydown(keyEvent("ArrowDown"));
         expect(active(model)).toEqual({ rowIndex: 20, columnIndex: 3 });
     });
 
@@ -443,12 +442,7 @@ describe("the keyboard", () => {
         first?.focus();
         expect(active(model)).toEqual({ rowIndex: 0, columnIndex: 0 });
         for (let i = 0; i < 15; i++) {
-            engine.adapter.keydown(
-                new KeyboardEvent("keydown", {
-                    key: "ArrowDown",
-                    cancelable: true,
-                }),
-            );
+            engine.adapter.keydown(keyEvent("ArrowDown"));
             render();
         }
         expect(active(model)).toEqual({ rowIndex: 15, columnIndex: 0 });
@@ -476,10 +470,7 @@ describe("the keyboard", () => {
                 ? { ok: false, error: { code: "vetoed", message: "no" } }
                 : next(),
         );
-        const event = new KeyboardEvent("keydown", {
-            key: "ArrowDown",
-            cancelable: true,
-        });
+        const event = keyEvent("ArrowDown");
         expect(engine.adapter.keydown(event)).toBe(true);
         expect(active(model)).toEqual({ rowIndex: 5, columnIndex: 5 });
     });
@@ -622,6 +613,89 @@ describe("focus that should not activate", () => {
         render();
         expect(document.activeElement).toBe(input);
         void element;
+    });
+});
+
+describe("epic review regressions", () => {
+    it("scrolls to the initial active cell, and to a cell asked for before attaching", () => {
+        vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+        const model = createDataGridModel<Row>({
+            columns: COLUMNS,
+            rowCount: 1_000,
+            getRow: (index) => ({ id: index }),
+            rowHeight: 20,
+            headerRowHeight: 30,
+            activePosition: { rowIndex: 500, columnIndex: 0 },
+        });
+        const engine = createDataGridEngine(model);
+        const element = document.createElement("div");
+        let top = 0;
+        Object.defineProperties(element, {
+            clientWidth: { get: () => 500 },
+            clientHeight: { get: () => 230 },
+            scrollTop: {
+                get: () => top,
+                set: (v: number) => {
+                    top = v;
+                },
+            },
+            scrollLeft: { get: () => 0, set: () => {} },
+        });
+        document.body.append(element);
+        engine.adapter.attach(element);
+        engine.adapter.commit(engine.adapter.getView());
+        const { visible } = engine.get("row-window");
+        expect(visible.start).toBeLessThanOrEqual(500);
+        expect(visible.end).toBeGreaterThan(500);
+
+        const other = createDataGridEngine(
+            createDataGridModel<Row>({
+                columns: COLUMNS,
+                rowCount: 1_000,
+                getRow: (index) => ({ id: index }),
+                rowHeight: 20,
+            }),
+        );
+        other.run("scroll-to-cell", { rowIndex: 800 });
+        top = 0;
+        other.adapter.attach(element);
+        other.adapter.commit(other.adapter.getView());
+        expect(other.get("row-window").visible.end).toBeGreaterThan(800);
+    });
+
+    it("forgets a press the browser cancelled (a touch that became a scroll)", () => {
+        const { model, element, render } = setup();
+        render();
+        element.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        document.dispatchEvent(new Event("pointercancel"));
+        element.tabIndex = -1;
+        element.focus();
+        expect(model.get("active-position")).toEqual({
+            rowIndex: 0,
+            columnIndex: 0,
+        });
+    });
+
+    it("never pulls focus back from a field outside the grid", () => {
+        const { model, engine, render } = setup();
+        render();
+        const outside = document.createElement("input");
+        document.body.append(outside);
+        // a cell the app does not render (no header cells here): its focus stays pending
+        model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
+        engine.adapter.keydown(keyEvent("Home", { ctrlKey: true }));
+        outside.focus();
+        render();
+        expect(document.activeElement).toBe(outside);
+    });
+
+    it("pages with Space by exactly the body's height under scaling", () => {
+        const { engine } = setup({ rows: 100_000_000 });
+        engine.run("scroll-to", { top: 1_000_000_000 });
+        const event = keyEvent(" ");
+        expect(engine.adapter.keydown(event)).toBe(true);
+        expect(event.defaultPrevented).toBe(true);
+        expect(engine.get("scroll-position").top).toBe(1_000_000_200);
     });
 });
 

@@ -566,6 +566,121 @@ describe("regressions", () => {
     });
 });
 
+describe("epic review regressions", () => {
+    it("keeps a controlled position the parent changes with the rows in the same update", () => {
+        const onChange = vi.fn();
+        const { container, rerender } = render(
+            <DivGrid
+                activePosition={{ rowIndex: 500, columnIndex: 0 }}
+                onActivePositionChange={onChange}
+            />,
+        );
+        rerender(
+            <DivGrid
+                rows={people.slice(0, 10)}
+                activePosition={{ rowIndex: 0, columnIndex: 1 }}
+                onActivePositionChange={onChange}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+        expect(
+            container.querySelector(
+                '[data-row-index="0"][data-column-index="1"]',
+            ),
+        ).toHaveAttribute("data-active", "");
+    });
+
+    it("lets the root's render element cancel a key", () => {
+        const onChange = vi.fn();
+        const section = (
+            // biome-ignore lint/a11y/noStaticElementInteractions: the cells inside are the interactive elements
+            <section
+                onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") event.preventDefault();
+                }}
+            />
+        );
+        const { container } = render(
+            <DataGrid.Root
+                columns={columns}
+                rows={people}
+                defaultActivePosition={{ rowIndex: 0, columnIndex: 0 }}
+                onActivePositionChange={onChange}
+                render={section}
+            >
+                <DataGrid.Grid>
+                    <DataGrid.Body />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const cell = container.querySelector(
+            '[data-row-index="0"][data-column-index="0"]',
+        ) as HTMLElement;
+        fireEvent.keyDown(cell, { key: "ArrowDown" });
+        expect(onChange).not.toHaveBeenCalled();
+        fireEvent.keyDown(cell, { key: "ArrowRight" });
+        expect(onChange).toHaveBeenCalledOnce();
+    });
+
+    it("ignores keys from a portal rendered by a cell", async () => {
+        const { createPortal } = await import("react-dom");
+        const onChange = vi.fn();
+        render(
+            <DataGrid.Root
+                columns={columns}
+                rows={people}
+                defaultActivePosition={{ rowIndex: 0, columnIndex: 0 }}
+                onActivePositionChange={onChange}
+            >
+                <DataGrid.Grid>
+                    <DataGrid.Body>
+                        <DataGrid.Rows<Person>>
+                            {(row) => (
+                                <DataGrid.Row row={row}>
+                                    <DataGrid.Cells<Person>>
+                                        {(cell) => (
+                                            <DataGrid.Cell cell={cell}>
+                                                {cell.rowIndex === 0 &&
+                                                cell.columnIndex === 0
+                                                    ? createPortal(
+                                                          <button type="button">
+                                                              menu
+                                                          </button>,
+                                                          document.body,
+                                                      )
+                                                    : undefined}
+                                            </DataGrid.Cell>
+                                        )}
+                                    </DataGrid.Cells>
+                                </DataGrid.Row>
+                            )}
+                        </DataGrid.Rows>
+                    </DataGrid.Body>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        fireEvent.keyDown(screen.getByRole("button", { name: "menu" }), {
+            key: "ArrowDown",
+        });
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("keeps the engine's transform on a layer whose style has one", () => {
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={people}>
+                <DataGrid.Grid>
+                    <DataGrid.Body
+                        style={{ transform: "translateZ(0)", color: "red" }}
+                    />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const body = parts(container, "body")[0];
+        expect(body?.style.color).toBe("red");
+        expect(body?.style.transform).toMatch(/^translate3d/);
+    });
+});
+
 describe("the engine's life", () => {
     it("attaches once under StrictMode: one window event per scroll", () => {
         const onRowWindowChange = vi.fn();

@@ -512,11 +512,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         update();
     }
 
-    function scrollToCell({
-        rowIndex,
-        columnIndex,
-        align,
-    }: EngineActionMap["scroll-to-cell"]) {
+    /** a scroll to a cell asked for before the viewport attached: applied on attach */
+    let pendingCellScroll: EngineActionMap["scroll-to-cell"] | null = null;
+
+    function scrollToCell(payload: EngineActionMap["scroll-to-cell"]) {
+        if (!viewport) {
+            pendingCellScroll = payload;
+            return;
+        }
+        const { rowIndex, columnIndex, align } = payload;
         const moves: { top?: number; left?: number } = {};
         if (
             rowIndex !== undefined &&
@@ -579,8 +583,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
         if (!cell) return;
         pendingFocus = false;
+        const doc = viewport.ownerDocument;
+        const focused = doc.activeElement;
+        // focus that left the grid for something else stays there
+        if (focused && focused !== doc.body && !viewport.contains(focused)) {
+            return;
+        }
         // focus already in the cell (on it, or on a control inside it) stays where it is
-        const focused = viewport.ownerDocument.activeElement;
         if (!focused || !cell.contains(focused)) {
             // the engine scrolled it into view already, through the scaling-aware mapping
             cell.focus({ preventScroll: true });
@@ -600,6 +609,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return { rowIndex, columnIndex: columnWindow.visible.start };
     }
 
+    function inViewport(target: EventTarget | null): boolean {
+        return Boolean(
+            viewport &&
+                target &&
+                typeof target === "object" &&
+                "nodeType" in target &&
+                viewport.contains(target as unknown as Element),
+        );
+    }
+
     function cellOf(target: EventTarget | null): CellPosition | null {
         if (!viewport || !target || typeof target !== "object") return null;
         if (!("closest" in target) || typeof target.closest !== "function")
@@ -617,17 +636,36 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     function onPointerDown() {
         pointerDown = true;
-        viewport?.ownerDocument.addEventListener(
-            "pointerup",
-            () => {
-                pointerDown = false;
-            },
-            { once: true, capture: true },
-        );
+    }
+
+    /** A release anywhere (or a pointer the browser took over for a scroll) ends the press. */
+    function onPointerEnd() {
+        pointerDown = false;
+    }
+
+    function onFocusOut(event: FocusEvent) {
+        const next = event.relatedTarget;
+        if (
+            viewport &&
+            next &&
+            typeof next === "object" &&
+            "nodeType" in next &&
+            !viewport.contains(next as unknown as Element)
+        ) {
+            pendingFocus = false;
+        }
     }
 
     function onFocusIn(event: FocusEvent) {
         const cell = cellOf(event.target);
+        if (cell && (rowsY.mapping.scaled || columnsX.mapping.scaled)) {
+            // the browser scrolled the focused cell into view itself (a Tab): under scaling its
+            // scroll would map to a far jump, so the engine makes the move, exact, instead
+            scrollToCell({
+                rowIndex: cell.rowIndex >= 0 ? cell.rowIndex : undefined,
+                columnIndex: cell.columnIndex,
+            });
+        }
         if (cell) {
             const active = state.activePosition;
             if (
@@ -656,13 +694,28 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     function keydown(event: KeyboardEvent): boolean {
-        // a key typed into a field inside a cell is the field's
+        // a key typed into a field inside a cell is the field's, and a key from outside the grid
+        // (a menu portalled out of a cell, whose events still bubble through the cell) is not ours
         if (
             event.defaultPrevented ||
             event.altKey ||
-            isEditable(event.target)
+            isEditable(event.target) ||
+            !inViewport(event.target)
         ) {
             return false;
+        }
+        if (
+            event.key === " " &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            rowsY.mapping.scaled
+        ) {
+            // the browser would page the container natively, a far jump under scaling
+            event.preventDefault();
+            scrollTo({
+                top: rowsY.virtual + (event.shiftKey ? -1 : 1) * bodyHeight(),
+            });
+            return true;
         }
         const ctrl = event.ctrlKey || event.metaKey;
         const direction =
@@ -741,6 +794,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             element.addEventListener("pointerdown", onPointerDown, {
                 capture: true,
             });
+            const doc = element.ownerDocument;
+            doc.addEventListener("pointerup", onPointerEnd, true);
+            doc.addEventListener("pointercancel", onPointerEnd, true);
+            element.addEventListener("focusout", onFocusOut);
             // the real mappings first, so a scroll already set (restored) is read, not reset
             rowsY.mapping = createScrollMapping(
                 rowAxis.totalSize,
@@ -756,6 +813,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columnsX.sync(element.scrollLeft);
             relayout(true);
             writeLayers();
+            // what was asked before the grid had a size: a scroll to a cell, or the active cell
+            const initial =
+                pendingCellScroll ??
+                (state.activePosition
+                    ? {
+                          rowIndex:
+                              state.activePosition.rowIndex >= 0
+                                  ? state.activePosition.rowIndex
+                                  : undefined,
+                          columnIndex: state.activePosition.columnIndex,
+                      }
+                    : null);
+            pendingCellScroll = null;
+            if (initial) scrollToCell(initial);
             let attached = true;
             const detach = () => {
                 if (!attached) return;
@@ -767,6 +838,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 element.removeEventListener("pointerdown", onPointerDown, {
                     capture: true,
                 });
+                doc.removeEventListener("pointerup", onPointerEnd, true);
+                doc.removeEventListener("pointercancel", onPointerEnd, true);
+                element.removeEventListener("focusout", onFocusOut);
+                pointerDown = false;
+                pendingFocus = false;
                 if (viewport === element) {
                     // the committed view stays: a re-attach (StrictMode) shows the same layers
                     viewport = null;

@@ -41,9 +41,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    declarative props, controlled (`activePosition` + `onActivePositionChange`) or uncontrolled
    (`defaultActivePosition`), and maps them onto commands; `useDataGrid()` returns the model and
    the engine. **Names say what they take**: an id field is `<entity>Id`, an index is
-   `<entity>Index` (`rowIndex`, `columnIndex`); a key and its payload read as one sentence
+   `<entity>Index` (`rowIndex`, `columnIndex`), except a plain `index` (or `key`) when it is the
+   index of what the key returns (`row-by { index }`, `column-by { key }`, as Dockable's
+   `node-by { id }`); a key and its payload read as one sentence
    (`model.run("active-position.set", { rowIndex, columnIndex })`); a `get` key names its result,
-   with `-by` when its payload selects (`column-by { key }`).
+   with `-by` when its payload selects (`row-key-by { rowIndex }`).
 4. **The primitive contract is Dockable's (D4)**, below.
 5. **Structure is the consumer's (D5).** The same primitives render `table/thead/tbody/tr/th/td` or
    `div`s (or anything through `render`). Two unstyled fixtures, one table and one div, are driven
@@ -163,8 +165,10 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }`; a part hook (`useRow`,
   `useCell`, `useHeaderCell`) returns `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
-  consumer's `onKeyDown`, and a cell's `onKeyDown` runs before both (bubbling): `preventDefault`
-  in either cancels a grid key.
+  consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
+  before both (bubbling): `preventDefault` in either cancels a grid key. Keys from outside the
+  viewport (a menu portalled out of a cell) are never the grid's.
+- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's.
 - **The root is no tab stop** (`tabIndex={-1}`, some browsers make a scroll container one): the
   grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.

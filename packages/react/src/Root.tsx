@@ -13,6 +13,8 @@ import {
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
+    cloneElement,
+    isValidElement,
     type ReactNode,
     useCallback,
     useLayoutEffect,
@@ -31,6 +33,12 @@ import {
     dataAttributes,
     useRenderElement,
 } from "./utils/useRender";
+
+interface KeyDownProps {
+    onKeyDown?:
+        | ((event: React.KeyboardEvent<HTMLDivElement>) => void)
+        | undefined;
+}
 
 /** The root's state: what its `className`/`style` functions and `render` receive. */
 export type RootState = Record<string, never>;
@@ -144,6 +152,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
     latest.current = props;
     /** a command the root runs to follow a controlled prop: the controlled guard lets it through */
     const syncing = useRef(false);
+    /** the root is applying the data props: a controlled position they clamp is settled after */
+    const applying = useRef(false);
 
     const [context] = useState<DataGridContextValue<TRow>>(() => {
         const model = createDataGridModel<TRow, ReactNode>({
@@ -185,11 +195,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // removed); the root's own syncs to a controlled prop are not reported back
         model.subscribe(({ before, after }) => {
             if (
-                !syncing.current &&
-                before.activePosition !== after.activePosition
+                syncing.current ||
+                before.activePosition === after.activePosition ||
+                // controlled: decided once every prop is applied (the last effect below)
+                (applying.current &&
+                    latest.current.activePosition !== undefined)
             ) {
-                latest.current.onActivePositionChange?.(after.activePosition);
+                return;
             }
+            latest.current.onActivePositionChange?.(after.activePosition);
         });
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
@@ -221,7 +235,31 @@ export function Root<TRow>(props: RootProps<TRow>) {
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
     });
 
-    // the props follow onto the model, before paint
+    /** Moves the model to the controlled position, when it is not there. */
+    const followControlled = (position: CellPosition | null | undefined) => {
+        if (
+            position === undefined ||
+            samePosition(position, model.state.activePosition)
+        ) {
+            return;
+        }
+        syncing.current = true;
+        try {
+            if (position === null) model.run("active-position.clear");
+            else model.run("active-position.set", position);
+        } finally {
+            syncing.current = false;
+        }
+    };
+
+    // the props follow onto the model, before paint. A controlled position first: valid before
+    // the data changes (rows filtered down), it survives them
+    useLayoutEffect(() => followControlled(activePosition));
+
+    useLayoutEffect(() => {
+        applying.current = true;
+    });
+
     useLayoutEffect(() => {
         if (columns !== model.state.columns) {
             model.run("columns.set", { columns });
@@ -260,20 +298,17 @@ export function Root<TRow>(props: RootProps<TRow>) {
         }
     }, [model, rowHeight, headerRowHeight]);
 
-    // every render: a controlled prop wins over a change the model made on its own
+    // and last: a controlled position valid only after the data changed (rows grown) follows now;
+    // one the data made impossible was clamped by the model, and the parent is told where
     useLayoutEffect(() => {
+        applying.current = false;
+        followControlled(activePosition);
+        const settled = model.state.activePosition;
         if (
-            activePosition === undefined ||
-            samePosition(activePosition, model.state.activePosition)
+            activePosition !== undefined &&
+            !samePosition(activePosition, settled)
         ) {
-            return;
-        }
-        syncing.current = true;
-        try {
-            if (activePosition === null) model.run("active-position.clear");
-            else model.run("active-position.set", activePosition);
-        } finally {
-            syncing.current = false;
+            latest.current.onActivePositionChange?.(settled);
         }
     });
 
@@ -299,23 +334,39 @@ export function Root<TRow>(props: RootProps<TRow>) {
         [engine],
     );
 
+    // the consumer's onKeyDown, on the root or on its render element, runs before the grid's keys
+    const { render } = rest;
+    const renderElement = isValidElement<KeyDownProps>(render)
+        ? render
+        : undefined;
+    const renderKeyDown = renderElement?.props.onKeyDown;
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
         onKeyDown?.(event);
+        renderKeyDown?.(event);
         engine.adapter.keydown(event.nativeEvent);
     };
 
-    const element = useRenderElement("div", rest, {
-        state: {},
-        ref,
-        props: {
-            ...dataAttributes({ "grid-part": "root" }),
-            // a scroll container is a tab stop in some browsers: the grid has its own
-            tabIndex: -1,
-            onKeyDown: handleKeyDown,
-            children,
+    const element = useRenderElement(
+        "div",
+        renderElement && renderKeyDown
+            ? {
+                  ...rest,
+                  render: cloneElement(renderElement, { onKeyDown: undefined }),
+              }
+            : rest,
+        {
+            state: {},
+            ref,
+            props: {
+                ...dataAttributes({ "grid-part": "root" }),
+                // a scroll container is a tab stop in some browsers: the grid has its own
+                tabIndex: -1,
+                onKeyDown: handleKeyDown,
+                children,
+            },
+            style: { position: "relative", overflow: "auto" },
         },
-        style: { position: "relative", overflow: "auto" },
-    });
+    );
 
     return (
         <DataGridContext value={context as unknown as DataGridContextValue}>

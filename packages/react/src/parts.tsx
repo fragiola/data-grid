@@ -43,6 +43,31 @@ function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
     );
 }
 
+type LayerStyle<State> = DivPrimitiveProps<State>["style"];
+
+/**
+ * A layer's props without a `transform` in their style: the engine writes the layer's transform
+ * itself, after every commit, so a consumer's would hide the rows.
+ */
+function withoutTransform<
+    P extends { style?: LayerStyle<Record<string, never>> },
+>(props: P): P {
+    const { style } = props;
+    if (style === undefined) return props;
+    const strip = (value: React.CSSProperties | undefined) => {
+        if (!value || !("transform" in value)) return value;
+        const { transform: _, ...rest } = value;
+        return rest;
+    };
+    return {
+        ...props,
+        style:
+            typeof style === "function"
+                ? (state: Record<string, never>) => strip(style(state))
+                : strip(style),
+    };
+}
+
 // ── the grid ─────────────────────────────────────────────────────────────────
 
 /** The grid's state. */
@@ -128,7 +153,7 @@ export type HeaderRowProps = DivPrimitiveProps<Record<string, never>> & {
 
 /** The header row (`role="row"`), the layer the engine moves with the columns. A `<tr>`. */
 export function HeaderRow(props: HeaderRowProps) {
-    const { children = <HeaderCells />, ...rest } = props;
+    const { children = <HeaderCells />, ...rest } = withoutTransform(props);
     const view = useGridView();
     return useRenderElement("div", rest, {
         state: {},
@@ -206,7 +231,7 @@ export type BodyProps = DivPrimitiveProps<Record<string, never>> & {
 
 /** The body (`role="rowgroup"`), the layer the engine moves with the rows. A `<tbody>`. */
 export function Body(props: BodyProps) {
-    const { children = <Rows />, ...rest } = props;
+    const { children = <Rows />, ...rest } = withoutTransform(props);
     const view = useGridView();
     return useRenderElement("div", rest, {
         state: {},
