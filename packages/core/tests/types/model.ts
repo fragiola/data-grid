@@ -129,6 +129,25 @@ const columnWithChildren: Column<Person> = {
     children: [],
 };
 
+// a column can sort the grid; a group cannot
+const sortableColumn: Column<Person> = {
+    key: "age",
+    width: 60,
+    sortable: true,
+};
+// @ts-expect-error
+const sortableGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    sortable: true,
+    children: [sortableColumn],
+};
+grid.run("sort-columns.toggle", { columnKey: "age", multi: true });
+grid.run("sort-columns.set", {
+    // @ts-expect-error
+    sortColumns: [{ columnKey: "age", direction: "up" }],
+});
+void sortableGroup;
+
 void groupWithCells;
 void groupWithWidth;
 void columnWithChildren;

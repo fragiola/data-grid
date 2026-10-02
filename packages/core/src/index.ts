@@ -18,8 +18,10 @@ export {
     type EngineQueryKey,
     type EngineQueryMap,
     type GridView,
+    type HeaderCellSort,
     type HeaderRowView,
     headerCellBox,
+    headerCellSort,
     renderedWidth,
     rowTop,
 } from "./engine/engine";
@@ -73,6 +75,8 @@ export type {
     ResultOf,
     RowKeyGetter,
     RowSource,
+    SortColumn,
+    SortDirection,
 } from "./model/types";
 export {
     DIRECTIONS,

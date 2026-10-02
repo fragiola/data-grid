@@ -27,6 +27,8 @@ import type {
     QuestionMap,
     ResultOf,
     RowSource,
+    SortColumn,
+    SortDirection,
 } from "./types";
 
 // The model (D3): the grid's data and rules, the single source of truth. Every change is a
@@ -201,6 +203,83 @@ function reconcile<TRow, TNode>(
     return { ...state, activePosition: { rowIndex, columnIndex } };
 }
 
+const SORT_DIRECTIONS: readonly SortDirection[] = ["ascending", "descending"];
+
+/** The sortable column with this key, or why there is none. */
+function sortableColumn<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+    columnKey: unknown,
+): { column: Column<TRow, TNode> } | { error: CommandError } {
+    const column = columns.find((candidate) => candidate.key === columnKey);
+    if (!column) {
+        return {
+            error: {
+                code: "not_found",
+                message: `no column "${String(columnKey)}"`,
+            },
+        };
+    }
+    if (column.sortable !== true) {
+        return {
+            error: {
+                code: "refused",
+                message: `column "${column.key}" is not sortable`,
+            },
+        };
+    }
+    return { column };
+}
+
+/** The sorted columns still sortable columns of the grid (after the columns changed). */
+function prunedSort<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+    sortColumns: readonly SortColumn[],
+): readonly SortColumn[] {
+    const seen = new Set<string>();
+    const kept = sortColumns.filter((entry) => {
+        const keep =
+            !seen.has(entry.columnKey) &&
+            SORT_DIRECTIONS.includes(entry.direction) &&
+            "column" in sortableColumn(columns, entry.columnKey);
+        seen.add(entry.columnKey);
+        return keep;
+    });
+    return kept.length === sortColumns.length ? sortColumns : kept;
+}
+
+/** The sort after toggling a column (S3): ascending, descending, not sorted. */
+function toggledSort(
+    sortColumns: readonly SortColumn[],
+    columnKey: string,
+    multi: boolean,
+): readonly SortColumn[] {
+    const index = sortColumns.findIndex(
+        (entry) => entry.columnKey === columnKey,
+    );
+    const current = sortColumns[index];
+    const next: SortColumn | null = !current
+        ? { columnKey, direction: "ascending" }
+        : current.direction === "ascending"
+          ? { columnKey, direction: "descending" }
+          : null;
+    if (!multi) return next ? [next] : [];
+    if (!current) return next ? [...sortColumns, next] : sortColumns;
+    return next
+        ? sortColumns.map((entry, i) => (i === index ? next : entry))
+        : sortColumns.filter((_, i) => i !== index);
+}
+
+function sameSort(a: readonly SortColumn[], b: readonly SortColumn[]): boolean {
+    return (
+        a.length === b.length &&
+        a.every(
+            (entry, i) =>
+                entry.columnKey === b[i]?.columnKey &&
+                entry.direction === b[i]?.direction,
+        )
+    );
+}
+
 function validSize(size: unknown): boolean {
     return (
         typeof size === "function" ||
@@ -222,6 +301,8 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                         columns,
                         columnEntries: entries,
                         header,
+                        // a sorted column gone, or no longer sortable, leaves the sort
+                        sortColumns: prunedSort(columns, state.sortColumns),
                     }),
                     value: { columnCount: columns.length },
                 },
@@ -295,6 +376,52 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                       }
                     : state;
             return { ok: true, value: { state: next, value: range } };
+        },
+        "sort-columns.set": (state, { sortColumns }) => {
+            if (!Array.isArray(sortColumns)) {
+                return fail("invalid_payload", "sortColumns must be an array");
+            }
+            const seen = new Set<string>();
+            for (const entry of sortColumns) {
+                if (!SORT_DIRECTIONS.includes(entry?.direction)) {
+                    return fail(
+                        "invalid_payload",
+                        `direction must be one of ${SORT_DIRECTIONS.join(", ")}`,
+                    );
+                }
+                const found = sortableColumn(state.columns, entry.columnKey);
+                if ("error" in found) return { ok: false, error: found.error };
+                if (seen.has(entry.columnKey)) {
+                    return fail(
+                        "invalid_payload",
+                        `column "${entry.columnKey}" is sorted twice`,
+                    );
+                }
+                seen.add(entry.columnKey);
+            }
+            const next = sameSort(sortColumns, state.sortColumns)
+                ? state
+                : { ...state, sortColumns };
+            return {
+                ok: true,
+                value: { state: next, value: next.sortColumns },
+            };
+        },
+        "sort-columns.toggle": (state, { columnKey, multi }) => {
+            const found = sortableColumn(state.columns, columnKey);
+            if ("error" in found) return { ok: false, error: found.error };
+            const sortColumns = toggledSort(
+                state.sortColumns,
+                columnKey,
+                multi === true,
+            );
+            const next = sameSort(sortColumns, state.sortColumns)
+                ? state
+                : { ...state, sortColumns };
+            return {
+                ok: true,
+                value: { state: next, value: next.sortColumns },
+            };
         },
         "sizes.set": (state, { rowHeight, headerRowHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
@@ -426,6 +553,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         rowHeight: options.rowHeight ?? DEFAULT_ROW_HEIGHT,
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
         activePosition: options.activePosition ?? null,
+        sortColumns: prunedSort(columns, options.sortColumns ?? []),
         rowsChanged: { revision: 0, start: 0, end: 0 },
     });
     const middlewares: Middleware<TRow, TNode>[] = [];
@@ -589,6 +717,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 : undefined;
         },
         "active-position": () => state.activePosition,
+        "sort-columns": () => state.sortColumns,
+        "sort-column-by": ({ columnKey }) =>
+            state.sortColumns.find((entry) => entry.columnKey === columnKey),
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
     };
@@ -603,6 +734,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
             state.activePosition?.rowIndex === rowIndex,
         "row-loaded": ({ rowIndex }) =>
             rowAt(state.source, rowIndex) !== undefined,
+        "column-sortable": ({ columnKey }) =>
+            "column" in sortableColumn(state.columns, columnKey),
     };
 
     const model: DataGridModel<TRow, TNode> = {
@@ -654,6 +787,8 @@ export const COMMANDS: readonly CommandName[] = [
     "columns.set",
     "data.set",
     "rows.changed",
+    "sort-columns.set",
+    "sort-columns.toggle",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

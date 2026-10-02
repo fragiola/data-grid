@@ -8,6 +8,8 @@ import type {
     HeaderCellLayout,
     HeaderLayout,
     RowSource,
+    SortColumn,
+    SortDirection,
 } from "../model/types";
 import { type Direction, sameCell } from "../navigation/navigation";
 import {
@@ -109,6 +111,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * row): their data is new, read it again
      */
     readonly rowsRevision: number;
+    /** the sorted columns, the first one first */
+    readonly sortColumns: readonly SortColumn[];
 }
 
 /** What `engine.get` reads. */
@@ -182,6 +186,12 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
      * (`preventDefault`) or replace it.
      */
     keydown(event: KeyboardEvent): boolean;
+    /**
+     * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
+     * (Ctrl/⌘ adds the column). Returns whether it did. Like `keydown`, an adapter calls it
+     * after the consumer's own handlers, so `preventDefault` cancels it.
+     */
+    click(event: MouseEvent): boolean;
     /** changes the options */
     setOptions(options: DataGridEngineOptions): void;
 }
@@ -235,6 +245,48 @@ function isEditable(target: EventTarget | null): boolean {
         element.isContentEditable === true
     );
 }
+
+/** Roles of controls that act on their own: a click or a key on one is the control's. */
+const CONTROL_ROLES = new Set([
+    "button",
+    "link",
+    "checkbox",
+    "switch",
+    "radio",
+    "menuitem",
+    "menuitemcheckbox",
+    "menuitemradio",
+    "option",
+    "combobox",
+    "slider",
+    "spinbutton",
+    "tab",
+    "textbox",
+]);
+
+/** Whether an element is a control of its own (a button, a link, a field, a menu trigger). */
+function isControl(element: Element): boolean {
+    const tag = element.tagName;
+    if (
+        tag === "BUTTON" ||
+        tag === "INPUT" ||
+        tag === "SELECT" ||
+        tag === "TEXTAREA" ||
+        tag === "SUMMARY" ||
+        tag === "LABEL" ||
+        (tag === "A" && element.hasAttribute("href"))
+    ) {
+        return true;
+    }
+    const role = element.getAttribute("role");
+    return (
+        (role !== null && CONTROL_ROLES.has(role)) ||
+        (element as HTMLElement).isContentEditable === true
+    );
+}
+
+/** How far a press may move before its click is a drag (a text selection), in pixels. */
+const CLICK_SLOP = 4;
 
 function rowAxisOf<TRow, TNode>(state: DataGridState<TRow, TNode>): Axis {
     return createAxis(state.rowCount, state.rowHeight);
@@ -335,6 +387,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let focusBeforeRender = false;
     /** a pointer is down in the viewport: focus it causes is a click, not a Tab */
     let pointerDown = false;
+    /** where the last press started, to tell a click from a drag */
+    let pressedAt: { x: number; y: number } | null = null;
     const viewListeners = new Set<() => void>();
     const eventListeners: {
         [K in EngineEventKey]: Set<(value: EngineEventMap[K]) => void>;
@@ -447,6 +501,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             source: state.source,
             active,
             rowsRevision,
+            sortColumns: state.sortColumns,
         };
     }
 
@@ -477,7 +532,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.columnDefs !== next.columnDefs ||
             current.source !== next.source ||
             current.active !== next.active ||
-            current.rowsRevision !== next.rowsRevision
+            current.rowsRevision !== next.rowsRevision ||
+            current.sortColumns !== next.sortColumns
         );
     }
 
@@ -843,13 +899,77 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return { rowIndex, columnIndex };
     }
 
-    function onPointerDown() {
+    function onPointerDown(event: PointerEvent) {
         pointerDown = true;
+        pressedAt = { x: event.clientX, y: event.clientY };
+    }
+
+    /**
+     * The sortable column whose header cell an event happened in, or `null`: not a header cell, a
+     * group, a column that is not sortable, or a control inside the cell (it acts on its own).
+     */
+    function sortableColumnOf(
+        target: EventTarget | null,
+    ): Column<TRow, TNode> | null {
+        const cell = cellOf(target);
+        if (!cell || cell.rowIndex >= 0 || !isElement(target)) return null;
+        for (
+            let node: Element | null = target;
+            node &&
+            !(
+                node.hasAttribute("data-row-index") &&
+                node.hasAttribute("data-column-index")
+            );
+            node = node.parentElement
+        ) {
+            if (isControl(node)) return null;
+        }
+        const column = state.header.cellAt(
+            cell.rowIndex,
+            cell.columnIndex,
+        )?.column;
+        return column?.sortable === true ? column : null;
+    }
+
+    function toggleSort(column: Column<TRow, TNode>, multi: boolean) {
+        model.run("sort-columns.toggle", { columnKey: column.key, multi });
+    }
+
+    function click(event: MouseEvent): boolean {
+        if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.altKey ||
+            event.shiftKey ||
+            // the second click of a double click selects a word: it is not a second toggle
+            event.detail > 1 ||
+            !inViewport(event.target)
+        ) {
+            return false;
+        }
+        // a press that moved is a drag (selecting the header's text), not a click. A click with
+        // no press (`detail` 0: a screen reader, `element.click()`) has nothing to compare
+        const press = pressedAt;
+        pressedAt = null;
+        if (
+            event.detail > 0 &&
+            press &&
+            Math.hypot(event.clientX - press.x, event.clientY - press.y) >
+                CLICK_SLOP
+        ) {
+            return false;
+        }
+        const column = sortableColumnOf(event.target);
+        if (!column) return false;
+        toggleSort(column, event.ctrlKey || event.metaKey);
+        return true;
     }
 
     /** A release anywhere (or a pointer the browser took over for a scroll) ends the press. */
-    function onPointerEnd() {
+    function onPointerEnd(event: PointerEvent) {
         pointerDown = false;
+        // a press the browser took over makes no click
+        if (event.type === "pointercancel") pressedAt = null;
     }
 
     function onFocusOut(event: FocusEvent) {
@@ -919,6 +1039,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return false;
         }
+        const ctrl = event.ctrlKey || event.metaKey;
+        if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) {
+            // Enter or Space on a sortable column's header cell toggles its sort
+            const column = sortableColumnOf(event.target);
+            if (column) {
+                event.preventDefault();
+                toggleSort(column, ctrl);
+                return true;
+            }
+        }
         if (
             event.key === " " &&
             !event.ctrlKey &&
@@ -932,7 +1062,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             });
             return true;
         }
-        const ctrl = event.ctrlKey || event.metaKey;
         const direction =
             (ctrl ? CTRL_KEYS[event.key] : undefined) ?? KEYS[event.key];
         if (!direction) return false;
@@ -1132,6 +1261,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             flushFocus();
         },
         keydown,
+        click,
         setOptions(next) {
             const changed =
                 next.maxScrollSize !== options.maxScrollSize ||
@@ -1277,4 +1407,36 @@ export function ariaRowIndex<TRow, TNode>(
     rowIndex: number,
 ): number {
     return rowIndex + view.headerRowCount + 1;
+}
+
+/** A header cell's sort, as the adapters show it (S6). */
+export interface HeaderCellSort {
+    /** its column sorts the grid (never a group) */
+    readonly sortable: boolean;
+    /** the direction its column is sorted in, when it is */
+    readonly direction: SortDirection | undefined;
+    /** its column's place among the sorted columns, 1-based, when it is sorted */
+    readonly priority: number | undefined;
+    /**
+     * `aria-sort`, on the first sorted column's header cell only (ARIA 1.2: one header at a time)
+     */
+    readonly ariaSort: SortDirection | undefined;
+}
+
+/** How a header cell shows the sort: sortable, and its direction and priority when sorted. */
+export function headerCellSort<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: HeaderCellLayout<TRow, TNode>,
+): HeaderCellSort {
+    const column = cell.column;
+    const index = column
+        ? view.sortColumns.findIndex((entry) => entry.columnKey === column.key)
+        : -1;
+    const sorted = view.sortColumns[index];
+    return {
+        sortable: column?.sortable === true,
+        direction: sorted?.direction,
+        priority: sorted ? index + 1 : undefined,
+        ariaSort: index === 0 ? sorted?.direction : undefined,
+    };
 }

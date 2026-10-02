@@ -51,6 +51,11 @@ export interface Column<TRow, TNode = unknown> {
     readonly renderCell?:
         | ((props: CellRenderProps<TRow, TNode>) => TNode)
         | undefined;
+    /**
+     * whether its header cell sorts the grid (a click, Enter or Space toggles it). The grid keeps
+     * the sort; the app orders the rows
+     */
+    readonly sortable?: boolean | undefined;
     /** anything the app wants to keep on the column */
     readonly meta?: Readonly<Record<string, unknown>> | undefined;
     /** a column has no children: an entry with children is a {@link ColumnGroup} */
@@ -78,6 +83,17 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly width?: never;
     readonly getValue?: never;
     readonly renderCell?: never;
+    /** a group is never sorted: its columns are */
+    readonly sortable?: never;
+}
+
+/** A sort's direction: the values of `aria-sort`. */
+export type SortDirection = "ascending" | "descending";
+
+/** A sorted column: its key and its direction. */
+export interface SortColumn {
+    readonly columnKey: string;
+    readonly direction: SortDirection;
 }
 
 /** An entry of `columns`: a column, or a group of them. */
@@ -161,6 +177,8 @@ export interface DataGridState<TRow, TNode = unknown> {
     /** a header row's height; 0 for a grid without a header */
     readonly headerRowHeight: number;
     readonly activePosition: CellPosition | null;
+    /** the sorted columns, the first one first (the grid keeps them; the app orders the rows) */
+    readonly sortColumns: readonly SortColumn[];
     /**
      * the last `rows.changed`: which rows' data changed (end excluded), and how many times it
      * was said (`revision`, 0 before the first)
@@ -185,6 +203,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     /** a header row's height in pixels (default 35); 0 for no header */
     headerRowHeight?: number;
     activePosition?: CellPosition | null;
+    /** the sorted columns to start with (entries that are not a sortable column are dropped) */
+    sortColumns?: readonly SortColumn[];
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -223,6 +243,25 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly end?: number | undefined;
         };
         result: { readonly start: number; readonly end: number };
+    };
+    /**
+     * replaces the sorted columns, the first one first: each a sortable column, once. Returns them
+     */
+    "sort-columns.set": {
+        payload: { readonly sortColumns: readonly SortColumn[] };
+        result: readonly SortColumn[];
+    };
+    /**
+     * toggles a sortable column through ascending, descending and not sorted. Alone, it becomes
+     * the only sorted column; with `multi`, the others stay and it is added last (or cycles in
+     * place). Returns the sorted columns
+     */
+    "sort-columns.toggle": {
+        payload: {
+            readonly columnKey: string;
+            readonly multi?: boolean | undefined;
+        };
+        result: readonly SortColumn[];
     };
     /** changes the row height (a number or a function of the index) or the header row's */
     "sizes.set": {
@@ -390,6 +429,13 @@ export interface QueryMap<TRow, TNode = unknown> {
         result: unknown;
     };
     "active-position": { payload: undefined; result: CellPosition | null };
+    /** the sorted columns, the first one first */
+    "sort-columns": { payload: undefined; result: readonly SortColumn[] };
+    /** a column's sort, or `undefined` when it is not sorted */
+    "sort-column-by": {
+        payload: { readonly columnKey: string };
+        result: SortColumn | undefined;
+    };
     "row-height": { payload: undefined; result: Size };
     "header-row-height": { payload: undefined; result: number };
 }
@@ -407,6 +453,8 @@ export interface QuestionMap {
     "row-active": { readonly rowIndex: number };
     /** whether the row is loaded (its getter answered a row) */
     "row-loaded": { readonly rowIndex: number };
+    /** whether a column sorts the grid (a column, `sortable`) */
+    "column-sortable": { readonly columnKey: string };
 }
 
 export type QuestionKey = keyof QuestionMap;
