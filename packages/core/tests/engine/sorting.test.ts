@@ -9,7 +9,7 @@ import {
 
 // Sorting from the header (Epic #27, S3–S6): a click, Enter or Space on a sortable column's
 // header cell toggles the sort, Ctrl/⌘ adds the column; a consumer's preventDefault, a control
-// inside the cell, a drag and a double click's second click do not sort.
+// inside the cell, a drag and a held key's repeats do not sort.
 
 interface Row {
     id: number;
@@ -174,16 +174,17 @@ describe("a click on a header cell", () => {
         expect(sort()).toEqual(["id ascending"]);
     });
 
-    it("does not sort for a drag, a double click's second click, another button or Shift", () => {
+    it("does not sort for a drag, another button or Shift; a quick second click sorts again", () => {
         const { headerCell, click, sort } = setup();
         const id = headerCell(-2, 0);
         expect(click(id, {}, 20).handled).toBe(false);
-        expect(click(id, { detail: 2 }).handled).toBe(false);
         expect(click(id, { button: 1 }).handled).toBe(false);
         expect(click(id, { shiftKey: true }).handled).toBe(false);
         expect(sort()).toEqual([]);
         // a few pixels of jitter is still a click
         expect(click(id, {}, 3).handled).toBe(true);
+        expect(click(id, { detail: 2 }).handled).toBe(true);
+        expect(sort()).toEqual(["id descending"]);
     });
 
     it("sorts for a click with no press (a screen reader, element.click()), whatever came before", () => {
@@ -231,11 +232,27 @@ describe("Enter and Space on a header cell", () => {
         prevented.preventDefault();
         Object.defineProperty(prevented, "target", { value: id });
         expect(engine.adapter.keydown(prevented)).toBe(false);
-        // a button inside the cell activates itself
+        // a button inside the cell activates itself, and so does a widget holding controls
         const button = document.createElement("button");
         id.append(button);
         expect(key(button, "Enter").handled).toBe(false);
+        const popover = document.createElement("div");
+        popover.setAttribute("role", "dialog");
+        const padding = document.createElement("span");
+        popover.append(padding);
+        id.append(popover);
+        expect(key(padding, "Enter").handled).toBe(false);
         expect(sort()).toEqual([]);
+    });
+
+    it("toggle once per press: a key held down repeats without cycling", () => {
+        const { headerCell, key, sort } = setup();
+        const id = headerCell(-2, 0);
+        key(id, "Enter");
+        const held = key(id, "Enter", { repeat: true });
+        expect(held.handled).toBe(true);
+        expect(held.event.defaultPrevented).toBe(true);
+        expect(sort()).toEqual(["id ascending"]);
     });
 });
 

@@ -5,6 +5,7 @@ import {
     DataGrid,
     type HeaderCellInfo,
     type SortColumn,
+    useGridView,
 } from "@fragiola/data-grid-react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -100,6 +101,7 @@ export default function Sorting() {
  * direction and, with more than one sorted column, its priority.
  */
 function HeaderCell({ cell }: { cell: HeaderCellInfo<Person> }) {
+    const { sortColumns } = useGridView();
     return (
         <DataGrid.HeaderCell
             cell={cell}
@@ -114,11 +116,12 @@ function HeaderCell({ cell }: { cell: HeaderCellInfo<Person> }) {
                     ) : state.sortable ? (
                         <ArrowUpDown aria-hidden className={styles.unsorted} />
                     ) : null}
-                    {state.sortPriority !== undefined && (
-                        <span className={styles.priority}>
-                            {state.sortPriority}
-                        </span>
-                    )}
+                    {sortColumns.length > 1 &&
+                        state.sortPriority !== undefined && (
+                            <span className={styles.priority}>
+                                {state.sortPriority}
+                            </span>
+                        )}
                 </div>
             )}
         />

@@ -10,6 +10,8 @@ import {
     type RowKeyGetter,
     type Size,
     type SortColumn,
+    sameSortColumns,
+    validSortColumns,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -133,18 +135,6 @@ function samePosition(
     );
 }
 
-function sameSort(a: readonly SortColumn[], b: readonly SortColumn[]): boolean {
-    return (
-        a === b ||
-        (a.length === b.length &&
-            a.every(
-                (entry, i) =>
-                    entry.columnKey === b[i]?.columnKey &&
-                    entry.direction === b[i]?.direction,
-            ))
-    );
-}
-
 function sourceMatches<TRow>(
     state: DataGridState<TRow, ReactNode>,
     rows: readonly TRow[] | undefined,
@@ -235,28 +225,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
             prefix: "sort-columns.",
             prop: () => latest.current.sortColumns,
             read: (state) => state.sortColumns,
-            same: sameSort,
+            same: sameSortColumns,
             valueOf: (_, value) => value as readonly SortColumn[],
             report: (value) => latest.current.onSortColumnsChange?.(value),
             // what the columns cannot take (a column not sortable, twice) is left out, as at
             // mount, and the parent is told the sort as it settled
             apply: (value) => {
-                if (model.run("sort-columns.set", { sortColumns: value }).ok) {
-                    return;
-                }
-                const seen = new Set<string>();
-                const sortColumns = value.filter((entry) => {
-                    const keep =
-                        !seen.has(entry.columnKey) &&
-                        (entry.direction === "ascending" ||
-                            entry.direction === "descending") &&
-                        model.is("column-sortable", {
-                            columnKey: entry.columnKey,
-                        });
-                    seen.add(entry.columnKey);
-                    return keep;
+                model.run("sort-columns.set", {
+                    sortColumns: validSortColumns(model.state.columns, value),
                 });
-                model.run("sort-columns.set", { sortColumns });
             },
         };
         bindControlled(model, flags, position);
@@ -352,6 +329,19 @@ export function Root<TRow>(props: RootProps<TRow>) {
         settleControlled(model, flags, grid.position);
         settleControlled(model, flags, grid.sort);
     });
+
+    // an uncontrolled sort to start with that the columns could not take all of (a column not
+    // sortable) started without it: the app is told the sort the grid holds
+    useLayoutEffect(() => {
+        const start = latest.current.defaultSortColumns;
+        if (
+            latest.current.sortColumns === undefined &&
+            start !== undefined &&
+            !sameSortColumns(start, model.state.sortColumns)
+        ) {
+            latest.current.onSortColumnsChange?.(model.state.sortColumns);
+        }
+    }, [model]);
 
     const overscanRows = overscan?.rows;
     const overscanColumns = overscan?.columns;

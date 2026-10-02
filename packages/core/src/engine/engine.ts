@@ -188,7 +188,8 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
     keydown(event: KeyboardEvent): boolean;
     /**
      * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
-     * (Ctrl/⌘ adds the column). Returns whether it did. Like `keydown`, an adapter calls it
+     * (Ctrl/⌘ adds the column). Returns whether the click was the grid's: a toggle ran, even
+     * when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
      * after the consumer's own handlers, so `preventDefault` cancels it.
      */
     click(event: MouseEvent): boolean;
@@ -246,8 +247,22 @@ function isEditable(target: EventTarget | null): boolean {
     );
 }
 
-/** Roles of controls that act on their own: a click or a key on one is the control's. */
+/**
+ * Roles of controls that act on their own, and of widgets holding them (a popover, a menu, a
+ * toolbar): a click or a key in one is the widget's.
+ */
 const CONTROL_ROLES = new Set([
+    "dialog",
+    "alertdialog",
+    "menu",
+    "menubar",
+    "listbox",
+    "toolbar",
+    "tablist",
+    "radiogroup",
+    "tree",
+    "grid",
+    "treegrid",
     "button",
     "link",
     "checkbox",
@@ -266,7 +281,8 @@ const CONTROL_ROLES = new Set([
 
 /** Whether an element is a control of its own (a button, a link, a field, a menu trigger). */
 function isControl(element: Element): boolean {
-    const tag = element.tagName;
+    // upper case in HTML, as written in SVG (`a`)
+    const tag = element.tagName.toUpperCase();
     if (
         tag === "BUTTON" ||
         tag === "INPUT" ||
@@ -941,8 +957,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             event.button !== 0 ||
             event.altKey ||
             event.shiftKey ||
-            // the second click of a double click selects a word: it is not a second toggle
-            event.detail > 1 ||
             !inViewport(event.target)
         ) {
             return false;
@@ -1041,11 +1055,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         const ctrl = event.ctrlKey || event.metaKey;
         if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) {
-            // Enter or Space on a sortable column's header cell toggles its sort
+            // Enter or Space on a sortable column's header cell toggles its sort, once per press:
+            // a key held down repeats, and would cycle through the sort
             const column = sortableColumnOf(event.target);
             if (column) {
                 event.preventDefault();
-                toggleSort(column, ctrl);
+                if (!event.repeat) toggleSort(column, ctrl);
                 return true;
             }
         }

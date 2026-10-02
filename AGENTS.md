@@ -84,7 +84,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     or not on `Root` like the active position (`sortColumns`/`defaultSortColumns`/
     `onSortColumnsChange`, one helper for both). A click, Enter or Space on a sortable column's
     header cell toggles it (ascending, descending, none; Ctrl/⌘ adds it); a control inside the
-    cell, a drag and a double click's second click are not a sort. `aria-sort` on the first
+    cell (or a widget holding controls), a drag and a held key's repeats are not a sort. `aria-sort` on the first
     sorted column only; `data-sortable`, `data-sort`, `data-sort-priority`. The grid never orders
     the rows: the app does.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps

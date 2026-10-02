@@ -176,6 +176,23 @@ describe("uncontrolled", () => {
         expect(shown(container)[0]?.[1]).toBe("descending");
     });
 
+    it("tells the app when its starting sort names a column that is not sortable", () => {
+        const onSortColumnsChange = vi.fn();
+        render(
+            <Grid
+                defaultSortColumns={[
+                    { columnKey: "id", direction: "ascending" },
+                    { columnKey: "age", direction: "descending" },
+                ]}
+                onSortColumnsChange={onSortColumnsChange}
+            />,
+        );
+        expect(onSortColumnsChange).toHaveBeenCalledTimes(1);
+        expect(onSortColumnsChange).toHaveBeenCalledWith([
+            { columnKey: "age", direction: "descending" },
+        ]);
+    });
+
     it("leaves a control inside a header cell its own clicks", () => {
         const onSortColumnsChange = vi.fn();
         const { container } = render(

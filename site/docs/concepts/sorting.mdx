@@ -57,9 +57,8 @@ with Ctrl (⌘ on a Mac), it is added last, or cycles in place, and the others s
 
 The grid acts **after** your handlers, as for its keys: `preventDefault` in an `onClick` or
 `onKeyDown` on the header cell, on `Root` or on its `render` element cancels the toggle. A click
-or a key on a control inside the header cell (a button, a link, a menu trigger) is the
-control's, never a sort, and neither is a drag across the header's text or the second click of a
-double click.
+or a key on a control inside the header cell (a button, a link, a menu trigger, a popover) is the
+control's, never a sort; neither is a drag across the header's text, nor a held key repeating.
 
 The same changes go through the model, for a toolbar or a menu of your own:
 `model.run("sort-columns.toggle", { columnKey: "name", multi: true })`,

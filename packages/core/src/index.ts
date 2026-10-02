@@ -42,6 +42,7 @@ export {
     rowAt,
     veto,
 } from "./model/model";
+export { sameSortColumns, validSortColumns } from "./model/sort";
 export type {
     CellPosition,
     CellRenderProps,
