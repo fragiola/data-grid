@@ -13,6 +13,7 @@ export const CATEGORIES = [
     "data-loading",
     "keyboard",
     "styling",
+    "real-world",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
@@ -23,6 +24,7 @@ export const CATEGORY_TITLES: Record<Category, string> = {
     "data-loading": "Data loading",
     keyboard: "Keyboard",
     styling: "Styling",
+    "real-world": "Real-world",
 };
 
 export interface ExampleMeta {
@@ -58,4 +60,5 @@ export const DEFAULT_HEIGHT: Record<Category, number> = {
     "data-loading": 520,
     keyboard: 480,
     styling: 420,
+    "real-world": 600,
 };
