@@ -361,6 +361,34 @@ export const TAB_STOP_ATTRIBUTE = "data-grid-tab-stop";
 /** The keys a scroll container pages itself by. */
 const PAGE_KEYS = new Set(["PageUp", "PageDown", "Home", "End"]);
 
+/** Roles of controls with no use for the page keys (a button, a link, a box to check). */
+const PAGELESS_ROLES = new Set([
+    "button",
+    "link",
+    "checkbox",
+    "switch",
+    "radio",
+    "menuitem",
+    "tab",
+]);
+
+/**
+ * Whether a control has no use for the page keys (they would page the grid's container): a
+ * button, a link, a box to check. A field, a list, media or a scrolling element keeps them.
+ */
+function isPagelessControl(element: Element): boolean {
+    const tag = element.tagName.toUpperCase();
+    if (tag === "BUTTON" || tag === "SUMMARY" || tag === "A") return true;
+    if (tag === "INPUT") {
+        const type = (element.getAttribute("type") ?? "text").toLowerCase();
+        return ["checkbox", "radio", "button", "submit", "reset"].includes(
+            type,
+        );
+    }
+    const role = element.getAttribute("role");
+    return role !== null && PAGELESS_ROLES.has(role);
+}
+
 /** How far a press may move before its click is a drag (a text selection), in pixels. */
 const CLICK_SLOP = 4;
 
@@ -489,7 +517,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** the cell whose controls have the keys (its element's position), or `null` */
     let interaction: CellPosition | null = null;
     /** a cell `interact-cell` asked for before it was rendered: entered on the commit that shows it */
-    let pendingInteraction: CellPosition | null = null;
+    let pendingInteraction: { position: CellPosition; focus: boolean } | null =
+        null;
     /** the controls' own `tabindex` (`null`: none), kept while the grid holds them at -1 */
     const ownTabIndex = new WeakMap<Element, string | null>();
     let view: GridView<TRow, TNode> = makeView();
@@ -1343,18 +1372,50 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const active = state.activePosition;
         if (!active || !sameCell(active, at, state.header.cellAt)) {
             model.run("active-position.set", at);
-            // refused or redirected (a middleware, a controlled parent): the cell in
-            // interaction is always the active one
+            // the cell in interaction is always the active one: a controlled parent that follows
+            // later makes it so (the entry waits for it); a middleware that redirected it, never
             const now = state.activePosition;
-            if (!now || !sameCell(now, at, state.header.cellAt)) return false;
+            if (!now || !sameCell(now, at, state.header.cellAt)) {
+                pendingInteraction = { position: at, focus };
+                return false;
+            }
         }
         const previous = interaction ? cellElement(interaction) : null;
         interaction = at;
+        pendingInteraction = null;
         if (previous && previous !== cell) manageTabOrder(previous);
         manageTabOrder(cell);
-        if (focus) controls[0]?.focus();
+        // the first control that takes focus (one hidden by the app's CSS cannot): none, and the
+        // cell stays in navigation
+        if (focus && !focusFrom(controls, 0, 1)) {
+            interaction = null;
+            manageTabOrder(cell);
+            if (previous && previous !== cell) emitInteraction();
+            return false;
+        }
         emitInteraction();
         return true;
+    }
+
+    /**
+     * Focuses the first of `controls` that takes focus, from `start` in `step` direction,
+     * wrapping; returns whether one did.
+     */
+    function focusFrom(
+        controls: readonly HTMLElement[],
+        start: number,
+        step: 1 | -1,
+    ): boolean {
+        const doc = viewport?.ownerDocument;
+        for (let tried = 0; tried < controls.length; tried++) {
+            const index =
+                (((start + tried * step) % controls.length) + controls.length) %
+                controls.length;
+            const control = controls[index];
+            control?.focus();
+            if (control && doc?.activeElement === control) return true;
+        }
+        return false;
     }
 
     /** Gives the keys back to the grid; `focusCell`: the cell takes focus (Escape, the action). */
@@ -1384,13 +1445,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 if (isElement(from) && control.contains(from)) at = i;
             });
         }
-        const next =
-            at < 0
-                ? back
-                    ? controls.length - 1
-                    : 0
-                : (at + (back ? -1 : 1) + controls.length) % controls.length;
-        controls[next]?.focus();
+        const back1 = back ? -1 : 1;
+        const start = at < 0 ? (back ? controls.length - 1 : 0) : at + back1;
+        // a control that cannot take focus (hidden by the app's CSS) is passed over
+        focusFrom(controls, start, back1);
     }
 
     function onPointerDown(event: PointerEvent) {
@@ -1581,7 +1639,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 }
                 // a button or a link has no use for the page keys: the container would page
                 // itself, a far jump under scaling. A field keeps them (its caret)
-                if (!isEditable(target) && PAGE_KEYS.has(event.key)) {
+                if (PAGE_KEYS.has(event.key) && isPagelessControl(target)) {
                     event.preventDefault();
                     return true;
                 }
@@ -1737,7 +1795,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 scrollWhenReady({ top });
             }
         }
-        // another cell made active (the app, a middleware): the interaction ends
+        // another cell made active (the app, a middleware): the interaction ends, and an entry
+        // waiting for another cell is dropped
         if (
             interaction &&
             !(
@@ -1746,6 +1805,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             )
         ) {
             leaveCell(false);
+        }
+        if (pendingInteraction) {
+            const waiting = pendingInteraction;
+            const now = after.activePosition;
+            if (!now || !sameCell(now, waiting.position, after.header.cellAt)) {
+                if (now !== before.activePosition) pendingInteraction = null;
+            } else if (cellElement(waiting.position)) {
+                // a controlled parent followed: the cell enters now
+                enterCell(waiting.position, waiting.focus);
+            }
         }
         const active = after.activePosition;
         if (active && active !== before.activePosition) {
@@ -1918,10 +1987,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 interaction = null;
                 emitInteraction();
             }
-            if (pendingInteraction && cellElement(pendingInteraction)) {
-                const position = pendingInteraction;
-                pendingInteraction = null;
-                enterCell(position, true);
+            // an entry waiting for its cell (out of view, a row loading): it enters once shown with
+            // controls, and waits on otherwise
+            if (
+                pendingInteraction &&
+                cellElement(pendingInteraction.position)
+            ) {
+                const { position, focus } = pendingInteraction;
+                enterCell(position, focus);
             }
             flushFocus();
         },
@@ -1960,13 +2033,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "scroll-to": scrollTo,
         "interact-cell": (position) => {
             if (enterCell(position, true)) return;
-            // not rendered (out of view): active, scrolled to, and entered once on screen
-            if (
-                !cellElement(position) &&
-                model.run("active-position.set", position).ok
-            ) {
-                pendingInteraction = position;
+            // not rendered (out of view), no controls yet (a row loading), or a controlled parent
+            // to follow: active, and entered once its cell shows controls
+            const active = state.activePosition;
+            if (!active || !sameCell(active, position, state.header.cellAt)) {
+                model.run("active-position.set", position);
             }
+            pendingInteraction = { position, focus: true };
         },
         "leave-cell": () => leaveCell(true),
     };

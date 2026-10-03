@@ -404,3 +404,68 @@ describe("review cases", () => {
         expect(document.activeElement).toBe(byId("far"));
     });
 });
+
+describe("second review cases", () => {
+    it("passes over a control that cannot take focus, and stays in navigation when none can", () => {
+        const { engine, cell, key, byId } = setup();
+        const holder = cell(
+            8,
+            2,
+            '<button id="gone">Gone</button><button id="here">Here</button>',
+        );
+        // hidden by the app's CSS: focus does not land on it
+        byId("gone").focus = () => {};
+        key(holder, "Enter");
+        expect(document.activeElement).toBe(byId("here"));
+        key(byId("here"), "Tab");
+        expect(document.activeElement).toBe(byId("here"));
+        key(byId("here"), "Escape");
+        byId("here").focus = () => {};
+        expect(key(holder, "Enter").handled).toBe(false);
+        expect(engine.get("interaction")).toBeNull();
+    });
+
+    it("enters once a controlled parent follows the activation a click asked for", () => {
+        const { engine, model, byId } = setup();
+        let controlled = true;
+        model.use((ctx, next) =>
+            ctx.command === "active-position.set" && controlled
+                ? {
+                      ok: false,
+                      error: { code: "vetoed", message: "controlled" },
+                  }
+                : next(),
+        );
+        byId("edit").focus();
+        expect(engine.get("interaction")).toBeNull();
+        // the parent follows: the prop sets the position
+        controlled = false;
+        model.run("active-position.set", { rowIndex: 0, columnIndex: 1 });
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: 0,
+            columnIndex: 1,
+        });
+        expect(document.activeElement).toBe(byId("edit"));
+    });
+
+    it("drops an entry waiting for a cell once another one is made active", () => {
+        const { engine, model, cell } = setup();
+        engine.run("interact-cell", { rowIndex: 60, columnIndex: 2 });
+        model.run("active-position.set", { rowIndex: 2, columnIndex: 0 });
+        cell(60, 2, '<button id="late">Late</button>');
+        engine.adapter.commit(engine.adapter.getView());
+        expect(engine.get("interaction")).toBeNull();
+    });
+
+    it("leaves the page keys to media and scrolling controls", () => {
+        const { cell, key, byId } = setup();
+        const holder = cell(
+            9,
+            2,
+            '<video id="clip" controls></video><button id="play">Play</button>',
+        );
+        key(holder, "Enter");
+        expect(key(byId("clip"), "Home").handled).toBe(false);
+        expect(key(byId("play"), "Home").handled).toBe(true);
+    });
+});
