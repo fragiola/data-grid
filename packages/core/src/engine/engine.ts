@@ -1321,6 +1321,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             );
             rowsY.sync(element.scrollTop);
             columnsX.sync(element.scrollLeft);
+            // pinned cells may have registered while it was detached: write them all
+            pinnedFor = null;
             relayout(true);
             writeLayers();
             // what was asked before the grid had a size: a scroll to a cell, or the active cell
@@ -1368,9 +1370,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             written.delete(element);
             // only this element: a row of pinned cells mounting does not rewrite every other one
             const offsets = layerOffsets();
-            if (offsets && layer === "pinned") {
+            if (!offsets) {
+                // nothing to write for yet (a detached viewport: a root re-mounting while its
+                // cells stay): the next write is for every pinned cell
+                if (layer === "pinned") pinnedFor = null;
+            } else if (layer === "pinned") {
                 writeInset(element, offsets.x, offsets.columnAxis);
-            } else if (offsets && layer !== "grid") {
+            } else if (layer !== "grid") {
                 write(element, layerTransform(layer, offsets.x, offsets.y));
             }
             return () => {
@@ -1530,8 +1536,9 @@ export function pinnedInset(
 
 /**
  * Where something at virtual `offset` sits in its row, after the row's start (`rowLeft`): a
- * column that scrolls from the base; a pinned one at its offset, its place in the row's flow
- * (the pinned cells come first, in order), where its sticky inset keeps it.
+ * column that scrolls, from the base. A pinned one is in the row's flow and the engine's sticky
+ * inset places it (its box follows the scroll): it reports its column's offset, which is its
+ * place in a body row's flow (every pinned column is rendered there, in order).
  */
 function leftInRow<TRow, TNode>(
     view: GridView<TRow, TNode>,

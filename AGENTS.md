@@ -99,8 +99,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     the same task), so no painted frame lags the scroll; React renders no `left` for it. Rows
     and header rows start at `rowLeft` (−the pinned width − the rendered columns' width) so their
     box holds the pinned cells and sticky keeps them in place through a scroll not rendered yet,
-    both ways. Stacking is the consumer's, and an `overflow` other than `visible`/`clip` on a row
-    or a layer breaks sticky. Pinned columns as wide as the view scroll with
+    both ways. Stacking is the consumer's; pinned cells are their row's own children, and an
+    `overflow` other than `visible`/`clip` on a row or a layer, or a row's padding or flex
+    direction, breaks them. Pinned columns as wide as the view scroll with
     the rest until it is wider.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the

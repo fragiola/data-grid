@@ -69,6 +69,11 @@ give a row, a header row, `Body` or `Header` an `overflow` other than `visible` 
 `overflow: hidden` or `auto` makes that element the one they hold to, and they scroll away with
 the rest. Use `overflow: clip` to cut a row's content. A cell's own `overflow` is free.
 
+With pinned columns, a row (and a header row) is a flex container its pinned cells sit in:
+render them as the row's own children (no wrapper between `Row` and its cells), and give the row
+no padding, `flex-direction` or `flex-wrap` of yours, or the pinned cells leave the line the
+cells that scroll are on.
+
 ## What it shows
 
 | on a cell or header cell | when |

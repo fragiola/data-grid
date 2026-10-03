@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react";
+import { Activity } from "react";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Column, type ColumnOrGroup, DataGrid } from "../src";
 
@@ -314,6 +315,31 @@ describe("pinned cells", () => {
         ) as HTMLElement;
         expect(headerRow.style.left).toBe("-700px");
         expect(headerRow.style.width).toBe(row.style.width);
+    });
+
+    it("get their insets back when the grid is shown again (Activity)", () => {
+        const { container, rerender } = render(
+            <Activity mode="visible">
+                <Grid />
+            </Activity>,
+        );
+        expect(cellAt(container, 0, 0).style.left).toBe("-200px");
+        // hidden: the effects and refs are cleaned up while the elements stay; shown: the cells
+        // register again before the root attaches its viewport
+        rerender(
+            <Activity mode="hidden">
+                <Grid />
+            </Activity>,
+        );
+        rerender(
+            <Activity mode="visible">
+                <Grid />
+            </Activity>,
+        );
+        for (const rowIndex of [-1, 0]) {
+            expect(cellAt(container, rowIndex, 0).style.left).toBe("-200px");
+            expect(cellAt(container, rowIndex, 1).style.left).toBe("-100px");
+        }
     });
 
     it("become cells that scroll once their column is unpinned", () => {
