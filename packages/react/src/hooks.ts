@@ -11,6 +11,7 @@ import {
     headerCellSort,
     renderedWidth,
     rowAt,
+    rowDisplay,
     rowLeft,
     rowTop,
     type SortDirection,
@@ -105,6 +106,27 @@ export interface RowState {
     readonly active: boolean;
 }
 
+/**
+ * A row's structural style (a header row's too, at `top`): in its layer, from `rowLeft`, as wide
+ * as its rendered cells; with pinned columns, a flex container their sticky cells stack in.
+ */
+export function rowStyle<TRow>(
+    view: GridView<TRow, ReactNode>,
+    top: number,
+    height: number,
+): React.CSSProperties {
+    const display = rowDisplay(view);
+    return {
+        position: "absolute",
+        ...(display ? { display } : {}),
+        top,
+        left: rowLeft(view),
+        width: renderedWidth(view),
+        height,
+        boxSizing: "border-box",
+    };
+}
+
 /** A body row's state, and the props for its element (ARIA, `data-*`, structural style). */
 export function useRow<TRow>(row: RowInfo<TRow>): {
     state: RowState;
@@ -127,16 +149,36 @@ export function useRow<TRow>(row: RowInfo<TRow>): {
                 loading: !row.loaded,
                 active: state.active,
             }),
-            style: {
-                position: "absolute",
-                top: rowTop(view, row.rowIndex),
-                left: rowLeft(view),
-                width: renderedWidth(view),
-                height: view.rowAxis.sizeOf(row.rowIndex),
-                boxSizing: "border-box",
-            },
+            style: rowStyle(
+                view,
+                rowTop(view, row.rowIndex),
+                view.rowAxis.sizeOf(row.rowIndex),
+            ),
         },
     };
+}
+
+/**
+ * A cell's structural style (a header cell's too). A cell that scrolls is positioned in its row. A
+ * pinned one is in the row's flow, `sticky`: the browser's scrolling keeps it in place, at the
+ * `left` inset the engine writes (it is the engine's, like a layer's transform).
+ */
+function cellStyle(
+    pinned: boolean,
+    left: number,
+    width: number,
+    height: number,
+): React.CSSProperties {
+    return pinned
+        ? { position: "sticky", width, height, boxSizing: "border-box" }
+        : {
+              position: "absolute",
+              top: 0,
+              left,
+              width,
+              height,
+              boxSizing: "border-box",
+          };
 }
 
 /** The cells a row renders, with their columns and values. */
@@ -168,7 +210,7 @@ export interface CellState {
     readonly loaded: boolean;
     /** it is the active cell (the one the keyboard moves) */
     readonly active: boolean;
-    /** its column is pinned at the start: the engine keeps it in view sideways */
+    /** its column is pinned at the start: sticky, it stays in view sideways */
     readonly pinned: boolean;
     /** its column is the last pinned one (for a divider or a shadow) */
     readonly pinnedEdge: boolean;
@@ -206,14 +248,12 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
                 pinned: pinned ? "start" : undefined,
                 "pinned-edge": pinnedEdge,
             }),
-            style: {
-                position: "absolute",
-                top: 0,
-                left: columnLeft(view, cell.columnIndex),
-                width: view.columnAxis.sizeOf(cell.columnIndex),
-                height: view.rowAxis.sizeOf(cell.rowIndex),
-                boxSizing: "border-box",
-            },
+            style: cellStyle(
+                pinned,
+                columnLeft(view, cell.columnIndex),
+                view.columnAxis.sizeOf(cell.columnIndex),
+                view.rowAxis.sizeOf(cell.rowIndex),
+            ),
         },
     };
 }
@@ -260,7 +300,7 @@ export interface HeaderCellState {
     readonly sortDirection: SortDirection | undefined;
     /** its column's place among the sorted columns, 1-based, when it is sorted */
     readonly sortPriority: number | undefined;
-    /** its columns are pinned at the start: the engine keeps it in view sideways */
+    /** its columns are pinned at the start: sticky, it stays in view sideways */
     readonly pinned: boolean;
     /** it ends at the last pinned column (for a divider or a shadow) */
     readonly pinnedEdge: boolean;
@@ -316,15 +356,8 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
                 pinned: pinned ? "start" : undefined,
                 "pinned-edge": pinnedEdge,
             }),
-            style: {
-                // at its row's top: a cell spanning rows reaches down past it
-                position: "absolute",
-                top: 0,
-                left: box.left,
-                width: box.width,
-                height: box.height,
-                boxSizing: "border-box",
-            },
+            // at its row's top: a cell spanning rows reaches down past it
+            style: cellStyle(pinned, box.left, box.width, box.height),
         },
     };
 }

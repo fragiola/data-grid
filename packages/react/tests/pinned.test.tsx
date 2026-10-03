@@ -2,8 +2,9 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Column, type ColumnOrGroup, DataGrid } from "../src";
 
-// Pinned columns (Epic #31, P3 and P5): pinned cells and header cells carry `data-pinned` and
-// `data-pinned-edge`, the engine writes their transform (a consumer's is dropped), and a grid
+// Pinned columns (Epic #31, P3 and P5; Epic #38): pinned cells and header cells carry
+// `data-pinned` and `data-pinned-edge`, sit sticky in their row's flow (rows are flex containers
+// then) at the inset the engine writes (a consumer's transform and insets are dropped), and a grid
 // without pinned columns renders as before.
 
 interface Row {
@@ -43,6 +44,15 @@ afterAll(() => {
     delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
 });
 
+/** What a consumer might give a cell: a transform and insets (dropped on pinned cells), a colour. */
+const CONSUMER_STYLE = {
+    transform: "scale(2)",
+    top: 3,
+    left: 7,
+    right: 9,
+    color: "red",
+} as const;
+
 function Grid({
     cells = columns,
     table = false,
@@ -65,7 +75,7 @@ function Grid({
                                         <DataGrid.HeaderCell
                                             cell={cell}
                                             render={table ? <th /> : undefined}
-                                            style={{ transform: "scale(2)" }}
+                                            style={CONSUMER_STYLE}
                                             className={(state) =>
                                                 state.pinned
                                                     ? state.pinnedEdge
@@ -92,7 +102,7 @@ function Grid({
                                         <DataGrid.Cell
                                             cell={cell}
                                             render={table ? <td /> : undefined}
-                                            style={{ transform: "scale(2)" }}
+                                            style={CONSUMER_STYLE}
                                             className={(state) =>
                                                 state.pinned
                                                     ? state.pinnedEdge
@@ -143,33 +153,79 @@ describe("pinned cells", () => {
         }
     });
 
-    it("are written by the engine: their transform follows the scroll, a consumer's is dropped", () => {
+    for (const table of [false, true]) {
+        it(`are sticky in their row's flow at the engine's inset, a consumer's transform and insets dropped${table ? ", as table cells" : ""}`, () => {
+            const { container } = render(<Grid table={table} />);
+            for (const rowIndex of [-1, 0]) {
+                const a = cellAt(container, rowIndex, 0);
+                const b = cellAt(container, rowIndex, 1);
+                expect(a.tagName).toBe(
+                    table ? (rowIndex < 0 ? "TH" : "TD") : "DIV",
+                );
+                expect(a.style.position).toBe("sticky");
+                expect(a.style.width).toBe("100px");
+                // the rendered columns start at column 2: the layers are moved right by 200px, and
+                // the insets are each column's offset less that
+                expect(a.style.left).toBe("-200px");
+                expect(b.style.left).toBe("-100px");
+                for (const property of ["transform", "top", "right"] as const) {
+                    expect(a.style[property]).toBe("");
+                }
+                expect(a.style.color).toBe("red");
+                // a cell that scrolls keeps what the consumer gave it, under the structure
+                const c = cellAt(container, rowIndex, 2);
+                expect(c.style.position).toBe("absolute");
+                expect(c.style.transform).toBe("scale(2)");
+                expect(c.style.left).toBe("500px");
+            }
+            const row = container.querySelector(
+                '[data-grid-part="row"]',
+            ) as HTMLElement;
+            const headerRow = container.querySelector(
+                '[data-grid-part="header-row"]',
+            ) as HTMLElement;
+            expect(row.tagName).toBe(table ? "TR" : "DIV");
+            for (const element of [row, headerRow]) {
+                expect(element.style.display).toBe("flex");
+                expect(element.style.position).toBe("absolute");
+            }
+        });
+    }
+
+    it("are not written while scrolling inside the rendered window, and follow a new one", () => {
         const { container } = render(<Grid />);
         const root = container.querySelector(
             '[data-grid-part="root"]',
         ) as HTMLElement;
-        // the rendered columns start at column 2: the layers are moved right by 200px
-        expect(cellAt(container, 0, 0).style.transform).toBe(
-            "translate3d(-200px, 0px, 0px)",
-        );
-        expect(cellAt(container, -1, 1).style.transform).toBe(
-            "translate3d(-200px, 0px, 0px)",
-        );
-        // an unpinned cell keeps what the consumer gave it
-        expect(cellAt(container, 0, 2).style.transform).toBe("scale(2)");
+        const pinnedCells = [...container.querySelectorAll("[data-pinned]")];
+        const writes = new MutationObserver(() => {});
+        for (const cell of pinnedCells) {
+            writes.observe(cell, { attributeFilter: ["style"] });
+        }
         act(() => {
             root.scrollLeft = 40;
             fireEvent.scroll(root);
         });
-        expect(cellAt(container, 0, 0).style.transform).toBe(
-            "translate3d(-160px, 0px, 0px)",
+        expect(writes.takeRecords()).toEqual([]);
+        expect(cellAt(container, 0, 0).style.left).toBe("-200px");
+        writes.disconnect();
+        // far right: a new column window, the layers' x is its base
+        act(() => {
+            root.scrollLeft = 2_000;
+            fireEvent.scroll(root);
+        });
+        const body = container.querySelector(
+            '[data-grid-part="body"]',
+        ) as HTMLElement;
+        const x = Number(
+            /translate3d\(([-\d.]+)px/.exec(body.style.transform)?.[1],
         );
-        expect(cellAt(container, -1, 0).style.transform).toBe(
-            "translate3d(-160px, 0px, 0px)",
-        );
+        expect(x).toBeGreaterThan(1_000);
+        expect(cellAt(container, 0, 1).style.left).toBe(`${100 - x}px`);
+        expect(cellAt(container, -1, 1).style.left).toBe(`${100 - x}px`);
     });
 
-    it("drop a transform on their render element too", () => {
+    it("drop a transform and insets on their render element too", () => {
         const { container } = render(
             <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
                 <DataGrid.Grid>
@@ -186,6 +242,7 @@ describe("pinned cells", () => {
                                                         style={{
                                                             transform:
                                                                 "scale(3)",
+                                                            top: 4,
                                                             color: "red",
                                                         }}
                                                     />
@@ -201,7 +258,9 @@ describe("pinned cells", () => {
             </DataGrid.Root>,
         );
         const a = cellAt(container, 0, 0);
-        expect(a.style.transform).toContain("translate3d");
+        expect(a.style.transform).toBe("");
+        expect(a.style.top).toBe("");
+        expect(a.style.left).toBe("-200px");
         expect(a.style.color).toBe("red");
         expect(cellAt(container, 0, 2).style.transform).toBe("scale(3)");
     });
@@ -241,26 +300,23 @@ describe("pinned cells", () => {
         expect(group).toHaveAttribute("data-pinned-edge", "");
     });
 
-    it("sit inside their row's box: a row starts the pinned width before its layer", () => {
+    it("sit inside their row's box: a row starts a view's width before its layer", () => {
         const { container } = render(<Grid />);
         const row = container.querySelector(
             '[data-grid-part="row"][data-row-index="0"]',
         ) as HTMLElement;
-        expect(row.style.left).toBe("-200px");
-        // C0 and C1 pinned at 200 and 300 in the row, C2 (the first that scrolls) at 200 + 0
-        expect(cellAt(container, 0, 0).style.left).toBe("200px");
-        expect(cellAt(container, 0, 2).style.left).toBe("200px");
+        // the view is 500px wide, the pinned columns 200px
+        expect(row.style.left).toBe("-500px");
         const headerRow = container.querySelector(
             '[data-grid-part="header-row"]',
         ) as HTMLElement;
-        expect(headerRow.style.left).toBe("-200px");
+        expect(headerRow.style.left).toBe("-500px");
+        expect(headerRow.style.width).toBe(row.style.width);
     });
 
-    it("keep no engine transform once their column is unpinned", () => {
+    it("become cells that scroll once their column is unpinned", () => {
         const { container, rerender } = render(<Grid />);
-        expect(cellAt(container, 0, 0).style.transform).toContain(
-            "translate3d",
-        );
+        expect(cellAt(container, 0, 0).style.position).toBe("sticky");
         rerender(
             <Grid
                 cells={[
@@ -272,7 +328,14 @@ describe("pinned cells", () => {
         );
         const a = cellAt(container, 0, 0);
         expect(a).not.toHaveAttribute("data-pinned");
-        expect(a.style.transform).not.toContain("translate3d");
+        expect(a.style.position).toBe("absolute");
+        expect(a.style.left).toBe("0px");
+        expect(cellAt(container, 0, 1).style.left).toBe("100px");
+        const row = container.querySelector(
+            '[data-grid-part="row"]',
+        ) as HTMLElement;
+        expect(row.style.display).toBe("");
+        expect(row.style.left).toBe("0px");
     });
 
     it("leave a grid without pinned columns as it was", () => {
@@ -282,6 +345,16 @@ describe("pinned cells", () => {
         expect(
             container.querySelectorAll("[data-pinned], [data-pinned-edge]"),
         ).toHaveLength(0);
-        expect(cellAt(container, 0, 0).style.transform).toBe("scale(2)");
+        const a = cellAt(container, 0, 0);
+        expect(a.style.transform).toBe("scale(2)");
+        expect(a.style.position).toBe("absolute");
+        // no new structural key: no `display` on rows
+        for (const part of ["row", "header-row"]) {
+            const element = container.querySelector(
+                `[data-grid-part="${part}"]`,
+            ) as HTMLElement;
+            expect(element.style.display).toBe("");
+            expect(element.style.left).toBe("0px");
+        }
     });
 });
