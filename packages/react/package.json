@@ -22,6 +22,11 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.js"
         },
+        "./local": {
+            "development": "./src/local/index.ts",
+            "types": "./dist/local.d.ts",
+            "import": "./dist/local.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
