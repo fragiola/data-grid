@@ -41,7 +41,10 @@ export interface Column<TRow, TNode = unknown> {
     readonly name?: string | undefined;
     /** in pixels */
     readonly width: number;
-    /** the cell's value; without one, `row[key]` */
+    /**
+     * the cell's value; without one, `row[key]`. `rowIndex` is the row's index in the rows the
+     * grid is given (in `@fragiola/data-grid/local`, in the rows given to the pipeline)
+     */
     readonly getValue?: ((row: TRow, rowIndex: number) => unknown) | undefined;
     /** what a header cell shows when it is given no children */
     readonly renderHeaderCell?:

@@ -379,12 +379,17 @@ describe("the pipeline", () => {
         expect(local.derive(people, columns).filteredCount).toBe(5);
     });
 
-    it("keeps the page inside the pages left when the rows shrink", () => {
+    it("keeps the page inside the pages left when the rows shrink, and there when they grow back", () => {
         const local = createLocalRows<Person>({ pageSize: 2 });
         local.setPageIndex(2);
         const view = local.derive(people.slice(0, 3), columns);
         expect(view.pageIndex).toBe(1);
         expect(ids(view.rows)).toEqual([3]);
+        // the rows grow back: the view stays on the page it showed
+        expect(local.derive(people, columns).pageIndex).toBe(1);
+        // a page set again goes where it is told
+        local.setPageIndex(2);
+        expect(local.derive(people, columns).pageIndex).toBe(2);
     });
 
     it("tells its listeners on a change, never for the same state", () => {

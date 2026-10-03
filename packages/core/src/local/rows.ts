@@ -159,6 +159,11 @@ export function createLocalRows<TRow, TNode = unknown>(
         pageSize: validPageSize(options.pageSize),
     };
     const listeners = new Set<() => void>();
+    /**
+     * the page `derive` last showed when it kept the index inside fewer pages: rows growing back
+     * leave the view on that page, not on the one set before they shrank
+     */
+    let shownPageIndex: number | null = null;
 
     function update(next: Partial<LocalRowsState>, firstPage: boolean) {
         const changed = (Object.keys(next) as (keyof LocalRowsState)[]).some(
@@ -166,6 +171,7 @@ export function createLocalRows<TRow, TNode = unknown>(
         );
         if (!changed) return;
         state = { ...state, ...next, ...(firstPage ? { pageIndex: 0 } : {}) };
+        shownPageIndex = null;
         for (const listener of [...listeners]) listener();
     }
 
@@ -216,7 +222,19 @@ export function createLocalRows<TRow, TNode = unknown>(
                 state.sortColumns,
                 columnsOf,
             );
-            return view(ordered, rows.length, state.pageIndex, state.pageSize);
+            const pageIndex = Math.min(
+                state.pageIndex,
+                shownPageIndex ?? state.pageIndex,
+            );
+            const derived = view(
+                ordered,
+                rows.length,
+                pageIndex,
+                state.pageSize,
+            );
+            if (derived.pageIndex < pageIndex)
+                shownPageIndex = derived.pageIndex;
+            return derived;
         },
         setSortColumns: (sortColumns) => update({ sortColumns }, true),
         setFilter: (columnKey, value) => {
@@ -239,8 +257,17 @@ export function createLocalRows<TRow, TNode = unknown>(
             update({ filters }, true);
         },
         setSearch: (search) => update({ search }, true),
-        setPageIndex: (pageIndex) =>
-            update({ pageIndex: validPageIndex(pageIndex) }, false),
+        setPageIndex: (pageIndex) => {
+            // a page asked for again is the one to show, even after the pages shrank under it
+            const asked = validPageIndex(pageIndex);
+            if (shownPageIndex !== null && asked === state.pageIndex) {
+                shownPageIndex = null;
+                state = { ...state };
+                for (const listener of [...listeners]) listener();
+                return;
+            }
+            update({ pageIndex: asked }, false);
+        },
         setPageSize: (pageSize) =>
             update({ pageSize: validPageSize(pageSize) }, true),
     };
