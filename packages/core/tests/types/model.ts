@@ -165,6 +165,20 @@ const pinnedGroup: ColumnOrGroup<Person> = {
 void pinnedEnd;
 void pinnedGroup;
 
+// a row toggles by its index or by its key, never both; a detail's height is a function of the row
+grid.run("expanded-rows.toggle", { rowIndex: 0 });
+grid.run("expanded-rows.toggle", { rowKey: "a" });
+// @ts-expect-error
+grid.run("expanded-rows.toggle", { rowIndex: 0, rowKey: "a" });
+// @ts-expect-error
+grid.run("expanded-rows.set", { rowKeys: [true] });
+grid.run("sizes.set", { detailHeight: (row: Person) => row.name.length });
+// @ts-expect-error
+grid.run("sizes.set", { detailHeight: (row: Order) => row.total });
+const expandedKeys: readonly (string | number)[] =
+    grid.get("expanded-row-keys");
+void expandedKeys;
+
 void groupWithCells;
 void groupWithWidth;
 void columnWithChildren;

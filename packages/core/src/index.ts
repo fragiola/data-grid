@@ -1,9 +1,16 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
-export { type Axis, createAxis, type Size } from "./axis/axis";
+export {
+    type Axis,
+    type AxisExtra,
+    createAxis,
+    type Size,
+    withExtraSizes,
+} from "./axis/axis";
 export {
     ariaHeaderCellSpans,
     ariaRowCount,
+    ariaRowDetail,
     ariaRowIndex,
     columnLeft,
     columnPinning,
@@ -25,9 +32,13 @@ export {
     headerCellSort,
     pinnedInset,
     renderedWidth,
+    rowCellsHeight,
+    rowDetailBox,
     rowDisplay,
+    rowExpanded,
     rowLeft,
     rowTop,
+    rowWidth,
 } from "./engine/engine";
 export {
     type ColumnLayout,
@@ -36,6 +47,7 @@ export {
     isColumnGroup,
     layoutColumns,
 } from "./header/header";
+export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
     COMMANDS,
     cellValue,
@@ -43,10 +55,10 @@ export {
     type DataGridModel,
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
-    rowAt,
     veto,
 } from "./model/model";
 export { sameSortColumns, validSortColumns } from "./model/sort";
+export { rowAt } from "./model/source";
 export type {
     CellPosition,
     CellRenderProps,
@@ -66,6 +78,7 @@ export type {
     DataGridModelOptions,
     DataGridState,
     DataSetPayload,
+    DetailHeight,
     GroupHeaderCellRenderProps,
     HeaderCellLayout,
     HeaderCellRenderProps,
@@ -78,6 +91,7 @@ export type {
     QuestionKey,
     QuestionMap,
     ResultOf,
+    RowKey,
     RowKeyGetter,
     RowSource,
     SortColumn,
@@ -97,7 +111,11 @@ export {
     ScrollAxisState,
     type ScrollMapping,
 } from "./viewport/scaling";
-export { type ScrollAlign, scrollTargetFor } from "./viewport/scroll-target";
+export {
+    type ScrollAlign,
+    scrollTargetFor,
+    scrollTargetForSpan,
+} from "./viewport/scroll-target";
 export {
     type AxisWindow,
     contains,

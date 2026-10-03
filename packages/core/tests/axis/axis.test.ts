@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAxis } from "../../src/axis/axis";
+import { createAxis, withExtraSizes } from "../../src/axis/axis";
 
 /** A deterministic pseudo-random size in [min, max], so property runs reproduce. */
 function sizes(seed: number, min = 1, max = 80) {
@@ -178,5 +178,103 @@ describe("a variable-size axis", () => {
         expect(resized.totalSize).toBe(80);
         expect(axis.offsetOf(3)).toBe(30);
         expect(axis.totalSize).toBe(40);
+    });
+});
+
+describe("an axis with extra sizes (details)", () => {
+    /** The same axis built item by item: what the extended axis must answer. */
+    function reference(
+        base: (index: number) => number,
+        extras: Map<number, number>,
+    ) {
+        return (index: number) => base(index) + (extras.get(index) ?? 0);
+    }
+
+    it("is its base without extras", () => {
+        const base = createAxis(10, 20);
+        expect(withExtraSizes(base, [])).toBe(base);
+        expect(withExtraSizes(base, [{ index: 3, size: 0 }])).toBe(base);
+        expect(withExtraSizes(base, [{ index: 99, size: 10 }])).toBe(base);
+    });
+
+    it("adds each extra after its item's own size", () => {
+        const axis = withExtraSizes(createAxis(10, 20), [
+            { index: 5, size: 100 },
+            { index: 2, size: 50 },
+        ]);
+        expect(axis.fixed).toBe(false);
+        expect(axis.totalSize).toBe(350);
+        expect(axis.offsetOf(2)).toBe(40);
+        expect(axis.sizeOf(2)).toBe(70);
+        expect(axis.extraSizeOf(2)).toBe(50);
+        expect(axis.extraSizeOf(3)).toBe(0);
+        expect(axis.offsetOf(3)).toBe(110);
+        expect(axis.offsetOf(6)).toBe(270);
+        expect(axis.offsetOf(10)).toBe(350);
+        // the detail's area belongs to its row
+        expect(axis.indexAt(60)).toBe(2);
+        expect(axis.indexAt(109.9)).toBe(2);
+        expect(axis.indexAt(110)).toBe(3);
+        expect(axis.indexAt(269)).toBe(5);
+        expect(axis.indexAt(270)).toBe(6);
+        expect(axis.indexAt(-5)).toBe(0);
+        expect(axis.indexAt(10_000)).toBe(9);
+    });
+
+    it("answers as the axis built item by item (property)", () => {
+        for (let seed = 0; seed < 20; seed++) {
+            const count = 200;
+            const base = sizes(seed, seed % 3 === 0 ? 0 : 1, 60);
+            const extras = new Map<number, number>();
+            for (let i = 0; i < 25; i++) {
+                const index = sizes(seed + 100, 0, count - 1)(i);
+                if (!extras.has(index))
+                    extras.set(index, sizes(seed + 7, 0, 300)(i));
+            }
+            const axis = withExtraSizes(
+                createAxis(count, base),
+                [...extras].map(([index, size]) => ({ index, size })),
+            );
+            const expected = createAxis(count, reference(base, extras));
+            expect(axis.totalSize).toBe(expected.totalSize);
+            for (let i = 0; i <= count; i++) {
+                expect(axis.offsetOf(i)).toBe(expected.offsetOf(i));
+                expect(axis.sizeOf(i)).toBe(expected.sizeOf(i));
+            }
+            for (
+                let offset = -10;
+                offset < expected.totalSize + 10;
+                offset += 7
+            ) {
+                expect(
+                    axis.indexAt(offset),
+                    `seed ${seed} offset ${offset}`,
+                ).toBe(expected.indexAt(offset));
+            }
+        }
+    });
+
+    it("stays allocation-free over 100M fixed items", () => {
+        const axis = withExtraSizes(createAxis(100_000_000, 32), [
+            { index: 50_000_000, size: 300 },
+        ]);
+        expect(axis.totalSize).toBe(3_200_000_300);
+        expect(axis.offsetOf(50_000_001)).toBe(50_000_001 * 32 + 300);
+        expect(axis.indexAt(50_000_000 * 32 + 320)).toBe(50_000_000);
+        expect(axis.indexAt(50_000_001 * 32 + 300)).toBe(50_000_001);
+    });
+
+    it("keeps its extras when its count changes, and drops those past it", () => {
+        const axis = withExtraSizes(createAxis(10, 20), [
+            { index: 2, size: 50 },
+            { index: 8, size: 50 },
+        ]);
+        const grown = axis.withCount(20);
+        expect(grown.totalSize).toBe(500);
+        expect(grown.extraSizeOf(8)).toBe(50);
+        const shrunk = axis.withCount(5);
+        expect(shrunk.totalSize).toBe(150);
+        expect(shrunk.extraSizeOf(8)).toBe(0);
+        expect(axis.withCount(10)).toBe(axis);
     });
 });

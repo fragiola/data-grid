@@ -154,8 +154,19 @@ export interface CellPosition {
     readonly columnIndex: number;
 }
 
+/** What identifies a row across renders: `rowKey`'s answer, or its index without one. */
+export type RowKey = string | number;
+
 /** A row's key: what identifies it across renders. */
-export type RowKeyGetter<TRow> = (row: TRow, index: number) => string | number;
+export type RowKeyGetter<TRow> = (row: TRow, index: number) => RowKey;
+
+/**
+ * An expanded row's detail height in pixels (M2): one for all, or one per loaded row. It adds to
+ * the row's own height in the row axis.
+ */
+export type DetailHeight<TRow> =
+    | number
+    | ((row: TRow, rowIndex: number) => number);
 
 /**
  * Where the rows come from (D6): every row at once (fixed, or growing for infinite loading), or a
@@ -195,6 +206,18 @@ export interface DataGridState<TRow, TNode = unknown> {
         readonly start: number;
         readonly end: number;
     };
+    /**
+     * the keys of the expanded rows, in the order they were expanded (M1). A key whose row is not
+     * loaded, or not in the data, stays: its row expands once it is there
+     */
+    readonly expandedRowKeys: readonly RowKey[];
+    /**
+     * the indexes of the rows shown expanded, ascending: each loaded, its key in
+     * `expandedRowKeys`. Derived from the data and the keys, as the data contract tells them
+     */
+    readonly expandedRows: readonly number[];
+    /** an expanded row's detail height */
+    readonly detailHeight: DetailHeight<TRow>;
 }
 
 /** What `createDataGridModel` starts from. */
@@ -212,6 +235,10 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     activePosition?: CellPosition | null;
     /** the sorted columns to start with (entries that are not a sortable column are dropped) */
     sortColumns?: readonly SortColumn[];
+    /** the keys of the rows expanded to start with (a key given twice counts once) */
+    expandedRowKeys?: readonly RowKey[];
+    /** an expanded row's detail height in pixels, or a function of the row (default 300) */
+    detailHeight?: DetailHeight<TRow>;
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -270,11 +297,33 @@ export interface CommandMap<TRow, TNode = unknown> {
         };
         result: readonly SortColumn[];
     };
-    /** changes the row height (a number or a function of the index) or the header row's */
+    /**
+     * replaces the expanded rows' keys (each once). A key whose row is not loaded is kept: the
+     * row expands once it is. Returns them
+     */
+    "expanded-rows.set": {
+        payload: { readonly rowKeys: readonly RowKey[] };
+        result: readonly RowKey[];
+    };
+    /**
+     * expands a row, or collapses it when it is expanded: by its index (a loaded row; its key is
+     * kept) or by its key. Returns the expanded rows' keys
+     */
+    "expanded-rows.toggle": {
+        payload:
+            | { readonly rowIndex: number; readonly rowKey?: undefined }
+            | { readonly rowKey: RowKey; readonly rowIndex?: undefined };
+        result: readonly RowKey[];
+    };
+    /**
+     * changes the row height (a number or a function of the index), the header row's, or an
+     * expanded row's detail height
+     */
     "sizes.set": {
         payload: {
             readonly rowHeight?: Size | undefined;
             readonly headerRowHeight?: number | undefined;
+            readonly detailHeight?: DetailHeight<TRow> | undefined;
         };
         result: undefined;
     };
@@ -445,6 +494,12 @@ export interface QueryMap<TRow, TNode = unknown> {
     };
     "row-height": { payload: undefined; result: Size };
     "header-row-height": { payload: undefined; result: number };
+    /** the expanded rows' keys, in the order they were expanded */
+    "expanded-row-keys": { payload: undefined; result: readonly RowKey[] };
+    /** the indexes of the rows shown expanded (loaded, their key expanded), ascending */
+    "expanded-rows": { payload: undefined; result: readonly number[] };
+    /** an expanded row's detail height: a number, or a function of the row */
+    "detail-height": { payload: undefined; result: DetailHeight<TRow> };
 }
 
 export type QueryKey = keyof QueryMap<unknown>;
@@ -462,6 +517,8 @@ export interface QuestionMap {
     "row-loaded": { readonly rowIndex: number };
     /** whether a column sorts the grid (a column, `sortable`) */
     "column-sortable": { readonly columnKey: string };
+    /** whether the row shows its detail: loaded, and its key expanded */
+    "row-expanded": { readonly rowIndex: number };
 }
 
 export type QuestionKey = keyof QuestionMap;

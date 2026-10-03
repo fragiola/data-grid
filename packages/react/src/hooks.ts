@@ -1,6 +1,7 @@
 import {
     type AxisWindow,
     ariaHeaderCellSpans,
+    ariaRowDetail,
     ariaRowIndex,
     cellValue,
     columnLeft,
@@ -11,9 +12,13 @@ import {
     headerCellSort,
     renderedWidth,
     rowAt,
+    rowCellsHeight,
+    rowDetailBox,
     rowDisplay,
+    rowExpanded,
     rowLeft,
     rowTop,
+    rowWidth,
     type SortDirection,
     sameCell,
 } from "@fragiola/data-grid";
@@ -104,16 +109,20 @@ export interface RowState {
     readonly loaded: boolean;
     /** it holds the active cell */
     readonly active: boolean;
+    /** it shows its detail (`DataGrid.RowDetail`): loaded, and its key expanded */
+    readonly expanded: boolean;
 }
 
 /**
  * A row's structural style (a header row's too, at `top`): in its layer, from `rowLeft`, as wide
- * as its rendered cells; with pinned columns, a flex container their sticky cells stack in.
+ * as its rendered cells (an expanded row, as what holds its detail); with pinned columns, a flex
+ * container their sticky cells stack in.
  */
 export function rowStyle<TRow>(
     view: GridView<TRow, ReactNode>,
     top: number,
     height: number,
+    width: number = renderedWidth(view),
 ): React.CSSProperties {
     const display = rowDisplay(view);
     return {
@@ -121,7 +130,7 @@ export function rowStyle<TRow>(
         ...(display ? { display } : {}),
         top,
         left: rowLeft(view),
-        width: renderedWidth(view),
+        width,
         height,
         boxSizing: "border-box",
     };
@@ -137,6 +146,7 @@ export function useRow<TRow>(row: RowInfo<TRow>): {
         rowIndex: row.rowIndex,
         loaded: row.loaded,
         active: view.active?.rowIndex === row.rowIndex,
+        expanded: rowExpanded(view, row.rowIndex),
     };
     return {
         state,
@@ -148,11 +158,14 @@ export function useRow<TRow>(row: RowInfo<TRow>): {
                 "row-index": row.rowIndex,
                 loading: !row.loaded,
                 active: state.active,
+                expanded: state.expanded,
             }),
+            // an expanded row's box holds its detail, below its cells
             style: rowStyle(
                 view,
                 rowTop(view, row.rowIndex),
                 view.rowAxis.sizeOf(row.rowIndex),
+                rowWidth(view, row.rowIndex),
             ),
         },
     };
@@ -252,8 +265,60 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
                 pinned,
                 columnLeft(view, cell.columnIndex),
                 view.columnAxis.sizeOf(cell.columnIndex),
-                view.rowAxis.sizeOf(cell.rowIndex),
+                // its row's own height: a detail below the cells is not theirs
+                rowCellsHeight(view, cell.rowIndex),
             ),
+        },
+    };
+}
+
+/** The state of a row's detail. */
+export interface RowDetailState {
+    readonly rowIndex: number;
+    /** its row is expanded: the detail renders only meanwhile */
+    readonly expanded: boolean;
+    /** its height: the detail height the grid was given for this row (0 while collapsed) */
+    readonly height: number;
+}
+
+/**
+ * A row's detail (M3): its state, and the props for its element (render it only while
+ * `state.expanded`). It is one cell of its row spanning every column (M4: no row count or index changes),
+ * in the row's flow below its cells, sticky at the view's start (the engine writes its `left`),
+ * as wide as the visible area.
+ */
+export function useRowDetail<TRow>(row: RowInfo<TRow>): {
+    state: RowDetailState;
+    props: Record<string, unknown> & { style: React.CSSProperties };
+} {
+    const view = useGridView<TRow>();
+    const box = rowDetailBox(view, row.rowIndex);
+    if (!box) {
+        return {
+            state: { rowIndex: row.rowIndex, expanded: false, height: 0 },
+            props: { style: {} },
+        };
+    }
+    const flex = rowDisplay(view) === "flex";
+    return {
+        state: { rowIndex: row.rowIndex, expanded: true, height: box.height },
+        props: {
+            role: "gridcell",
+            ...ariaRowDetail(view),
+            ...dataAttributes({
+                "grid-part": "row-detail",
+                "row-index": row.rowIndex,
+            }),
+            style: {
+                position: "sticky",
+                display: "block",
+                marginTop: box.top,
+                // in a row of pinned cells (flex), from the row's start, never shrunk
+                ...(flex ? { marginLeft: box.start, flexShrink: 0 } : {}),
+                width: box.width,
+                height: box.height,
+                boxSizing: "border-box",
+            },
         },
     };
 }

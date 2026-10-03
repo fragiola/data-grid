@@ -19,8 +19,30 @@ export function scrollTargetFor(
     if (axis.count === 0) return 0;
     const item = Math.min(Math.max(Math.floor(index), 0), axis.count - 1);
     const start = axis.offsetOf(item);
-    const end = start + axis.sizeOf(item);
-    const max = Math.max(0, axis.totalSize - viewportSize);
+    return scrollTargetForSpan(
+        start,
+        start + axis.sizeOf(item),
+        offset,
+        viewportSize,
+        axis.totalSize,
+        align,
+    );
+}
+
+/**
+ * The virtual offset that brings `[start, end)` into view, from `offset`, with a viewport of
+ * `viewportSize` over content `totalSize` long: {@link scrollTargetFor} for any span (a row's
+ * cells, without its detail).
+ */
+export function scrollTargetForSpan(
+    start: number,
+    end: number,
+    offset: number,
+    viewportSize: number,
+    totalSize: number,
+    align: ScrollAlign = "nearest",
+): number {
+    const max = Math.max(0, totalSize - viewportSize);
     let target: number;
     switch (align) {
         case "start":

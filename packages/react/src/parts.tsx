@@ -25,6 +25,7 @@ import {
 import {
     type CellState,
     type HeaderCellState,
+    type RowDetailState,
     type RowState,
     rowStyle,
     useCell,
@@ -34,6 +35,7 @@ import {
     useHeaderCells,
     useHeaderRows,
     useRow,
+    useRowDetail,
     useRows,
 } from "./hooks";
 import {
@@ -138,6 +140,9 @@ export function Grid(props: GridProps) {
         engine.adapter.commit(view);
     }, [engine, view]);
     const empty = view.rowCount === 0;
+    // without rows, and with expanded rows (a detail is as wide as the view), the sizer spans at
+    // least the visible area: it clips what it holds
+    const wide = empty || view.expandedRows.length > 0;
     return useRenderElement("div", rest, {
         state: { rowCount: view.rowCount, columnCount: view.columnCount },
         ref: useLayer("grid"),
@@ -153,9 +158,7 @@ export function Grid(props: GridProps) {
             position: "relative",
             display: "block",
             // without rows, the sizer still spans the visible area: the empty state has room
-            width: empty
-                ? Math.max(view.width, view.viewportWidth)
-                : view.width,
+            width: wide ? Math.max(view.width, view.viewportWidth) : view.width,
             height:
                 view.headerHeight +
                 (empty
@@ -555,4 +558,41 @@ export function Cell<TRow>(props: CellProps<TRow>) {
         props: { ...cellProps, children: content },
         style,
     });
+}
+
+export type RowDetailProps = DivPrimitiveProps<RowDetailState> & {
+    /** what the detail holds: another grid, a summary, controls (the app's own content) */
+    children?: ReactNode;
+};
+
+/**
+ * An expanded row's detail (M3): inside its `Row`, after its cells, below the row's own height;
+ * as wide as the visible area and in view while the grid scrolls sideways (sticky, the engine
+ * writes its `left`). It renders only while its row is expanded (`expanded-rows.toggle`, the
+ * row's `data-expanded`), and holds only its children: no text and no names. One cell of its row
+ * spanning every column (`role="gridcell"`). Its keys and focus are its content's, never the
+ * grid's: a grid inside it is its own grid. A `<td>` through `render`, which then gets `colSpan`.
+ */
+export function RowDetail(props: RowDetailProps) {
+    const row = useRowContext("RowDetail");
+    const { state, props: own } = useRowDetail(row);
+    const view = useGridView();
+    // its inset is the engine's, and the other insets would move it from its place
+    const { children, ...rest } = withoutStyleKeys<
+        RowDetailState,
+        RowDetailProps
+    >(props, PINNED_KEYS);
+    const ref = useLayer("detail");
+    const spans =
+        isTableCell(rest.render) && view.columnCount > 1
+            ? { colSpan: view.columnCount }
+            : {};
+    const { style, ...detailProps } = own;
+    const element = useRenderElement("div", rest, {
+        state,
+        ref,
+        props: { ...detailProps, ...spans, children },
+        style,
+    });
+    return state.expanded ? element : null;
 }

@@ -6,12 +6,23 @@ import {
     sameCell,
 } from "../navigation/navigation";
 import {
+    DEFAULT_DETAIL_HEIGHT,
+    expandedRowsOf,
+    holdsRow,
+    isRowKey,
+    loadedRowKey,
+    type RowKeyHints,
+    type SearchRange,
+    sameRowKeys,
+} from "./expansion";
+import {
     SORT_DIRECTIONS,
     sameSortColumns,
     sortableColumn,
     toggledSort,
     validSortColumns,
 } from "./sort";
+import { rowAt } from "./source";
 import type {
     CellPosition,
     Column,
@@ -33,6 +44,7 @@ import type {
     QuestionKey,
     QuestionMap,
     ResultOf,
+    RowKey,
     RowSource,
     SortColumn,
 } from "./types";
@@ -109,16 +121,6 @@ type Handlers<TRow, TNode> = {
 
 function rowCountOf<TRow>(source: RowSource<TRow>): number {
     return "rows" in source ? source.rows.length : source.rowCount;
-}
-
-/** The row at `index` of a source, or `undefined` while it is not loaded. */
-export function rowAt<TRow>(
-    source: RowSource<TRow>,
-    index: number,
-): TRow | undefined {
-    if (!Number.isInteger(index) || index < 0) return undefined;
-    if ("rows" in source) return source.rows[index];
-    return index < source.rowCount ? source.getRow(index) : undefined;
 }
 
 function headerRowCountOf<TRow, TNode>(
@@ -217,6 +219,33 @@ function copied(sortColumns: readonly SortColumn[]): readonly SortColumn[] {
     }));
 }
 
+/**
+ * The state with the expanded rows found again after the rows or the keys changed: a key missing
+ * from where it was is looked for in `search` (every row by default).
+ */
+function withExpandedRows<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    hints: RowKeyHints,
+    search: SearchRange = { start: 0, end: state.rowCount },
+): DataGridState<TRow, TNode> {
+    const expandedRows = expandedRowsOf(state, hints, search);
+    return sameRowKeys(expandedRows, state.expandedRows)
+        ? state
+        : { ...state, expandedRows };
+}
+
+/** The expanded keys, once each: `undefined` when one is not a key. */
+function uniqueRowKeys(
+    keys: readonly unknown[],
+): readonly RowKey[] | undefined {
+    const unique = new Set<RowKey>();
+    for (const key of keys) {
+        if (!isRowKey(key)) return undefined;
+        unique.add(key);
+    }
+    return [...unique];
+}
+
 function validSize(size: unknown): boolean {
     return (
         typeof size === "function" ||
@@ -224,7 +253,29 @@ function validSize(size: unknown): boolean {
     );
 }
 
-function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
+/**
+ * The rows a new source may hold expanded keys in: behind the same `getRow` and `rowKey`, only
+ * the rows it added (the others change through `rows.changed`); anything else, every row.
+ */
+function newRowsOf<TRow, TNode>(
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): SearchRange {
+    const same =
+        "getRow" in before.source &&
+        "getRow" in after.source &&
+        before.source.getRow === after.source.getRow &&
+        before.rowKey === after.rowKey;
+    return { start: same ? before.rowCount : 0, end: after.rowCount };
+}
+
+/**
+ * The commands' handlers. `hints` (where expanded keys were last seen) is a cache they share: a
+ * dry run may fill it, and every use checks it first.
+ */
+function createHandlers<TRow, TNode>(
+    hints: RowKeyHints,
+): Handlers<TRow, TNode> {
     return {
         "columns.set": (state, { columns: entries }) => {
             const error = columnsError(entries);
@@ -274,12 +325,17 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                 };
             }
             const rowCount = rowCountOf(source);
-            const next = reconcile({
+            const reconciled = reconcile({
                 ...state,
                 source,
                 rowCount,
                 rowKey: "rowKey" in payload ? payload.rowKey : state.rowKey,
             });
+            const next = withExpandedRows(
+                reconciled,
+                hints,
+                newRowsOf(state, reconciled),
+            );
             return { ok: true, value: { state: next, value: { rowCount } } };
         },
         "rows.changed": (state, { start, end }) => {
@@ -304,16 +360,20 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                 start: Math.min(start ?? 0, state.rowCount),
                 end: Math.min(end ?? state.rowCount, state.rowCount),
             };
-            // no row in it: nothing to tell
+            // no row in it: nothing to tell. Rows that arrived may be expanded ones
             const next =
                 range.start < range.end
-                    ? {
-                          ...state,
-                          rowsChanged: {
-                              revision: state.rowsChanged.revision + 1,
-                              ...range,
+                    ? withExpandedRows(
+                          {
+                              ...state,
+                              rowsChanged: {
+                                  revision: state.rowsChanged.revision + 1,
+                                  ...range,
+                              },
                           },
-                      }
+                          hints,
+                          range,
+                      )
                     : state;
             return { ok: true, value: { state: next, value: range } };
         },
@@ -363,7 +423,80 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                 value: { state: next, value: next.sortColumns },
             };
         },
-        "sizes.set": (state, { rowHeight, headerRowHeight }) => {
+        "expanded-rows.set": (state, { rowKeys }) => {
+            if (!Array.isArray(rowKeys)) {
+                return fail("invalid_payload", "rowKeys must be an array");
+            }
+            const keys = uniqueRowKeys(rowKeys);
+            if (!keys) {
+                return fail(
+                    "invalid_payload",
+                    "a row key must be a string or a finite number",
+                );
+            }
+            const next = sameRowKeys(keys, state.expandedRowKeys)
+                ? state
+                : withExpandedRows({ ...state, expandedRowKeys: keys }, hints);
+            return {
+                ok: true,
+                value: { state: next, value: next.expandedRowKeys },
+            };
+        },
+        "expanded-rows.toggle": (state, payload) => {
+            let key: RowKey | undefined;
+            if (payload.rowIndex !== undefined) {
+                if (
+                    !Number.isInteger(payload.rowIndex) ||
+                    payload.rowIndex < 0 ||
+                    payload.rowIndex >= state.rowCount
+                ) {
+                    return fail("not_found", `no row ${payload.rowIndex}`);
+                }
+                key = loadedRowKey(state, payload.rowIndex);
+                if (key === undefined) {
+                    // its key is unknown until it loads
+                    return fail(
+                        "refused",
+                        `row ${payload.rowIndex} is not loaded`,
+                    );
+                }
+            } else if (isRowKey(payload.rowKey)) {
+                key = payload.rowKey;
+            } else {
+                return fail(
+                    "invalid_payload",
+                    "toggle a rowIndex, or a rowKey (a string or a finite number)",
+                );
+            }
+            const expanded = state.expandedRowKeys.includes(key);
+            const keys = expanded
+                ? state.expandedRowKeys.filter((entry) => entry !== key)
+                : [...state.expandedRowKeys, key];
+            let expandedRows: readonly number[];
+            if (payload.rowIndex !== undefined) {
+                // the toggled row alone changes: the others are where they were
+                const index = payload.rowIndex;
+                hints.set(key, index);
+                // collapsed: every row showing the key goes (a key the data repeats included)
+                expandedRows = expanded
+                    ? state.expandedRows.filter(
+                          (entry) => loadedRowKey(state, entry) !== key,
+                      )
+                    : [...state.expandedRows, index].sort((a, b) => a - b);
+            } else {
+                expandedRows = expandedRowsOf(
+                    { ...state, expandedRowKeys: keys },
+                    hints,
+                    { start: 0, end: state.rowCount },
+                );
+            }
+            const next = { ...state, expandedRowKeys: keys, expandedRows };
+            return {
+                ok: true,
+                value: { state: next, value: keys },
+            };
+        },
+        "sizes.set": (state, { rowHeight, headerRowHeight, detailHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return fail(
                     "invalid_payload",
@@ -380,10 +513,17 @@ function createHandlers<TRow, TNode>(): Handlers<TRow, TNode> {
                     "headerRowHeight must be a size",
                 );
             }
+            if (detailHeight !== undefined && !validSize(detailHeight)) {
+                return fail(
+                    "invalid_payload",
+                    "detailHeight must be a size or a function",
+                );
+            }
             const next = reconcile({
                 ...state,
                 rowHeight: rowHeight ?? state.rowHeight,
                 headerRowHeight: headerRowHeight ?? state.headerRowHeight,
+                detailHeight: detailHeight ?? state.detailHeight,
             });
             return { ok: true, value: { state: next, value: undefined } };
         },
@@ -473,7 +613,8 @@ interface Queued {
 export function createDataGridModel<TRow, TNode = unknown>(
     options: DataGridModelOptions<TRow, TNode> = {},
 ): DataGridModel<TRow, TNode> {
-    const handlers = createHandlers<TRow, TNode>();
+    const hints: RowKeyHints = new Map();
+    const handlers = createHandlers<TRow, TNode>(hints);
     const source: RowSource<TRow> =
         options.rows !== undefined || options.getRow === undefined
             ? { rows: options.rows ?? [] }
@@ -497,7 +638,11 @@ export function createDataGridModel<TRow, TNode = unknown>(
             validSortColumns(columns, options.sortColumns ?? []),
         ),
         rowsChanged: { revision: 0, start: 0, end: 0 },
+        expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
+        expandedRows: [],
+        detailHeight: options.detailHeight ?? DEFAULT_DETAIL_HEIGHT,
     });
+    state = withExpandedRows(state, hints);
     const middlewares: Middleware<TRow, TNode>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
     const queue: Queued[] = [];
@@ -664,6 +809,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
             state.sortColumns.find((entry) => entry.columnKey === columnKey),
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
+        "expanded-row-keys": () => state.expandedRowKeys,
+        "expanded-rows": () => state.expandedRows,
+        "detail-height": () => state.detailHeight,
     };
 
     const questions: {
@@ -678,6 +826,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
             rowAt(state.source, rowIndex) !== undefined,
         "column-sortable": ({ columnKey }) =>
             "column" in sortableColumn(state.columns, columnKey),
+        "row-expanded": ({ rowIndex }) =>
+            holdsRow(state.expandedRows, rowIndex),
     };
 
     const model: DataGridModel<TRow, TNode> = {
@@ -731,6 +881,8 @@ export const COMMANDS: readonly CommandName[] = [
     "rows.changed",
     "sort-columns.set",
     "sort-columns.toggle",
+    "expanded-rows.set",
+    "expanded-rows.toggle",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

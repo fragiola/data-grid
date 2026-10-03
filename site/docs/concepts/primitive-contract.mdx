@@ -31,7 +31,8 @@ into it; or a function, which receives the props and the part's state.
   [Sorting](/docs/concepts/sorting).
 - `Body` and `HeaderRow` drop a `transform` from your style: the grid moves them with it. A
   pinned column's cells drop a `transform` and the insets (`top`, `left`, `right`, `bottom`,
-  `inset`): they are sticky, the grid writes their `left`.
+  `inset`): they are sticky, the grid writes their `left`. A row's detail drops them too, for the
+  same reason.
 
 ## `className` and `style`
 
@@ -44,10 +45,12 @@ Both take a value, or a function of the part's state:
 ## Structural style only
 
 The only inline style a part sets is what places it: `position` (`sticky` on the header, the
-empty state and [pinned](/docs/concepts/pinned-columns) cells), `top`, `left`, `width`,
-`height`, the layers' `transform`, `display` (`flex` on rows with pinned columns), the root's
-`overflow`, `box-sizing`, and with [column groups](/docs/concepts/column-groups) a `z-index`
-between header rows (an upper row stays above the next). Your style is
+empty state, [pinned](/docs/concepts/pinned-columns) cells and a row's
+[detail](/docs/guides/master-detail)), `top`, `left`, `width`, `height`, the layers'
+`transform`, `display` (`flex` on rows with pinned columns), the root's `overflow`,
+`box-sizing`, with [column groups](/docs/concepts/column-groups) a `z-index` between header rows
+(an upper row stays above the next), and on a detail `margin-top` (below its row's cells) and,
+beside pinned cells, `margin-left` and `flex-shrink`. Your style is
 merged under these keys, which always win. Nothing cosmetic is ever set: see the
 [`unstyled`](/examples/unstyled) example.
 

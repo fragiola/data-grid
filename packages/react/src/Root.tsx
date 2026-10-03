@@ -4,12 +4,16 @@ import {
     createDataGridEngine,
     createDataGridModel,
     type DataGridState,
+    DEFAULT_DETAIL_HEIGHT,
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
+    type DetailHeight,
     type GridView,
+    type RowKey,
     type RowKeyGetter,
     type Size,
     type SortColumn,
+    sameRowKeys,
     sameSortColumns,
     validSortColumns,
 } from "@fragiola/data-grid";
@@ -105,6 +109,22 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onSortColumnsChange?:
             | ((sortColumns: readonly SortColumn[]) => void)
             | undefined;
+        /**
+         * the expanded rows' keys (a row's `rowKey`, else its index), controlled; pair it with
+         * `onExpandedRowKeysChange`. An expanded row shows its `DataGrid.RowDetail`
+         */
+        expandedRowKeys?: readonly RowKey[] | undefined;
+        /** the expanded rows' keys to start with, uncontrolled */
+        defaultExpandedRowKeys?: readonly RowKey[] | undefined;
+        /** the expanded rows changed (or, controlled, ask to): a row was toggled, or a command ran */
+        onExpandedRowKeysChange?:
+            | ((expandedRowKeys: readonly RowKey[]) => void)
+            | undefined;
+        /**
+         * an expanded row's detail height in pixels, or a function of the row (default 300): it
+         * adds to the row's own height
+         */
+        detailHeight?: DetailHeight<TRow> | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -172,6 +192,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
         sortColumns,
         defaultSortColumns,
         onSortColumnsChange,
+        expandedRowKeys,
+        defaultExpandedRowKeys,
+        onExpandedRowKeysChange,
+        detailHeight,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -205,6 +229,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
                     ? activePosition
                     : defaultActivePosition,
             sortColumns: sortColumns ?? defaultSortColumns,
+            expandedRowKeys: expandedRowKeys ?? defaultExpandedRowKeys,
+            detailHeight,
         });
         const position: ControlledState<TRow, CellPosition | null> = {
             prefix: "active-position.",
@@ -236,8 +262,20 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 });
             },
         };
+        const expanded: ControlledState<TRow, readonly RowKey[]> = {
+            prefix: "expanded-rows.",
+            prop: () => latest.current.expandedRowKeys,
+            read: (state) => state.expandedRowKeys,
+            same: sameRowKeys,
+            valueOf: (_, value) => value as readonly RowKey[],
+            report: (value) => latest.current.onExpandedRowKeysChange?.(value),
+            apply: (value) => {
+                model.run("expanded-rows.set", { rowKeys: value });
+            },
+        };
         bindControlled(model, flags, position);
         bindControlled(model, flags, sort);
+        bindControlled(model, flags, expanded);
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -254,7 +292,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             latest.current.onRowsEndReached?.(info),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
-        return { context, position, sort };
+        return { context, position, sort, expanded };
     });
     const { context } = grid;
     const { model, engine } = context;
@@ -313,13 +351,19 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // a prop removed goes back to the default
         const rows = rowHeight ?? DEFAULT_ROW_HEIGHT;
         const header = headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT;
-        if (rows !== state.rowHeight || header !== state.headerRowHeight) {
+        const detail = detailHeight ?? DEFAULT_DETAIL_HEIGHT;
+        if (
+            rows !== state.rowHeight ||
+            header !== state.headerRowHeight ||
+            detail !== state.detailHeight
+        ) {
             model.run("sizes.set", {
                 rowHeight: rows,
                 headerRowHeight: header,
+                detailHeight: detail,
             });
         }
-    }, [model, rowHeight, headerRowHeight]);
+    }, [model, rowHeight, headerRowHeight, detailHeight]);
 
     // and last: a controlled position valid only after the data changed (rows grown) follows now;
     // one the data made impossible was clamped by the model, and the parent is told where. A
@@ -328,6 +372,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         flags.applying.current = false;
         settleControlled(model, flags, grid.position);
         settleControlled(model, flags, grid.sort);
+        settleControlled(model, flags, grid.expanded);
     });
 
     // an uncontrolled sort to start with that the columns could not take all of (a column not
