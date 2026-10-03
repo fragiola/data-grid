@@ -1250,6 +1250,107 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("interactive cells", () => {
+            const CONTROLS = { rows: 1_000, columns: 20, controls: 1 };
+
+            const focusedTestId = (page: Page) =>
+                page.evaluate(
+                    () =>
+                        document.activeElement?.getAttribute("data-testid") ??
+                        null,
+                );
+
+            test("is one tab stop however many controls its cells hold", async ({
+                page,
+            }) => {
+                await open(page, kind, CONTROLS);
+                await page.getByTestId("before").focus();
+                await page.keyboard.press("Tab");
+                // the grid's own stop: a cell, never a control inside one
+                expect(await focused(page)).toMatchObject({ testId: null });
+                expect(
+                    await page.evaluate(() =>
+                        document.activeElement?.hasAttribute("data-row-index"),
+                    ),
+                ).toBe(true);
+                await page.keyboard.press("Tab");
+                // the app's own tab stop (row 0's C4) is one
+                expect(await focusedTestId(page)).toBe("kept");
+                await page.keyboard.press("Tab");
+                expect(await focusedTestId(page)).toBe("after");
+            });
+
+            test("Enter hands a cell's keys to its controls, Tab cycles them, Escape gives them back", async ({
+                page,
+            }) => {
+                await open(page, kind, CONTROLS);
+                await cell(page, 3, 2).click({ position: { x: 90, y: 5 } });
+                await page.keyboard.press("Enter");
+                expect(await focusedTestId(page)).toBe("edit-3");
+                await expect(cell(page, 3, 2)).toHaveAttribute(
+                    "data-interacting",
+                    "",
+                );
+                await page.keyboard.press("Tab");
+                expect(await focusedTestId(page)).toBe("open-3");
+                await page.keyboard.press("Tab");
+                expect(await focusedTestId(page)).toBe("edit-3");
+                await page.keyboard.press("Shift+Tab");
+                expect(await focusedTestId(page)).toBe("open-3");
+                await page.keyboard.press("Escape");
+                await expect(cell(page, 3, 2)).toBeFocused();
+                await expect(cell(page, 3, 2)).not.toHaveAttribute(
+                    "data-interacting",
+                    /.*/,
+                );
+            });
+
+            test("gives a field its keys, and a click on a control activates its cell", async ({
+                page,
+            }) => {
+                await open(page, kind, CONTROLS);
+                await page.getByTestId("field-4").click();
+                await expect(cell(page, 4, 3)).toHaveAttribute(
+                    "data-interacting",
+                    "",
+                );
+                await page.keyboard.type("abc");
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("Home");
+                expect(await active(page)).toEqual({
+                    rowIndex: 4,
+                    columnIndex: 3,
+                });
+                await expect(page.getByTestId("field-4")).toHaveValue("abc");
+                await page.keyboard.press("Escape");
+                await expect(cell(page, 4, 3)).toBeFocused();
+                await page.keyboard.press("ArrowDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 5,
+                    columnIndex: 3,
+                });
+                await page.getByTestId("open-7").focus();
+                expect(await active(page)).toEqual({
+                    rowIndex: 7,
+                    columnIndex: 2,
+                });
+            });
+
+            test("enters a header cell that is not sortable on Enter", async ({
+                page,
+            }) => {
+                await open(page, kind, CONTROLS);
+                const header = page.locator(
+                    '[data-grid-part="header-cell"][data-column-index="3"]',
+                );
+                await header.click({ position: { x: 5, y: 5 } });
+                await page.keyboard.press("Enter");
+                expect(await focusedTestId(page)).toBe("header-menu");
+                await page.keyboard.press("Escape");
+                await expect(header).toBeFocused();
+            });
+        });
+
         test.describe("sorting", () => {
             const SORT = { rows: 1_000, columns: 20, sort: 1 };
 
