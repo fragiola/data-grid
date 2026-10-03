@@ -359,7 +359,28 @@ const FOCUSABLE = [
 export const TAB_STOP_ATTRIBUTE = "data-grid-tab-stop";
 
 /** The keys a scroll container pages itself by. */
-const PAGE_KEYS = new Set(["PageUp", "PageDown", "Home", "End"]);
+const PAGE_KEYS = new Set([
+    "PageUp",
+    "PageDown",
+    "Home",
+    "End",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+]);
+
+/** Whether a control moves through its group with the arrows (a radio, a menu item, a tab). */
+function movesWithArrows(element: Element): boolean {
+    const role = element.getAttribute("role");
+    return (
+        (element.tagName.toUpperCase() === "INPUT" &&
+            element.getAttribute("type")?.toLowerCase() === "radio") ||
+        role === "radio" ||
+        role === "menuitem" ||
+        role === "tab"
+    );
+}
 
 /** Roles of controls with no use for the page keys (a button, a link, a box to check). */
 const PAGELESS_ROLES = new Set([
@@ -1099,12 +1120,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // its own cell: a nested grid may have one at the same indexes; a header cell spanning
         // rows carries its top row
-        const owned = viewport;
-        const cell = [
-            ...viewport.querySelectorAll<HTMLElement>(
-                cellSelector(elementPosition(position)),
-            ),
-        ].find((element) => ownerViewport(element) === owned);
+        const cell = cellElement(position);
         if (!cell) return;
         pendingFocus = false;
         const doc = viewport.ownerDocument;
@@ -1246,6 +1262,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             (element) =>
                 ownerViewport(element) === owned &&
                 cellElementOf(element) === cell &&
+                // the app's own tab stop is no control of the grid's: never cycled, never entered
+                !element.hasAttribute(TAB_STOP_ATTRIBUTE) &&
                 !element.hasAttribute("disabled") &&
                 !(
                     element.tagName === "INPUT" &&
@@ -1304,21 +1322,33 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             position !== null &&
             sameCell(interaction, position, state.header.cellAt);
         for (const control of controlsOf(cell)) {
-            if (control.hasAttribute(TAB_STOP_ATTRIBUTE) || interacting) {
-                // the app's own stop (marked after the grid took it out), or the keys' cell:
-                // its own tab index back
-                if (!ownTabIndex.has(control)) continue;
-                const own = ownTabIndex.get(control) ?? null;
-                ownTabIndex.delete(control);
-                if (own === null) control.removeAttribute("tabindex");
-                else control.setAttribute("tabindex", own);
-                continue;
-            }
-            if (control.getAttribute("tabindex") !== "-1") {
+            if (interacting) restoreTabIndex(control);
+            else if (control.getAttribute("tabindex") !== "-1") {
                 ownTabIndex.set(control, control.getAttribute("tabindex"));
-                control.setAttribute("tabindex", "-1");
+                writeTabIndex(control, "-1");
             }
         }
+        // a control the app marked as its own stop after the grid took it out: its value back
+        for (const own of cell.querySelectorAll(`[${TAB_STOP_ATTRIBUTE}]`)) {
+            restoreTabIndex(own);
+        }
+    }
+
+    /** A control's own tab index back, if the grid holds it at -1. */
+    function restoreTabIndex(control: Element) {
+        if (!ownTabIndex.has(control)) return;
+        const own = ownTabIndex.get(control) ?? null;
+        ownTabIndex.delete(control);
+        writeTabIndex(control, own);
+    }
+
+    /** What the grid wrote to a control's `tabindex`: its own change, which the observer skips. */
+    const writtenTabIndex = new WeakMap<Element, string | null>();
+
+    function writeTabIndex(control: Element, value: string | null) {
+        writtenTabIndex.set(control, value);
+        if (value === null) control.removeAttribute("tabindex");
+        else control.setAttribute("tabindex", value);
     }
 
     /** Every cell of this grid under a node (the node itself included). */
@@ -1339,9 +1369,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** The cells a set of DOM changes touched: rendered, or whose content changed. */
     function onMutations(records: readonly MutationRecord[]) {
         const touched = new Set<Element>();
+        let moved = false;
         for (const record of records) {
             const target = record.target;
             if (isElement(target)) {
+                const name = record.attributeName;
+                // the grid's own write, and a cell's own roving tab index, change no control
+                if (
+                    name === "tabindex" &&
+                    (isCellElement(target) ||
+                        writtenTabIndex.get(target) ===
+                            target.getAttribute("tabindex"))
+                ) {
+                    continue;
+                }
+                if (name === "data-row-index" || name === "data-column-index") {
+                    moved = true;
+                }
                 const holder = isCellElement(target)
                     ? target
                     : cellElementOf(target);
@@ -1351,7 +1395,27 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 for (const cell of cellsUnder(added)) touched.add(cell);
             }
         }
+        // the cell in interaction moved to another index (a keyed row re-sorted): the
+        // interaction follows the cell that holds focus, as the active cell
+        if (moved && interaction) followFocusedCell();
         for (const cell of touched) manageTabOrder(cell);
+    }
+
+    /** After cells moved: the interaction goes with the cell holding focus, or ends. */
+    function followFocusedCell() {
+        const focused = viewport?.ownerDocument.activeElement;
+        const holder = focused ? cellElementOf(focused) : null;
+        const now = holder ? cellOf(holder) : null;
+        if (
+            now &&
+            interaction &&
+            sameCell(now, interaction, state.header.cellAt)
+        ) {
+            return;
+        }
+        interaction = null;
+        if (now) enterCell(now, false);
+        else emitInteraction();
     }
 
     function emitInteraction() {
@@ -1363,7 +1427,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * Hands the keys to a cell's controls. `focus`: the first control takes focus (Enter, F2,
      * the action); a control that took focus itself keeps it. Returns whether it did.
      */
-    function enterCell(position: CellPosition, focus: boolean): boolean {
+    function enterCell(
+        position: CellPosition,
+        focus: boolean,
+        activate = true,
+    ): boolean {
         const cell = cellElement(position);
         if (!cell) return false;
         const controls = controlsOf(cell);
@@ -1371,7 +1439,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const at = cellOf(cell) ?? position;
         const active = state.activePosition;
         if (!active || !sameCell(active, at, state.header.cellAt)) {
-            model.run("active-position.set", at);
+            // asked once: a caller that asked already (a focus) waits for the answer instead
+            if (activate) model.run("active-position.set", at);
             // the cell in interaction is always the active one: a controlled parent that follows
             // later makes it so (the entry waits for it); a middleware that redirected it, never
             const now = state.activePosition;
@@ -1380,6 +1449,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return false;
             }
         }
+        const before = interaction;
         const previous = interaction ? cellElement(interaction) : null;
         interaction = at;
         pendingInteraction = null;
@@ -1390,7 +1460,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (focus && !focusFrom(controls, 0, 1)) {
             interaction = null;
             manageTabOrder(cell);
-            if (previous && previous !== cell) emitInteraction();
+            if (before) emitInteraction();
             return false;
         }
         emitInteraction();
@@ -1525,6 +1595,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function onFocusOut(event: FocusEvent) {
         const next = event.relatedTarget;
         // focus leaving the cell in interaction (elsewhere in the page, a portal): navigation
+        // focus gone from the grid: an entry waiting for its cell would pull it back, it is dropped
+        if (
+            pendingInteraction &&
+            !(isElement(next) && viewport?.contains(next)) &&
+            viewport?.ownerDocument.hasFocus() !== false
+        ) {
+            pendingInteraction = null;
+        }
         // (the window losing focus, alt-tab or the devtools, is no leaving: focus comes back)
         const windowBlur =
             next === null && viewport?.ownerDocument.hasFocus() === false;
@@ -1572,7 +1650,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     !interaction ||
                     !sameCell(interaction, cell, state.header.cellAt)
                 ) {
-                    enterCell(cell, false);
+                    // the activation was asked above: not twice (a controlled parent reports it)
+                    enterCell(cell, false, false);
                 }
             } else if (interaction) {
                 // the cell itself (or another one) took focus: back to navigation
@@ -1639,7 +1718,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 }
                 // a button or a link has no use for the page keys: the container would page
                 // itself, a far jump under scaling. A field keeps them (its caret)
-                if (PAGE_KEYS.has(event.key) && isPagelessControl(target)) {
+                // a radio, a menu item or a tab keeps its arrows (its group's own moves)
+                if (
+                    (PAGE_KEYS.has(event.key) ||
+                        (event.key === " " &&
+                            target.tagName.toUpperCase() === "A")) &&
+                    isPagelessControl(target) &&
+                    !(event.key.startsWith("Arrow") && movesWithArrows(target))
+                ) {
                     event.preventDefault();
                     return true;
                 }
@@ -1668,6 +1754,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             isCellElement(target)
         ) {
             const position = cellOf(target);
+            // a held Enter repeats: once the first entered, the rest would press the control
+            if (event.repeat && interaction) {
+                event.preventDefault();
+                return true;
+            }
             if (position && enterCell(position, true)) {
                 event.preventDefault();
                 return true;
@@ -1862,6 +1953,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     "hidden",
                     "inert",
                     TAB_STOP_ATTRIBUTE,
+                    "data-row-index",
+                    "data-column-index",
                 ],
             });
             for (const cell of cellsUnder(element)) manageTabOrder(cell);
@@ -2032,16 +2125,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "scroll-to-cell": scrollToCell,
         "scroll-to": scrollTo,
         "interact-cell": (position) => {
-            if (enterCell(position, true)) return;
-            // not rendered (out of view), no controls yet (a row loading), or a controlled parent
-            // to follow: active, and entered once its cell shows controls
             const active = state.activePosition;
             if (!active || !sameCell(active, position, state.header.cellAt)) {
                 model.run("active-position.set", position);
             }
+            if (enterCell(position, true, false)) return;
+            // not rendered (out of view), no controls yet (a row loading), or a controlled parent
+            // to follow: entered once its cell is active and shows controls
             pendingInteraction = { position, focus: true };
         },
-        "leave-cell": () => leaveCell(true),
+        "leave-cell": () => {
+            pendingInteraction = null;
+            leaveCell(true);
+        },
     };
 
     return {

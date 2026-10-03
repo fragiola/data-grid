@@ -469,3 +469,100 @@ describe("second review cases", () => {
         expect(key(byId("play"), "Home").handled).toBe(true);
     });
 });
+
+describe("epic review cases", () => {
+    it("never enters a cell whose only control is the app's own tab stop", () => {
+        const { engine, cell, key } = setup();
+        const holder = cell(
+            10,
+            2,
+            `<button ${TAB_STOP_ATTRIBUTE}>Own</button>`,
+        );
+        expect(key(holder, "Enter").handled).toBe(false);
+        expect(engine.get("interaction")).toBeNull();
+    });
+
+    it("drops a waiting entry on leave-cell", () => {
+        const { engine, cell } = setup();
+        engine.run("interact-cell", { rowIndex: 70, columnIndex: 2 });
+        engine.run("leave-cell", {});
+        cell(70, 2, '<button id="seventy">70</button>');
+        engine.adapter.commit(engine.adapter.getView());
+        expect(engine.get("interaction")).toBeNull();
+    });
+
+    it("takes a held Enter once: its repeats never press the control it focused", () => {
+        const { actions, key, byId } = setup();
+        key(actions, "Enter");
+        const repeat = key(actions, "Enter", { repeat: true });
+        expect(repeat.handled).toBe(true);
+        expect(repeat.event.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(byId("edit"));
+    });
+
+    it("keeps the arrows from paging the container on a button, never on a radio", () => {
+        const { cell, key, byId } = setup();
+        const holder = cell(
+            11,
+            2,
+            '<button id="go">Go</button><input id="pick" type="radio" name="r" />',
+        );
+        key(holder, "Enter");
+        expect(key(byId("go"), "ArrowDown").handled).toBe(true);
+        key(byId("go"), "Tab");
+        expect(key(byId("pick"), "ArrowDown").handled).toBe(false);
+    });
+
+    it("asks a controlled parent once for a click's activation", () => {
+        const { model, byId } = setup();
+        const asked = vi.fn();
+        model.use((ctx, next) => {
+            if (ctx.command === "active-position.set") {
+                asked();
+                return {
+                    ok: false,
+                    error: { code: "vetoed", message: "controlled" },
+                };
+            }
+            return next();
+        });
+        byId("edit").focus();
+        expect(asked).toHaveBeenCalledTimes(1);
+    });
+
+    it("follows the cell holding focus when its row moves to another index", async () => {
+        const { engine, model, actions, key, byId } = setup();
+        key(actions, "Enter");
+        expect(document.activeElement).toBe(byId("edit"));
+        // a keyed row re-sorted: the same element, another index
+        actions.dataset.rowIndex = "12";
+        await settled();
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: 12,
+            columnIndex: 1,
+        });
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 12,
+            columnIndex: 1,
+        });
+    });
+
+    it("tells when an entry into the cell already in interaction finds no control to focus", () => {
+        const { engine, actions, key, byId } = setup();
+        key(actions, "Enter");
+        const seen: (CellPosition | null)[] = [];
+        engine.subscribe("interaction", (value) => seen.push(value));
+        // the app's CSS hides them now: focus stays nowhere
+        byId("edit").focus = () => {};
+        byId("open").focus = () => {};
+        const owner = Object.getPrototypeOf(document);
+        const spy = vi
+            .spyOn(owner, "activeElement", "get")
+            .mockReturnValue(document.body);
+        engine.run("interact-cell", { rowIndex: 0, columnIndex: 1 });
+        spy.mockRestore();
+        expect(engine.get("interaction")).toBeNull();
+        expect(engine.adapter.getView().interaction).toBeNull();
+        expect(seen).toEqual([null]);
+    });
+});

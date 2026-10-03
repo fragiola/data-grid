@@ -64,7 +64,6 @@ export function SelectCell({ id, name }: { id: number; name: string }) {
 }
 
 /** The header's checkbox: every row, some (indeterminate) or none. */
-/** The header's checkbox: every row, some (indeterminate) or none. */
 export function SelectAllHeader() {
     const { selected, visibleIds, toggleAll } = useTable();
     const count = visibleIds.filter((id) => selected.has(id)).length;
