@@ -731,6 +731,104 @@ for (const kind of KINDS) {
                 );
             }
 
+            /**
+             * Sets `scrollLeft` and reads the pinned cells' lefts from the viewport's left edge in
+             * the same task, before any `scroll` listener runs: what a frame painted before the
+             * engine's JavaScript shows. `fired` tells whether a scroll listener ran meanwhile.
+             */
+            function leftsBeforeTheScrollEvent(
+                viewport: Locator,
+                left: number,
+                selectors: readonly string[],
+            ) {
+                return viewport.evaluate(
+                    (element, [to, targets]) => {
+                        let fired = false;
+                        const onScroll = () => {
+                            fired = true;
+                        };
+                        element.addEventListener("scroll", onScroll);
+                        element.scrollLeft = to;
+                        const view = element.getBoundingClientRect().left;
+                        const lefts = targets.map((selector) => {
+                            const target = element.querySelector(selector);
+                            if (!target) throw new Error(`no ${selector}`);
+                            return target.getBoundingClientRect().left - view;
+                        });
+                        element.removeEventListener("scroll", onScroll);
+                        return { lefts, fired, scrolled: element.scrollLeft };
+                    },
+                    [left, selectors] as const,
+                );
+            }
+
+            const PINNED_TARGETS = [
+                '[data-grid-part="cell"][data-row-index="6"][data-column-index="0"]',
+                '[data-grid-part="cell"][data-row-index="6"][data-column-index="1"]',
+                '[data-grid-part="header-cell"][data-row-index="-1"][data-column-index="0"]',
+                '[data-grid-part="header-cell"][data-row-index="-1"][data-column-index="1"]',
+            ];
+
+            test("has pinned cells in place before the scroll event runs", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 1_000,
+                    columns: 60,
+                    pinned: 2,
+                });
+                await scroll(page, viewport, 32 * 5, 1_000);
+                // small moves both ways, and one past a column
+                for (const left of [1_040, 1_000, 1_130]) {
+                    const { lefts, fired, scrolled } =
+                        await leftsBeforeTheScrollEvent(
+                            viewport,
+                            left,
+                            PINNED_TARGETS,
+                        );
+                    expect(fired).toBe(false);
+                    expect(scrolled).toBe(left);
+                    for (const [index, value] of lefts.entries()) {
+                        expect(
+                            value,
+                            `${PINNED_TARGETS[index]} at ${left}`,
+                        ).toBeCloseTo((index % 2) * 100, 0);
+                    }
+                    await settle(page);
+                }
+            });
+
+            test("has pinned cells in place before the scroll event runs, under scaled column scroll", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 100,
+                    columns: 1_000_000,
+                    maxScrollSize: 1_000_000,
+                    pinned: 2,
+                });
+                await scroll(page, viewport, 32 * 5, 333_333);
+                const start = await viewport.evaluate(
+                    (element) => element.scrollLeft,
+                );
+                // small physical moves, which do not cross a scaled jump of the content
+                for (const delta of [3, -2, 8]) {
+                    const { lefts, fired } = await leftsBeforeTheScrollEvent(
+                        viewport,
+                        start + delta,
+                        PINNED_TARGETS,
+                    );
+                    expect(fired).toBe(false);
+                    for (const [index, value] of lefts.entries()) {
+                        expect(
+                            value,
+                            `${PINNED_TARGETS[index]} at +${delta}`,
+                        ).toBeCloseTo((index % 2) * 100, 0);
+                    }
+                    await settle(page);
+                }
+            });
+
             test("keeps pinned cells and header cells in place while scrolling sideways", async ({
                 page,
             }) => {
