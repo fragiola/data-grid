@@ -49,38 +49,11 @@ function useTable(): TableState {
     return value;
 }
 
-/** Where a control sits: its cell (the header row is -1). */
-export interface CellAt {
-    rowIndex: number;
-    columnIndex: number;
-}
-
-/**
- * A control inside a cell is a tab stop only while its cell is active: Tab leaves the grid in
- * one step, and the arrows reach the cell (then Space or Enter, or Tab into the control).
- */
-export function useCellTabIndex({ rowIndex, columnIndex }: CellAt) {
-    const { active } = useGridView();
-    // explicit: an `undefined` would override a component's own default (Base UI's checkbox)
-    return active?.rowIndex === rowIndex && active.columnIndex === columnIndex
-        ? 0
-        : -1;
-}
-
 /** A row's checkbox. */
-export function SelectCell({
-    id,
-    name,
-    at,
-}: {
-    id: number;
-    name: string;
-    at: CellAt;
-}) {
+export function SelectCell({ id, name }: { id: number; name: string }) {
     const { selected, toggle } = useTable();
     return (
         <Checkbox.Root
-            tabIndex={useCellTabIndex(at)}
             aria-label={`Select ${name}`}
             checked={selected.has(id)}
             onCheckedChange={() => toggle(id)}
@@ -91,12 +64,11 @@ export function SelectCell({
 }
 
 /** The header's checkbox: every row, some (indeterminate) or none. */
-export function SelectAllHeader({ at }: { at: CellAt }) {
+export function SelectAllHeader() {
     const { selected, visibleIds, toggleAll } = useTable();
     const count = visibleIds.filter((id) => selected.has(id)).length;
     return (
         <Checkbox.Root
-            tabIndex={useCellTabIndex(at)}
             aria-label="Select all"
             checked={count > 0 && count === visibleIds.length}
             indeterminate={count > 0 && count < visibleIds.length}
@@ -139,21 +111,13 @@ export function SortLabel({
 /** A link out of a cell. */
 export function CellLink({
     href,
-    at,
     children,
 }: {
     href: string;
-    at: CellAt;
     children: ReactNode;
 }) {
     return (
-        <a
-            className={styles.link}
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            tabIndex={useCellTabIndex(at)}
-        >
+        <a className={styles.link} href={href} target="_blank" rel="noreferrer">
             {children}
         </a>
     );

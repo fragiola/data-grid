@@ -39,6 +39,7 @@ export {
     rowLeft,
     rowTop,
     rowWidth,
+    TAB_STOP_ATTRIBUTE,
 } from "./engine/engine";
 export {
     type ColumnLayout,

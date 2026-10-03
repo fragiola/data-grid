@@ -28,6 +28,9 @@ import { createRoot } from "react-dom/client";
 //   &details=1           expandable rows: C0's cell holds an expander (`expand-<row>`); a
 //                        detail (&detailHeight=200 tall) holds a grid of its own
 //                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`)
+//   &controls=1          controls in cells: C2 a button (`edit-<row>`) and a link
+//                        (`open-<row>`), C3 a field (`field-<row>`) and a header button
+//                        (`header-menu`), C4 of row 0 an app's own tab stop (`kept`)
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported, and a button before
@@ -56,6 +59,62 @@ function Expose() {
 }
 
 const getRow = (index: number): FixtureRow => ({ index });
+
+/** What `&controls=1` puts in a column's cells (and header): controls of every kind. */
+function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
+    if (columnIndex === 2) {
+        return {
+            renderCell: ({ row }) => (
+                <>
+                    <button type="button" data-testid={`edit-${row.index}`}>
+                        edit
+                    </button>{" "}
+                    <a
+                        href={`#row-${row.index}`}
+                        data-testid={`open-${row.index}`}
+                    >
+                        open
+                    </a>
+                </>
+            ),
+        };
+    }
+    if (columnIndex === 3) {
+        return {
+            renderHeaderCell: () => (
+                <>
+                    C3{" "}
+                    <button type="button" data-testid="header-menu">
+                        menu
+                    </button>
+                </>
+            ),
+            renderCell: ({ row }) => (
+                <input
+                    aria-label={`Field ${row.index}`}
+                    data-testid={`field-${row.index}`}
+                />
+            ),
+        };
+    }
+    if (columnIndex === 4) {
+        return {
+            renderCell: ({ row }) =>
+                row.index === 0 ? (
+                    <button
+                        type="button"
+                        data-testid="kept"
+                        data-grid-tab-stop=""
+                    >
+                        kept
+                    </button>
+                ) : (
+                    `${row.index}:4`
+                ),
+        };
+    }
+    return {};
+}
 
 const INNER_COLUMNS: Column<FixtureRow>[] = Array.from(
     { length: 8 },
@@ -197,6 +256,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const sort = params.get("sort") === "1";
     const pinnedCount = numberParam(params, "pinned", 0);
     const details = params.get("details") === "1";
+    const controls = params.get("controls") === "1";
     const detailHeight = numberParam(params, "detailHeight", 200);
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
@@ -213,6 +273,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                 ...(columnIndex < pinnedCount
                     ? { pinned: "start" as const }
                     : {}),
+                ...(controls ? controlColumn(columnIndex) : {}),
                 ...(sort && columnIndex === 1
                     ? {
                           renderHeaderCell: () => (
@@ -228,7 +289,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             }),
         );
         return groups ? grouped(leaves) : leaves;
-    }, [columnCount, groups, sort, pinnedCount]);
+    }, [columnCount, groups, sort, pinnedCount, controls]);
     const rowHeight = useMemo(
         () =>
             variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,

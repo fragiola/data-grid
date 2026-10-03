@@ -87,6 +87,19 @@ export function useColumnWindow<TRow>(gridRef?: DataGridRef<TRow>): AxisWindow {
     return useWindow("column-window", gridRef);
 }
 
+/** Whether a cell (at its element's position) is the one whose controls have the keys. */
+function isInteracting<TRow>(
+    view: GridView<TRow, ReactNode>,
+    cell: { readonly rowIndex: number; readonly columnIndex: number },
+): boolean {
+    const { interaction } = view;
+    return (
+        interaction !== null &&
+        interaction.rowIndex === cell.rowIndex &&
+        interaction.columnIndex === cell.columnIndex
+    );
+}
+
 /** The rows a render shows, with their data and keys. */
 export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
     const { model } = useDataGrid<TRow>();
@@ -227,6 +240,8 @@ export interface CellState {
     readonly pinned: boolean;
     /** its column is the last pinned one (for a divider or a shadow) */
     readonly pinnedEdge: boolean;
+    /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
+    readonly interacting: boolean;
 }
 
 /** A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. */
@@ -239,6 +254,7 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
         view.active?.rowIndex === cell.rowIndex &&
         view.active.columnIndex === cell.columnIndex;
     const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
+    const interacting = isInteracting(view, cell);
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -247,6 +263,7 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
             active,
             pinned,
             pinnedEdge,
+            interacting,
         },
         props: {
             role: "gridcell",
@@ -260,6 +277,7 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
                 active,
                 pinned: pinned ? "start" : undefined,
                 "pinned-edge": pinnedEdge,
+                interacting,
             }),
             style: cellStyle(
                 pinned,
@@ -369,6 +387,8 @@ export interface HeaderCellState {
     readonly pinned: boolean;
     /** it ends at the last pinned column (for a divider or a shadow) */
     readonly pinnedEdge: boolean;
+    /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
+    readonly interacting: boolean;
 }
 
 /** A header cell's state, and the props for its element. */
@@ -383,6 +403,7 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
     const group = cell.group !== undefined;
     const box = headerCellBox(view, cell);
     const sort = headerCellSort(view, cell);
+    const interacting = isInteracting(view, cell);
     const { pinned, pinnedEdge } = columnPinning(
         view,
         cell.columnIndex,
@@ -401,6 +422,7 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
             sortPriority: sort.priority,
             pinned,
             pinnedEdge,
+            interacting,
         },
         props: {
             role: "columnheader",
@@ -420,6 +442,7 @@ export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
                 "sort-priority": sort.priority,
                 pinned: pinned ? "start" : undefined,
                 "pinned-edge": pinnedEdge,
+                interacting,
             }),
             // at its row's top: a cell spanning rows reaches down past it
             style: cellStyle(pinned, box.left, box.width, box.height),

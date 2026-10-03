@@ -132,7 +132,16 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     anything else equals. A filter, the search or the sort changing goes to the first page.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
-    target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
+    target into view and moves focus with a roving tabindex. Tab leaves the grid. **Interactive
+    cells (Epic #52, I1–I5):** two modes, the engine's. Outside interaction the engine keeps the
+    controls inside its own cells at `tabindex` -1 (a MutationObserver from the viewport's window,
+    cells rendered later included; their own value kept; `data-grid-tab-stop` opts a control
+    out; a nested grid's elements are that grid's), so the grid stays one tab stop. Enter or F2
+    on a cell holding controls (Enter on a sortable header cell sorts: F2), or a control taking
+    focus, hands the cell's keys to its controls: Tab and Shift+Tab cycle them, Escape (or focus
+    leaving the cell) gives them back. The cell in interaction is always the active one
+    (`engine.get("interaction")`, the `interaction` event, `view.interaction`,
+    `interact-cell`/`leave-cell`); `data-interacting` on it. A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. ARIA: `role="grid"`,
     `aria-rowcount`/`aria-colcount` are totals, `aria-rowindex`/`aria-colindex` 1-based.
 12. **Versions (D12).** Exact versions published at least 7 days ago, checked against the registry
@@ -235,7 +244,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
-  before both (bubbling): `preventDefault` in either cancels a grid key. **Clicks too (Epic
+  before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and
+  Escape of interactive cells included. **Clicks too (Epic
   #27):** `Root` calls the engine's `click` (a header cell's sort) after the consumer's
   `onClick`, the same way. Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
