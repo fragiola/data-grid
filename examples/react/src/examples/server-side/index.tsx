@@ -1,5 +1,6 @@
 "use client";
 
+import { pageCount } from "@fragiola/data-grid/local";
 import {
     type Column,
     DataGrid,
@@ -56,14 +57,16 @@ export default function ServerSide() {
     }>({ rows: [], total: 0 });
     const [loading, setLoading] = useState(true);
 
-    // the search goes to the server once the typing pauses
+    // the search goes to the server once the typing pauses (and only when it changed: a page
+    // chosen meanwhile stays)
     useEffect(() => {
+        if (typed === search) return;
         const timer = setTimeout(() => {
             setSearch(typed);
             setPageIndex(0);
         }, 250);
         return () => clearTimeout(timer);
-    }, [typed]);
+    }, [typed, search]);
 
     useEffect(() => {
         // an answer to a query the app has moved on from is dropped
@@ -85,7 +88,7 @@ export default function ServerSide() {
         };
     }, [sortColumns, team, search, pageIndex]);
 
-    const pageCount = Math.max(1, Math.ceil(page.total / PAGE_SIZE));
+    const pages = pageCount(page.total, PAGE_SIZE);
 
     return (
         <div className={styles.frame}>
@@ -196,17 +199,15 @@ export default function ServerSide() {
                     <ChevronLeft aria-hidden />
                 </Clickable.Button>
                 <span className={styles.pageOf} data-testid="page">
-                    Page {pageIndex + 1} of {pageCount}
+                    Page {pageIndex + 1} of {pages}
                 </span>
                 <Clickable.Button
                     size="sm"
                     variant="outline"
                     aria-label="Next page"
-                    disabled={pageIndex >= pageCount - 1}
+                    disabled={pageIndex >= pages - 1}
                     onClick={() =>
-                        setPageIndex((index) =>
-                            Math.min(pageCount - 1, index + 1),
-                        )
+                        setPageIndex((index) => Math.min(pages - 1, index + 1))
                     }
                 >
                     <ChevronRight aria-hidden />

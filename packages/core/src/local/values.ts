@@ -2,8 +2,8 @@
 // the text a filter or a search looks in.
 
 /**
- * Whether a value is empty: `undefined`, `null`, `NaN`, `""` or an invalid date (sorted last,
- * never filtered by).
+ * Whether a value is empty: `undefined`, `null`, `NaN`, `""`, an empty list or an invalid date
+ * (sorted last, never filtered by).
  */
 export function isEmptyValue(value: unknown): boolean {
     return (
@@ -11,6 +11,7 @@ export function isEmptyValue(value: unknown): boolean {
         value === null ||
         value === "" ||
         (typeof value === "number" && Number.isNaN(value)) ||
+        (Array.isArray(value) && value.length === 0) ||
         (value instanceof Date && Number.isNaN(value.getTime()))
     );
 }
@@ -78,8 +79,6 @@ export function foldText(text: string): string {
     // plain ASCII has no accents to take off: the costly part skipped for most text. Lower case
     // the same way for all text, whatever the reader's locale (no Turkish dotless i)
     if (/^[\x20-\x7e]*$/.test(text)) return text.toLowerCase();
-    return text
-        .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
-        .toLowerCase();
+    // only combining marks go (the accents NFD splits off), never `^` or `` ` `` themselves
+    return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }

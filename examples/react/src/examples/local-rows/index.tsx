@@ -248,7 +248,11 @@ export default function LocalRows() {
                 <Select.Root
                     items={PAGE_SIZES}
                     value={String(local.page.size)}
-                    onValueChange={(size) => local.page.setSize(Number(size))}
+                    onValueChange={(size) => {
+                        // a cleared choice keeps the page size
+                        if (typeof size === "string")
+                            local.page.setSize(Number(size));
+                    }}
                 >
                     <Select.Trigger
                         className={styles.select}

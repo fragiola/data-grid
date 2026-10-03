@@ -33,24 +33,32 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Whether a cell's value passes a filter value, without a column's own `filter`: a text is
- * contained (case and accents aside), a list holds the value (or one of the values, for a cell
- * holding a list), anything else equals it. An empty filter value passes everything.
+ * How a filter value matches a cell's value, without a column's own `filter`: a text is contained
+ * (case and accents aside), a list holds the value (or one of the values, for a cell holding a
+ * list), anything else equals it. An empty filter value matches everything. The filter value is
+ * read once, not once per row.
  */
-export function matchesFilter(value: unknown, filterValue: unknown): boolean {
-    if (isEmptyFilter(filterValue)) return true;
+export function matcherOf(filterValue: unknown): (value: unknown) => boolean {
+    if (isEmptyFilter(filterValue)) return () => true;
     if (Array.isArray(filterValue)) {
-        const values: readonly unknown[] = Array.isArray(value)
-            ? value
-            : [value];
-        return values.some((item) =>
-            filterValue.some((wanted: unknown) => same(item, wanted)),
-        );
+        const wanted: readonly unknown[] = filterValue;
+        return (value) => {
+            const values: readonly unknown[] = Array.isArray(value)
+                ? value
+                : [value];
+            return values.some((item) => wanted.some((one) => same(item, one)));
+        };
     }
     if (typeof filterValue === "string") {
-        return foldText(textOf(value)).includes(foldText(filterValue));
+        const folded = foldText(filterValue);
+        return (value) => foldText(textOf(value)).includes(folded);
     }
-    return same(value, filterValue);
+    return (value) => same(value, filterValue);
+}
+
+/** Whether a cell's value passes a filter value (see `matcherOf`). */
+export function matchesFilter(value: unknown, filterValue: unknown): boolean {
+    return matcherOf(filterValue)(value);
 }
 
 /**
@@ -67,33 +75,56 @@ export function filterEntries<TRow, TNode>(
         const filterValue = Object.hasOwn(filters, column.key)
             ? filters[column.key]
             : undefined;
-        return isEmptyFilter(filterValue) ? [] : [{ column, filterValue }];
+        if (isEmptyFilter(filterValue)) return [];
+        const { filter } = column;
+        const passes = filter
+            ? (value: unknown, row: TRow) => filter(value, filterValue, row)
+            : (
+                  (matches) => (value: unknown) =>
+                      matches(value)
+              )(matcherOf(filterValue));
+        return [{ column, passes }];
     });
     if (active.length === 0) return entries;
     return entries.filter(({ row, index }) =>
-        active.every(({ column, filterValue }) => {
-            const value = cellValue(column, row, index);
-            return column.filter
-                ? column.filter(value, filterValue, row)
-                : matchesFilter(value, filterValue);
-        }),
+        active.every(({ column, passes }) =>
+            passes(cellValue(column, row, index), row),
+        ),
     );
+}
+
+/** A row's text for the search: every column's value as text, folded, a separator between them. */
+function searchText<TRow, TNode>(
+    { row, index }: RowEntry<TRow>,
+    columns: readonly Column<TRow, TNode>[],
+): string {
+    return columns
+        .map((column) => foldText(textOf(cellValue(column, row, index))))
+        .join("\u0000");
+}
+
+/** Every entry's text for the search, worked out once (see `searchEntries`). */
+export function searchTextsOf<TRow, TNode>(
+    entries: readonly RowEntry<TRow>[],
+    columns: readonly Column<TRow, TNode>[],
+): ReadonlyMap<RowEntry<TRow>, string> {
+    return new Map(entries.map((entry) => [entry, searchText(entry, columns)]));
 }
 
 /**
  * The entries where any column's value, as text, contains `text` (case and accents aside), in
- * order. A blank `text` keeps every entry.
+ * order. A blank `text` keeps every entry. `texts`, from `searchTextsOf`, saves working the rows'
+ * text out again on every search.
  */
 export function searchEntries<TRow, TNode>(
     entries: readonly RowEntry<TRow>[],
     text: string,
     columns: readonly Column<TRow, TNode>[],
+    texts?: ReadonlyMap<RowEntry<TRow>, string>,
 ): readonly RowEntry<TRow>[] {
     const wanted = foldText(text.trim());
     if (wanted === "") return entries;
-    return entries.filter(({ row, index }) =>
-        columns.some((column) =>
-            foldText(textOf(cellValue(column, row, index))).includes(wanted),
-        ),
+    return entries.filter((entry) =>
+        (texts?.get(entry) ?? searchText(entry, columns)).includes(wanted),
     );
 }

@@ -56,7 +56,12 @@ export function fetchPeople(query: Query) {
     return api.fetchQuery<Person>(describe(query), () => {
         const matching = sortRows(
             searchRows(
-                filterRows(everyone, { team: query.team }, schema),
+                // a team chosen from a list: an exact value (a list filter), not a text contained
+                filterRows(
+                    everyone,
+                    { team: query.team ? [query.team] : [] },
+                    schema,
+                ),
                 query.search,
                 schema,
             ),

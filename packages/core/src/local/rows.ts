@@ -7,6 +7,7 @@ import {
     type LocalFilters,
     type RowEntry,
     searchEntries,
+    searchTextsOf,
 } from "./filter";
 import { clampPageIndex, pageCount, pageOf } from "./page";
 import { sortEntries } from "./sort";
@@ -78,7 +79,7 @@ export interface LocalRowsState {
     readonly sortColumns: readonly SortColumn[];
     readonly filters: LocalFilters;
     readonly search: string;
-    /** as set: `derive` keeps it inside the pages there are */
+    /** as set: `derive` shows the last page when it is past it */
     readonly pageIndex: number;
     readonly pageSize: number | undefined;
 }
@@ -159,11 +160,6 @@ export function createLocalRows<TRow, TNode = unknown>(
         pageSize: validPageSize(options.pageSize),
     };
     const listeners = new Set<() => void>();
-    /**
-     * the page `derive` last showed when it kept the index inside fewer pages: rows growing back
-     * leave the view on that page, not on the one set before they shrank
-     */
-    let shownPageIndex: number | null = null;
 
     function update(next: Partial<LocalRowsState>, firstPage: boolean) {
         const changed = (Object.keys(next) as (keyof LocalRowsState)[]).some(
@@ -171,7 +167,6 @@ export function createLocalRows<TRow, TNode = unknown>(
         );
         if (!changed) return;
         state = { ...state, ...next, ...(firstPage ? { pageIndex: 0 } : {}) };
-        shownPageIndex = null;
         for (const listener of [...listeners]) listener();
     }
 
@@ -179,6 +174,8 @@ export function createLocalRows<TRow, TNode = unknown>(
     const entries = memo(entriesOf<TRow>);
     const filtered = memo(filterEntries<TRow, TNode>);
     const searched = memo(searchEntries<TRow, TNode>);
+    // each row's text, folded, for the search: worked out once per rows and columns, not per key
+    const texts = memo(searchTextsOf<TRow, TNode>);
     const sorted = memo(sortEntries<TRow, TNode>);
     const view = memo(
         (
@@ -213,28 +210,22 @@ export function createLocalRows<TRow, TNode = unknown>(
         },
         derive(rows, columns) {
             const columnsOf = leaves(columns);
+            const all = entries(rows);
             const ordered = sorted(
                 searched(
-                    filtered(entries(rows), state.filters, columnsOf),
+                    filtered(all, state.filters, columnsOf),
                     state.search,
                     columnsOf,
+                    state.search.trim() === ""
+                        ? undefined
+                        : texts(all, columnsOf),
                 ),
                 state.sortColumns,
                 columnsOf,
             );
-            const pageIndex = Math.min(
-                state.pageIndex,
-                shownPageIndex ?? state.pageIndex,
-            );
-            const derived = view(
-                ordered,
-                rows.length,
-                pageIndex,
-                state.pageSize,
-            );
-            if (derived.pageIndex < pageIndex)
-                shownPageIndex = derived.pageIndex;
-            return derived;
+            // pure: a page past the last shows the last; the state keeps what was set (an adapter
+            // may write the shown page back once it is on screen)
+            return view(ordered, rows.length, state.pageIndex, state.pageSize);
         },
         setSortColumns: (sortColumns) => update({ sortColumns }, true),
         setFilter: (columnKey, value) => {
@@ -257,17 +248,8 @@ export function createLocalRows<TRow, TNode = unknown>(
             update({ filters }, true);
         },
         setSearch: (search) => update({ search }, true),
-        setPageIndex: (pageIndex) => {
-            // a page asked for again is the one to show, even after the pages shrank under it
-            const asked = validPageIndex(pageIndex);
-            if (shownPageIndex !== null && asked === state.pageIndex) {
-                shownPageIndex = null;
-                state = { ...state };
-                for (const listener of [...listeners]) listener();
-                return;
-            }
-            update({ pageIndex: asked }, false);
-        },
+        setPageIndex: (pageIndex) =>
+            update({ pageIndex: validPageIndex(pageIndex) }, false),
         setPageSize: (pageSize) =>
             update({ pageSize: validPageSize(pageSize) }, true),
     };

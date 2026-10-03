@@ -197,6 +197,9 @@ describe("useLocalRows across renders", () => {
                     >
                         delete
                     </button>
+                    <button type="button" onClick={() => setRows(people)}>
+                        restore
+                    </button>
                     <DataGrid.Root columns={columns} {...local.props}>
                         <DataGrid.Grid>
                             <DataGrid.Body />
@@ -212,6 +215,9 @@ describe("useLocalRows across renders", () => {
         // Carla, Ana, Bruno left: sorted, on the last page there is
         expect(latest?.page).toMatchObject({ index: 1, count: 2 });
         expect(names(container)).toEqual(["Carla"]);
+        // the page shown is the page: rows growing back leave the view there
+        fireEvent.click(screen.getByText("restore"));
+        expect(latest?.page).toMatchObject({ index: 1, count: 3 });
         expect(latest?.sort.columns).toEqual([
             { columnKey: "name", direction: "ascending" },
         ]);

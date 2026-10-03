@@ -107,6 +107,12 @@ export function useLocalRows<TRow>(
     );
     // stage by stage, computed again only when its own inputs change: cheap on every render
     const view = local.derive(rows, columns);
+    // a page past the last (the rows shrank) showed the last one: once on screen, it is the page,
+    // so rows growing back stay there (written after the commit: a discarded render writes nothing)
+    useEffect(() => {
+        if (view.pageIndex !== state.pageIndex)
+            local.setPageIndex(view.pageIndex);
+    }, [local, view.pageIndex, state.pageIndex]);
     const last = view.pageCount - 1;
     return {
         props: {

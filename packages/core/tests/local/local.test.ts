@@ -110,7 +110,7 @@ describe("comparing values", () => {
         ]) {
             expect(isEmptyValue(value)).toBe(true);
         }
-        for (const value of [0, false, " ", [], new Date(0)]) {
+        for (const value of [0, false, " ", ["a"], new Date(0)]) {
             expect(isEmptyValue(value)).toBe(false);
         }
     });
@@ -305,6 +305,17 @@ describe("filtering", () => {
 });
 
 describe("odd input", () => {
+    it("folds ^ and ` the same in plain and accented text, and sorts an empty list last", () => {
+        expect(matchesFilter("x^2 – café", "x^2")).toBe(true);
+        expect(matchesFilter("x^2", "x^2")).toBe(true);
+        const tagged = sortRows(
+            people,
+            [{ columnKey: "tags", direction: "ascending" }],
+            [{ key: "tags", width: 100 }],
+        );
+        expect(tagged.at(-1)?.id).toBe(4);
+    });
+
     it("takes an invalid date as empty: last in a sort, nothing to search, no throw", () => {
         const dated = people.map((row) =>
             row.id === 2 ? { ...row, joined: new Date("not a date") } : row,
@@ -379,17 +390,28 @@ describe("the pipeline", () => {
         expect(local.derive(people, columns).filteredCount).toBe(5);
     });
 
-    it("keeps the page inside the pages left when the rows shrink, and there when they grow back", () => {
+    it("shows the last page when the one set is past it, without changing the state", () => {
         const local = createLocalRows<Person>({ pageSize: 2 });
         local.setPageIndex(2);
         const view = local.derive(people.slice(0, 3), columns);
         expect(view.pageIndex).toBe(1);
         expect(ids(view.rows)).toEqual([3]);
-        // the rows grow back: the view stays on the page it showed
-        expect(local.derive(people, columns).pageIndex).toBe(1);
-        // a page set again goes where it is told
-        local.setPageIndex(2);
-        expect(local.derive(people, columns).pageIndex).toBe(2);
+        // derive is pure: the state keeps what was set (an adapter writes the shown page back)
+        expect(local.state.pageIndex).toBe(2);
+    });
+
+    it("searches with each row's text worked out once per rows and columns", () => {
+        const getValue = vi.fn((row: Person) => row.name);
+        const counted: Column<Person>[] = [
+            { key: "name", width: 100, getValue },
+        ];
+        const local = createLocalRows<Person>();
+        local.setSearch("a");
+        local.derive(people, counted);
+        const reads = getValue.mock.calls.length;
+        local.setSearch("an");
+        local.derive(people, counted);
+        expect(getValue.mock.calls.length).toBe(reads);
     });
 
     it("tells its listeners on a change, never for the same state", () => {
