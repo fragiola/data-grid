@@ -56,16 +56,8 @@ const columns: Column<Company>[] = [
     {
         key: "select",
         width: 48,
-        renderHeaderCell: ({ columnIndex }) => (
-            <SelectAllHeader at={{ rowIndex: -1, columnIndex }} />
-        ),
-        renderCell: ({ row, rowIndex, columnIndex }) => (
-            <SelectCell
-                id={row.id}
-                name={row.name}
-                at={{ rowIndex, columnIndex }}
-            />
-        ),
+        renderHeaderCell: () => <SelectAllHeader />,
+        renderCell: ({ row }) => <SelectCell id={row.id} name={row.name} />,
     },
     {
         key: "name",
@@ -216,10 +208,9 @@ const columns: Column<Company>[] = [
                 Primary location
             </SortLabel>
         ),
-        renderCell: ({ row, rowIndex, columnIndex }) => (
+        renderCell: ({ row }) => (
             <CellLink
                 href={`https://en.wikipedia.org/wiki/${encodeURIComponent(row.country)}`}
-                at={{ rowIndex, columnIndex }}
             >
                 {row.country}
             </CellLink>
