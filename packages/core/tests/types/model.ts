@@ -162,6 +162,27 @@ const pinnedGroup: ColumnOrGroup<Person> = {
     pinned: "start",
     children: [pinnedColumn],
 };
+// compare and filter receive the row type; a group has neither
+const comparing: Column<Person> = {
+    key: "age",
+    width: 60,
+    compare: (a, b) => a.age - b.age,
+    filter: (value, filterValue, row) => row.age > 0 && value === filterValue,
+};
+const wrongCompare: Column<Person> = {
+    key: "total",
+    width: 60,
+    // @ts-expect-error
+    compare: (a: Order, b: Order) => a.total - b.total,
+};
+// @ts-expect-error
+const comparingGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    compare: () => 0,
+    children: [comparing],
+};
+void wrongCompare;
+void comparingGroup;
 void pinnedEnd;
 void pinnedGroup;
 

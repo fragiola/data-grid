@@ -61,6 +61,19 @@ export interface Column<TRow, TNode = unknown> {
      * columns come first, and a group's columns are all pinned or none
      */
     readonly pinned?: "start" | undefined;
+    /**
+     * how two rows compare by this column, for sorting rows in memory (`@fragiola/data-grid/local`):
+     * negative when `a` comes first. Without one, their values compare by type
+     */
+    readonly compare?: ((a: TRow, b: TRow) => number) | undefined;
+    /**
+     * whether a row passes this column's filter, for filtering rows in memory
+     * (`@fragiola/data-grid/local`): `value` is the cell's, `filterValue` what the filter was set
+     * to (never empty). Without one, a text contains, a list holds, anything else equals
+     */
+    readonly filter?:
+        | ((value: unknown, filterValue: unknown, row: TRow) => boolean)
+        | undefined;
     /** anything the app wants to keep on the column */
     readonly meta?: Readonly<Record<string, unknown>> | undefined;
     /** a column has no children: an entry with children is a {@link ColumnGroup} */
@@ -92,6 +105,9 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly sortable?: never;
     /** a group is pinned by its columns */
     readonly pinned?: never;
+    /** a group neither sorts nor filters: its columns do */
+    readonly compare?: never;
+    readonly filter?: never;
 }
 
 /** A sort's direction: the values of `aria-sort`. */
