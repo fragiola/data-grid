@@ -1,6 +1,7 @@
-import { type Axis, createAxis } from "../axis/axis";
+import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import { headerCellsIn, pinnedColumnCount } from "../header/header";
-import type { DataGridModel } from "../model/model";
+import { holdsRow, holdsRowIn } from "../model/expansion";
+import { type DataGridModel, rowAt } from "../model/model";
 import type {
     CellPosition,
     Column,
@@ -17,7 +18,10 @@ import {
     DEFAULT_MAX_SCROLL_SIZE,
     ScrollAxisState,
 } from "../viewport/scaling";
-import { type ScrollAlign, scrollTargetFor } from "../viewport/scroll-target";
+import {
+    type ScrollAlign,
+    scrollTargetForSpan,
+} from "../viewport/scroll-target";
 import {
     type AxisWindow,
     EMPTY_WINDOW,
@@ -101,6 +105,7 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly header: HeaderLayout<TRow, TNode>;
     readonly rowCount: number;
     readonly columnCount: number;
+    /** the rows' sizes and offsets: an expanded row's size holds its detail (`extraSizeOf`) */
     readonly rowAxis: Axis;
     readonly columnAxis: Axis;
     readonly columnDefs: readonly Column<TRow, TNode>[];
@@ -117,6 +122,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly pinnedColumnCount: number;
     /** their width: the column window covers the view right of it */
     readonly pinnedWidth: number;
+    /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
+    readonly expandedRows: readonly number[];
 }
 
 /** What `engine.get` reads. */
@@ -317,6 +324,30 @@ function rowAxisOf<TRow, TNode>(state: DataGridState<TRow, TNode>): Axis {
     return createAxis(state.rowCount, state.rowHeight);
 }
 
+/** The rows' axis with the expanded rows' details on top of their own heights (M2). */
+function withDetails<TRow, TNode>(
+    base: Axis,
+    state: DataGridState<TRow, TNode>,
+): Axis {
+    if (state.expandedRows.length === 0) return base;
+    const { detailHeight } = state;
+    return withExtraSizes(
+        base,
+        state.expandedRows.map((index) => {
+            const row = rowAt(state.source, index);
+            return {
+                index,
+                size:
+                    typeof detailHeight === "number"
+                        ? detailHeight
+                        : row === undefined
+                          ? 0
+                          : detailHeight(row, index),
+            };
+        }),
+    );
+}
+
 function columnAxisOf<TRow, TNode>(state: DataGridState<TRow, TNode>): Axis {
     const { columns } = state;
     return createAxis(columns.length, (index) => columns[index]?.width ?? 0);
@@ -376,7 +407,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let detachViewport: (() => void) | null = null;
 
     let state = model.state;
-    let rowAxis = rowAxisOf(state);
+    /** the rows' own heights; `rowAxis` adds the details */
+    let baseRowAxis = rowAxisOf(state);
+    let rowAxis = withDetails(baseRowAxis, state);
     let columnAxis = columnAxisOf(state);
     let width = 0;
     /** the pinned columns in effect, and their width */
@@ -562,6 +595,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             sortColumns: state.sortColumns,
             pinnedColumnCount: pinnedCount,
             pinnedWidth,
+            expandedRows: state.expandedRows,
         };
     }
 
@@ -583,8 +617,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.headerHeight !== next.headerHeight ||
             current.headerRowHeight !== next.headerRowHeight ||
             current.header !== next.header ||
-            // the visible area matters only to an empty grid: a resize alone renders nothing else
-            ((current.rowCount === 0 || next.rowCount === 0) &&
+            // the visible area matters only to an empty grid and to details (as wide as the view):
+            // a resize alone renders nothing else
+            ((current.rowCount === 0 ||
+                next.rowCount === 0 ||
+                next.expandedRows.length > 0) &&
                 (current.viewportWidth !== next.viewportWidth ||
                     current.viewportBodyHeight !== next.viewportBodyHeight)) ||
             current.rowAxis !== next.rowAxis ||
@@ -594,7 +631,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.active !== next.active ||
             current.rowsRevision !== next.rowsRevision ||
             current.sortColumns !== next.sortColumns ||
-            current.pinnedColumnCount !== next.pinnedColumnCount
+            current.pinnedColumnCount !== next.pinnedColumnCount ||
+            current.expandedRows !== next.expandedRows
         );
     }
 
@@ -866,11 +904,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rowIndex >= 0 &&
             rowIndex < rowAxis.count
         ) {
-            const target = scrollTargetFor(
-                rowAxis,
-                rowIndex,
+            // the row's cells: its detail below them is not what a move goes to
+            const start = rowAxis.offsetOf(rowIndex);
+            const target = scrollTargetForSpan(
+                start,
+                start +
+                    rowAxis.sizeOf(rowIndex) -
+                    rowAxis.extraSizeOf(rowIndex),
                 rowsY.virtual,
                 bodyHeight(),
+                rowAxis.totalSize,
                 align,
             );
             if (target !== rowsY.virtual) moves.top = rowsY.scrollTo(target);
@@ -882,11 +925,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             // into the view right of the pinned columns; a pinned one is always in view
             const from = columnsX.virtual + pinnedWidth;
-            const target = scrollTargetFor(
-                columnAxis,
-                columnIndex,
+            const start = columnAxis.offsetOf(columnIndex);
+            const target = scrollTargetForSpan(
+                start,
+                start + columnAxis.sizeOf(columnIndex),
                 from,
                 width - pinnedWidth,
+                columnAxis.totalSize,
                 align,
             );
             // compared where it was computed: a column in view moves nothing, exactly
@@ -985,7 +1030,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (state.columns.length === 0) return null;
         const rowIndex =
             state.rowCount > 0
-                ? rowWindow.visible.start
+                ? firstRowWithCellsInView()
                 : state.headerRowHeight > 0
                   ? -1
                   : null;
@@ -994,6 +1039,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rowIndex,
             columnIndex: pinnedCount > 0 ? 0 : columnWindow.visible.start,
         };
+    }
+
+    /**
+     * The first row in view whose cells are: one whose cells scrolled above the view while its
+     * detail shows is passed over (when a row follows it).
+     */
+    function firstRowWithCellsInView(): number {
+        const first = rowWindow.visible.start;
+        const cellsEnd =
+            rowAxis.offsetOf(first) +
+            rowAxis.sizeOf(first) -
+            rowAxis.extraSizeOf(first);
+        return cellsEnd <= rowsY.virtual && first + 1 < state.rowCount
+            ? first + 1
+            : first;
     }
 
     /** Whether an event comes from this grid itself, not from a grid nested in one of its cells. */
@@ -1239,24 +1299,57 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
     }
 
+    /** The row at the view's top, and how far into it the view starts. */
+    function anchorOf(axis: Axis): { rowIndex: number; within: number } | null {
+        if (axis.count === 0 || rowsY.virtual <= 0) return null;
+        const rowIndex = axis.indexAt(rowsY.virtual);
+        return { rowIndex, within: rowsY.virtual - axis.offsetOf(rowIndex) };
+    }
+
     const unsubscribeModel = model.subscribe((event) => {
         const { before, after } = event;
         state = after;
+        const detailsChanged =
+            after.expandedRows !== before.expandedRows ||
+            (after.expandedRows.length > 0 &&
+                (after.detailHeight !== before.detailHeight ||
+                    // a detail's height may be a function of its row, whose data changed
+                    (typeof after.detailHeight === "function" &&
+                        (after.source !== before.source ||
+                            (after.rowsChanged !== before.rowsChanged &&
+                                holdsRowIn(
+                                    after.expandedRows,
+                                    after.rowsChanged.start,
+                                    after.rowsChanged.end,
+                                ))))));
         if (after.rowsChanged !== before.rowsChanged) {
             // rows' data changed, and nothing else did: off screen, there is nothing to do
-            if (!rendersRows(after.rowsChanged)) return;
-            rowsRevision += 1;
+            if (!rendersRows(after.rowsChanged) && !detailsChanged) return;
+            if (rendersRows(after.rowsChanged)) rowsRevision += 1;
         }
         let fresh = false;
-        if (
+        const rowsResized =
             after.rowCount !== before.rowCount ||
-            after.rowHeight !== before.rowHeight
-        ) {
-            rowAxis =
+            after.rowHeight !== before.rowHeight;
+        if (rowsResized) {
+            baseRowAxis =
                 after.rowHeight === before.rowHeight
-                    ? rowAxis.withCount(after.rowCount)
+                    ? baseRowAxis.withCount(after.rowCount)
                     : rowAxisOf(after);
             fresh = true;
+        }
+        let anchored = false;
+        if (rowsResized || detailsChanged) {
+            const anchor = rowsResized ? null : anchorOf(rowAxis);
+            rowAxis = withDetails(baseRowAxis, after);
+            fresh = true;
+            // a row expanding or collapsing above the view keeps the view where it is (M2)
+            if (anchor) {
+                rowsY.virtual =
+                    rowAxis.offsetOf(anchor.rowIndex) +
+                    Math.min(anchor.within, rowAxis.sizeOf(anchor.rowIndex));
+                anchored = true;
+            }
         }
         if (after.columns !== before.columns) {
             columnAxis = columnAxisOf(after);
@@ -1270,6 +1363,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             fresh = true;
         }
         relayout(fresh);
+        if (anchored) {
+            // the physical scroll follows even when the total did not change (no remap moved it)
+            const top = rowsY.scrollTo(rowsY.virtual);
+            if (Math.abs(top - (viewport?.scrollTop ?? 0)) > 0.5) {
+                scrollWhenReady({ top });
+            }
+        }
         const active = after.activePosition;
         if (active && active !== before.activePosition) {
             if (focusInside()) pendingFocus = true;
@@ -1624,6 +1724,55 @@ export function ariaHeaderCellSpans<TRow, TNode>(
     return {
         ...(cell.columnSpan > 1 ? { "aria-colspan": cell.columnSpan } : {}),
         ...(cell.rowSpan > 1 ? { "aria-rowspan": cell.rowSpan } : {}),
+    };
+}
+
+/** Whether a row shows its detail (M1): loaded, and its key expanded. */
+export function rowExpanded<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): boolean {
+    return holdsRow(view.expandedRows, rowIndex);
+}
+
+/** A row's own height: its cells', without its detail. */
+export function rowCellsHeight<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): number {
+    return view.rowAxis.sizeOf(rowIndex) - view.rowAxis.extraSizeOf(rowIndex);
+}
+
+/**
+ * An expanded row's detail area in its row (M3): below its cells, as tall as its detail and as
+ * wide as the visible area. `null` while the row is collapsed.
+ */
+export function rowDetailBox<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): {
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+} | null {
+    if (!rowExpanded(view, rowIndex)) return null;
+    return {
+        top: rowCellsHeight(view, rowIndex),
+        width: view.viewportWidth,
+        height: view.rowAxis.extraSizeOf(rowIndex),
+    };
+}
+
+/**
+ * A detail's ARIA (M4): one cell of its row spanning every column, so expanding a row changes no
+ * row count or index.
+ */
+export function ariaRowDetail<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): { readonly "aria-colindex": number; readonly "aria-colspan"?: number } {
+    return {
+        "aria-colindex": 1,
+        ...(view.columnCount > 1 ? { "aria-colspan": view.columnCount } : {}),
     };
 }
 

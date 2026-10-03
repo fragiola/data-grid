@@ -1,9 +1,16 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
-export { type Axis, createAxis, type Size } from "./axis/axis";
+export {
+    type Axis,
+    type AxisExtra,
+    createAxis,
+    type Size,
+    withExtraSizes,
+} from "./axis/axis";
 export {
     ariaHeaderCellSpans,
     ariaRowCount,
+    ariaRowDetail,
     ariaRowIndex,
     columnLeft,
     columnPinning,
@@ -25,7 +32,10 @@ export {
     headerCellSort,
     pinnedInset,
     renderedWidth,
+    rowCellsHeight,
+    rowDetailBox,
     rowDisplay,
+    rowExpanded,
     rowLeft,
     rowTop,
 } from "./engine/engine";
@@ -36,6 +46,7 @@ export {
     isColumnGroup,
     layoutColumns,
 } from "./header/header";
+export { DEFAULT_DETAIL_HEIGHT } from "./model/expansion";
 export {
     COMMANDS,
     cellValue,
@@ -66,6 +77,7 @@ export type {
     DataGridModelOptions,
     DataGridState,
     DataSetPayload,
+    DetailHeight,
     GroupHeaderCellRenderProps,
     HeaderCellLayout,
     HeaderCellRenderProps,
@@ -78,6 +90,7 @@ export type {
     QuestionKey,
     QuestionMap,
     ResultOf,
+    RowKey,
     RowKeyGetter,
     RowSource,
     SortColumn,
@@ -97,7 +110,11 @@ export {
     ScrollAxisState,
     type ScrollMapping,
 } from "./viewport/scaling";
-export { type ScrollAlign, scrollTargetFor } from "./viewport/scroll-target";
+export {
+    type ScrollAlign,
+    scrollTargetFor,
+    scrollTargetForSpan,
+} from "./viewport/scroll-target";
 export {
     type AxisWindow,
     contains,
