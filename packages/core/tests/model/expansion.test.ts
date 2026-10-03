@@ -226,6 +226,22 @@ describe("expanded rows", () => {
         expect(getRow).not.toHaveBeenCalled();
     });
 
+    it("collapse every row showing a key, when the data repeats it", () => {
+        const model = createDataGridModel<Order>({
+            columns: [{ key: "id", width: 100 }],
+            rows: [
+                { id: "a", total: 0 },
+                { id: "b", total: 0 },
+                { id: "a", total: 0 },
+            ],
+            rowKey: (row) => row.id,
+        });
+        model.run("expanded-rows.toggle", { rowIndex: 0 });
+        model.run("expanded-rows.toggle", { rowIndex: 2 });
+        expect(model.get("expanded-row-keys")).toEqual([]);
+        expect(model.get("expanded-rows")).toEqual([]);
+    });
+
     it("a middleware can refuse a toggle", () => {
         const model = grid();
         model.use((ctx, next) =>

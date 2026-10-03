@@ -1,7 +1,8 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import { headerCellsIn, pinnedColumnCount } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
-import { type DataGridModel, rowAt } from "../model/model";
+import type { DataGridModel } from "../model/model";
+import { rowAt } from "../model/source";
 import type {
     CellPosition,
     Column,
@@ -601,6 +602,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         };
     }
 
+    /** Whether a view renders an expanded row (its rendered rows, or the active row). */
+    function rendersDetail(next: GridView<TRow, TNode>): boolean {
+        const { expandedRows, renderedRows, active } = next;
+        if (expandedRows.length === 0) return false;
+        return (
+            holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
+            (active !== null && holdsRow(expandedRows, active.rowIndex))
+        );
+    }
+
     function viewChanged(next: GridView<TRow, TNode>): boolean {
         const current = view;
         return (
@@ -619,13 +630,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.headerHeight !== next.headerHeight ||
             current.headerRowHeight !== next.headerRowHeight ||
             current.header !== next.header ||
-            // the visible area matters only to an empty grid and to details (as wide as the view):
-            // a resize alone renders nothing else
-            ((current.rowCount === 0 ||
-                next.rowCount === 0 ||
-                next.expandedRows.length > 0) &&
+            // the visible area matters only to an empty grid, and its width to the details on
+            // screen (as wide as the view): a resize alone renders nothing else
+            ((current.rowCount === 0 || next.rowCount === 0) &&
                 (current.viewportWidth !== next.viewportWidth ||
                     current.viewportBodyHeight !== next.viewportBodyHeight)) ||
+            (current.viewportWidth !== next.viewportWidth &&
+                rendersDetail(next)) ||
             current.rowAxis !== next.rowAxis ||
             current.columnAxis !== next.columnAxis ||
             current.columnDefs !== next.columnDefs ||
@@ -1067,7 +1078,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rowAxis.offsetOf(first) +
             rowAxis.sizeOf(first) -
             rowAxis.extraSizeOf(first);
-        return cellsEnd <= rowsY.virtual && first + 1 < state.rowCount
+        // the next row only when it is in view too (a detail may fill the view)
+        return cellsEnd <= rowsY.virtual && first + 1 < rowWindow.visible.end
             ? first + 1
             : first;
     }

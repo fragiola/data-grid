@@ -1085,6 +1085,20 @@ for (const kind of KINDS) {
                 const box = await detailBox(viewport, 0);
                 expect(box.left).toBeCloseTo(0, 0);
                 expect(box.width).toBeCloseTo(box.viewWidth, 0);
+                // painted to the view's end: nothing clips it at the last column
+                const painted = await viewport.evaluate((element) => {
+                    const target = element.querySelector(
+                        '[data-grid-part="row-detail"][data-row-index="0"]',
+                    );
+                    const rect = target?.getBoundingClientRect();
+                    if (!rect) return false;
+                    const hit = document.elementFromPoint(
+                        rect.right - 10,
+                        rect.top + rect.height / 2,
+                    );
+                    return Boolean(hit && target?.contains(hit));
+                });
+                expect(painted).toBe(true);
             });
 
             test("moves between rows' cells with the arrows, never into a detail", async ({

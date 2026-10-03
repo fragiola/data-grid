@@ -1,4 +1,5 @@
-import type { DataGridState, RowKey, RowSource } from "./types";
+import { rowAt } from "./source";
+import type { DataGridState, RowKey } from "./types";
 
 // Expanded rows (M1): the model keeps their keys, the app's state, and derives the indexes of the
 // rows shown expanded: each loaded, its key (`rowKey`, else its index) among the keys. Without a
@@ -28,11 +29,6 @@ export interface SearchRange {
     readonly end: number;
 }
 
-function rowOf<TRow>(source: RowSource<TRow>, index: number): TRow | undefined {
-    if ("rows" in source) return source.rows[index];
-    return index < source.rowCount ? source.getRow(index) : undefined;
-}
-
 /** A key the model accepts: a string, or a finite number. */
 export function isRowKey(key: unknown): key is RowKey {
     return (
@@ -56,7 +52,7 @@ export function loadedRowKey<TRow>(
 ): RowKey | undefined {
     if (!Number.isInteger(rowIndex) || rowIndex < 0) return undefined;
     if (rowIndex >= state.rowCount) return undefined;
-    const row = rowOf(state.source, rowIndex);
+    const row = rowAt(state.source, rowIndex);
     if (row === undefined) return undefined;
     return state.rowKey ? state.rowKey(row, rowIndex) : rowIndex;
 }

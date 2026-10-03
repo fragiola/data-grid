@@ -333,14 +333,26 @@ describe("keys and focus with details", () => {
     it("tabbing into the grid passes over a row whose cells scrolled away", () => {
         const { model, engine, element, render } = setup({ detailHeight: 300 });
         model.run("expanded-rows.toggle", { rowIndex: 0 });
-        engine.run("scroll-to", { top: 50 });
+        // row 0's cells above the view, its detail and row 1 in it
+        engine.run("scroll-to", { top: 150 });
         render();
-        expect(engine.get("row-window").visible.start).toBe(0);
+        const { visible } = engine.get("row-window");
+        expect(visible.start).toBe(0);
+        expect(visible.end).toBeGreaterThan(1);
         element.dispatchEvent(new FocusEvent("focusin"));
         expect(model.get("active-position")).toEqual({
             rowIndex: 1,
             columnIndex: 0,
         });
+    });
+
+    it("tabbing into a view the detail fills keeps its row: the next one is not in view", () => {
+        const { model, engine, element, render } = setup({ detailHeight: 300 });
+        model.run("expanded-rows.toggle", { rowIndex: 0 });
+        engine.run("scroll-to", { top: 50 });
+        render();
+        element.dispatchEvent(new FocusEvent("focusin"));
+        expect(model.get("active-position")?.rowIndex).toBe(0);
     });
 });
 
@@ -387,5 +399,11 @@ describe("rendering with details", () => {
         resize?.();
         expect(listener).toHaveBeenCalled();
         expect(rowDetailBox(view(), 1)?.width).toBe(400);
+        // an expanded row off screen: a resize renders nothing
+        model.run("expanded-rows.set", { rowKeys: [900] });
+        listener.mockClear();
+        size.width = 380;
+        resize?.();
+        expect(listener).not.toHaveBeenCalled();
     });
 });

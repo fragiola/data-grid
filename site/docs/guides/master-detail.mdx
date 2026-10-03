@@ -52,12 +52,10 @@ Give `Root` a `detailHeight`, a number or a function of the row, and render
 `DataGrid.RowDetail` inside each `Row`, after its cells:
 
 ```tsx title="orders.tsx"
-<DataGrid.Root
-    columns={columns}
-    rows={orders}
-    rowKey={(order) => order.id}
-    detailHeight={(order) => 40 + order.items.length * 24}
->
+// a function defined once: a new one on every render would lay the rows out again each time
+const detailHeight = (order: Order) => 40 + order.items.length * 24;
+
+<DataGrid.Root columns={columns} rows={orders} rowKey={(order) => order.id} detailHeight={detailHeight}>
     <DataGrid.Grid aria-label="Orders">
         <DataGrid.Header />
         <DataGrid.Body>

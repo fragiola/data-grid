@@ -140,6 +140,9 @@ export function Grid(props: GridProps) {
         engine.adapter.commit(view);
     }, [engine, view]);
     const empty = view.rowCount === 0;
+    // without rows, and with expanded rows (a detail is as wide as the view), the sizer spans at
+    // least the visible area: it clips what it holds
+    const wide = empty || view.expandedRows.length > 0;
     return useRenderElement("div", rest, {
         state: { rowCount: view.rowCount, columnCount: view.columnCount },
         ref: useLayer("grid"),
@@ -155,9 +158,7 @@ export function Grid(props: GridProps) {
             position: "relative",
             display: "block",
             // without rows, the sizer still spans the visible area: the empty state has room
-            width: empty
-                ? Math.max(view.width, view.viewportWidth)
-                : view.width,
+            width: wide ? Math.max(view.width, view.viewportWidth) : view.width,
             height:
                 view.headerHeight +
                 (empty
@@ -574,7 +575,7 @@ export type RowDetailProps = DivPrimitiveProps<RowDetailState> & {
  */
 export function RowDetail(props: RowDetailProps) {
     const row = useRowContext("RowDetail");
-    const detail = useRowDetail(row);
+    const { state, props: own } = useRowDetail(row);
     const view = useGridView();
     // its inset is the engine's, and the other insets would move it from its place
     const { children, ...rest } = withoutStyleKeys<
@@ -586,11 +587,12 @@ export function RowDetail(props: RowDetailProps) {
         isTableCell(rest.render) && view.columnCount > 1
             ? { colSpan: view.columnCount }
             : {};
+    const { style, ...detailProps } = own;
     const element = useRenderElement("div", rest, {
-        state: detail?.state ?? { rowIndex: row.rowIndex, height: 0 },
+        state,
         ref,
-        props: { ...detail?.props, ...spans, children },
-        style: detail?.props.style ?? {},
+        props: { ...detailProps, ...spans, children },
+        style,
     });
-    return detail ? element : null;
+    return state.expanded ? element : null;
 }

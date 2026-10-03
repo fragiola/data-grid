@@ -55,10 +55,10 @@ export {
     type DataGridModel,
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
-    rowAt,
     veto,
 } from "./model/model";
 export { sameSortColumns, validSortColumns } from "./model/sort";
+export { rowAt } from "./model/source";
 export type {
     CellPosition,
     CellRenderProps,

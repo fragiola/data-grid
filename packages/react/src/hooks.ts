@@ -275,26 +275,33 @@ export function useCell<TRow>(cell: CellInfo<TRow>): {
 /** The state of a row's detail. */
 export interface RowDetailState {
     readonly rowIndex: number;
-    /** its height: the detail height the grid was given for this row */
+    /** its row is expanded: the detail renders only meanwhile */
+    readonly expanded: boolean;
+    /** its height: the detail height the grid was given for this row (0 while collapsed) */
     readonly height: number;
 }
 
 /**
- * A row's detail (M3): `null` while the row is collapsed; else its state and the props for its
- * element. It is one cell of its row spanning every column (M4: no row count or index changes),
+ * A row's detail (M3): its state, and the props for its element (render it only while
+ * `state.expanded`). It is one cell of its row spanning every column (M4: no row count or index changes),
  * in the row's flow below its cells, sticky at the view's start (the engine writes its `left`),
  * as wide as the visible area.
  */
 export function useRowDetail<TRow>(row: RowInfo<TRow>): {
     state: RowDetailState;
     props: Record<string, unknown> & { style: React.CSSProperties };
-} | null {
+} {
     const view = useGridView<TRow>();
     const box = rowDetailBox(view, row.rowIndex);
-    if (!box) return null;
+    if (!box) {
+        return {
+            state: { rowIndex: row.rowIndex, expanded: false, height: 0 },
+            props: { style: {} },
+        };
+    }
     const flex = rowDisplay(view) === "flex";
     return {
-        state: { rowIndex: row.rowIndex, height: box.height },
+        state: { rowIndex: row.rowIndex, expanded: true, height: box.height },
         props: {
             role: "gridcell",
             ...ariaRowDetail(view),

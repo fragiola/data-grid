@@ -22,6 +22,7 @@ import {
     toggledSort,
     validSortColumns,
 } from "./sort";
+import { rowAt } from "./source";
 import type {
     CellPosition,
     Column,
@@ -120,16 +121,6 @@ type Handlers<TRow, TNode> = {
 
 function rowCountOf<TRow>(source: RowSource<TRow>): number {
     return "rows" in source ? source.rows.length : source.rowCount;
-}
-
-/** The row at `index` of a source, or `undefined` while it is not loaded. */
-export function rowAt<TRow>(
-    source: RowSource<TRow>,
-    index: number,
-): TRow | undefined {
-    if (!Number.isInteger(index) || index < 0) return undefined;
-    if ("rows" in source) return source.rows[index];
-    return index < source.rowCount ? source.getRow(index) : undefined;
 }
 
 function headerRowCountOf<TRow, TNode>(
@@ -238,13 +229,9 @@ function withExpandedRows<TRow, TNode>(
     search: SearchRange = { start: 0, end: state.rowCount },
 ): DataGridState<TRow, TNode> {
     const expandedRows = expandedRowsOf(state, hints, search);
-    return sameRows(expandedRows, state.expandedRows)
+    return sameRowKeys(expandedRows, state.expandedRows)
         ? state
         : { ...state, expandedRows };
-}
-
-function sameRows(a: readonly number[], b: readonly number[]): boolean {
-    return a.length === b.length && a.every((index, i) => index === b[i]);
 }
 
 /** The expanded keys, once each: `undefined` when one is not a key. */
@@ -490,8 +477,11 @@ function createHandlers<TRow, TNode>(
                 // the toggled row alone changes: the others are where they were
                 const index = payload.rowIndex;
                 hints.set(key, index);
+                // collapsed: every row showing the key goes (a key the data repeats included)
                 expandedRows = expanded
-                    ? state.expandedRows.filter((entry) => entry !== index)
+                    ? state.expandedRows.filter(
+                          (entry) => loadedRowKey(state, entry) !== key,
+                      )
                     : [...state.expandedRows, index].sort((a, b) => a - b);
             } else {
                 expandedRows = expandedRowsOf(
