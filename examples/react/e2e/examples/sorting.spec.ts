@@ -1,7 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
 
-// Sorting from the header (Epic #27): the grid keeps the sort and the app orders its rows by it.
+// Sorting from the header (Epic #27): the grid keeps the sort, and one hook orders the rows in
+// memory by it (Epic #47).
 
 const header = (page: Page, name: string) =>
     page.getByRole("columnheader").filter({ hasText: name });
@@ -25,21 +26,30 @@ test("starts sorted by team, and a click sorts by another column, both ways", as
     );
     const teams = await values(page, 3);
     expect(teams).toEqual(sortedBy(teams, 1));
-    await header(page, "Name").click();
-    await expect(header(page, "Name")).toHaveAttribute(
+    await header(page, "City").click();
+    await expect(header(page, "City")).toHaveAttribute(
         "aria-sort",
         "ascending",
     );
     await expect(header(page, "Team")).not.toHaveAttribute("aria-sort", /.*/);
-    const names = await values(page, 0);
-    expect(names).toEqual(sortedBy(names, 1));
-    await header(page, "Name").click();
-    await expect(header(page, "Name")).toHaveAttribute(
+    const cities = await values(page, 2);
+    expect(cities).toEqual(sortedBy(cities, 1));
+    await header(page, "City").click();
+    await expect(header(page, "City")).toHaveAttribute(
         "aria-sort",
         "descending",
     );
-    const descending = await values(page, 0);
+    const descending = await values(page, 2);
     expect(descending).toEqual(sortedBy(descending, -1));
+});
+
+test("sorts names by last name, the column's own compare", async ({ page }) => {
+    await openExample(page, "sorting");
+    await header(page, "Name").click();
+    const lastNames = (await values(page, 0)).map(
+        (name) => name.split(" ").at(-1) ?? name,
+    );
+    expect(lastNames).toEqual(sortedBy(lastNames, 1));
 });
 
 test("adds a column with Ctrl or ⌘, showing each one's priority", async ({

@@ -1,0 +1,122 @@
+---
+title: Rows in memory
+description: Sort, filter, search and page the rows you hold in the browser with one hook, or send the same state to your server.
+---
+
+The grid shows the rows it is given, in that order. When every row is in memory, one hook does
+the rest: it keeps the sort, the filters, the search and the page, and hands the grid the rows to
+show. A grid fed by a server never loads it.
+
+<Example id="local-rows" />
+
+## One hook
+
+`useLocalRows(rows, columns, options)` comes from its own entry point,
+`@fragiola/data-grid-react/local`. Spread its `props` onto `DataGrid.Root`: the current page's
+rows, and the sort, so a click on a sortable header sorts them. Give its `filter` and `page` to
+your own controls.
+
+```tsx title="people.tsx"
+import { useLocalRows } from "@fragiola/data-grid-react/local";
+
+const local = useLocalRows(people, columns, {
+    pageSize: 50,
+    defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
+});
+
+<input
+    value={local.filter.search}
+    onChange={(event) => local.filter.setSearch(event.target.value)}
+/>
+<DataGrid.Root columns={columns} {...local.props}>
+    {/* … */}
+</DataGrid.Root>
+<button type="button" disabled={!local.page.canNext} onClick={local.page.next}>
+    {local.page.index + 1} / {local.page.count}
+</button>
+```
+
+It returns:
+
+| field | holds |
+| --- | --- |
+| `props` | `rows`, `sortColumns` and `onSortColumnsChange`, for `DataGrid.Root` |
+| `rows` | the current page's rows |
+| `total`, `filteredCount` | every row given, and those passing the filters and the search |
+| `sort` | `columns`, `set`, `clear` |
+| `filter` | `values`, `set(columnKey, value)`, `clear`, `search`, `setSearch` |
+| `page` | `index`, `size`, `count`, `canPrevious`, `canNext`, `set`, `previous`, `next`, `first`, `last`, `setSize` |
+
+The options are where it starts: `pageSize` (none: a single page of every row),
+`defaultSortColumns`, `defaultFilters`, `defaultSearch`, `defaultPageIndex`. A filter, the
+search or the sort changing goes back to the first page.
+
+Keep `rows` and `columns` the same arrays between renders (outside the component, or memoised),
+as `DataGrid.Root` wants its columns: the hook works again when they change.
+
+## In stages
+
+The rows are filtered, then searched, then sorted, then paged. Each stage is worked out again only
+when its own inputs change: turning a page sorts nothing again, and a new sort filters nothing
+again.
+
+## Sorting
+
+Without anything more, a column's values compare by type: numbers by value, dates by time,
+`false` before `true`, text in the reader's order (`"item 2"` before `"item 10"`, case and
+accents aside). Empty values (`undefined`, `null`, `NaN`, `""`, an invalid date) go last, in
+either direction. Ties go to the next sorted column, then keep their order.
+
+When a column's values are not its order, give it `compare`:
+
+```tsx title="columns.tsx"
+{
+    key: "employees",
+    name: "Employees",
+    width: 150,
+    sortable: true,
+    // ranges sort by their scale, not as text
+    compare: (a, b) => SCALE.indexOf(a.employees) - SCALE.indexOf(b.employees),
+}
+```
+
+## Filtering and search
+
+`filter.set(columnKey, value)` filters a column by a value. What it matches depends on the value:
+
+| filter value | a row passes when its cell |
+| --- | --- |
+| a text | contains it, case and accents aside |
+| a list | is one of its values (or holds one, for a cell holding a list): facets |
+| a number, a boolean, a date | equals it |
+| empty (`undefined`, `null`, `""`, `[]`) | always: no filter |
+
+Filters on several columns all apply. When a column needs another rule, a range for example,
+give it `filter`: it receives the cell's value, the filter value and the row.
+
+```tsx title="columns.tsx"
+{
+    key: "salary",
+    name: "Salary",
+    width: 130,
+    // a minimum, not an equal value
+    filter: (value, minimum) =>
+        typeof value === "number" && typeof minimum === "number" && value >= minimum,
+}
+```
+
+`filter.setSearch(text)` keeps the rows where any column's value, as text, contains it.
+
+## Without React
+
+The same pipeline is framework-free in `@fragiola/data-grid/local`: `createLocalRows(options)`
+keeps the state and `derive(rows, columns)` returns the page and the counts, and `sortRows`,
+`filterRows`, `searchRows` and `pageRows` work on any array.
+
+## On a server
+
+With more rows than the browser should hold, keep the same state in your app and send it: the
+sort is grid state (`sortColumns` and `onSortColumnsChange`, the header toggles it), the filters,
+the search and the page are yours. The grid shows the page that comes back.
+
+<Example id="server-side" />

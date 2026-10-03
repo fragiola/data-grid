@@ -3,7 +3,7 @@
 
 export interface Request {
     readonly id: number;
-    readonly kind: "rows" | "page" | "tile";
+    readonly kind: "rows" | "page" | "tile" | "query";
     readonly description: string;
     /** the first item asked for (a row, or a tile's first row) */
     readonly start: number;
@@ -31,6 +31,14 @@ export interface FakeApi {
         columns: readonly [number, number],
         cellAt: (rowIndex: number, columnIndex: number) => T,
     ): Promise<T[][]>;
+    /**
+     * a query a server answers (sorted, filtered, paged): `describe` says what was asked, for the
+     * log; `answer` is the server's work
+     */
+    fetchQuery<T>(
+        describe: string,
+        answer: () => { readonly rows: readonly T[]; readonly total: number },
+    ): Promise<{ readonly rows: readonly T[]; readonly total: number }>;
     /** every request so far, oldest first */
     readonly log: readonly Request[];
     /** listens to new requests; returns the unsubscription */
@@ -96,6 +104,10 @@ export function createFakeApi(latency = 400): FakeApi {
                     ),
                 ),
             );
+        },
+        fetchQuery(describe, answer) {
+            record({ kind: "query", description: describe, start: 0, end: 0 });
+            return later(answer);
         },
         get log() {
             return log;

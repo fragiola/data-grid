@@ -12,8 +12,8 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 | --- | --- |
 | Columns pin only at the **start**: none at the end yet. | Pinned columns first ([Pinned columns](/docs/concepts/pinned-columns)). |
 | The header needs a **background and a `z-index`** to cover the rows that scroll under it. | `z-10` and an opaque background on `Header`. |
-| No built-in **selection or filtering**: the grid shows the rows it is given. | The app keeps that state and passes the rows: [`companies`](/examples/companies) selects, [`tasks`](/examples/tasks) filters by facets. |
-| **Sorting** is state only: the grid keeps the sort, never orders the rows (no local pipeline yet). | The app orders the rows it passes by `sortColumns` ([`sorting`](/examples/sorting), [`companies`](/examples/companies)). |
+| No built-in **selection**: the grid shows the rows it is given. | The app keeps that state: [`companies`](/examples/companies) selects with its own checkboxes. |
+| Sorting, filtering and pages **in memory need every row**: `useLocalRows` takes an array, not `getRow`. | Past what the browser should hold, a server does it ([`server-side`](/examples/server-side)). |
 | **Controls inside cells** (a checkbox, a link, a button) are tab stops of their own: Tab walks through them before it leaves the grid. | A `tabIndex` of -1 unless their cell is active, read from `useGridView().active` ([`companies`](/examples/companies)). |
 | Every **nested grid** is a tab stop by default. | The inner grid's tab stops only while the outer cell or row holding it is active ([Nested grids](/docs/guides/nested-grids), [`master-detail`](/examples/master-detail)). |
 | A **row's detail** is as tall as the `detailHeight` you give: heights measured from its content are not there yet. | A height per row from its data (`detailHeight` as a function of the row: [Master-detail](/docs/guides/master-detail)). |
@@ -32,9 +32,9 @@ The next steps, each its own release, in this order:
 
 ## Row operations
 
-Started: [sorting](/docs/concepts/sorting), single and multi, as grid state your app orders its
-rows by. Next: an opt-in local pipeline for data in memory (which a server-driven grid never pays
-for), filtering and pagination.
+Done: [sorting](/docs/concepts/sorting), single and multi, as grid state, and
+[rows in memory](/docs/concepts/rows-in-memory): sorted, filtered, searched and paged by one
+opt-in hook, which a server-driven grid never loads.
 
 </Step>
 

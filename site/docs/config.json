@@ -55,6 +55,10 @@
                     "path": "concepts/sorting"
                 },
                 {
+                    "label": "Rows in memory",
+                    "path": "concepts/rows-in-memory"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

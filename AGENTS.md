@@ -13,8 +13,8 @@ Other adapters may follow React, so **every piece of logic that isn't rendering 
 
 | package | name | contains | depends on |
 |---|---|---|---|
-| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM | DOM only |
-| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core | peer `react`, `react-dom` (^19) |
+| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; `/local`: the opt-in pipeline for rows in memory | DOM only |
+| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows` | peer `react`, `react-dom` (^19) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react` |
 
 ## Non-negotiable rules
@@ -68,7 +68,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
-    renderHeaderCell?, renderCell?, sortable?, pinned?, meta? }`. Without children, a header cell renders
+    renderHeaderCell?, renderCell?, sortable?, pinned?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -118,7 +118,18 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     row is at least as wide as what holds it (`rowWidth`). ARIA: a detail is one `gridcell` of
     its row (`aria-colindex` 1, `aria-colspan` every column), so counts and row indexes never
     change. Keys: the arrows move between rows' cells and scroll by a row's own height; a detail
-    has no `data-column-index`, so its keys and focus are its content's (a grid in it is its own).
+    has no `data-column-index`, so its keys and focus are its content's (a grid in it is its own). **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
+    the main ones (their built files must not contain it): `@fragiola/data-grid/local` holds the
+    framework-free pipeline (`createLocalRows` keeps the sort, filters, search and page;
+    `derive(rows, columns)` filters, searches, sorts and pages in that order, each stage
+    computed again only when its own inputs change; `sortRows`, `filterRows`, `searchRows`,
+    `pageRows`), `@fragiola/data-grid-react/local` holds `useLocalRows(rows, columns, options)`,
+    which keeps that state itself and returns `props` to spread onto `Root` (`rows`,
+    `sortColumns`, a stable `onSortColumnsChange`) and `sort`/`filter`/`page` for the app's
+    controls. Filter and page are not model state (no grid behaviour); the sort is. Values
+    compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
+    `Column.filter` override; a text filter contains (case and accents aside), a list holds,
+    anything else equals. A filter, the search or the sort changing goes to the first page.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can

@@ -4,18 +4,24 @@ import {
     type Column,
     DataGrid,
     type HeaderCellInfo,
-    type SortColumn,
     useGridView,
 } from "@fragiola/data-grid-react";
+import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { useMemo, useState } from "react";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
 const all = people(200);
 
 const columns: Column<Person>[] = [
-    { key: "name", name: "Name", width: 180, sortable: true },
+    {
+        key: "name",
+        name: "Name",
+        width: 180,
+        sortable: true,
+        // its own order: by last name (the others compare their values by type)
+        compare: (a, b) => lastName(a).localeCompare(lastName(b)),
+    },
     { key: "email", name: "Email", width: 260 },
     { key: "city", name: "City", width: 140, sortable: true },
     { key: "team", name: "Team", width: 130, sortable: true },
@@ -28,43 +34,25 @@ const columns: Column<Person>[] = [
     },
 ];
 
-/** Ordering the rows is the app's: a comparator per sortable column. */
-const compare: Record<string, (a: Person, b: Person) => number> = {
-    name: (a, b) => a.name.localeCompare(b.name),
-    city: (a, b) => a.city.localeCompare(b.city),
-    team: (a, b) => a.team.localeCompare(b.team),
-    salary: (a, b) => a.salary - b.salary,
-};
-
-/** The rows in the sort's order: the first column first, the next ones breaking ties. */
-function sortRows(rows: readonly Person[], sortColumns: readonly SortColumn[]) {
-    return [...rows].sort((a, b) => {
-        for (const { columnKey, direction } of sortColumns) {
-            const order = compare[columnKey]?.(a, b) ?? 0;
-            if (order !== 0) return direction === "ascending" ? order : -order;
-        }
-        return a.id - b.id;
-    });
+function lastName(person: Person): string {
+    return person.name.split(" ").at(-1) ?? person.name;
 }
 
 export default function Sorting() {
-    // the grid keeps the sort and asks for changes (a click, Enter or Space on a header cell;
-    // Ctrl or ⌘ adds a column); the app holds it and orders the rows it passes
-    const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([
-        { columnKey: "team", direction: "ascending" },
-    ]);
-    const rows = useMemo(() => sortRows(all, sortColumns), [sortColumns]);
+    // the rows in memory, sorted by one hook: its props give the grid the sorted rows and its
+    // sort (a click, Enter or Space on a header cell; Ctrl or ⌘ adds a column)
+    const local = useLocalRows(all, columns, {
+        defaultSortColumns: [{ columnKey: "team", direction: "ascending" }],
+    });
 
     return (
         <div className={styles.frame}>
             <DataGrid.Root
                 columns={columns}
-                rows={rows}
                 rowKey={(row) => row.id}
                 rowHeight={36}
-                sortColumns={sortColumns}
-                onSortColumnsChange={setSortColumns}
                 className={styles.root}
+                {...local.props}
             >
                 <DataGrid.Grid aria-label="People" className={styles.grid}>
                     <DataGrid.Header className={styles.header}>
