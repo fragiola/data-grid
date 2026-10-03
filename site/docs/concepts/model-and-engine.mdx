@@ -25,6 +25,7 @@ Everything has the same verbs, each taking a key and a payload:
 | `subscribe` | listens to every committed command |
 
 The commands of this version are `columns.set`, `data.set`, `rows.changed`, `sizes.set`,
+`sort-columns.set`, `sort-columns.toggle`, `expanded-rows.set`, `expanded-rows.toggle`,
 `active-position.set`, `active-position.clear` and `active-position.move`. A command never
 throws on bad input: it returns `{ ok: false, error }`.
 
@@ -109,4 +110,5 @@ The [`large-dataset`](/examples/large-dataset) example shows its windows this wa
 
 `defaultActivePosition` starts the active cell and lets the grid move it.
 `activePosition` controls it: a key press asks, through `onActivePositionChange`, and only the
-prop moves it. See the [`keyboard-navigation`](/examples/keyboard-navigation) example.
+prop moves it. See the [`keyboard-navigation`](/examples/keyboard-navigation) example. The sort
+(`sortColumns`) and the expanded rows (`expandedRowKeys`) work the same way.

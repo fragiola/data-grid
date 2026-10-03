@@ -89,6 +89,10 @@
                     "path": "guides/column-alignment"
                 },
                 {
+                    "label": "Master-detail",
+                    "path": "guides/master-detail"
+                },
+                {
                     "label": "Nested grids",
                     "path": "guides/nested-grids"
                 },

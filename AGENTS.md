@@ -102,7 +102,23 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     both ways. Stacking is the consumer's; pinned cells are their row's own children, and an
     `overflow` other than `visible`/`clip` on a row or a layer, or a row's padding or flex
     direction, breaks them. Pinned columns as wide as the view scroll with
-    the rest until it is wider.
+    the rest until it is wider. **Master-detail (Epic #41, M1–M4):** the model keeps
+    `expandedRowKeys` (keys, `rowKey` else index; `expanded-rows.set { rowKeys }`,
+    `expanded-rows.toggle { rowIndex } | { rowKey }`, `is("row-expanded", { rowIndex })`),
+    controlled or not on `Root` like the sort (`expandedRowKeys`/`defaultExpandedRowKeys`/
+    `onExpandedRowKeysChange`). A row is expanded when it is loaded and its key is expanded; the
+    model derives `expandedRows` (indexes) looking for a key where it was last seen, then only in
+    the rows the app names (a `rows.changed` range, rows added behind the same `getRow`, a new
+    source), so nothing is scanned without expanded keys. `detailHeight: number | (row, rowIndex)
+    => number` (default 300) adds to an expanded row's size in the row axis (`withExtraSizes`, a
+    sorted list over the base axis): no fake rows, indexes, windows and `getRow` unchanged; a row
+    expanding above the view keeps the view where it is. `DataGrid.RowDetail` sits inside its
+    `Row` after its cells, renders only while expanded, sticky (the engine's `detail` element,
+    `left` = −layerX) with `margin-top` = the row's own height, as wide as the view; an expanded
+    row is at least as wide as what holds it (`rowWidth`). ARIA: a detail is one `gridcell` of
+    its row (`aria-colindex` 1, `aria-colspan` every column), so counts and row indexes never
+    change. Keys: the arrows move between rows' cells and scroll by a row's own height; a detail
+    has no `data-column-index`, so its keys and focus are its content's (a grid in it is its own).
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. A consumer can
@@ -230,6 +246,9 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   the flow after `Header`, sticky on the left, as large as the visible body), has no text or role
   of its own, and `Root` and `Grid` carry `data-empty` meanwhile. With no rows, the grid's sizer
   spans at least the visible area (the view's `viewportWidth`/`viewportBodyHeight`).
+- **`RowDetail` renders only while its row is expanded (Epic #41, M3).** It holds only its
+  children (no text, no names), is a block (its content's layout is the app's), and drops a
+  consumer's insets and `transform` like a pinned cell. As a `td` it gets `colSpan`.
 - **The root is no tab stop** (`tabIndex={-1}`, some browsers make a scroll container one): the
   grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.

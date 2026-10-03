@@ -4,9 +4,9 @@ description: Put a grid inside a cell of another grid. Each keeps its own active
 ---
 
 A cell can render anything, including another `DataGrid.Root`. The two grids stay independent:
-each has its own model and engine, and each looks only at its own cells.
-
-<Example id="nested-grid" />
+each has its own model and engine, and each looks only at its own cells. The same holds for a
+grid in a row's detail: to open a grid below a row rather than inside one of its cells, see
+[Master-detail](/docs/guides/master-detail), whose example nests a grid of each order's items.
 
 ## Giving the cell room
 
@@ -38,8 +38,9 @@ default, Tab visits each rendered nested grid in page order before it leaves the
 
 To keep a single stop, render the inner grid's tab stops only while the outer cell holding it is
 active (the grid, its header cells and its cells). A `tabIndex` you pass to a part overrides the
-grid's own. Then Tab moves from the active
-outer cell into its inner grid, and Shift+Tab moves back. The example does this:
+grid's own. Then Tab moves from the active outer cell into its inner grid, and Shift+Tab moves
+back. In a cell, it looks like this (the [`master-detail`](/examples/master-detail) example does
+the same for a grid in a detail, reachable while its row is active):
 
 ```tsx title="items.tsx"
 function Items({ order, rowIndex, columnIndex }: ItemsProps) {

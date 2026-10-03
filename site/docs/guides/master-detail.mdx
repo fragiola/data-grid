@@ -1,0 +1,105 @@
+---
+title: Master-detail
+description: Let rows expand into an area below their cells that holds another grid or any component, under virtualization, from the keyboard, as divs or as a table.
+---
+
+A row can expand. An expanded row grows by its detail's height, and below its cells a detail
+area shows whatever you put there: another grid, a summary, controls. The rows keep their
+indexes, so the windows, `getRow` and `rows.changed` work as before.
+
+<Example id="master-detail" />
+
+## Expanding rows
+
+The grid keeps which rows are expanded, by their key (`rowKey`, else their index). Keyed by row,
+an expansion follows its record when you sort or filter the rows you pass. A row that is not
+loaded yet is never expanded, because its key is unknown until it loads.
+
+The control that expands a row is yours, for example a button in a cell. It runs a command and
+carries `aria-expanded`:
+
+```tsx title="expander.tsx"
+function Expander({ rowIndex }: { rowIndex: number }) {
+    const { model } = useDataGrid<Order>();
+    const expanded = model.is("row-expanded", { rowIndex });
+    return (
+        <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Hide items" : "Show items"}
+            onClick={() => model.run("expanded-rows.toggle", { rowIndex })}
+        />
+    );
+}
+```
+
+| command | does |
+| --- | --- |
+| `expanded-rows.toggle { rowIndex }` | expands a loaded row, or collapses it |
+| `expanded-rows.toggle { rowKey }` | the same, by key, whether its row is loaded or not |
+| `expanded-rows.set { rowKeys }` | replaces the expanded keys (an "expand all" is yours) |
+
+`model.is("row-expanded", { rowIndex })` tells whether a row shows its detail, and
+`model.get("expanded-row-keys")` lists the keys. A middleware can refuse a toggle, as any
+command.
+
+On `Root`, the expansion is controlled or not, like the sort: `defaultExpandedRowKeys` starts
+it, and `expandedRowKeys` with `onExpandedRowKeysChange` controls it.
+
+## The detail area
+
+Give `Root` a `detailHeight`, a number or a function of the row, and render
+`DataGrid.RowDetail` inside each `Row`, after its cells:
+
+```tsx title="orders.tsx"
+<DataGrid.Root
+    columns={columns}
+    rows={orders}
+    rowKey={(order) => order.id}
+    detailHeight={(order) => 40 + order.items.length * 24}
+>
+    <DataGrid.Grid aria-label="Orders">
+        <DataGrid.Header />
+        <DataGrid.Body>
+            <DataGrid.Rows<Order>>
+                {(row) => (
+                    <DataGrid.Row row={row}>
+                        <DataGrid.Cells />
+                        <DataGrid.RowDetail>
+                            {row.row ? <OrderItems order={row.row} /> : null}
+                        </DataGrid.RowDetail>
+                    </DataGrid.Row>
+                )}
+            </DataGrid.Rows>
+        </DataGrid.Body>
+    </DataGrid.Grid>
+</DataGrid.Root>
+```
+
+`RowDetail` renders its children only while its row is expanded. It sits below the row's own
+height, as wide as the visible area, and it stays in view while the grid scrolls sideways, with
+or without [pinned columns](/docs/concepts/pinned-columns). The row carries `data-expanded`
+meanwhile, and its box holds the detail, so a row's background covers both.
+
+The part is a block, so lay out its content inside your own element. As a table, render it as a
+`<td>` (`render={<td />}`), which then gets a `colSpan` over every column.
+
+Rows expanding or collapsing above the view keep the view where it is. A detail's height is the
+one you give: heights measured from the content are a later step.
+
+## Keys and focus
+
+- The arrows, Home, End, Page Up and Page Down move between rows' cells and never land in a
+  detail. Moving onto an expanded row brings its cells into view, not the end of its detail.
+- A detail's content owns its keys and its focus. A grid inside it is its own grid, with its own
+  active cell, and a control inside it is yours, like content in
+  [`DataGrid.Empty`](/docs/guides/empty-state).
+- Every grid is a tab stop. The example keeps the items grid in the tab order only while its
+  order's row is active, so Tab goes from the row into its items and Shift+Tab comes back, and
+  Escape in a detail returns to the row's first cell. See [Nested grids](/docs/guides/nested-grids).
+
+## ARIA
+
+A detail is one cell of its row: `role="gridcell"`, `aria-colindex="1"` and an `aria-colspan`
+over every column. Expanding a row changes no `aria-rowcount` and no `aria-rowindex`, so the
+counts stay the data's, even in a `getRow` grid whose rows load as you scroll.
