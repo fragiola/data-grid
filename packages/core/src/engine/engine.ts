@@ -177,9 +177,10 @@ export type EngineEventKey = keyof EngineEventMap;
  * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
  * pinned columns (`pinned`: `position: sticky` in their row's flow, whose `left` inset the engine
  * writes so the browser's scrolling keeps them at the view's start; their `data-column-index`
- * says which column they are, a header cell's first).
+ * says which column they are, a header cell's first), and expanded rows' details (`detail`:
+ * sticky the same way, at the view's start: as a column at offset 0 would be).
  */
-export type EngineLayer = "grid" | "header" | "body" | "pinned";
+export type EngineLayer = "grid" | "header" | "body" | "pinned" | "detail";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {
@@ -403,6 +404,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         header: new Set(),
         body: new Set(),
         pinned: new Set(),
+        detail: new Set(),
     };
     let detachViewport: (() => void) | null = null;
 
@@ -767,7 +769,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * its offset from the view's start, on every frame the browser paints while it scrolls. An
      * element without its column (`data-column-index`) is left alone.
      */
-    function writeInset(element: HTMLElement, x: number, columnAxis: Axis) {
+    function writeInset(
+        layer: "pinned" | "detail",
+        element: HTMLElement,
+        x: number,
+        columnAxis: Axis,
+    ) {
+        if (layer === "detail") {
+            // the view's start: what a column at offset 0 shows at
+            element.style.left = `${-x}px`;
+            return;
+        }
         const attribute = element.getAttribute("data-column-index");
         const columnIndex = attribute === null ? Number.NaN : Number(attribute);
         if (!Number.isInteger(columnIndex)) return;
@@ -781,7 +793,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function writeInsets(x: number, columnAxis: Axis) {
         if (pinnedFor?.x === x && pinnedFor.columnAxis === columnAxis) return;
         pinnedFor = { x, columnAxis };
-        for (const element of layers.pinned) writeInset(element, x, columnAxis);
+        for (const layer of ["pinned", "detail"] as const) {
+            for (const element of layers[layer]) {
+                writeInset(layer, element, x, columnAxis);
+            }
+        }
     }
 
     function writeLayers() {
@@ -1067,7 +1083,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function ownsKeysOf(target: EventTarget | null): boolean {
         if (target === viewport) return true;
         if (!isElement(target)) return false;
-        const owned: ReadonlySet<Element>[] = Object.values(layers);
+        // the layers that hold rows: a detail's keys are its content's (a pinned cell is a cell)
+        const owned: ReadonlySet<Element>[] = [
+            layers.grid,
+            layers.header,
+            layers.body,
+        ];
         if (owned.some((elements) => elements.has(target))) return true;
         return cellOf(target) !== null;
     }
@@ -1473,9 +1494,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (!offsets) {
                 // nothing to write for yet (a detached viewport: a root re-mounting while its
                 // cells stay): the next write is for every pinned cell
-                if (layer === "pinned") pinnedFor = null;
-            } else if (layer === "pinned") {
-                writeInset(element, offsets.x, offsets.columnAxis);
+                if (layer === "pinned" || layer === "detail") pinnedFor = null;
+            } else if (layer === "pinned" || layer === "detail") {
+                writeInset(layer, element, offsets.x, offsets.columnAxis);
             } else if (layer !== "grid") {
                 write(element, layerTransform(layer, offsets.x, offsets.y));
             }
@@ -1483,7 +1504,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 layers[layer].delete(element);
                 written.delete(element);
                 // a cell no longer pinned keeps no inset of the engine's: its adapter places it
-                if (layer === "pinned") element.style.left = "";
+                if (layer === "pinned" || layer === "detail") {
+                    element.style.left = "";
+                }
             };
         },
         getView: () => view,
@@ -1744,23 +1767,45 @@ export function rowCellsHeight<TRow, TNode>(
 }
 
 /**
- * An expanded row's detail area in its row (M3): below its cells, as tall as its detail and as
- * wide as the visible area. `null` while the row is collapsed.
+ * An expanded row's detail area in its row (M3): below its cells (`top`, its place in the row's
+ * flow), as tall as its detail and as wide as the visible area. Sticky in the flow, it is held at
+ * the view's start by the inset the engine writes (the `detail` layer); `start` moves its box to
+ * the row's start, before the pinned cells (−their width, 0 without), so that inset can reach the
+ * view's start from wherever the row is scrolled. `null` while the row is collapsed.
  */
 export function rowDetailBox<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
 ): {
     readonly top: number;
+    readonly start: number;
     readonly width: number;
     readonly height: number;
 } | null {
     if (!rowExpanded(view, rowIndex)) return null;
     return {
         top: rowCellsHeight(view, rowIndex),
+        start: view.pinnedWidth > 0 ? -view.pinnedWidth : 0,
         width: view.viewportWidth,
         height: view.rowAxis.extraSizeOf(rowIndex),
     };
+}
+
+/**
+ * A body row's width: its rendered cells' (`renderedWidth`), and for an expanded row at least
+ * what holds its detail at the view's start, as wide as the view (sticky keeps an element inside
+ * its row): in a grid narrower than the view, the row reaches the view's end.
+ */
+export function rowWidth<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): number {
+    const width = renderedWidth(view);
+    if (!rowExpanded(view, rowIndex)) return width;
+    return Math.max(
+        width,
+        view.viewportWidth - view.columnBase - rowLeft(view),
+    );
 }
 
 /**

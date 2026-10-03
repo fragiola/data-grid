@@ -5,7 +5,9 @@ export type {
     CellPosition,
     DataGridEngine,
     DataGridModel,
+    DetailHeight,
     Range,
+    RowKey,
     RowKeyGetter,
     Size,
     SortColumn,
@@ -30,6 +32,7 @@ export {
 export {
     type CellState,
     type HeaderCellState,
+    type RowDetailState,
     type RowState,
     useCell,
     useCells,
@@ -39,6 +42,7 @@ export {
     useHeaderCells,
     useHeaderRows,
     useRow,
+    useRowDetail,
     useRows,
     useRowWindow,
 } from "./hooks";
@@ -57,6 +61,7 @@ export type {
     HeaderRowsProps,
     RootProps,
     RootState,
+    RowDetailProps,
     RowProps,
     RowsProps,
 } from "./parts";

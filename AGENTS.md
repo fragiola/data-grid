@@ -190,12 +190,14 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   first, then the consumer's.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
-- **Structural inline style only**: `position` (`sticky` on the header, `Empty` and pinned
-  cells), `top`/`left`/`width`/`height`/`inset`, `transform` on the layers, `display` (also to
-  make table parts positionable, and `flex` on rows and header rows with pinned columns),
-  `overflow` on the viewport, `contain`, `box-sizing`, and `z-index` between header rows (with
-  column groups, an upper row stays above the next, which a column spanning rows reaches into).
-  Nothing cosmetic.
+- **Structural inline style only**: `position` (`sticky` on the header, `Empty`, pinned
+  cells and a row's detail), `top`/`left`/`width`/`height`/`inset`, `transform` on the layers,
+  `display` (also to make table parts positionable, and `flex` on rows and header rows with
+  pinned columns), `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
+  rows (with column groups, an upper row stays above the next, which a column spanning rows
+  reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
+  row of pinned cells, `margin-left` and `flex-shrink: 0` (its box from the row's start, never
+  shrunk). Nothing cosmetic.
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.

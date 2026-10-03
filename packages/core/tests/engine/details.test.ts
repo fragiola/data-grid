@@ -162,6 +162,7 @@ describe("details in the row axis", () => {
         expect(rowTop(current, 3)).toBe(160);
         expect(rowDetailBox(current, 2)).toEqual({
             top: 20,
+            start: 0,
             width: 500,
             height: 100,
         });
@@ -312,6 +313,21 @@ describe("keys and focus with details", () => {
             rowIndex: 0,
             columnIndex: 0,
         });
+    });
+
+    it("a key on a focusable detail itself is not the grid's", () => {
+        const { model, engine, body, keydown, render } = setup();
+        model.run("expanded-rows.toggle", { rowIndex: 1 });
+        model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
+        render();
+        const detail = body.querySelector<HTMLElement>(
+            '[data-grid-part="row-detail"]',
+        );
+        if (!detail) throw new Error("no detail");
+        detail.tabIndex = 0;
+        engine.adapter.registerLayer("detail", detail);
+        expect(keydown("ArrowDown", detail)).toBe(false);
+        expect(model.get("active-position")?.rowIndex).toBe(0);
     });
 
     it("tabbing into the grid passes over a row whose cells scrolled away", () => {

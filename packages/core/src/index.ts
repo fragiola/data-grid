@@ -38,6 +38,7 @@ export {
     rowExpanded,
     rowLeft,
     rowTop,
+    rowWidth,
 } from "./engine/engine";
 export {
     type ColumnLayout,
@@ -46,7 +47,7 @@ export {
     isColumnGroup,
     layoutColumns,
 } from "./header/header";
-export { DEFAULT_DETAIL_HEIGHT } from "./model/expansion";
+export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
     COMMANDS,
     cellValue,

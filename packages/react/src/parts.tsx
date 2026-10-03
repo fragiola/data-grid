@@ -25,6 +25,7 @@ import {
 import {
     type CellState,
     type HeaderCellState,
+    type RowDetailState,
     type RowState,
     rowStyle,
     useCell,
@@ -34,6 +35,7 @@ import {
     useHeaderCells,
     useHeaderRows,
     useRow,
+    useRowDetail,
     useRows,
 } from "./hooks";
 import {
@@ -555,4 +557,40 @@ export function Cell<TRow>(props: CellProps<TRow>) {
         props: { ...cellProps, children: content },
         style,
     });
+}
+
+export type RowDetailProps = DivPrimitiveProps<RowDetailState> & {
+    /** what the detail holds: another grid, a summary, controls (the app's own content) */
+    children?: ReactNode;
+};
+
+/**
+ * An expanded row's detail (M3): inside its `Row`, after its cells, below the row's own height;
+ * as wide as the visible area and in view while the grid scrolls sideways (sticky, the engine
+ * writes its `left`). It renders only while its row is expanded (`expanded-rows.toggle`, the
+ * row's `data-expanded`), and holds only its children: no text and no names. One cell of its row
+ * spanning every column (`role="gridcell"`). Its keys and focus are its content's, never the
+ * grid's: a grid inside it is its own grid. A `<td>` through `render`, which then gets `colSpan`.
+ */
+export function RowDetail(props: RowDetailProps) {
+    const row = useRowContext("RowDetail");
+    const detail = useRowDetail(row);
+    const view = useGridView();
+    // its inset is the engine's, and the other insets would move it from its place
+    const { children, ...rest } = withoutStyleKeys<
+        RowDetailState,
+        RowDetailProps
+    >(props, PINNED_KEYS);
+    const ref = useLayer("detail");
+    const spans =
+        isTableCell(rest.render) && view.columnCount > 1
+            ? { colSpan: view.columnCount }
+            : {};
+    const element = useRenderElement("div", rest, {
+        state: detail?.state ?? { rowIndex: row.rowIndex, height: 0 },
+        ref,
+        props: { ...detail?.props, ...spans, children },
+        style: detail?.props.style ?? {},
+    });
+    return detail ? element : null;
 }
