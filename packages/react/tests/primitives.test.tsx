@@ -230,6 +230,38 @@ describe("the primitive contract", () => {
         }
     });
 
+    it("applies only structural inline style with pinned columns: sticky cells, flex rows", () => {
+        const { container } = render(
+            <DataGrid.Root
+                columns={columns.map((column, index) =>
+                    index === 0 ? { ...column, pinned: "start" } : column,
+                )}
+                rows={people}
+                rowHeight={20}
+            >
+                <DataGrid.Grid aria-label="People">
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const pinned = container.querySelectorAll<HTMLElement>("[data-pinned]");
+        expect(pinned.length).toBeGreaterThan(1);
+        for (const element of pinned) {
+            expect(element.style.position).toBe("sticky");
+        }
+        for (const element of container.querySelectorAll<HTMLElement>(
+            "[data-grid-part]",
+        )) {
+            for (const property of [...element.style]) {
+                expect(
+                    STRUCTURAL.has(property),
+                    `${element.dataset.gridPart}: ${property}`,
+                ).toBe(true);
+            }
+        }
+    });
+
     it("sets no accessible name of its own", () => {
         const { container } = render(
             <DataGrid.Root columns={columns} rows={people}>

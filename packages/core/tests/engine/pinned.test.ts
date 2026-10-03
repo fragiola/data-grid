@@ -8,13 +8,16 @@ import {
     createDataGridEngine,
     createDataGridModel,
     headerCellBox,
+    pinnedInset,
+    renderedWidth,
+    rowDisplay,
     rowLeft,
 } from "../../src";
 
-// Pinned columns at the start (Epic #31, P1–P7): the leading `pinned: "start"` columns are always
-// rendered, the column window covers the view right of them, the engine keeps their cells at the
-// view's start (a `pinned` element's transform, unscaled and scaled), and bringing a cell into
-// view leaves it right of them.
+// Pinned columns at the start (Epic #31, P1–P7; Epic #38): the leading `pinned: "start"` columns
+// are always rendered, the column window covers the view right of them, their cells are sticky in
+// their row's flow at the inset the engine writes (written only when the layers' offset moves,
+// unscaled and scaled), and bringing a cell into view leaves it right of them.
 
 interface Row {
     id: number;
@@ -101,12 +104,19 @@ function setup(
         viewport.dispatchEvent(new Event("scroll"));
         commit();
     };
-    /** a pinned cell's element, as an adapter registers it */
-    const pinnedCell = () => {
+    /** a pinned cell's element, as an adapter registers it (it carries its column) */
+    const pinnedCell = (columnIndex = 0) => {
         const element = document.createElement("div");
+        element.setAttribute("data-column-index", String(columnIndex));
         body.append(element);
         engine.adapter.registerLayer("pinned", element);
         return element;
+    };
+    const wheel = (deltaX: number) => {
+        viewport.dispatchEvent(
+            new WheelEvent("wheel", { deltaX, cancelable: true }),
+        );
+        commit();
     };
     return {
         model,
@@ -119,10 +129,33 @@ function setup(
         },
         scroll,
         scrollLeft,
+        wheel,
         commit,
         body,
         pinnedCell,
     };
+}
+
+/** The x a layer's transform moves it by. */
+function layerX(layer: HTMLElement): number {
+    const match = /translate3d\(([-\d.e]+)px/.exec(layer.style.transform);
+    if (!match) throw new Error(`no transform: ${layer.style.transform}`);
+    return Number(match[1]);
+}
+
+/** A pinned cell's sticky inset, as the engine wrote it. */
+function inset(cell: HTMLElement): number {
+    if (!cell.style.left.endsWith("px")) throw new Error("no inset");
+    return Number.parseFloat(cell.style.left);
+}
+
+/** Records the writes to elements' inline style until `takeRecords`. */
+function styleWrites(...elements: HTMLElement[]) {
+    const observer = new MutationObserver(() => {});
+    for (const element of elements) {
+        observer.observe(element, { attributeFilter: ["style"] });
+    }
+    return observer;
 }
 
 describe("validation", () => {
@@ -208,70 +241,155 @@ describe("the view", () => {
 });
 
 describe("placement", () => {
-    it("moves a pinned cell back by what its layer scrolled, without a new view", () => {
-        const { view, scrollLeft, pinnedCell, body } = setup();
-        const cell = pinnedCell();
-        // the rendered columns start at column 2 (200px): the layer is moved right by that much
-        expect(cell.style.transform).toBe("translate3d(-200px, 0px, 0px)");
-        const before = view();
-        scrollLeft(50);
-        // inside the overscan: the same view, only the engine's writes moved
-        expect(view()).toBe(before);
-        expect(cell.style.transform).toBe("translate3d(-150px, 0px, 0px)");
-        // where the browser shows column 1: its left in the layer, moved by the layer and by its
-        // own transform, less the scroll: its offset from the view's start
-        const layerX = Number(
-            /translate3d\(([-\d.]+)px/.exec(body.style.transform)?.[1],
-        );
-        const ownX = Number(
-            /translate3d\(([-\d.]+)px/.exec(cell.style.transform)?.[1],
-        );
-        // a pinned cell sits at its own offset after the row's start, which is the pinned
-        // columns' width before the layer
-        expect(rowLeft(view())).toBe(-200);
-        expect(columnLeft(view(), 1)).toBe(300);
-        expect(
-            rowLeft(view()) + columnLeft(view(), 1) + layerX + ownX - 50,
-        ).toBe(100);
-        // and a column that scrolls, where it always was
-        const scrolling = columnLeft(view(), 3);
-        expect(rowLeft(view()) + scrolling + layerX - 50).toBe(300 - 50);
-        // a cell registered later starts where the others are
-        expect(pinnedCell().style.transform).toBe(
-            "translate3d(-150px, 0px, 0px)",
-        );
+    /**
+     * Where the browser shows a pinned cell, from the view's start, as sticky resolves it: at the
+     * scroll plus its inset in layout, unless that is before its place in the row's flow or past
+     * the row's end (sticky keeps it inside its row), then moved by its layer's transform.
+     */
+    function shownAt(
+        view: ReturnType<ReturnType<typeof setup>["view"]>,
+        columnIndex: number,
+        scroll: number,
+        cellInset: number,
+        x: number,
+    ) {
+        const offset = view.columnAxis.offsetOf(columnIndex);
+        const start = rowLeft(view) + offset;
+        const end =
+            rowLeft(view) +
+            renderedWidth(view) -
+            view.columnAxis.sizeOf(columnIndex);
+        const layout = Math.min(Math.max(scroll + cellInset, start), end);
+        return layout + x - scroll;
+    }
+
+    it("writes a pinned cell's sticky inset: its offset less the layers' x", () => {
+        const { view, body, pinnedCell } = setup();
+        const a = pinnedCell(0);
+        const b = pinnedCell(1);
+        // the rendered columns start at column 2 (200px): the layers are moved right by that much
+        expect(layerX(body)).toBe(200);
+        expect(a.style.left).toBe("-200px");
+        expect(b.style.left).toBe("-100px");
+        expect(pinnedInset(view().columnAxis, 1, 200)).toBe(-100);
+        // no transform of the engine's on a pinned cell any more
+        expect(a.style.transform).toBe("");
     });
 
-    it("stays at the view's start under scaled column scroll", () => {
+    it("writes nothing for pinned cells while scrolling inside the rendered window", () => {
+        const { view, body, scrollLeft, pinnedCell } = setup();
+        const cells = [pinnedCell(0), pinnedCell(1)];
+        const before = view();
+        const writes = styleWrites(body, ...cells);
+        for (const left of [10, 50, 99.5, 60, 0]) {
+            scrollLeft(left);
+            // inside the overscan: the same view, and not a write to a pinned cell or a layer
+            expect(view()).toBe(before);
+            expect(writes.takeRecords()).toEqual([]);
+            for (const [columnIndex, cell] of cells.entries()) {
+                expect(
+                    shownAt(
+                        view(),
+                        columnIndex,
+                        left,
+                        inset(cell),
+                        layerX(body),
+                    ),
+                ).toBe(columnIndex * 100);
+            }
+        }
+        writes.disconnect();
+    });
+
+    it("rewrites them with a new column window, where they still show", () => {
+        const { view, body, scrollLeft, pinnedCell } = setup();
+        const cells = [pinnedCell(0), pinnedCell(1)];
+        const before = view();
+        scrollLeft(2_345);
+        expect(view()).not.toBe(before);
+        expect(layerX(body)).toBe(view().columnBase);
+        for (const [columnIndex, cell] of cells.entries()) {
+            expect(inset(cell)).toBe(columnIndex * 100 - view().columnBase);
+            expect(
+                shownAt(view(), columnIndex, 2_345, inset(cell), layerX(body)),
+            ).toBe(columnIndex * 100);
+        }
+        // a cell registered later starts where the others are
+        expect(pinnedCell(1).style.left).toBe(cells[1]?.style.left);
+    });
+
+    it("keeps them inside their row through a scroll the engine has not rendered yet, both ways", () => {
+        const { engine, view, size, body, scrollLeft, pinnedCell } = setup();
+        const cells = [pinnedCell(0), pinnedCell(1)];
+        scrollLeft(2_000);
+        // scrolled back to the rendered window's start: the next step left renders a new window,
+        // the least room there is on the left
+        scrollLeft(1_950);
+        const { visible, rendered } = engine.get("column-window");
+        expect(visible.start).toBe(rendered.start);
+        // the browser scrolls, the scroll event (and the engine) comes a frame later: the insets
+        // and the layers stay as written, sticky follows the scroll. The area that scrolls is
+        // 300px wide: a larger step shows no cell of the window anyway
+        const x = layerX(body);
+        const room = size.width - 200;
+        for (const delta of [-room, -150, 150, room]) {
+            for (const [columnIndex, cell] of cells.entries()) {
+                expect(
+                    shownAt(view(), columnIndex, 1_950 + delta, inset(cell), x),
+                    `column ${columnIndex}, ${delta}`,
+                ).toBe(columnIndex * 100);
+            }
+        }
+    });
+
+    it("lays the rows out to hold them: their width and the rendered columns' before the layer, as a flex container", () => {
+        const { view } = setup();
+        // 200px pinned, columns 2 to 6 rendered (400px): the row starts 600px before its layer
+        expect(view().renderedColumns).toEqual({ start: 2, end: 6 });
+        expect(rowLeft(view())).toBe(-600);
+        expect(rowDisplay(view())).toBe("flex");
+        // a pinned column at its place in the row's flow, one that scrolls from the base
+        expect(columnLeft(view(), 1)).toBe(100);
+        expect(columnLeft(view(), 3)).toBe(300 - 200 + 600);
+        // from the row's start to the last rendered column's end
+        expect(renderedWidth(view())).toBe(600 - 200 + 600);
+    });
+
+    it("stays at the view's start under scaled column scroll, written with the engine's own moves", () => {
         // 1,000 columns of 100px under a cap of 20,000px: scaled
         const wide: Column<Row>[] = Array.from({ length: 1_000 }, (_, i) =>
             column(`c${i}`, i < 2),
         );
-        const { view, scrollLeft, pinnedCell, body } = setup({
+        const { view, scroll, scrollLeft, wheel, pinnedCell, body } = setup({
             columns: wide,
             maxScrollSize: 20_000,
         });
-        const cell = pinnedCell();
-        for (const left of [0, 7_777, 19_500]) {
-            scrollLeft(left);
-            const layerX = Number(
-                /translate3d\(([-\d.]+)px/.exec(body.style.transform)?.[1],
-            );
-            const ownX = Number(
-                /translate3d\(([-\d.]+)px/.exec(cell.style.transform)?.[1],
-            );
-            // no number near the browser's limits: the base follows the view
-            expect(Math.abs(ownX)).toBeLessThan(10_000);
-            for (const columnIndex of [0, 1]) {
-                // where the browser shows it: in the layer, moved by both, less the scroll
+        const cells = [pinnedCell(0), pinnedCell(1)];
+        const check = () => {
+            for (const [columnIndex, cell] of cells.entries()) {
+                // no number near the browser's limits: within the physical scroll
+                expect(Math.abs(inset(cell))).toBeLessThanOrEqual(20_000);
                 expect(
-                    rowLeft(view()) +
-                        columnLeft(view(), columnIndex) +
-                        layerX +
-                        ownX -
-                        left,
+                    shownAt(
+                        view(),
+                        columnIndex,
+                        scroll.left,
+                        inset(cell),
+                        layerX(body),
+                    ),
                 ).toBeCloseTo(columnIndex * 100, 5);
             }
+        };
+        for (const left of [0, 7_777, 19_500]) {
+            scrollLeft(left);
+            check();
+        }
+        scrollLeft(7_777);
+        // the wheel: the engine moves the virtual offset exactly and sets the scroll itself; the
+        // layers' x moves with it, and the insets are written in the same task, before any frame
+        for (const delta of [40, 40, -25, 3]) {
+            wheel(delta);
+            check();
         }
     });
 });
@@ -354,15 +472,18 @@ describe("a view too narrow for the pinned columns", () => {
 });
 
 describe("a pinned cell let go", () => {
-    it("keeps no transform of the engine's", () => {
+    it("keeps no inset of the engine's, and is not written any more", () => {
         const { engine, scrollLeft, body } = setup();
         const element = document.createElement("div");
+        element.setAttribute("data-column-index", "0");
         body.append(element);
         const release = engine.adapter.registerLayer("pinned", element);
-        scrollLeft(50);
-        expect(element.style.transform).not.toBe("");
+        expect(element.style.left).toBe("-200px");
         release();
-        expect(element.style.transform).toBe("");
+        expect(element.style.left).toBe("");
+        // a new column window: its adapter places it now
+        scrollLeft(2_500);
+        expect(element.style.left).toBe("");
     });
 });
 

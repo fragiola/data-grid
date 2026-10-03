@@ -167,8 +167,10 @@ export interface EngineEventMap {
 export type EngineEventKey = keyof EngineEventMap;
 
 /**
- * The elements whose geometry the engine writes: the layers, and the cells of pinned columns
- * (`pinned`: the engine keeps them at the visible start while the layers scroll sideways).
+ * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
+ * pinned columns (`pinned`: `position: sticky` in their row's flow, whose `left` inset the engine
+ * writes so the browser's scrolling keeps them at the view's start; their `data-column-index`
+ * says which column they are, a header cell's first).
  */
 export type EngineLayer = "grid" | "header" | "body" | "pinned";
 
@@ -695,32 +697,62 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         element.style.transform = transform;
     }
 
-    /** The layers' offsets for the view on screen: what is in view is the virtual offset's content. */
-    /** Each layer's transform for the view on screen (none before one is committed). */
-    function layerTransforms(): Partial<Record<EngineLayer, string>> {
-        if (!viewport || !committed) return {};
-        const x = columnsX.layerOffset(
-            committed.columnBase,
-            viewport.scrollLeft,
-        );
-        const y = rowsY.layerOffset(committed.rowBase, viewport.scrollTop);
+    /**
+     * The layers' offsets for the view on screen, and its column axis (none before one is
+     * committed): what is in view is the virtual offset's content, wherever the physical scroll
+     * stands.
+     */
+    function layerOffsets(): { x: number; y: number; columnAxis: Axis } | null {
+        if (!viewport || !committed) return null;
         return {
-            body: `translate3d(${x}px, ${y}px, 0px)`,
-            header: `translate3d(${x}px, 0px, 0px)`,
-            // a pinned cell sits at its own offset in its row (`columnLeft`) and moves back by
-            // what its layer moved: it stays at that offset from the view's start, scaled or not.
-            // Both numbers stay small (the base follows the view): CSS never sees an offset near
-            // its limits
-            pinned: `translate3d(${columnsX.virtual - committed.columnBase}px, 0px, 0px)`,
+            x: columnsX.layerOffset(committed.columnBase, viewport.scrollLeft),
+            y: rowsY.layerOffset(committed.rowBase, viewport.scrollTop),
+            columnAxis: committed.columnAxis,
         };
     }
 
+    /** A layer's transform for offsets `x` and `y`: the header moves with the columns only. */
+    function layerTransform(
+        layer: "body" | "header",
+        x: number,
+        y: number,
+    ): string {
+        return `translate3d(${x}px, ${layer === "body" ? y : 0}px, 0px)`;
+    }
+
+    /** what the pinned cells' insets were last written for: the layers' `x` and the column axis */
+    let pinnedFor: { x: number; columnAxis: Axis } | null = null;
+
+    /**
+     * Writes a pinned cell's sticky inset for the layers' `x`: its column's offset less `x`.
+     * Sticky is resolved in layout, before the layer's transform moves it by `x`, so it shows at
+     * its offset from the view's start, on every frame the browser paints while it scrolls. An
+     * element without its column (`data-column-index`) is left alone.
+     */
+    function writeInset(element: HTMLElement, x: number, columnAxis: Axis) {
+        const attribute = element.getAttribute("data-column-index");
+        const columnIndex = attribute === null ? Number.NaN : Number(attribute);
+        if (!Number.isInteger(columnIndex)) return;
+        element.style.left = `${pinnedInset(columnAxis, columnIndex, x)}px`;
+    }
+
+    /**
+     * Writes the pinned cells' insets when the layers' `x` or the columns moved, and only then:
+     * unscaled, `x` is the base, which moves with a new view, never with a scroll frame.
+     */
+    function writeInsets(x: number, columnAxis: Axis) {
+        if (pinnedFor?.x === x && pinnedFor.columnAxis === columnAxis) return;
+        pinnedFor = { x, columnAxis };
+        for (const element of layers.pinned) writeInset(element, x, columnAxis);
+    }
+
     function writeLayers() {
-        const transforms = layerTransforms();
-        for (const layer of ["body", "header", "pinned"] as const) {
-            const transform = transforms[layer];
-            if (transform !== undefined) setTransform(layer, transform);
-        }
+        const offsets = layerOffsets();
+        if (!offsets) return;
+        const { x, y, columnAxis } = offsets;
+        setTransform("body", layerTransform("body", x, y));
+        setTransform("header", layerTransform("header", x, y));
+        writeInsets(x, columnAxis);
     }
 
     /**
@@ -1289,6 +1321,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             );
             rowsY.sync(element.scrollTop);
             columnsX.sync(element.scrollLeft);
+            // pinned cells may have registered while it was detached: write them all
+            pinnedFor = null;
             relayout(true);
             writeLayers();
             // what was asked before the grid had a size: a scroll to a cell, or the active cell
@@ -1335,13 +1369,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             layers[layer].add(element);
             written.delete(element);
             // only this element: a row of pinned cells mounting does not rewrite every other one
-            const transform = layerTransforms()[layer];
-            if (transform !== undefined) write(element, transform);
+            const offsets = layerOffsets();
+            if (!offsets) {
+                // nothing to write for yet (a detached viewport: a root re-mounting while its
+                // cells stay): the next write is for every pinned cell
+                if (layer === "pinned") pinnedFor = null;
+            } else if (layer === "pinned") {
+                writeInset(element, offsets.x, offsets.columnAxis);
+            } else if (layer !== "grid") {
+                write(element, layerTransform(layer, offsets.x, offsets.y));
+            }
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
-                // a cell no longer pinned (its column was unpinned) keeps no offset of the engine's
-                if (layer === "pinned") element.style.transform = "";
+                // a cell no longer pinned keeps no inset of the engine's: its adapter places it
+                if (layer === "pinned") element.style.left = "";
             };
         },
         getView: () => view,
@@ -1440,12 +1482,28 @@ export function rowTop<TRow, TNode>(
 }
 
 /**
- * A row's left in its layer (a header row's too): with pinned columns, it starts their width
- * before the layer, so its box holds them wherever the engine keeps them (a row's background,
- * its hover, its `overflow`). 0 without.
+ * A row's left in its layer (a header row's too). With pinned columns, it starts their width and
+ * the rendered columns' width (at least the view's width less theirs) before the layer, so its
+ * box holds them where the browser keeps them (a row's background, its hover), and sticky, which
+ * keeps a cell inside its row, holds them in place through a scroll the engine has not rendered
+ * yet (the frame a browser paints before the `scroll` event), to the left as far as to the right.
+ * It moves only with the rendered columns. 0 without.
  */
 export function rowLeft<TRow, TNode>(view: GridView<TRow, TNode>): number {
-    return -view.pinnedWidth;
+    if (view.pinnedColumnCount === 0) return 0;
+    const rendered =
+        view.columnAxis.offsetOf(view.renderedColumns.end) - view.columnBase;
+    return -(view.pinnedWidth + Math.max(0, rendered));
+}
+
+/**
+ * A row's structural `display` (a header row's too): with pinned columns, `flex`, so the pinned
+ * cells (in its flow, sticky) stack by their widths; nothing without, a row is then as it was.
+ */
+export function rowDisplay<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): "flex" | undefined {
+    return view.pinnedColumnCount > 0 ? "flex" : undefined;
 }
 
 /**
@@ -1463,16 +1521,31 @@ export function columnPinning<TRow, TNode>(
 }
 
 /**
- * Where something at virtual `offset` sits in its row: a pinned column at its own offset (the
- * engine's transform keeps it in view), the others from the base; both after the row's start
- * (`rowLeft`).
+ * A pinned cell's sticky `left` inset: its column's offset less the layers' horizontal offset
+ * `layerX` (what they are translated by). The browser resolves sticky in layout, before the
+ * transform, against the scrolled view: the cell shows at its offset from the view's start
+ * whatever the scroll, on every painted frame. Unscaled, `layerX` is the view's `columnBase`.
+ */
+export function pinnedInset(
+    columnAxis: Axis,
+    columnIndex: number,
+    layerX: number,
+): number {
+    return columnAxis.offsetOf(columnIndex) - layerX;
+}
+
+/**
+ * Where something at virtual `offset` sits in its row, after the row's start (`rowLeft`): a
+ * column that scrolls, from the base. A pinned one is in the row's flow and the engine's sticky
+ * inset places it (its box follows the scroll): it reports its column's offset, which is its
+ * place in a body row's flow (every pinned column is rendered there, in order).
  */
 function leftInRow<TRow, TNode>(
     view: GridView<TRow, TNode>,
     offset: number,
     pinned: boolean,
 ): number {
-    return (pinned ? offset : offset - view.columnBase) + view.pinnedWidth;
+    return pinned ? offset : offset - view.columnBase - rowLeft(view);
 }
 
 /** A column's left in its row (the same in the header rows and in every row). */
@@ -1496,9 +1569,7 @@ export function renderedWidth<TRow, TNode>(
 ): number {
     const last = view.columns[view.columns.length - 1];
     if (last === undefined) return 0;
-    return (
-        view.columnAxis.offsetOf(last + 1) - view.columnBase + view.pinnedWidth
-    );
+    return view.columnAxis.offsetOf(last + 1) - view.columnBase - rowLeft(view);
 }
 
 /**

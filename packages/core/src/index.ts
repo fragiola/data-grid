@@ -23,7 +23,9 @@ export {
     type HeaderRowView,
     headerCellBox,
     headerCellSort,
+    pinnedInset,
     renderedWidth,
+    rowDisplay,
     rowLeft,
     rowTop,
 } from "./engine/engine";

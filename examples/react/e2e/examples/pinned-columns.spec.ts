@@ -1,8 +1,9 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { openExample } from "../helpers";
-import { cell, scrollTo, viewport } from "./helpers";
+import { openExample, THEMES } from "../helpers";
+import { cell, scrollTo, settle, viewport } from "./helpers";
 
-// Pinned columns (Epic #31): the Person group stays at the start while the months scroll under it.
+// Pinned columns (Epic #31, Epic #38): the Person group stays at the start while the months scroll
+// under it, on every frame the browser paints, in every theme.
 
 async function leftInView(page: Page, target: Locator) {
     const view = await viewport(page).boundingBox();
@@ -41,6 +42,65 @@ test("keeps the pinned group in place while the months scroll", async ({
         "data-pinned",
         "start",
     );
+});
+
+test("has the pinned group in place before the scroll event runs, in every theme", async ({
+    page,
+}) => {
+    for (const theme of THEMES) {
+        await openExample(page, "pinned-columns", { theme: theme.name });
+        const selectors = [
+            '[data-grid-part="cell"][data-row-index="0"][data-column-index="0"]',
+            '[data-grid-part="cell"][data-row-index="0"][data-column-index="1"]',
+            '[data-grid-part="header-cell"][data-pinned][data-group]',
+        ];
+        const lefts = () =>
+            viewport(page).evaluate(
+                (element, targets) =>
+                    targets.map(
+                        (selector) =>
+                            (element
+                                .querySelector(selector)
+                                ?.getBoundingClientRect().left ?? Number.NaN) -
+                            element.getBoundingClientRect().left,
+                    ),
+                selectors,
+            );
+        const atStart = await lefts();
+        for (const step of [37, 120, -80]) {
+            // the scroll and the measure in one task: what a frame painted before the grid's
+            // JavaScript shows
+            const { fired, moved } = await viewport(page).evaluate(
+                (element, [by, targets]) => {
+                    let fired = false;
+                    const onScroll = () => {
+                        fired = true;
+                    };
+                    element.addEventListener("scroll", onScroll);
+                    element.scrollLeft += by;
+                    const view = element.getBoundingClientRect().left;
+                    const moved = targets.map(
+                        (selector) =>
+                            (element
+                                .querySelector(selector)
+                                ?.getBoundingClientRect().left ?? Number.NaN) -
+                            view,
+                    );
+                    element.removeEventListener("scroll", onScroll);
+                    return { fired, moved };
+                },
+                [step, selectors] as const,
+            );
+            expect(fired, theme.name).toBe(false);
+            for (const [index, value] of moved.entries()) {
+                expect(value, `${theme.name} ${selectors[index]}`).toBeCloseTo(
+                    atStart[index] ?? Number.NaN,
+                    0,
+                );
+            }
+            await settle(page);
+        }
+    }
 });
 
 test("brings a month into view right of the pinned columns from the keyboard", async ({

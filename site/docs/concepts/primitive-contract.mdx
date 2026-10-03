@@ -29,8 +29,9 @@ into it; or a function, which receives the props and the part's state.
   or on its `render` element; a cell's handlers run before both, so `preventDefault` cancels a
   key or a sort. See [Keyboard and accessibility](/docs/concepts/keyboard) and
   [Sorting](/docs/concepts/sorting).
-- `Body`, `HeaderRow` and a pinned column's cells drop a `transform` from your style: the grid
-  moves them with it.
+- `Body` and `HeaderRow` drop a `transform` from your style: the grid moves them with it. A
+  pinned column's cells drop a `transform` and the insets (`top`, `left`, `right`, `bottom`,
+  `inset`): they are sticky, the grid writes their `left`.
 
 ## `className` and `style`
 
@@ -42,10 +43,11 @@ Both take a value, or a function of the part's state:
 
 ## Structural style only
 
-The only inline style a part sets is what places it: `position`, `top`, `left`, `width`,
-`height`, the layers' and the pinned cells' `transform`, `display`, the root's `overflow`, `box-sizing`, and with
-[column groups](/docs/concepts/column-groups) a `z-index` between header rows (an upper row stays
-above the next). Your style is
+The only inline style a part sets is what places it: `position` (`sticky` on the header, the
+empty state and [pinned](/docs/concepts/pinned-columns) cells), `top`, `left`, `width`,
+`height`, the layers' `transform`, `display` (`flex` on rows with pinned columns), the root's
+`overflow`, `box-sizing`, and with [column groups](/docs/concepts/column-groups) a `z-index`
+between header rows (an upper row stays above the next). Your style is
 merged under these keys, which always win. Nothing cosmetic is ever set: see the
 [`unstyled`](/examples/unstyled) example.
 

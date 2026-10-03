@@ -2,8 +2,6 @@ import {
     ariaRowCount,
     ariaRowIndex,
     type EngineLayer,
-    renderedWidth,
-    rowLeft,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -28,6 +26,7 @@ import {
     type CellState,
     type HeaderCellState,
     type RowState,
+    rowStyle,
     useCell,
     useCells,
     useGridView,
@@ -58,17 +57,18 @@ function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
 type LayerStyle<State> = DivPrimitiveProps<State>["style"];
 
 /**
- * A layer's props (or a pinned cell's) without a `transform` in their style, nor in their
- * `render` element's: the engine writes that transform itself, so a consumer's would move the
- * rows, or let a pinned cell scroll away.
+ * Props without some keys in their style, nor in their `render` element's: the keys the engine
+ * writes itself (a layer's `transform`, a pinned cell's `left`) and, on a pinned cell, the insets
+ * that would move it from its place (`position: sticky` obeys every inset it is given).
  */
-function withoutTransform<
+function withoutStyleKeys<
     State,
     P extends { style?: LayerStyle<State>; render?: unknown },
->(props: P): P {
+>(props: P, keys: readonly (keyof React.CSSProperties)[]): P {
     const strip = (value: React.CSSProperties | undefined) => {
-        if (!value || !("transform" in value)) return value;
-        const { transform: _, ...rest } = value;
+        if (!value || !keys.some((key) => key in value)) return value;
+        const rest: React.CSSProperties = { ...value };
+        for (const key of keys) delete rest[key];
         return rest;
     };
     const { style, render } = props;
@@ -86,11 +86,33 @@ function withoutTransform<
                           ? (state: State) => strip(style(state))
                           : strip(style),
               }),
-        ...(element && renderStyle && "transform" in renderStyle
+        ...(element && renderStyle && keys.some((key) => key in renderStyle)
             ? { render: cloneElement(element, { style: strip(renderStyle) }) }
             : {}),
     };
 }
+
+/** The layers' `transform` is the engine's: a consumer's would move the rows. */
+const LAYER_KEYS = ["transform"] as const;
+
+/**
+ * A pinned cell's `left` inset is the engine's, and the other insets and a `transform` would let it
+ * move from its place.
+ */
+const PINNED_KEYS = [
+    "transform",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "inset",
+    "insetInline",
+    "insetInlineStart",
+    "insetInlineEnd",
+    "insetBlock",
+    "insetBlockStart",
+    "insetBlockEnd",
+] as const;
 
 // ── the grid ─────────────────────────────────────────────────────────────────
 
@@ -226,7 +248,10 @@ export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
         row: given,
         children = <HeaderCells />,
         ...rest
-    } = withoutTransform<HeaderRowState, HeaderRowProps<TRow>>(props);
+    } = withoutStyleKeys<HeaderRowState, HeaderRowProps<TRow>>(
+        props,
+        LAYER_KEYS,
+    );
     const view = useGridView<TRow>();
     // the header rows that provide it were rendered for this grid's row type
     const rendering = useContext(
@@ -251,15 +276,14 @@ export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
             ),
         },
         style: {
-            position: "absolute",
-            top: (rowIndex + view.headerRowCount) * view.headerRowHeight,
-            left: rowLeft(view),
-            width: renderedWidth(view),
-            height: view.headerRowHeight,
+            ...rowStyle(
+                view,
+                (rowIndex + view.headerRowCount) * view.headerRowHeight,
+                view.headerRowHeight,
+            ),
             // with several rows, an upper one stays above the next: a cell spanning down from it
             // is not covered by the row it reaches into
             ...(view.headerRowCount > 1 ? { zIndex: -rowIndex } : {}),
-            boxSizing: "border-box",
         },
     });
 }
@@ -307,9 +331,12 @@ function isTableCell(render: unknown): boolean {
  */
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
     const { state, props: own } = useHeaderCell(props.cell);
-    // a pinned cell's transform is the engine's (it keeps the cell in view sideways)
+    // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
     const { cell, children, ...rest } = state.pinned
-        ? withoutTransform<HeaderCellState, HeaderCellProps<TRow>>(props)
+        ? withoutStyleKeys<HeaderCellState, HeaderCellProps<TRow>>(
+              props,
+              PINNED_KEYS,
+          )
         : props;
     const pinnedRef = useLayer("pinned");
     const { style, ...cellProps } = own;
@@ -388,10 +415,10 @@ export type BodyProps = DivPrimitiveProps<Record<string, never>> & {
 
 /** The body (`role="rowgroup"`), the layer the engine moves with the rows. A `<tbody>`. */
 export function Body(props: BodyProps) {
-    const { children = <Rows />, ...rest } = withoutTransform<
+    const { children = <Rows />, ...rest } = withoutStyleKeys<
         Record<string, never>,
         BodyProps
-    >(props);
+    >(props, LAYER_KEYS);
     const view = useGridView();
     return useRenderElement("div", rest, {
         state: {},
@@ -502,9 +529,9 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
     const { state, props: own } = useCell(props.cell);
-    // a pinned cell's transform is the engine's (it keeps the cell in view sideways)
+    // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
     const { cell, children, ...rest } = state.pinned
-        ? withoutTransform<CellState, CellProps<TRow>>(props)
+        ? withoutStyleKeys<CellState, CellProps<TRow>>(props, PINNED_KEYS)
         : props;
     const pinnedRef = useLayer("pinned");
     const { style, ...cellProps } = own;
