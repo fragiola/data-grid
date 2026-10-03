@@ -1,11 +1,12 @@
 ---
 title: Sorting
-description: Sortable columns toggled from the header by mouse or keyboard, the sort kept by the grid, the rows ordered by your app.
+description: Sortable columns toggled from the header by mouse or keyboard, the sort kept by the grid, the rows ordered in memory or by your server.
 ---
 
 The grid keeps which columns are sorted, in which direction and in which order, toggles them from
-the header and shows them in ARIA and `data-*`. It never reorders your rows: you sort what you
-pass, in the browser or on your server.
+the header and shows them in ARIA and `data-*`. It never reorders the rows it is given: with your
+rows in memory, [one hook](/docs/concepts/rows-in-memory) orders them; with a server, you send it
+the sort.
 
 <Example id="sorting" />
 
@@ -32,12 +33,15 @@ controlled or not:
   `onSortColumnsChange`.
 
 ```tsx title="people.tsx"
-const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([]);
-const rows = useMemo(() => sortRows(people, sortColumns), [sortColumns]);
+// rows in memory: one hook keeps the sort and orders the rows
+const local = useLocalRows(people, columns);
+<DataGrid.Root columns={columns} {...local.props}>{/* … */}</DataGrid.Root>
 
+// a server: the app keeps the sort and sends it
+const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([]);
 <DataGrid.Root
     columns={columns}
-    rows={rows}
+    rows={pageFromServer}
     sortColumns={sortColumns}
     onSortColumnsChange={setSortColumns}
 >
@@ -82,6 +86,7 @@ its first one; the others are in `data-sort`. Indicators are yours: draw an arro
 
 ## Rows stay yours
 
-The grid shows the rows it is given, in that order: sorting them is your app's, so a server-side
-sort works the same as an in-memory one. The active cell keeps its position when the rows change
+The grid shows the rows it is given, in that order: `useLocalRows` orders them in memory (see
+[Rows in memory](/docs/concepts/rows-in-memory) for how values compare, and `compare`), and a
+server orders them for you. The active cell keeps its position when the rows change
 order: it stays on the same row index and column, not on the same record.

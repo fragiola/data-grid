@@ -11,10 +11,10 @@ it. Fetching, caching and placeholders are your app's.
 Pass `rows`, an array. Append to it (a new array) and the grid renders the new rows, keeping the
 scroll position.
 
-Ordering, filtering and selecting the rows you hold are yours too: compute the array and pass
-it. The grid keeps a [sort](/docs/concepts/sorting) you order them by. The
-[`companies`](/examples/companies) example sorts, selects and deletes this way, and
-[`tasks`](/examples/tasks) filters by facets.
+Sorting, filtering, searching and paging the rows you hold take one hook:
+[Rows in memory](/docs/concepts/rows-in-memory). Selecting them is yours: the
+[`companies`](/examples/companies) example sorts through the hook, and selects and deletes its
+own way.
 
 ## Page by page
 
