@@ -59,10 +59,15 @@ pinned cells opaque and above the cells that scroll under them:
 }
 ```
 
-A row starts the pinned columns' width before its layer, so its box holds the pinned cells: a
-row's background, its hover or `overflow: hidden` cover them. A row stripe that is translucent
+A row's box holds the pinned cells (it starts their width and the rendered columns' width before
+its layer), so a row's background and its hover cover them. A row stripe that is translucent
 needs painting on the pinned cell too, over its opaque background (the example does it from the
 cell's state).
+
+Pinned cells are `position: sticky`, and sticky holds to the nearest element that scrolls. Never
+give a row, a header row, `Body` or `Header` an `overflow` other than `visible` or `clip`:
+`overflow: hidden` or `auto` makes that element the one they hold to, and they scroll away with
+the rest. Use `overflow: clip` to cut a row's content. A cell's own `overflow` is free.
 
 ## What it shows
 
@@ -76,7 +81,11 @@ the DOM order is the columns' order, and `aria-colindex` is the column's.
 
 ## How it works
 
-The engine writes a pinned cell's `transform` as the view scrolls, as it does for the layers: no
-React render while scrolling, the same under [scroll scaling](/docs/concepts/scroll-scaling), and
-a `transform` you give a pinned cell is dropped. A browser that scrolls on its own thread may show
-pinned cells a frame behind during a fast fling; they settle as the scroll does.
+A pinned cell is `position: sticky` in its row's flow, before the cells that scroll, and the row
+is a flex container: the browser keeps the cell in place as it scrolls, on every frame it paints,
+a fling and the scrollbar's thumb included. The grid writes the cell's `left` inset, the offset
+that cancels its layer's: unscaled it changes only when a new column window renders, never while
+you scroll, and under [scroll scaling](/docs/concepts/scroll-scaling) it is written with the
+grid's own moves, in the same frame. A `transform` or an inset (`top`, `left`, `right`,
+`bottom`, `inset`) you give a pinned cell is dropped, since sticky would obey it. A grid without
+pinned columns renders as before: no flex rows, no sticky cells.

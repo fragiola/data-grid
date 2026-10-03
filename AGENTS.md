@@ -90,10 +90,17 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     leading columns (`columnsError` refuses one after an unpinned column, and a group mixing
     both). They are always rendered (first in `view.columns` and each header row); the column
     window covers the view right of them; scrolling a cell into view leaves it right of them.
-    A pinned cell (`data-pinned="start"`, `data-pinned-edge` on the last) registers as the
-    engine's `pinned` element, which writes its `transform` (`virtualX − columnBase`, small under
-    scaling too); rows and header rows start at `rowLeft` (−the pinned width) so their box holds
-    the pinned cells. Stacking is the consumer's. Pinned columns as wide as the view scroll with
+    A pinned cell (`data-pinned="start"`, `data-pinned-edge` on the last) is `position: sticky`
+    in its row's flow, before the cells that scroll, and the row (header rows too) is
+    `display: flex`, only while there are pinned columns (Epic #38). It registers as the
+    engine's `pinned` element: the engine writes its `left` inset, `offsetOf(column) − layerX`
+    (the layers' x, `scrollLeft − virtualX + columnBase`), only when `layerX` or the columns
+    change (unscaled: a new view, never a scroll frame; scaled: with the engine's own moves, in
+    the same task), so no painted frame lags the scroll; React renders no `left` for it. Rows
+    and header rows start at `rowLeft` (−the pinned width − the rendered columns' width) so their
+    box holds the pinned cells and sticky keeps them in place through a scroll not rendered yet,
+    both ways. Stacking is the consumer's, and an `overflow` other than `visible`/`clip` on a row
+    or a layer breaks sticky. Pinned columns as wide as the view scroll with
     the rest until it is wider.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
@@ -182,10 +189,12 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   first, then the consumer's.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
-- **Structural inline style only**: `position`, `top`/`left`/`width`/`height`/`inset`,
-  `transform` on the layers and on pinned cells, `display` (also to make table parts positionable), `overflow` on the
-  viewport, `contain`, `box-sizing`, and `z-index` between header rows (with column groups, an
-  upper row stays above the next, which a column spanning rows reaches into). Nothing cosmetic.
+- **Structural inline style only**: `position` (`sticky` on the header, `Empty` and pinned
+  cells), `top`/`left`/`width`/`height`/`inset`, `transform` on the layers, `display` (also to
+  make table parts positionable, and `flex` on rows and header rows with pinned columns),
+  `overflow` on the viewport, `contain`, `box-sizing`, and `z-index` between header rows (with
+  column groups, an upper row stays above the next, which a column spanning rows reaches into).
+  Nothing cosmetic.
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
@@ -201,9 +210,10 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `onClick`, the same way. Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
-- **The layers' `transform` is the engine's**: `Body`, `HeaderRow` and a pinned column's
-  `Cell`/`HeaderCell` drop a consumer's. The
-  header layer has an element per header row: the engine writes the same transform to each.
+- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's. The
+  header layer has an element per header row: the engine writes the same transform to each. A
+  pinned column's `Cell`/`HeaderCell` drop a consumer's `transform` and insets (`top`, `left`,
+  `right`, `bottom`, `inset*`): its `left` is the engine's.
 - **Header rows render through `HeaderRows` (Epic #13, G6)**, a children function over the
   header rows that `Header` renders by default; each `HeaderRow` takes its `row`, `HeaderCells`
   that row's cells (groups and columns), and `HeaderCell` carries `data-group` for a group and

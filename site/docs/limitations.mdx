@@ -10,7 +10,7 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 
 | missing | what the examples do meanwhile |
 | --- | --- |
-| Columns pin only at the **start**: none at the end yet, and a pinned cell may trail a fast fling by a frame in a browser that scrolls on its own thread. | Pinned columns first ([Pinned columns](/docs/concepts/pinned-columns)). |
+| Columns pin only at the **start**: none at the end yet. | Pinned columns first ([Pinned columns](/docs/concepts/pinned-columns)). |
 | The header needs a **background and a `z-index`** to cover the rows that scroll under it. | `z-10` and an opaque background on `Header`. |
 | No built-in **selection or filtering**: the grid shows the rows it is given. | The app keeps that state and passes the rows: [`companies`](/examples/companies) selects, [`tasks`](/examples/tasks) filters by facets. |
 | **Sorting** is state only: the grid keeps the sort, never orders the rows (no local pipeline yet). | The app orders the rows it passes by `sortColumns` ([`sorting`](/examples/sorting), [`companies`](/examples/companies)). |
