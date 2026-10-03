@@ -318,39 +318,41 @@ describe("placement", () => {
         expect(pinnedCell(1).style.left).toBe(cells[1]?.style.left);
     });
 
-    it("keeps them inside their row for a view's width the engine has not rendered yet", () => {
-        const { view, size, body, scrollLeft, pinnedCell } = setup();
+    it("keeps them inside their row through a scroll the engine has not rendered yet, both ways", () => {
+        const { engine, view, size, body, scrollLeft, pinnedCell } = setup();
         const cells = [pinnedCell(0), pinnedCell(1)];
         scrollLeft(2_000);
+        // scrolled back to the rendered window's start: the next step left renders a new window,
+        // the least room there is on the left
+        scrollLeft(1_950);
+        const { visible, rendered } = engine.get("column-window");
+        expect(visible.start).toBe(rendered.start);
         // the browser scrolls, the scroll event (and the engine) comes a frame later: the insets
-        // and the layers stay as written, sticky follows the scroll
+        // and the layers stay as written, sticky follows the scroll. The area that scrolls is
+        // 300px wide: a larger step shows no cell of the window anyway
         const x = layerX(body);
-        for (const delta of [
-            -(size.width - 200),
-            -150,
-            150,
-            size.width - 200,
-        ]) {
+        const room = size.width - 200;
+        for (const delta of [-room, -150, 150, room]) {
             for (const [columnIndex, cell] of cells.entries()) {
                 expect(
-                    shownAt(view(), columnIndex, 2_000 + delta, inset(cell), x),
+                    shownAt(view(), columnIndex, 1_950 + delta, inset(cell), x),
                     `column ${columnIndex}, ${delta}`,
                 ).toBe(columnIndex * 100);
             }
         }
     });
 
-    it("lays the rows out to hold them: a view's width before the layer, as a flex container", () => {
+    it("lays the rows out to hold them: their width and the rendered columns' before the layer, as a flex container", () => {
         const { view } = setup();
-        // 500px wide, 200px pinned: the row starts 500px before its layer
-        expect(rowLeft(view())).toBe(-500);
+        // 200px pinned, columns 2 to 6 rendered (400px): the row starts 600px before its layer
+        expect(view().renderedColumns).toEqual({ start: 2, end: 6 });
+        expect(rowLeft(view())).toBe(-600);
         expect(rowDisplay(view())).toBe("flex");
         // a pinned column at its place in the row's flow, one that scrolls from the base
         expect(columnLeft(view(), 1)).toBe(100);
-        expect(columnLeft(view(), 3)).toBe(300 - 200 + 500);
+        expect(columnLeft(view(), 3)).toBe(300 - 200 + 600);
         // from the row's start to the last rendered column's end
-        const last = view().columns[view().columns.length - 1] ?? 0;
-        expect(renderedWidth(view())).toBe((last + 1) * 100 - 200 + 500);
+        expect(renderedWidth(view())).toBe(600 - 200 + 600);
     });
 
     it("stays at the view's start under scaled column scroll, written with the engine's own moves", () => {
@@ -470,7 +472,7 @@ describe("a view too narrow for the pinned columns", () => {
 });
 
 describe("a pinned cell let go", () => {
-    it("is not written any more", () => {
+    it("keeps no inset of the engine's, and is not written any more", () => {
         const { engine, scrollLeft, body } = setup();
         const element = document.createElement("div");
         element.setAttribute("data-column-index", "0");
@@ -478,9 +480,10 @@ describe("a pinned cell let go", () => {
         const release = engine.adapter.registerLayer("pinned", element);
         expect(element.style.left).toBe("-200px");
         release();
+        expect(element.style.left).toBe("");
         // a new column window: its adapter places it now
         scrollLeft(2_500);
-        expect(element.style.left).toBe("-200px");
+        expect(element.style.left).toBe("");
     });
 });
 

@@ -176,7 +176,9 @@ describe("pinned cells", () => {
                 const c = cellAt(container, rowIndex, 2);
                 expect(c.style.position).toBe("absolute");
                 expect(c.style.transform).toBe("scale(2)");
-                expect(c.style.left).toBe("500px");
+                // the row starts the pinned and the rendered columns' width (200 + 500) before
+                // its layer
+                expect(c.style.left).toBe("700px");
             }
             const row = container.querySelector(
                 '[data-grid-part="row"]',
@@ -300,17 +302,17 @@ describe("pinned cells", () => {
         expect(group).toHaveAttribute("data-pinned-edge", "");
     });
 
-    it("sit inside their row's box: a row starts a view's width before its layer", () => {
+    it("sit inside their row's box: a row starts the pinned and rendered columns' width before its layer", () => {
         const { container } = render(<Grid />);
         const row = container.querySelector(
             '[data-grid-part="row"][data-row-index="0"]',
         ) as HTMLElement;
-        // the view is 500px wide, the pinned columns 200px
-        expect(row.style.left).toBe("-500px");
+        // 200px pinned, columns 2 to 7 rendered (the view's 300px and 2 of overscan)
+        expect(row.style.left).toBe("-700px");
         const headerRow = container.querySelector(
             '[data-grid-part="header-row"]',
         ) as HTMLElement;
-        expect(headerRow.style.left).toBe("-500px");
+        expect(headerRow.style.left).toBe("-700px");
         expect(headerRow.style.width).toBe(row.style.width);
     });
 
