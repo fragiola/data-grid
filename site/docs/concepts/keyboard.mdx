@@ -29,11 +29,37 @@ across the cells of a header row.
 
 While no cell is active, the grid is the tab stop; focusing it activates the first cell in view.
 Then the active cell is (`tabIndex` 0, the others -1), so Tab moves past the grid in one step.
+The controls inside cells (buttons, links, fields, a select, a box to check) are no stops of their
+own: the grid keeps them at `tabIndex` -1, the ones your cells render later included, so a grid
+full of controls is still one stop.
+
+## Controls in cells
+
+A cell's controls take the keys in **interaction**, the grid's other mode beside navigation:
+
+| key | in navigation | in interaction |
+| --- | --- | --- |
+| Enter, F2 | the active cell's controls take the keys, the first takes focus | the control's |
+| Tab, Shift+Tab | leave the grid | the cell's next or previous control, round and round |
+| Escape | — | back to navigation, focus on the cell |
+| Arrows, Home, End… | move the active cell | the control's (a field's caret, a select's options) |
+
+A click on a control does what Enter does: its cell becomes active and its controls take the keys.
+Focus leaving the cell (a click elsewhere, a menu portalled out of it) goes back to navigation. On
+a sortable column's header cell, Enter sorts, and F2 reaches its controls. A cell in interaction
+carries `data-interacting`, and `useCell` and `useHeaderCell` report `interacting`.
+
+<Example id="interactive-cells" />
+
+A control you want to stay a tab stop of its own carries `data-grid-tab-stop`: the grid leaves its
+`tabIndex` alone. From code, `engine.run("interact-cell", { rowIndex, columnIndex })` and
+`engine.run("leave-cell", {})` do what Enter and Escape do, and `engine.get("interaction")` tells
+which cell is in interaction.
 
 ## Whose key it is
 
-The grid takes keys pressed on its cells (and on controls inside them, except fields you type
-in), on the grid itself and on its scroll container. A key pressed on your own content beside
+The grid takes keys pressed on its cells, on the grid itself and on its scroll container; in
+interaction, only Escape and Tab from the cell's controls. A key pressed on your own content beside
 the cells, such as a button in [`DataGrid.Empty`](/docs/guides/empty-state) or anything in a
 row's [detail](/docs/guides/master-detail), or in a menu portalled out of a cell, stays with
 that content. The arrows move between rows' cells and never land in a detail.
