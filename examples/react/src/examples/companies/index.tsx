@@ -1,10 +1,7 @@
 "use client";
 
-import {
-    type Column,
-    DataGrid,
-    type SortColumn,
-} from "@fragiola/data-grid-react";
+import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { useLocalRows } from "@fragiola/data-grid-react/local";
 import {
     AtSign,
     Building2,
@@ -47,23 +44,12 @@ const SORT_LABELS: Record<SortKey, string> = {
     country: "Primary location",
 };
 
-/** Ordering the rows is the app's: here, a comparator per column over the rows it holds. */
-function compare(key: SortKey, a: Company, b: Company): number {
-    switch (key) {
-        case "employees":
-            return (
-                EMPLOYEE_RANGES.indexOf(a.employees) -
-                EMPLOYEE_RANGES.indexOf(b.employees)
-            );
-        case "arr":
-            // not estimated sorts first
-            return (
-                (a.arr ? ARR_RANGES.indexOf(a.arr) : -1) -
-                (b.arr ? ARR_RANGES.indexOf(b.arr) : -1)
-            );
-        default:
-            return a[key].localeCompare(b[key]);
-    }
+/** A range's place in its scale; not estimated (no range) sorts first. */
+function rank(
+    ranges: readonly string[],
+    range: string | null | undefined,
+): number {
+    return range ? ranges.indexOf(range) : -1;
 }
 
 const columns: Column<Company>[] = [
@@ -176,6 +162,10 @@ const columns: Column<Company>[] = [
         key: "employees",
         width: 150,
         sortable: true,
+        // ranges sort by their scale, not as text
+        compare: (a, b) =>
+            rank(EMPLOYEE_RANGES, a.employees) -
+            rank(EMPLOYEE_RANGES, b.employees),
         renderHeaderCell: () => (
             <SortLabel
                 columnKey="employees"
@@ -198,6 +188,7 @@ const columns: Column<Company>[] = [
         key: "arr",
         width: 160,
         sortable: true,
+        compare: (a, b) => rank(ARR_RANGES, a.arr) - rank(ARR_RANGES, b.arr),
         renderHeaderCell: () => (
             <SortLabel
                 columnKey="arr"
@@ -241,26 +232,12 @@ export default function Companies() {
     const [selected, setSelected] = useState<ReadonlySet<number>>(
         () => new Set(),
     );
-    // the grid keeps the sort (controlled here, so the toolbar's select can set it too); the app
-    // orders the rows by it: the first column first, the next ones breaking ties
-    const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([
-        { columnKey: "name", direction: "ascending" },
-    ]);
-
-    const rows = useMemo(
-        () =>
-            [...all].sort((a, b) => {
-                for (const { columnKey, direction } of sortColumns) {
-                    if (!isSortKey(columnKey)) continue;
-                    const order = compare(columnKey, a, b);
-                    if (order !== 0) {
-                        return direction === "ascending" ? order : -order;
-                    }
-                }
-                return a.id - b.id;
-            }),
-        [all, sortColumns],
-    );
+    // the rows in memory sorted by one hook: the header and the toolbar's select both set its
+    // sort (the first column first, the next ones breaking ties)
+    const local = useLocalRows(all, columns, {
+        defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
+    });
+    const { rows } = local;
     const visibleIds = useMemo(() => rows.map((row) => row.id), [rows]);
 
     const toggle = useCallback((id: number) => {
@@ -293,10 +270,10 @@ export default function Companies() {
                 <div className={styles.toolbar}>
                     <Select.Root
                         items={SORT_LABELS}
-                        value={sortColumns[0]?.columnKey ?? null}
+                        value={local.sort.columns[0]?.columnKey ?? null}
                         onValueChange={(key) => {
                             if (isSortKey(key)) {
-                                setSortColumns([
+                                local.sort.set([
                                     { columnKey: key, direction: "ascending" },
                                 ]);
                             }
@@ -332,13 +309,11 @@ export default function Companies() {
                 </div>
                 <DataGrid.Root
                     columns={columns}
-                    rows={rows}
                     rowKey={(row) => row.id}
                     rowHeight={44}
                     headerRowHeight={40}
-                    sortColumns={sortColumns}
-                    onSortColumnsChange={setSortColumns}
                     className={styles.root}
+                    {...local.props}
                 >
                     <DataGrid.Grid
                         aria-label="Companies"

@@ -11,6 +11,12 @@ const header = (page: Page, name: string) =>
 const bodyRows = (page: Page) => page.locator('[data-grid-part="row"]');
 
 /** The rendered rows' domains: they identify the companies (the name cell holds initials too). */
+/** The order the local pipeline sorts text in: the reader's, numbers by value ("3" before "10"). */
+const collator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+});
+
 const domains = (page: Page) =>
     bodyRows(page).locator('[data-column-index="2"]').allTextContents();
 
@@ -63,9 +69,7 @@ test("sorts from the header, both ways, with aria-sort", async ({ page }) => {
         /.*/,
     );
     const ascending = await domains(page);
-    expect(ascending).toEqual(
-        [...ascending].sort((a, b) => a.localeCompare(b)),
-    );
+    expect(ascending).toEqual([...ascending].sort(collator.compare));
     await header(page, "Domain").click();
     await expect(header(page, "Domain")).toHaveAttribute(
         "aria-sort",
@@ -73,7 +77,7 @@ test("sorts from the header, both ways, with aria-sort", async ({ page }) => {
     );
     const descending = await domains(page);
     expect(descending).toEqual(
-        [...descending].sort((a, b) => b.localeCompare(a)),
+        [...descending].sort((a, b) => collator.compare(b, a)),
     );
 });
 
