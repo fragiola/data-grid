@@ -955,6 +955,287 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("row details", () => {
+            const DETAILS = { rows: 1_000, columns: 40, details: 1 } as const;
+
+            /** The outer grid's cell: an inner grid in a detail has cells at the same indexes. */
+            function cell(page: Page, rowIndex: number, columnIndex: number) {
+                return page
+                    .locator(
+                        `[data-grid-part="cell"][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
+                    )
+                    .filter({ hasText: `${rowIndex}:${columnIndex}` });
+            }
+
+            function detail(page: Page, rowIndex: number) {
+                return page.locator(
+                    `[data-grid-part="row-detail"][data-row-index="${rowIndex}"]`,
+                );
+            }
+
+            /** The detail's box from the viewport's left edge, its top from row's cells. */
+            async function detailBox(viewport: Locator, rowIndex: number) {
+                return viewport.evaluate((element, index) => {
+                    const target = element.querySelector(
+                        `[data-grid-part="row-detail"][data-row-index="${index}"]`,
+                    );
+                    if (!target) throw new Error("no detail");
+                    const box = target.getBoundingClientRect();
+                    const view = element.getBoundingClientRect();
+                    return {
+                        left: box.left - view.left,
+                        top: box.top,
+                        width: box.width,
+                        height: box.height,
+                        viewWidth: element.clientWidth,
+                    };
+                }, rowIndex);
+            }
+
+            test("expands and collapses a row: its detail below its cells, the rows after it moved down", async ({
+                page,
+            }) => {
+                await open(page, kind, DETAILS);
+                const expander = page.getByTestId("expand-2");
+                await expect(expander).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                const below = (await cell(page, 3, 1).boundingBox())?.y ?? 0;
+                await expander.click();
+                await settle(page);
+                await expect(expander).toHaveAttribute("aria-expanded", "true");
+                // the outer row: the inner grid's rows come after it
+                const row = page
+                    .locator('[data-grid-part="row"][data-row-index="2"]')
+                    .first();
+                await expect(row).toHaveAttribute("data-expanded", "");
+                await expect(detail(page, 2)).toBeVisible();
+                if (kind === "table") {
+                    expect(
+                        await detail(page, 2).evaluate((e) => e.tagName),
+                    ).toBe("TD");
+                }
+                const cells = await cell(page, 2, 1).boundingBox();
+                const box = await detail(page, 2).boundingBox();
+                expect(box?.y).toBeCloseTo((cells?.y ?? 0) + 32, 0);
+                expect(box?.height).toBeCloseTo(200, 0);
+                expect((await cell(page, 3, 1).boundingBox())?.y).toBeCloseTo(
+                    below + 200,
+                    0,
+                );
+                await expander.click();
+                await settle(page);
+                await expect(detail(page, 2)).toHaveCount(0);
+                await expect(row).not.toHaveAttribute("data-expanded");
+                expect((await cell(page, 3, 1).boundingBox())?.y).toBeCloseTo(
+                    below,
+                    0,
+                );
+            });
+
+            for (const pinned of [0, 2]) {
+                test(`keeps a detail as wide as the view and in view sideways${pinned ? ", with pinned columns" : ""}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        ...DETAILS,
+                        pinned,
+                    });
+                    await page.getByTestId("expand-1").click();
+                    await settle(page);
+                    for (const left of [0, 1_234, 3_210, 450]) {
+                        await scroll(page, viewport, 0, left);
+                        const box = await detailBox(viewport, 1);
+                        expect(box.left, `at ${left}`).toBeCloseTo(0, 0);
+                        expect(box.width).toBeCloseTo(box.viewWidth, 0);
+                    }
+                    // and on the frame before the scroll event runs (sticky, no JavaScript)
+                    const same = await viewport.evaluate((element) => {
+                        let fired = false;
+                        const onScroll = () => {
+                            fired = true;
+                        };
+                        element.addEventListener("scroll", onScroll);
+                        element.scrollLeft += 60;
+                        const target = element.querySelector(
+                            '[data-grid-part="row-detail"][data-row-index="1"]',
+                        );
+                        const left =
+                            (target?.getBoundingClientRect().left ?? 1) -
+                            element.getBoundingClientRect().left;
+                        element.removeEventListener("scroll", onScroll);
+                        return { left, fired };
+                    });
+                    expect(same.fired).toBe(false);
+                    expect(same.left).toBeCloseTo(0, 0);
+                });
+            }
+
+            test("keeps a detail as wide as the view in a grid narrower than the view", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...DETAILS,
+                    columns: 3,
+                    pinned: 1,
+                });
+                await page.getByTestId("expand-0").click();
+                await settle(page);
+                const box = await detailBox(viewport, 0);
+                expect(box.left).toBeCloseTo(0, 0);
+                expect(box.width).toBeCloseTo(box.viewWidth, 0);
+            });
+
+            test("moves between rows' cells with the arrows, never into a detail", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, DETAILS);
+                await page.getByTestId("expand-2").click();
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("ArrowDown");
+                await settle(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 3,
+                    columnIndex: 1,
+                });
+                await expect(cell(page, 3, 1)).toBeFocused();
+                await expectFullyInBody(viewport, cell(page, 3, 1));
+                await page.keyboard.press("ArrowUp");
+                await settle(page);
+                await expect(cell(page, 2, 1)).toBeFocused();
+            });
+
+            test("leaves a grid inside a detail its own active cell and keys", async ({
+                page,
+            }) => {
+                await open(page, kind, DETAILS);
+                await page.getByTestId("expand-1").click();
+                await cell(page, 0, 2).click();
+                await settle(page);
+                const inner = page.getByTestId("inner-1");
+                await inner
+                    .locator(
+                        '[data-grid-part="cell"][data-row-index="0"][data-column-index="0"]',
+                    )
+                    .click();
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("ArrowRight");
+                await settle(page);
+                await expect(
+                    inner.locator(
+                        '[data-grid-part="cell"][data-row-index="1"][data-column-index="1"]',
+                    ),
+                ).toBeFocused();
+                // the outer grid's active cell did not move
+                expect(await active(page)).toEqual({
+                    rowIndex: 0,
+                    columnIndex: 2,
+                });
+                // a control in the detail is the app's: the arrows do nothing to the grid
+                await page.getByTestId("detail-button-1").focus();
+                await page.keyboard.press("ArrowDown");
+                await settle(page);
+                await expect(page.getByTestId("detail-button-1")).toBeFocused();
+                expect(await active(page)).toEqual({
+                    rowIndex: 0,
+                    columnIndex: 2,
+                });
+            });
+
+            test("keeps ARIA counts and indexes: a detail is a cell of its row", async ({
+                page,
+            }) => {
+                await open(page, kind, DETAILS);
+                const grid = page.locator('[data-grid-part="grid"]').first();
+                const count = await grid.getAttribute("aria-rowcount");
+                await page.getByTestId("expand-2").click();
+                await settle(page);
+                expect(await grid.getAttribute("aria-rowcount")).toBe(count);
+                const outer = page.locator(
+                    '[data-grid-part="row"][data-row-index="3"]',
+                );
+                await expect(outer.first()).toHaveAttribute(
+                    "aria-rowindex",
+                    "5",
+                );
+                await expect(detail(page, 2)).toHaveAttribute(
+                    "role",
+                    "gridcell",
+                );
+                await expect(detail(page, 2)).toHaveAttribute(
+                    "aria-colindex",
+                    "1",
+                );
+                await expect(detail(page, 2)).toHaveAttribute(
+                    "aria-colspan",
+                    "40",
+                );
+            });
+
+            test("keeps the view where it is when a row above it expands", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, DETAILS);
+                await scroll(page, viewport, 32 * 100 + 5);
+                const before = (await cell(page, 101, 1).boundingBox())?.y;
+                await page.evaluate(() =>
+                    window.grid?.model.run("expanded-rows.toggle", {
+                        rowIndex: 10,
+                    }),
+                );
+                await settle(page);
+                await settle(page);
+                expect((await cell(page, 101, 1).boundingBox())?.y).toBeCloseTo(
+                    before ?? 0,
+                    0,
+                );
+                expect(
+                    await viewport.evaluate((element) => element.scrollTop),
+                ).toBeCloseTo(32 * 100 + 5 + 200, 0);
+            });
+
+            test("renders no React while scrolling inside the overscan, a detail on screen", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, DETAILS);
+                await page.getByTestId("expand-3").click();
+                await scroll(page, viewport, 32 * 2);
+                const before = await page.evaluate(() => window.commits);
+                await scroll(page, viewport, 32 * 3, 30);
+                await scroll(page, viewport, 32 * 2 + 7, 60);
+                expect(await page.evaluate(() => window.commits)).toBe(before);
+            });
+
+            test("places rows past a detail exactly under scroll scaling", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...DETAILS,
+                    rows: 1_000_000,
+                    maxScrollSize: 1_000_000,
+                });
+                await page.evaluate(() => {
+                    window.grid?.model.run("expanded-rows.toggle", {
+                        rowIndex: 500_000,
+                    });
+                    window.grid?.engine.run("scroll-to-cell", {
+                        rowIndex: 500_000,
+                        align: "start",
+                    });
+                });
+                await settle(page);
+                await settle(page);
+                await expect(detail(page, 500_000)).toBeVisible();
+                const cells = await cell(page, 500_000, 1).boundingBox();
+                const box = await detail(page, 500_000).boundingBox();
+                const next = await cell(page, 500_001, 1).boundingBox();
+                expect(box?.y).toBeCloseTo((cells?.y ?? 0) + 32, 0);
+                expect(next?.y).toBeCloseTo((cells?.y ?? 0) + 232, 0);
+                await expectFullyInBody(viewport, cell(page, 500_000, 1));
+            });
+        });
+
         test.describe("sorting", () => {
             const SORT = { rows: 1_000, columns: 20, sort: 1 };
 

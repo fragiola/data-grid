@@ -25,6 +25,9 @@ import { createRoot } from "react-dom/client";
 //                        sort uncontrolled
 //   &pinned=2            the first N columns pinned at the start (with groups, 5 pins C0 and
 //                        the first group); the two lines of CSS stacking needs are the fixture's
+//   &details=1           expandable rows: C0's cell holds an expander (`expand-<row>`); a
+//                        detail (&detailHeight=200 tall) holds a grid of its own
+//                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`)
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported, and a button before
@@ -53,6 +56,78 @@ function Expose() {
 }
 
 const getRow = (index: number): FixtureRow => ({ index });
+
+const INNER_COLUMNS: Column<FixtureRow>[] = Array.from(
+    { length: 8 },
+    (_, columnIndex) => ({
+        key: `i${columnIndex}`,
+        name: `I${columnIndex}`,
+        width: 120,
+        getValue: (row) => `${row.index}.${columnIndex}`,
+    }),
+);
+
+/** The expander of a row: a button in its first cell, as an app writes it (M3). */
+function Expander({ rowIndex }: { rowIndex: number }) {
+    const { model } = useDataGrid<FixtureRow>();
+    return (
+        <button
+            type="button"
+            data-testid={`expand-${rowIndex}`}
+            aria-expanded={model.is("row-expanded", { rowIndex })}
+            aria-label="Details"
+            onClick={() => model.run("expanded-rows.toggle", { rowIndex })}
+        >
+            ±
+        </button>
+    );
+}
+
+/** A grid of its own inside a detail (E4): its keys and its active cell are its own. */
+function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
+    return (
+        <DataGrid.Root<FixtureRow>
+            columns={INNER_COLUMNS}
+            rowCount={30}
+            getRow={getRow}
+            rowHeight={24}
+            headerRowHeight={24}
+            data-testid={`inner-${rowIndex}`}
+            style={{ width: 500, height: 150 }}
+        >
+            <DataGrid.Grid
+                aria-label="Items"
+                render={table ? <table /> : undefined}
+            >
+                <DataGrid.Header
+                    render={table ? <thead /> : undefined}
+                    style={{ background: "white", zIndex: 1 }}
+                >
+                    <HeaderRow table={table} />
+                </DataGrid.Header>
+                <DataGrid.Body render={table ? <tbody /> : undefined}>
+                    <DataGrid.Rows<FixtureRow>>
+                        {(row) => (
+                            <DataGrid.Row
+                                row={row}
+                                render={table ? <tr /> : undefined}
+                            >
+                                <DataGrid.Cells<FixtureRow>>
+                                    {(cell) => (
+                                        <DataGrid.Cell
+                                            cell={cell}
+                                            render={table ? <td /> : undefined}
+                                        />
+                                    )}
+                                </DataGrid.Cells>
+                            </DataGrid.Row>
+                        )}
+                    </DataGrid.Rows>
+                </DataGrid.Body>
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
 
 /** The columns under groups: C0 alone, then groups of 4 and 12 columns in turn. */
 function grouped(columns: Column<FixtureRow>[]): ColumnOrGroup<FixtureRow>[] {
@@ -121,6 +196,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const groups = params.get("groups") === "1";
     const sort = params.get("sort") === "1";
     const pinnedCount = numberParam(params, "pinned", 0);
+    const details = params.get("details") === "1";
+    const detailHeight = numberParam(params, "detailHeight", 200);
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
 
@@ -175,6 +252,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     rowCount={rowCount}
                     getRow={getRow}
                     rowHeight={rowHeight}
+                    detailHeight={details ? detailHeight : undefined}
                     maxScrollSize={maxScrollSize}
                     onSortColumnsChange={(sortColumns) =>
                         window.sortChanges.push(sortColumns)
@@ -220,9 +298,40 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                         ) : undefined
                                                     }
                                                     style={pinnedStyle}
-                                                />
+                                                >
+                                                    {details &&
+                                                    cell.columnIndex === 0 ? (
+                                                        <>
+                                                            {String(cell.value)}{" "}
+                                                            <Expander
+                                                                rowIndex={
+                                                                    cell.rowIndex
+                                                                }
+                                                            />
+                                                        </>
+                                                    ) : undefined}
+                                                </DataGrid.Cell>
                                             )}
                                         </DataGrid.Cells>
+                                        {details ? (
+                                            <DataGrid.RowDetail
+                                                render={
+                                                    table ? <td /> : undefined
+                                                }
+                                                style={{ background: "white" }}
+                                            >
+                                                <InnerGrid
+                                                    table={table}
+                                                    rowIndex={row.rowIndex}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    data-testid={`detail-button-${row.rowIndex}`}
+                                                >
+                                                    detail
+                                                </button>
+                                            </DataGrid.RowDetail>
+                                        ) : null}
                                     </DataGrid.Row>
                                 )}
                             </DataGrid.Rows>
