@@ -26,6 +26,7 @@ looking for its feature would search, and `order` is its place inside the catego
 | `virtualization` | large grids on both axes: millions of cells, thousands of columns, variable heights |
 | `data-loading` | where rows come from: infinite loading, loading by window, tiles |
 | `keyboard` | the active cell and the keys that move it, and replacing them |
+| `columns` | what a person does to the columns: resizing them |
 | `row-operations` | the grid's row state the app orders its rows by: sorting |
 | `styling` | how the grid looks when it is not about one feature, the unstyled grid |
 | `real-world` | tables that look like products: rich cells, selection, sorting and filters written in the app |

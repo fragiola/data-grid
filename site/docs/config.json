@@ -51,6 +51,10 @@
                     "path": "concepts/pinned-columns"
                 },
                 {
+                    "label": "Column resizing",
+                    "path": "concepts/column-resizing"
+                },
+                {
                     "label": "Sorting",
                     "path": "concepts/sorting"
                 },

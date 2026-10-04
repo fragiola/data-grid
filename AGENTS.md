@@ -60,7 +60,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    engine reports the row and column windows (visible and rendered ranges) and the end being
    reached. Fetching, caching and placeholders are **app policy**: they live in the examples
    (`_kit/`), never in a package.
-7. **Sizes (D7).** `rowHeight: number | (index) => number`; columns `width: number` (px).
+7. **Sizes (D7).** `rowHeight: number | (index) => number`; columns `width: number` (px), the
+   width a column starts with and a reset gives back: the model keeps a resized column's width
+   over it (`columnWidths`, Epic #70).
 8. **Scroll scaling (D8).** When an axis is larger than a physical cap (configurable, safe in
    Chromium, Firefox and WebKit by default), the engine maps physical scroll to virtual offset.
    Small moves stay pixel-exact relative to the content, the scrollbar reaches the whole dataset,
@@ -68,7 +70,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
-    renderHeaderCell?, renderCell?, sortable?, pinned?, compare?, filter?, meta? }`. Without children, a header cell renders
+    renderHeaderCell?, renderCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
+    compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -149,6 +152,29 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `toggledRowKeys`) and `@fragiola/data-grid-react/selection` (`useSelectAll(rowKeys,
    gridRef?)` → `{ status, count, toggle, canToggle }`); `useLocalRows` returns `filteredRows`. The
    checkbox is always the app's.
+   **Column resizing (Epic #70, W1–W8):** the model keeps `columnWidths` (`{ [columnKey]: px }`,
+   over each column's `width`; a key that is not a column is kept: it may come back),
+   controlled or not on `Root` like the sort (`columnWidths`/`defaultColumnWidths`/
+   `onColumnWidthsChange`); `column-widths.set { columnWidths }`, `.resize { columnKey, width }`,
+   `.reset { columnKey? }`; `get("column-widths")`, `get("column-width-by", { columnKey })` (the
+   width on screen, a group's its columns'). `resizable: true` opts a column in; `minWidth`
+   (default 40) and `maxWidth` (default none) clamp every resize, and a `width` outside them is
+   clamped where used; `columnsError` refuses a negative minimum or one above the maximum. The
+   column axis reads the effective width, so pinned widths, header spans, windows and scroll
+   scaling follow. A group's resize is shared by its resizable columns in proportion to their
+   widths, each clamped, the rest going to the next; a group is resizable when one of its
+   columns is. The handle is the app's element with `useColumnResizer(cell)`'s props
+   (`role="separator"`, `aria-orientation="vertical"`, `aria-valuenow`/`-min`/`-max` in px, the
+   maximum without one the view's width, `data-grid-column-resizer` = the key,
+   `data-grid-part="column-resizer"`); its name, place, look and `touch-action: none` are the
+   app's. The engine drags it: a primary-button press captures the pointer, one
+   `column-widths.resize` per animation frame (the view's `requestAnimationFrame`), right grows,
+   the release keeps the width, Escape or `pointercancel` restores the one it started from
+   (`engine.get("column-resize")` → `{ columnKey, width } | null`, the `column-resize` event); a
+   double click runs `column-widths.reset`; a press, click or drag on it is never a sort
+   (`separator` is a control role). `data-resizable` on a resizable header cell (a group's when
+   one of its columns is), `data-resizing` on the header cell and the handle during a drag. Auto
+   widths, reordering, RTL and persisting the widths are not the grid's (yet, or ever).
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. With
@@ -163,7 +189,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     focus, hands the cell's keys to its controls: Tab and Shift+Tab cycle them, Escape (or focus
     leaving the cell) gives them back. The cell in interaction is always the active one
     (`engine.get("interaction")`, the `interaction` event, `view.interaction`,
-    `interact-cell`/`leave-cell`); `data-interacting` on it. A consumer can
+    `interact-cell`/`leave-cell`); `data-interacting` on it. A column's resize handle is a control
+    of its header cell: in interaction (F2, Enter on a header that does not sort, Tab among its
+    controls), on the focused handle ←/→ resize by 10 px (Shift: 50), Home/End go to the minimum
+    and the maximum (the column's own `width` without one), each one `column-widths.resize` after
+    the consumer's handlers; Escape leaves interaction and keeps the width. A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. ARIA: `role="grid"`,
     `aria-rowcount`/`aria-colcount` are totals, `aria-rowindex`/`aria-colindex` 1-based.
 12. **Versions (D12).** Exact versions published at least 7 days ago, checked against the registry
@@ -293,9 +323,19 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
+- **A column resizer is the app's element (Epic #70, W3).** `useColumnResizer(cell)` returns
+  `{ state, props }` (`state`: `columnKey`, `resizable`, `resizing`, `width`, `minWidth`,
+  `maxWidth`; `props`: the separator's ARIA, `tabIndex`, `data-grid-column-resizer`,
+  `data-grid-part="column-resizer"`, `data-resizing`, an empty `style`), and no props under a
+  cell that does not resize (`state.resizable` false: render none). The app gives it a name
+  (`aria-label`), a place (a header cell is positioned), a look and `touch-action: none`. A header
+  cell given children renders only them: `headerCellContent(cell)` is its default content, for
+  `{headerCellContent(cell)}<Resizer cell={cell} />`. A focusable `separator` on a `div` needs a
+  documented `biome-ignore` of `useAriaPropsSupportedByRole` (the APG splitter; an `<hr>` cannot
+  take focus).
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
-  until a root holds it); a part hook (`useRow`, `useCell`, `useHeaderCell`) returns
-  `{ state, props }`, the structural style in `props.style`.
+  until a root holds it); a part hook (`useRow`, `useCell`, `useHeaderCell`,
+  `useColumnResizer`) returns `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
   before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample, part } from "../helpers";
-import { header, rows } from "./helpers";
+import { boxOf, dragBy, header, rows } from "./helpers";
 
 // The grid's selection (the app keeps the keys and deletes those rows), and the grid's sort (the
 // app orders the rows by it).
@@ -138,4 +138,19 @@ test("the grid is one tab stop: Enter reaches a cell's control, Escape comes bac
     ).toBeFocused();
     await page.keyboard.press("Tab");
     expect(await focusInGrid()).toBe(false);
+});
+
+test("resizes a column by its handle without sorting it", async ({ page }) => {
+    await openExample(page, "companies");
+    await dragBy(
+        page,
+        page.getByRole("separator", { name: "Resize Domain" }),
+        50,
+    );
+    expect((await boxOf(header(page, "Domain"))).width).toBe(220);
+    await expect(header(page, "Company")).toHaveAttribute(
+        "aria-sort",
+        "ascending",
+    );
+    await expect(header(page, "Domain")).not.toHaveAttribute("data-sort");
 });

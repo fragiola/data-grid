@@ -37,9 +37,10 @@ header.
 ## Columns
 
 A column's `width` is in pixels. The grid's width is the sum of its columns: wider than the
-root, it scrolls sideways, and columns are virtualized like rows.
+root, it scrolls sideways, and columns are virtualized like rows. A `resizable` column starts at
+its `width`, and a person can [resize it](/docs/concepts/column-resizing) within its limits.
 
 <Callout type="warn" title="Measured sizes come later">
-Heights measured from the rendered content, automatic widths and resizable columns are not built
-yet. See [Limitations and roadmap](/docs/limitations).
+Heights measured from the rendered content and automatic widths are not built yet. See
+[Limitations and roadmap](/docs/limitations).
 </Callout>

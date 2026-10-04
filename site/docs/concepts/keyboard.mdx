@@ -59,6 +59,21 @@ A control you want to stay a tab stop of its own carries `data-grid-tab-stop`: t
 `engine.run("leave-cell", {})` do what Enter and Escape do, and `engine.get("interaction")` tells
 which cell is in interaction.
 
+### Resize handles
+
+A [column's resize handle](/docs/concepts/column-resizing) is a control of its header cell: F2
+(or Enter, where the header does not sort) hands it the keys, or Tab reaches it among the cell's
+other controls. Then, on the focused handle:
+
+| key | does |
+| --- | --- |
+| ←, → | 10 px narrower, wider |
+| Shift+←, Shift+→ | 50 px narrower, wider |
+| Home, End | the column's minimum, its maximum (or its own `width`, without one) |
+| Escape | back to navigation; the width stays |
+
+Escape also cancels a drag, putting back the width it started from.
+
 ## Whose key it is
 
 The grid takes keys pressed on its cells, on the grid itself and on its scroll container; in

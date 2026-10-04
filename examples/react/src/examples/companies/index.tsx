@@ -1,6 +1,11 @@
 "use client";
 
-import { type Column, DataGrid, type RowKey } from "@fragiola/data-grid-react";
+import {
+    type Column,
+    DataGrid,
+    headerCellContent,
+    type RowKey,
+} from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import {
     AtSign,
@@ -29,6 +34,7 @@ import {
     CellLink,
     CompanyIds,
     isSortKey,
+    Resizer,
     SelectAllHeader,
     SelectCell,
     type SortKey,
@@ -52,6 +58,8 @@ function rank(
     return range ? ranges.indexOf(range) : -1;
 }
 
+// Every column but the checkboxes resizes (a handle in its header cell); its `name` is the
+// handle's, the header showing its own label.
 const columns: Column<Company>[] = [
     {
         key: "select",
@@ -63,7 +71,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "name",
+        name: "Company",
         width: 220,
+        resizable: true,
         sortable: true,
         renderHeaderCell: () => (
             <SortLabel
@@ -88,7 +98,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "domain",
+        name: "Domain",
         width: 170,
+        resizable: true,
         sortable: true,
         renderHeaderCell: () => (
             <SortLabel
@@ -104,7 +116,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "categories",
+        name: "Categories",
         width: 360,
+        resizable: true,
         renderHeaderCell: () => (
             <span className={styles.headerLabel}>
                 <Tags aria-hidden className={styles.icon} />
@@ -126,7 +140,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "description",
+        name: "Description",
         width: 300,
+        resizable: true,
         renderHeaderCell: () => (
             <span className={styles.headerLabel}>
                 <FileText aria-hidden className={styles.icon} />
@@ -141,7 +157,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "linkedin",
+        name: "LinkedIn",
         width: 170,
+        resizable: true,
         renderHeaderCell: () => (
             <span className={styles.headerLabel}>
                 <AtSign aria-hidden className={styles.icon} />
@@ -154,7 +172,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "employees",
+        name: "Employees",
         width: 150,
+        resizable: true,
         sortable: true,
         // ranges sort by their scale, not as text
         compare: (a, b) =>
@@ -180,7 +200,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "arr",
+        name: "Estimated ARR",
         width: 160,
+        resizable: true,
         sortable: true,
         compare: (a, b) => rank(ARR_RANGES, a.arr) - rank(ARR_RANGES, b.arr),
         renderHeaderCell: () => (
@@ -200,7 +222,9 @@ const columns: Column<Company>[] = [
     },
     {
         key: "country",
+        name: "Primary location",
         width: 210,
+        resizable: true,
         sortable: true,
         renderHeaderCell: () => (
             <SortLabel
@@ -303,7 +327,10 @@ export default function Companies() {
                                         <DataGrid.HeaderCell
                                             cell={cell}
                                             className={styles.headerCell}
-                                        />
+                                        >
+                                            {headerCellContent(cell)}
+                                            <Resizer cell={cell} />
+                                        </DataGrid.HeaderCell>
                                     )}
                                 </DataGrid.HeaderCells>
                             </DataGrid.HeaderRow>

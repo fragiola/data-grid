@@ -1,5 +1,10 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { cell, settle } from "../../../examples/react/e2e/examples/helpers.ts";
+import {
+    boxOf,
+    cell,
+    dragBy,
+    settle,
+} from "../../../examples/react/e2e/examples/helpers.ts";
 
 // One spec, two structures (D5): every test runs against the same unstyled grid rendered as real
 // table elements (fixtures/table-grid) and as divs (fixtures/div-grid), in Chromium and Firefox.
@@ -1555,12 +1560,6 @@ for (const kind of KINDS) {
             const resizer = (page: Page, key: string) =>
                 page.getByTestId(`resizer-${key}`);
 
-            async function boxOf(target: Locator) {
-                const box = await target.boundingBox();
-                if (!box) throw new Error("no box");
-                return box;
-            }
-
             /** The widths on screen of a column's header cell and its first body cell. */
             async function widths(page: Page, columnIndex: number) {
                 return [
@@ -1569,25 +1568,13 @@ for (const kind of KINDS) {
                 ];
             }
 
-            /** Presses a resizer, drags it by `dx` and, unless told to hold it, releases it. */
-            async function drag(
+            /** Drags a resizer by `dx` and, unless told to hold it, releases it. */
+            const drag = (
                 page: Page,
                 key: string,
                 dx: number,
-                { hold = false } = {},
-            ) {
-                const box = await boxOf(resizer(page, key));
-                const x = box.x + box.width / 2;
-                const y = box.y + box.height / 2;
-                await page.mouse.move(x, y);
-                await page.mouse.down();
-                await page.mouse.move(x + dx, y, { steps: 5 });
-                await settle(page);
-                if (!hold) {
-                    await page.mouse.up();
-                    await settle(page);
-                }
-            }
+                options?: { hold?: boolean },
+            ) => dragBy(page, resizer(page, key), dx, options);
 
             const lastWidths = (page: Page) =>
                 page.evaluate(() => window.widthChanges.at(-1));
