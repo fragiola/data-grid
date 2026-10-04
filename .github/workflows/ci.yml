@@ -57,6 +57,9 @@ jobs:
 
       - run: pnpm build
 
+      # a report, never a gate (Epic #62): the bundle sizes in the job summary
+      - run: pnpm size
+
   e2e:
     name: E2E (${{ matrix.name }})
     if: github.event_name != 'push'
