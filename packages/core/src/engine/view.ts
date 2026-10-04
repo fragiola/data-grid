@@ -62,14 +62,6 @@ function indexes(
     return list;
 }
 
-/** The header cell at a header position (a group, or a column's on its rows). */
-export function headerCellAt<TRow, TNode>(
-    header: HeaderLayout<TRow, TNode>,
-    { rowIndex, columnIndex }: CellPosition,
-) {
-    return header.cellAt(rowIndex, columnIndex);
-}
-
 /** A column window without the pinned columns (the overscan may reach into them). */
 export function scrollingWindow(
     columns: AxisWindow,
@@ -100,7 +92,7 @@ export function activeColumn<TRow, TNode>(
     // a pinned column is always rendered
     if (!active || active.columnIndex < pinnedCount) return null;
     if (active.rowIndex < 0) {
-        const cell = headerCellAt(header, active);
+        const cell = header.cellAt(active.rowIndex, active.columnIndex);
         if (
             cell &&
             overlaps(
@@ -174,24 +166,15 @@ export interface ViewInputs<TRow, TNode>
     readonly headerRowsFor: HeaderRowsFor<TRow, TNode>;
 }
 
-/** The view a render shows for its inputs. */
+/** The view a render shows for its inputs: its own measures as given, the rest from the state. */
 export function buildView<TRow, TNode>({
     state,
     rowWindow,
     columnWindow,
-    rowAxis,
-    columnAxis,
-    width,
-    height,
-    headerHeight,
-    viewportWidth,
-    viewportBodyHeight,
-    pinnedColumnCount: pinnedCount,
-    pinnedWidth,
-    rowsRevision,
-    interaction,
     headerRowsFor,
+    ...measures
 }: ViewInputs<TRow, TNode>): GridView<TRow, TNode> {
+    const { rowAxis, columnAxis, pinnedColumnCount: pinnedCount } = measures;
     const active = state.activePosition;
     const extraColumn = activeColumn(
         active,
@@ -202,6 +185,7 @@ export function buildView<TRow, TNode>({
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
     return {
+        ...measures,
         rows: indexes(
             rowWindow.rendered.start,
             rowWindow.rendered.end,
@@ -218,12 +202,7 @@ export function buildView<TRow, TNode>({
         renderedColumns: columnWindow.rendered,
         rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
         columnBase: columnAxis.offsetOf(start),
-        width,
-        height,
-        headerHeight,
         headerRowHeight: state.headerRowHeight,
-        viewportWidth,
-        viewportBodyHeight,
         headerRowCount: rowsOfHeader,
         headerRows: headerRowsFor(
             state.header,
@@ -236,21 +215,15 @@ export function buildView<TRow, TNode>({
         header: state.header,
         rowCount: state.rowCount,
         columnCount: state.columns.length,
-        rowAxis,
-        columnAxis,
         columnDefs: state.columns,
         source: state.source,
         active,
-        rowsRevision,
         sortColumns: state.sortColumns,
-        pinnedColumnCount: pinnedCount,
-        pinnedWidth,
         expandedRows: state.expandedRows,
         rowKey: state.rowKey,
         rowSelection: state.rowSelection,
         selectedRowKeys: state.selectedRowKeys,
         isRowSelectable: state.isRowSelectable,
-        interaction,
     };
 }
 
@@ -279,18 +252,6 @@ const VIEW_KEYS = [
     "interaction",
 ] as const satisfies readonly (keyof GridView)[];
 
-/** Whether a view renders an expanded row (its rendered rows, or the active row). */
-export function rendersDetail<TRow, TNode>(
-    next: GridView<TRow, TNode>,
-): boolean {
-    const { expandedRows, renderedRows, active } = next;
-    if (expandedRows.length === 0) return false;
-    return (
-        holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
-        (active !== null && holdsRow(expandedRows, active.rowIndex))
-    );
-}
-
 /** Whether `next` renders anything `current` does not: a new view to publish. */
 export function viewChanged<TRow, TNode>(
     current: GridView<TRow, TNode>,
@@ -303,13 +264,17 @@ export function viewChanged<TRow, TNode>(
         return true;
     }
     if (VIEW_KEYS.some((key) => current[key] !== next[key])) return true;
+    const { expandedRows, renderedRows, active } = next;
     // the visible area matters only to an empty grid, and its width to the details on
     // screen (as wide as the view): a resize alone renders nothing else
     return (
         ((current.rowCount === 0 || next.rowCount === 0) &&
             (current.viewportWidth !== next.viewportWidth ||
                 current.viewportBodyHeight !== next.viewportBodyHeight)) ||
-        (current.viewportWidth !== next.viewportWidth && rendersDetail(next))
+        (current.viewportWidth !== next.viewportWidth &&
+            // an expanded row it renders (its rendered rows, or the active row)
+            (holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
+                (active !== null && holdsRow(expandedRows, active.rowIndex))))
     );
 }
 
@@ -319,7 +284,7 @@ export function elementPosition<TRow, TNode>(
     header: HeaderLayout<TRow, TNode>,
 ): CellPosition {
     if (position.rowIndex >= 0) return position;
-    const cell = headerCellAt(header, position);
+    const cell = header.cellAt(position.rowIndex, position.columnIndex);
     return cell
         ? { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex }
         : position;
@@ -336,7 +301,7 @@ export function columnToScrollTo<TRow, TNode>(
     visibleColumns: Range,
 ): number | undefined {
     if (position.rowIndex >= 0) return position.columnIndex;
-    const cell = headerCellAt(header, position);
+    const cell = header.cellAt(position.rowIndex, position.columnIndex);
     if (!cell || cell.columnSpan <= 1) return position.columnIndex;
     // a pinned group is always in view
     if (cell.columnIndex + cell.columnSpan <= pinnedCount) return undefined;

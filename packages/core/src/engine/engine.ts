@@ -59,7 +59,6 @@ import {
     columnToScrollTo,
     createHeaderRows,
     elementPosition,
-    headerCellAt,
     rowAxisOf,
     scrollingWindow,
     viewChanged,
@@ -145,19 +144,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     let viewStale = false;
     /** the cell whose controls have the keys, and an entry waiting for its cell (Epic #52) */
-    const interaction = createInteraction<TRow, TNode>({
+    const interaction = createInteraction({
         getViewport: () => viewport,
-        getState: () => state,
-        model,
         cellElement,
         cellOf,
         isCellElement,
         same,
-        markStale: () => {
+        isActive: (position) => same(state.activePosition, position),
+        activate,
+        changed: () => {
             viewStale = true;
+            update();
+            emit("interaction", interaction.cell);
         },
-        update,
-        emit,
     });
     let view: GridView<TRow, TNode> = makeView();
     let committed: GridView<TRow, TNode> | null = null;
@@ -402,13 +401,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * Sets the physical scroll, now or, while a view the adapter has not committed yet is waiting
      * (its sizer may not have its size), when it commits; a later move replaces an earlier one.
      */
-    function scrollWhenReady({ top, left }: ScrollMoves) {
+    function scrollWhenReady(moves: ScrollMoves) {
         if (view === committed) {
-            applyScroll({ top, left });
+            applyScroll(moves);
             return;
         }
-        if (top !== undefined) pendingScroll.top = top;
-        if (left !== undefined) pendingScroll.left = left;
+        if (moves.top !== undefined) pendingScroll.top = moves.top;
+        if (moves.left !== undefined) pendingScroll.left = moves.left;
     }
 
     function applyScroll(moves: ScrollMoves) {
@@ -741,7 +740,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             if (isControl(node)) return null;
         }
-        const column = headerCellAt(state.header, cell)?.column;
+        const column = state.header.cellAt(
+            cell.rowIndex,
+            cell.columnIndex,
+        )?.column;
         return column?.sortable === true ? column : null;
     }
 
@@ -788,11 +790,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const inside = isElement(next) && viewport?.contains(next) === true;
         // focus leaving the cell in interaction (elsewhere in the page, a portal): navigation
         // focus gone from the grid: an entry waiting for its cell would pull it back, it is dropped
-        if (
-            interaction.pending &&
-            !inside &&
-            viewport?.ownerDocument.hasFocus() !== false
-        ) {
+        if (!inside && viewport?.ownerDocument.hasFocus() !== false) {
             interaction.cancelPending();
         }
         // (the window losing focus, alt-tab or the devtools, is no leaving: focus comes back)
@@ -1104,16 +1102,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // another cell made active (the app, a middleware): the interaction ends, and an entry
         // waiting for another cell is dropped
-        if (interaction.cell && !same(after.activePosition, interaction.cell)) {
-            interaction.leaveCell(false);
-        }
-        const waiting = interaction.pending;
-        if (waiting && same(after.activePosition, waiting.position)) {
-            // a controlled parent followed: the cell enters now (once rendered)
-            interaction.enterCell(waiting.position, waiting.focus);
-        } else if (waiting && after.activePosition !== before.activePosition) {
-            interaction.cancelPending();
-        }
+        interaction.activeChanged(
+            after.activePosition !== before.activePosition,
+        );
         const active = after.activePosition;
         if (active && active !== before.activePosition) {
             if (focusInside()) pendingFocus = true;
@@ -1162,8 +1153,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     "data-column-index",
                 ],
             });
-            for (const cell of interaction.cellsUnder(element))
-                interaction.manageTabOrder(cell);
+            interaction.manageCellsUnder(element);
             // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("focusin", onFocusIn);
@@ -1276,11 +1266,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 update();
             }
             writeLayers();
-            interaction.dropUnrendered();
-            // an entry waiting for its cell (out of view, a row loading): it enters once shown with
-            // controls, and waits on otherwise
-            const waiting = interaction.pending;
-            if (waiting) interaction.enterCell(waiting.position, waiting.focus);
+            interaction.committed();
             flushFocus();
         },
         keydown,
@@ -1316,13 +1302,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     } = {
         "scroll-to-cell": scrollToCell,
         "scroll-to": scrollTo,
-        "interact-cell": (position) => {
-            activate(position);
-            if (interaction.enterCell(position, true, false)) return;
-            // not rendered (out of view), no controls yet (a row loading), or a controlled parent
-            // to follow: entered once its cell is active and shows controls
-            interaction.wait(position, true);
-        },
+        "interact-cell": interaction.interact,
         "leave-cell": () => {
             interaction.cancelPending();
             interaction.leaveCell(true);

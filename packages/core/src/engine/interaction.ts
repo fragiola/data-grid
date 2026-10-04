@@ -1,5 +1,4 @@
-import type { DataGridModel } from "../model/model";
-import type { CellPosition, DataGridState } from "../model/types";
+import type { CellPosition } from "../model/types";
 import {
     CELL_SELECTOR,
     FOCUSABLE,
@@ -10,50 +9,37 @@ import {
     TAB_STOP_ATTRIBUTE,
     VIEWPORTS,
 } from "./dom";
-import type { EngineEventKey, EngineEventMap } from "./types";
 
 // Interactive cells (Epic #52): the state machine of a cell whose controls have the keys. Outside
 // interaction the controls inside the engine's own cells stay out of the tab order (their own
 // `tabindex` kept); entering a cell gives them back and focuses one, leaving takes them out again.
 
-/** What the interaction needs of its engine. */
-export interface InteractionContext<TRow, TNode> {
-    /** the attached viewport, or `null` */
-    readonly getViewport: () => HTMLElement | null;
-    /** the model's state, as it is now */
-    readonly getState: () => DataGridState<TRow, TNode>;
-    readonly model: DataGridModel<TRow, TNode>;
-    /** this grid's own element of a cell */
-    readonly cellElement: (position: CellPosition) => HTMLElement | null;
-    /** the cell of this grid an event happened in */
-    readonly cellOf: (target: EventTarget | null) => CellPosition | null;
-    /** whether an element is one of this grid's cells (or header cells) itself */
-    readonly isCellElement: (element: Element) => boolean;
-    /** whether `a` is the cell `b` (a header cell spanning rows is the same on each of them) */
-    readonly same: (a: CellPosition | null, b: CellPosition) => boolean;
-    /** the view shows something new: the next update builds one */
-    readonly markStale: () => void;
-    readonly update: () => void;
-    readonly emit: <K extends EngineEventKey>(
-        event: K,
-        value: EngineEventMap[K],
-    ) => void;
-}
-
 /** The interaction of one engine. */
 export interface Interaction {
     /** the cell whose controls have the keys (its element's position), or `null` */
     readonly cell: CellPosition | null;
-    /** a cell `interact-cell` asked for before it was rendered: entered on the commit that shows it */
-    readonly pending: { position: CellPosition; focus: boolean } | null;
-    /** waits for a cell to enter once it is active and shows controls */
-    wait(position: CellPosition, focus: boolean): void;
+    /**
+     * `interact-cell`: makes a cell active and hands the keys to its controls. One not rendered
+     * (out of view), with no controls yet (a row loading) or with a controlled parent to follow
+     * enters once it is active and shows controls
+     */
+    interact(position: CellPosition): void;
     /** drops the entry waiting for its cell, if any */
     cancelPending(): void;
-    /** ends the interaction, without focusing, when its cell is no longer rendered */
-    dropUnrendered(): void;
-    manageTabOrder(cell: Element): void;
-    cellsUnder(node: Node): Element[];
+    /**
+     * After a model change: another cell made active (the app, a middleware) ends the interaction,
+     * and the entry waiting for its cell enters once it is active, or is dropped when `moved`
+     * made another one active
+     */
+    activeChanged(moved: boolean): void;
+    /**
+     * After a commit: the interaction ends, without focusing, when its cell is no longer rendered;
+     * an entry waiting for its cell (out of view, a row loading) enters once it is shown with
+     * controls, and waits on otherwise
+     */
+    committed(): void;
+    /** keeps the tab order of every cell of this grid under a node (the node itself included) */
+    manageCellsUnder(node: Node): void;
     onMutations(records: readonly MutationRecord[]): void;
     enterCell(
         position: CellPosition,
@@ -64,19 +50,37 @@ export interface Interaction {
     cycleControls(cell: Element, from: Element, back: boolean): void;
 }
 
+/** What the interaction needs of its engine. */
+export interface InteractionContext {
+    /** the attached viewport, or `null` */
+    readonly getViewport: () => HTMLElement | null;
+    /** this grid's own element of a cell */
+    readonly cellElement: (position: CellPosition) => HTMLElement | null;
+    /** the cell of this grid an event happened in */
+    readonly cellOf: (target: EventTarget | null) => CellPosition | null;
+    /** whether an element is one of this grid's cells (or header cells) itself */
+    readonly isCellElement: (element: Element) => boolean;
+    /** whether `a` is the cell `b` (a header cell spanning rows is the same on each of them) */
+    readonly same: (a: CellPosition | null, b: CellPosition) => boolean;
+    /** whether a cell is the active one */
+    readonly isActive: (position: CellPosition) => boolean;
+    /** makes a cell active, unless it is already */
+    readonly activate: (position: CellPosition) => void;
+    /** the interaction changed: the engine shows it (a new view) and tells its listeners */
+    readonly changed: () => void;
+}
+
 /** Creates the interaction of an engine: no cell's controls have the keys yet. */
-export function createInteraction<TRow, TNode>({
+export function createInteraction({
     getViewport,
-    getState,
-    model,
     cellElement,
     cellOf,
     isCellElement,
     same,
-    markStale,
-    update,
-    emit,
-}: InteractionContext<TRow, TNode>): Interaction {
+    isActive,
+    activate,
+    changed,
+}: InteractionContext): Interaction {
     /** the cell whose controls have the keys (its element's position), or `null` */
     let interaction: CellPosition | null = null;
     /** a cell `interact-cell` asked for before it was rendered: entered on the commit that shows it */
@@ -218,13 +222,7 @@ export function createInteraction<TRow, TNode>({
         if (now && same(interaction, now)) return;
         interaction = null;
         // an entry that does not happen (a controlled parent to follow) tells nothing itself
-        if (!now || !enterCell(now, false)) emitInteraction();
-    }
-
-    function emitInteraction() {
-        markStale();
-        update();
-        emit("interaction", interaction);
+        if (!now || !enterCell(now, false)) changed();
     }
 
     /**
@@ -241,12 +239,12 @@ export function createInteraction<TRow, TNode>({
         const controls = controlsOf(cell);
         if (controls.length === 0) return false;
         const at = cellOf(cell) ?? position;
-        if (!same(getState().activePosition, at)) {
+        if (!isActive(at)) {
             // asked once: a caller that asked already (a focus) waits for the answer instead
-            if (activating) model.run("active-position.set", at);
+            if (activating) activate(at);
             // the cell in interaction is always the active one: a controlled parent that follows
             // later makes it so (the entry waits for it); a middleware that redirected it, never
-            if (!same(getState().activePosition, at)) {
+            if (!isActive(at)) {
                 pendingInteraction = { position: at, focus };
                 return false;
             }
@@ -262,10 +260,10 @@ export function createInteraction<TRow, TNode>({
         if (focus && !focusFrom(controls, 0, 1)) {
             interaction = null;
             manageTabOrder(cell);
-            if (before) emitInteraction();
+            if (before) changed();
             return false;
         }
-        emitInteraction();
+        changed();
         return true;
     }
 
@@ -299,7 +297,7 @@ export function createInteraction<TRow, TNode>({
             manageTabOrder(cell);
             if (focusCell) cell.focus({ preventScroll: true });
         }
-        emitInteraction();
+        changed();
     }
 
     /** Tab and Shift+Tab in interaction: the cell's next or previous control, wrapping around. */
@@ -320,24 +318,37 @@ export function createInteraction<TRow, TNode>({
         get cell() {
             return interaction;
         },
-        get pending() {
-            return pendingInteraction;
-        },
-        wait(position, focus) {
-            pendingInteraction = { position, focus };
+        interact(position) {
+            activate(position);
+            if (!enterCell(position, true, false)) {
+                pendingInteraction = { position, focus: true };
+            }
         },
         cancelPending() {
             pendingInteraction = null;
         },
-        dropUnrendered() {
+        activeChanged(moved) {
+            if (interaction && !isActive(interaction)) leaveCell(false);
+            const waiting = pendingInteraction;
+            // a controlled parent followed: the cell enters now (once rendered)
+            if (waiting && isActive(waiting.position)) {
+                enterCell(waiting.position, waiting.focus);
+            } else if (waiting && moved) {
+                pendingInteraction = null;
+            }
+        },
+        committed() {
             // the cell in interaction scrolled out of the rendered ones: back to navigation
             if (interaction && !cellElement(interaction)) {
                 interaction = null;
-                emitInteraction();
+                changed();
             }
+            const waiting = pendingInteraction;
+            if (waiting) enterCell(waiting.position, waiting.focus);
         },
-        manageTabOrder,
-        cellsUnder,
+        manageCellsUnder(node) {
+            for (const cell of cellsUnder(node)) manageTabOrder(cell);
+        },
         onMutations,
         enterCell,
         leaveCell,

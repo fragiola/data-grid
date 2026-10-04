@@ -112,17 +112,8 @@ export const FOCUSABLE = [
  */
 export const TAB_STOP_ATTRIBUTE = "data-grid-tab-stop";
 
-/** The keys a scroll container pages itself by. */
-export const PAGE_KEYS = new Set([
-    "PageUp",
-    "PageDown",
-    "Home",
-    "End",
-    "ArrowUp",
-    "ArrowDown",
-    "ArrowLeft",
-    "ArrowRight",
-]);
+/** The keys a scroll container pages itself by: every navigation key (`KEYS`) is one of them. */
+export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
 
 /** Whether a control moves through its group with the arrows (a radio, a menu item, a tab). */
 export function movesWithArrows(element: Element): boolean {

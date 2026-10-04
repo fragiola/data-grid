@@ -170,8 +170,11 @@ function samePosition(
     );
 }
 
-/** A controlled state of keys (the sort, the expanded rows, the selection), over the root's props. */
-interface KeysState<TRow, V>
+/**
+ * A controlled state over the root's props (the active position, the sort, the expanded rows, the
+ * selection): its prop, its handler, its default.
+ */
+interface PropsState<TRow, V>
     extends Pick<
         ControlledState<TRow, V>,
         "prefix" | "read" | "same" | "apply" | "vetoed"
@@ -182,23 +185,20 @@ interface KeysState<TRow, V>
     ) => ((value: V) => void) | undefined;
     /** the value to start with, uncontrolled, when the grid may not take all of it */
     readonly start?: (props: RootProps<TRow>) => V | undefined;
-    /** the keys a command makes; without it, the command's value is the keys themselves */
-    readonly keysOf?: (command: CommandName, value: unknown) => V;
+    /** what a command makes it, from the command's value; without it, that value itself */
+    readonly fromCommand?: (command: CommandName, value: unknown) => V;
 }
 
-/** The controlled state of keys a root's latest props hold: its prop, its handler, its default. */
-function keysState<TRow, V>(
+/** The controlled state a root's latest props hold: its prop, its handler, its default. */
+function propsState<TRow, V>(
     latest: RefObject<RootProps<TRow>>,
-    spec: KeysState<TRow, V>,
+    spec: PropsState<TRow, V>,
 ): ControlledState<TRow, V> {
     const { start } = spec;
     return {
-        prefix: spec.prefix,
-        read: spec.read,
-        same: spec.same,
-        apply: spec.apply,
-        vetoed: spec.vetoed,
-        valueOf: spec.keysOf ?? ((_, value) => value as V),
+        // its `prefix`, `read`, `same`, `apply` and `vetoed` as given
+        ...spec,
+        valueOf: spec.fromCommand ?? ((_, value) => value as V),
         prop: () => spec.prop(latest.current),
         report: (value) => spec.onChange(latest.current)?.(value),
         start: start && (() => start(latest.current)),
@@ -291,23 +291,25 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // each piece guarded in this order, the active position first: it settles first too
         const bind = <V,>(spec: ControlledState<TRow, V>) =>
             bindControlled(model, flags, spec);
-        const position = bind<CellPosition | null>({
-            prefix: "active-position.",
-            prop: () => latest.current.activePosition,
-            read: (state) => state.activePosition,
-            same: samePosition,
-            valueOf: (command, value) =>
-                command === "active-position.clear"
-                    ? null
-                    : (value as CellPosition),
-            report: (value) => latest.current.onActivePositionChange?.(value),
-            apply: (value) => {
-                if (value === null) model.run("active-position.clear");
-                else model.run("active-position.set", value);
-            },
-        });
+        const position = bind(
+            propsState<TRow, CellPosition | null>(latest, {
+                prefix: "active-position.",
+                prop: (props) => props.activePosition,
+                onChange: (props) => props.onActivePositionChange,
+                read: (state) => state.activePosition,
+                same: samePosition,
+                fromCommand: (command, value) =>
+                    command === "active-position.clear"
+                        ? null
+                        : (value as CellPosition),
+                apply: (value) => {
+                    if (value === null) model.run("active-position.clear");
+                    else model.run("active-position.set", value);
+                },
+            }),
+        );
         const sort = bind(
-            keysState<TRow, readonly SortColumn[]>(latest, {
+            propsState<TRow, readonly SortColumn[]>(latest, {
                 prefix: "sort-columns.",
                 prop: (props) => props.sortColumns,
                 onChange: (props) => props.onSortColumnsChange,
@@ -329,7 +331,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             }),
         );
         const expanded = bind(
-            keysState<TRow, readonly RowKey[]>(latest, {
+            propsState<TRow, readonly RowKey[]>(latest, {
                 prefix: "expanded-rows.",
                 prop: (props) => props.expandedRowKeys,
                 onChange: (props) => props.onExpandedRowKeysChange,
@@ -341,7 +343,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             }),
         );
         const selection = bind(
-            keysState<TRow, readonly RowKey[]>(latest, {
+            propsState<TRow, readonly RowKey[]>(latest, {
                 prefix: "selected-rows.",
                 // the keys follow the prop while rows are selectable; off, the model keeps the
                 // keys it had (no row shows them) and the prop waits until it is on again
@@ -356,7 +358,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                         : undefined,
                 read: (state) => state.selectedRowKeys,
                 same: sameRowKeys,
-                keysOf: (command, value) =>
+                fromCommand: (command, value) =>
                     command === "selected-rows.toggle"
                         ? (value as ToggleResult).rowKeys
                         : (value as readonly RowKey[]),
