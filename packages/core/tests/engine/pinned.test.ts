@@ -11,7 +11,7 @@ import {
     rowDisplay,
     rowLeft,
 } from "../../src";
-import { pinnedInset } from "../../src/engine/engine";
+import { pinnedInset } from "../../src/engine/geometry";
 import { columnsError } from "../../src/header/header";
 
 // Pinned columns at the start (Epic #31, P1–P7; Epic #38): the leading `pinned: "start"` columns

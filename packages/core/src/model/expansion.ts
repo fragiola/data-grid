@@ -158,3 +158,27 @@ export function withRow(
 export function holdsRow(rows: readonly number[], rowIndex: number): boolean {
     return holdsRowIn(rows, rowIndex, rowIndex + 1);
 }
+
+/**
+ * Whether the details' sizes may differ between two states: the rows shown expanded changed, or,
+ * with rows expanded, their height did.
+ */
+export function detailsChanged<TRow, TNode>(
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): boolean {
+    return (
+        after.expandedRows !== before.expandedRows ||
+        (after.expandedRows.length > 0 &&
+            (after.detailHeight !== before.detailHeight ||
+                // a detail's height may be a function of its row, whose data changed
+                (typeof after.detailHeight === "function" &&
+                    (after.source !== before.source ||
+                        (after.rowsChanged !== before.rowsChanged &&
+                            holdsRowIn(
+                                after.expandedRows,
+                                after.rowsChanged.start,
+                                after.rowsChanged.end,
+                            ))))))
+    );
+}

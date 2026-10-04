@@ -1,6 +1,8 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
 export type { Axis, Size } from "./axis/axis";
+export { TAB_STOP_ATTRIBUTE } from "./engine/dom";
+export { createDataGridEngine } from "./engine/engine";
 export {
     ariaHeaderCellSpans,
     ariaRowCount,
@@ -8,20 +10,7 @@ export {
     ariaRowIndex,
     columnLeft,
     columnPinning,
-    createDataGridEngine,
-    type DataGridEngine,
-    type DataGridEngineOptions,
-    type EngineActionKey,
-    type EngineActionMap,
-    type EngineAdapter,
-    type EngineEventKey,
-    type EngineEventMap,
-    type EngineLayer,
-    type EngineQueryKey,
-    type EngineQueryMap,
-    type GridView,
     type HeaderCellSort,
-    type HeaderRowView,
     headerCellBox,
     headerCellSort,
     renderedWidth,
@@ -34,8 +23,21 @@ export {
     rowSelected,
     rowTop,
     rowWidth,
-    TAB_STOP_ATTRIBUTE,
-} from "./engine/engine";
+} from "./engine/geometry";
+export type {
+    DataGridEngine,
+    DataGridEngineOptions,
+    EngineActionKey,
+    EngineActionMap,
+    EngineAdapter,
+    EngineEventKey,
+    EngineEventMap,
+    EngineLayer,
+    EngineQueryKey,
+    EngineQueryMap,
+    GridView,
+    HeaderRowView,
+} from "./engine/types";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
     createDataGridModel,

@@ -1,29 +1,9 @@
-import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
-import {
-    headerCellsIn,
-    headerRowCount,
-    pinnedColumnCount,
-} from "../header/header";
-import { holdsRow, holdsRowIn } from "../model/expansion";
+import type { Axis } from "../axis/axis";
+import { headerRowCount, pinnedColumnCount } from "../header/header";
+import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
-import { isRowSelectable, isRowSelected } from "../model/selection";
-import { rowAt } from "../model/source";
-import type {
-    CellPosition,
-    Column,
-    DataGridState,
-    HeaderCellLayout,
-    HeaderLayout,
-    RowKey,
-    RowKeyGetter,
-    RowSelectable,
-    RowSelection,
-    RowSource,
-    SortColumn,
-    SortDirection,
-} from "../model/types";
-import { type Direction, sameCell } from "../navigation/navigation";
-import { memo } from "../utils";
+import type { CellPosition, Column } from "../model/types";
+import { sameCell } from "../navigation/navigation";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
@@ -31,10 +11,7 @@ import {
     type ScrollMapping,
     sameMapping,
 } from "../viewport/scaling";
-import {
-    type ScrollAlign,
-    scrollTargetForSpan,
-} from "../viewport/scroll-target";
+import { scrollTargetForSpan } from "../viewport/scroll-target";
 import {
     type AxisWindow,
     EMPTY_WINDOW,
@@ -44,6 +21,50 @@ import {
     sameWindow,
     windowFor,
 } from "../viewport/window";
+import {
+    CLICK_SLOP,
+    CTRL_KEYS,
+    cellSelector,
+    isCellNode,
+    isControl,
+    isEditable,
+    isElement,
+    isPagelessControl,
+    KEYS,
+    LINE_HEIGHT,
+    movesWithArrows,
+    ownerViewport,
+    PAGE_KEYS,
+    TAB_STOP_ATTRIBUTE,
+    VIEWPORTS,
+} from "./dom";
+import { cellsSizeOf, pinnedInset } from "./geometry";
+import { createInteraction } from "./interaction";
+import type {
+    DataGridEngine,
+    DataGridEngineOptions,
+    EngineActionKey,
+    EngineActionMap,
+    EngineAdapter,
+    EngineEventKey,
+    EngineEventMap,
+    EngineLayer,
+    EngineQueryKey,
+    EngineQueryMap,
+    GridView,
+} from "./types";
+import {
+    buildView,
+    columnAxisOf,
+    columnToScrollTo,
+    createHeaderRows,
+    elementPosition,
+    headerCellAt,
+    rowAxisOf,
+    scrollingWindow,
+    viewChanged,
+    withDetails,
+} from "./view";
 
 // The engine (D3): one grid on screen. It owns the scroll element, the sizes, the windows, scroll
 // scaling, keyboard handling and focus; the adapter (React) renders the view the engine reports
@@ -58,472 +79,6 @@ import {
 //
 // Every DOM access goes through the viewport's ownerDocument/defaultView, never the globals.
 
-/** How the engine renders and loads. */
-export interface DataGridEngineOptions {
-    /** items rendered beyond the view on each side (default 4 rows, 2 columns) */
-    overscan?: { rows?: number; columns?: number };
-    /** the cap on an axis's physical scroll size (default {@link DEFAULT_MAX_SCROLL_SIZE}) */
-    maxScrollSize?: number;
-    /** `rows-end-reached` fires when the view's last row is this close to the end (default 10) */
-    endReachedThreshold?: number;
-}
-
-/** A header row a render shows: its index (-depth … -1) and its cells in the column window. */
-export interface HeaderRowView<TRow = unknown, TNode = unknown> {
-    readonly rowIndex: number;
-    /**
-     * the cells starting in this row that intersect the rendered columns (a group cut by the
-     * window included), plus the one holding the active column
-     */
-    readonly cells: readonly HeaderCellLayout<TRow, TNode>[];
-}
-
-/**
- * Everything a render of the grid needs. A new object only when what is rendered changes: the
- * rendered ranges, the sizes, the data, the columns or the active cell; scrolling inside the
- * overscan keeps the same view, so nothing renders.
- */
-export interface GridView<TRow = unknown, TNode = unknown> {
-    /** the body rows to render, in order: the rendered range, plus the active row */
-    readonly rows: readonly number[];
-    /** the columns to render, in order: the rendered range, plus the active column */
-    readonly columns: readonly number[];
-    /** the rendered rows' range (the overscan window), without the active row */
-    readonly renderedRows: Range;
-    /** the rendered columns' range (the overscan window), without the active column */
-    readonly renderedColumns: Range;
-    /** the virtual offset the body layer lays its rows out from */
-    readonly rowBase: number;
-    /** the virtual offset the layers lay their cells out from */
-    readonly columnBase: number;
-    /** the sizer's physical width */
-    readonly width: number;
-    /** the body's physical height (the sizer is `headerHeight + height`) */
-    readonly height: number;
-    /** the header's height: its rows times `headerRowHeight` */
-    readonly headerHeight: number;
-    /** a header row's height */
-    readonly headerRowHeight: number;
-    /**
-     * the viewport's visible width (what an empty grid's placeholder spans); a resize alone
-     * publishes a new view only while the grid has no rows
-     */
-    readonly viewportWidth: number;
-    /** the visible body's height, below the header (what an empty grid's placeholder fills); as above */
-    readonly viewportBodyHeight: number;
-    /** the header rows: the header's depth, 0 without a header */
-    readonly headerRowCount: number;
-    /** the header rows to render, the top one first (none without a header) */
-    readonly headerRows: readonly HeaderRowView<TRow, TNode>[];
-    /** the header's layout, for the whole grid */
-    readonly header: HeaderLayout<TRow, TNode>;
-    readonly rowCount: number;
-    readonly columnCount: number;
-    /** the rows' sizes and offsets: an expanded row's size holds its detail (`extraSizeOf`) */
-    readonly rowAxis: Axis;
-    readonly columnAxis: Axis;
-    readonly columnDefs: readonly Column<TRow, TNode>[];
-    readonly source: RowSource<TRow>;
-    readonly active: CellPosition | null;
-    /**
-     * moves when `rows.changed` names rows this view renders (the rendered rows or the active
-     * row): their data is new, read it again
-     */
-    readonly rowsRevision: number;
-    /** the sorted columns, the first one first */
-    readonly sortColumns: readonly SortColumn[];
-    /** how many columns are pinned at the start (always rendered, in `columns` first) */
-    readonly pinnedColumnCount: number;
-    /** their width: the column window covers the view right of it */
-    readonly pinnedWidth: number;
-    /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
-    readonly expandedRows: readonly number[];
-    /** a row's key: `rowKey`, else its index */
-    readonly rowKey: RowKeyGetter<TRow> | undefined;
-    /** how rows are selected; `undefined` when they are not */
-    readonly rowSelection: RowSelection | undefined;
-    /** the selected rows' keys (`rowSelected` tells a row's state) */
-    readonly selectedRowKeys: readonly RowKey[];
-    /** whether a loaded row can be selected; `undefined`: every row can */
-    readonly isRowSelectable: RowSelectable<TRow> | undefined;
-    /**
-     * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
-     * leaves), at its element's position (a header cell's top row and first column); `null` in
-     * navigation
-     */
-    readonly interaction: CellPosition | null;
-}
-
-/** What `engine.get` reads. */
-export interface EngineQueryMap {
-    "row-window": AxisWindow;
-    "column-window": AxisWindow;
-    /** the virtual scroll offsets */
-    "scroll-position": { readonly top: number; readonly left: number };
-    /** the viewport's size, and the body's (below the header) */
-    "viewport-size": {
-        readonly width: number;
-        readonly height: number;
-        readonly bodyHeight: number;
-    };
-    /** whether an axis is scaled (its virtual size passes the cap) */
-    "scroll-scaled": { readonly rows: boolean; readonly columns: boolean };
-    /** the cell whose controls have the keys, or `null` (see `GridView.interaction`) */
-    interaction: CellPosition | null;
-}
-
-export type EngineQueryKey = keyof EngineQueryMap;
-
-/** What `engine.run` does: screen actions (no dot: they are not model commands). */
-export interface EngineActionMap {
-    /** scrolls a cell into view (either index alone scrolls that axis only) */
-    "scroll-to-cell": {
-        readonly rowIndex?: number | undefined;
-        readonly columnIndex?: number | undefined;
-        readonly align?: ScrollAlign | undefined;
-    };
-    /** scrolls to virtual offsets */
-    "scroll-to": {
-        readonly top?: number | undefined;
-        readonly left?: number | undefined;
-    };
-    /**
-     * makes a cell active and hands the keys to its controls, focusing the first one (as Enter
-     * or F2 on it does); a cell without controls stays in navigation
-     */
-    "interact-cell": CellPosition;
-    /** gives the keys back to the grid and focuses the cell (as Escape does) */
-    "leave-cell": Record<string, never>;
-}
-
-export type EngineActionKey = keyof EngineActionMap;
-
-/** What `engine.subscribe` listens to. */
-export interface EngineEventMap {
-    /** the row window changed (visible or rendered) */
-    "row-window": AxisWindow;
-    /** the column window changed (visible or rendered) */
-    "column-window": AxisWindow;
-    /** the view's last row came within the threshold of the end: once per row count */
-    "rows-end-reached": { readonly rowCount: number };
-    /** a cell's controls got the keys (the cell), or gave them back (`null`) */
-    interaction: CellPosition | null;
-}
-
-export type EngineEventKey = keyof EngineEventMap;
-
-/**
- * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
- * pinned columns (`pinned`: `position: sticky` in their row's flow, whose `left` inset the engine
- * writes so the browser's scrolling keeps them at the view's start; their `data-column-index`
- * says which column they are, a header cell's first), and expanded rows' details (`detail`:
- * sticky the same way, at the view's start: as a column at offset 0 would be).
- */
-export type EngineLayer = "grid" | "header" | "body" | "pinned" | "detail";
-
-/** What only an adapter calls. An app never touches it. */
-export interface EngineAdapter<TRow = unknown, TNode = unknown> {
-    /** binds the engine to the scroll container; returns the unbinding (idempotent) */
-    attach(viewport: HTMLElement): () => void;
-    /** registers a layer's element (the header layer has one per header row); returns the unregistration */
-    registerLayer(layer: EngineLayer, element: HTMLElement): () => void;
-    /** the view to render */
-    getView(): GridView<TRow, TNode>;
-    /** listens to view changes (for `useSyncExternalStore`) */
-    subscribe(listener: () => void): () => void;
-    /**
-     * Tells the engine a view is on screen (from a layout effect): it writes the layers' offsets
-     * for that view's bases, applies the scroll it was waiting to apply and moves focus.
-     */
-    commit(view: GridView<TRow, TNode>): void;
-    /**
-     * Handles a key pressed in the grid. Returns whether it did (and then prevented the default).
-     * An adapter calls it after the consumer's own handlers, so they can cancel a key
-     * (`preventDefault`) or replace it.
-     */
-    keydown(event: KeyboardEvent): boolean;
-    /**
-     * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
-     * (Ctrl/⌘ adds the column). Returns whether the click was the grid's: a toggle ran, even
-     * when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
-     * after the consumer's own handlers, so `preventDefault` cancels it.
-     */
-    click(event: MouseEvent): boolean;
-    /** changes the options */
-    setOptions(options: DataGridEngineOptions): void;
-}
-
-/** One grid on screen. */
-export interface DataGridEngine<TRow = unknown, TNode = unknown> {
-    get<K extends EngineQueryKey>(key: K): EngineQueryMap[K];
-    run<K extends EngineActionKey>(
-        action: K,
-        payload: EngineActionMap[K],
-    ): void;
-    subscribe<K extends EngineEventKey>(
-        event: K,
-        listener: (value: EngineEventMap[K]) => void,
-    ): () => void;
-    /** stops listening to the model; the adapter detaches the viewport itself */
-    destroy(): void;
-    readonly adapter: EngineAdapter<TRow, TNode>;
-}
-
-const KEYS: Record<string, Direction> = {
-    ArrowUp: "up",
-    ArrowDown: "down",
-    ArrowLeft: "left",
-    ArrowRight: "right",
-    Home: "row-start",
-    End: "row-end",
-    PageUp: "page-up",
-    PageDown: "page-down",
-};
-
-/** A key with Ctrl (or ⌘) held: Ctrl+Home and Ctrl+End reach the grid's ends. */
-const CTRL_KEYS: Record<string, Direction> = {
-    Home: "grid-start",
-    End: "grid-end",
-};
-
-/** The pixels a wheel "line" or "page" stands for (`deltaMode` 1 and 2). */
-const LINE_HEIGHT = 40;
-
-function isEditable(element: Element): boolean {
-    const tag = element.tagName;
-    return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        (element as HTMLElement).isContentEditable === true
-    );
-}
-
-/**
- * Roles of controls that act on their own, and of widgets holding them (a popover, a menu, a
- * toolbar): a click or a key in one is the widget's.
- */
-const CONTROL_ROLES = new Set([
-    "dialog",
-    "alertdialog",
-    "menu",
-    "menubar",
-    "listbox",
-    "toolbar",
-    "tablist",
-    "radiogroup",
-    "tree",
-    "grid",
-    "treegrid",
-    "button",
-    "link",
-    "checkbox",
-    "switch",
-    "radio",
-    "menuitem",
-    "menuitemcheckbox",
-    "menuitemradio",
-    "option",
-    "combobox",
-    "slider",
-    "spinbutton",
-    "tab",
-    "textbox",
-]);
-
-/** Whether an element is a control of its own (a button, a link, a field, a menu trigger). */
-function isControl(element: Element): boolean {
-    // upper case in HTML, as written in SVG (`a`)
-    const tag = element.tagName.toUpperCase();
-    if (
-        tag === "BUTTON" ||
-        tag === "INPUT" ||
-        tag === "SELECT" ||
-        tag === "TEXTAREA" ||
-        tag === "SUMMARY" ||
-        tag === "LABEL" ||
-        (tag === "A" && element.hasAttribute("href"))
-    ) {
-        return true;
-    }
-    const role = element.getAttribute("role");
-    return (
-        (role !== null && CONTROL_ROLES.has(role)) ||
-        (element as HTMLElement).isContentEditable === true
-    );
-}
-
-/** What takes focus in a cell: its controls (the grid moves between them in interaction). */
-const FOCUSABLE = [
-    "a[href]",
-    "area[href]",
-    "button",
-    "input",
-    "select",
-    "textarea",
-    "summary",
-    "iframe",
-    "audio[controls]",
-    "video[controls]",
-    "[tabindex]",
-    '[contenteditable]:not([contenteditable="false"])',
-].join(",");
-
-/**
- * A control the app keeps as a tab stop of its own: the grid leaves its `tabindex` alone outside
- * interaction (Epic #52, I4).
- */
-export const TAB_STOP_ATTRIBUTE = "data-grid-tab-stop";
-
-/** The keys a scroll container pages itself by. */
-const PAGE_KEYS = new Set([
-    "PageUp",
-    "PageDown",
-    "Home",
-    "End",
-    "ArrowUp",
-    "ArrowDown",
-    "ArrowLeft",
-    "ArrowRight",
-]);
-
-/** Whether a control moves through its group with the arrows (a radio, a menu item, a tab). */
-function movesWithArrows(element: Element): boolean {
-    const role = element.getAttribute("role");
-    return (
-        (element.tagName.toUpperCase() === "INPUT" &&
-            element.getAttribute("type")?.toLowerCase() === "radio") ||
-        role === "radio" ||
-        role === "menuitem" ||
-        role === "tab"
-    );
-}
-
-/** Roles of controls with no use for the page keys (a button, a link, a box to check). */
-const PAGELESS_ROLES = new Set([
-    "button",
-    "link",
-    "checkbox",
-    "switch",
-    "radio",
-    "menuitem",
-    "tab",
-]);
-
-/** Input types with no use for the page keys. */
-const PAGELESS_INPUTS = new Set([
-    "checkbox",
-    "radio",
-    "button",
-    "submit",
-    "reset",
-]);
-
-/**
- * Whether a control has no use for the page keys (they would page the grid's container): a
- * button, a link, a box to check. A field, a list, media or a scrolling element keeps them.
- */
-function isPagelessControl(element: Element): boolean {
-    const tag = element.tagName.toUpperCase();
-    if (tag === "BUTTON" || tag === "SUMMARY" || tag === "A") return true;
-    if (tag === "INPUT") {
-        return PAGELESS_INPUTS.has(
-            (element.getAttribute("type") ?? "text").toLowerCase(),
-        );
-    }
-    const role = element.getAttribute("role");
-    return role !== null && PAGELESS_ROLES.has(role);
-}
-
-/** How far a press may move before its click is a drag (a text selection), in pixels. */
-const CLICK_SLOP = 4;
-
-function rowAxisOf<TRow, TNode>(state: DataGridState<TRow, TNode>): Axis {
-    return createAxis(state.rowCount, state.rowHeight);
-}
-
-/** The rows' axis with the expanded rows' details on top of their own heights (M2). */
-function withDetails<TRow, TNode>(
-    base: Axis,
-    state: DataGridState<TRow, TNode>,
-): Axis {
-    if (state.expandedRows.length === 0) return base;
-    const { detailHeight, source } = state;
-    const sizeOf =
-        typeof detailHeight === "number"
-            ? () => detailHeight
-            : (index: number) => {
-                  const row = rowAt(source, index);
-                  return row === undefined ? 0 : detailHeight(row, index);
-              };
-    return withExtraSizes(
-        base,
-        state.expandedRows.map((index) => ({ index, size: sizeOf(index) })),
-    );
-}
-
-function columnAxisOf<TRow, TNode>(state: DataGridState<TRow, TNode>): Axis {
-    const { columns } = state;
-    return createAxis(columns.length, (index) => columns[index]?.width ?? 0);
-}
-
-/** `list` with `start` … `end` appended, and `extra` added in order when it is outside. */
-function indexes(
-    start: number,
-    end: number,
-    extra: number | null,
-    list: number[] = [],
-): number[] {
-    if (extra !== null && extra >= 0 && extra < start) list.push(extra);
-    for (let i = start; i < end; i++) list.push(i);
-    if (extra !== null && extra >= end) list.push(extra);
-    return list;
-}
-
-/**
- * Every attached viewport, across engines: a grid nested in a cell of another one is its own grid,
- * and an engine tells its cells from a nested grid's by the nearest viewport above them.
- */
-const VIEWPORTS = new WeakSet<Element>();
-
-function isElement(target: unknown): target is Element {
-    return (
-        typeof target === "object" &&
-        target !== null &&
-        "nodeType" in target &&
-        target.nodeType === 1
-    );
-}
-
-/** The nearest attached viewport at or above `element`: the grid it belongs to. */
-function ownerViewport(element: Element): Element | null {
-    for (let node: Element | null = element; node; node = node.parentElement) {
-        if (VIEWPORTS.has(node)) return node;
-    }
-    return null;
-}
-
-/** The cell elements carry their indexes: the engine finds one to focus by them. */
-function cellSelector({ rowIndex, columnIndex }: CellPosition): string {
-    return `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`;
-}
-
-/** Any cell element (a nested grid's too). */
-const CELL_SELECTOR = "[data-row-index][data-column-index]";
-
-/** Whether an element is a cell (a header cell, a nested grid's): it carries both indexes. */
-function isCellNode(element: Element): boolean {
-    return (
-        element.hasAttribute("data-row-index") &&
-        element.hasAttribute("data-column-index")
-    );
-}
-
-/** An item's own size, without its extra (a row's cells, without its detail). */
-function cellsSizeOf(axis: Axis, index: number): number {
-    return axis.sizeOf(index) - axis.extraSizeOf(index);
-}
-
 /** The layers whose elements get an inset of the engine's (`left`), not a transform. */
 function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
     return layer === "pinned" || layer === "detail";
@@ -531,31 +86,6 @@ function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
 
 /** Physical scroll moves, on either axis or both. */
 type ScrollMoves = { top?: number | undefined; left?: number | undefined };
-
-/**
- * The view's fields compared by identity to tell a new view; the rest follow from them and the
- * rendered ranges (the rows and columns to render, the header's height).
- */
-const VIEW_KEYS = [
-    "width",
-    "height",
-    "headerRowHeight",
-    "header",
-    "rowAxis",
-    "columnAxis",
-    "columnDefs",
-    "source",
-    "active",
-    "rowsRevision",
-    "sortColumns",
-    "pinnedColumnCount",
-    "expandedRows",
-    "rowKey",
-    "rowSelection",
-    "selectedRowKeys",
-    "isRowSelectable",
-    "interaction",
-] as const satisfies readonly (keyof GridView)[];
 
 /** Creates the engine of one grid on screen. */
 export function createDataGridEngine<TRow, TNode = unknown>(
@@ -603,44 +133,32 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     const columnsX = new ScrollAxisState(createScrollMapping(0, 0));
 
     /** The header rows for the rendered columns: laid out again only when they change. */
-    const headerRowsFor = memo(
-        (
-            header: HeaderLayout<TRow, TNode>,
-            count: number,
-            start: number,
-            end: number,
-            extra: number | null,
-            pinned: number,
-        ): readonly HeaderRowView<TRow, TNode>[] => {
-            if (count === 0) return [];
-            // the pinned columns' cells first: a pinned group holds only pinned columns
-            const pinnedCells =
-                pinned > 0 ? headerCellsIn(header, 0, pinned) : [];
-            return headerCellsIn(header, start, end, extra).map(
-                (cells, level) => ({
-                    rowIndex: level - count,
-                    cells: [...(pinnedCells[level] ?? []), ...cells],
-                }),
-            );
-        },
-    );
+    const headerRowsFor = createHeaderRows<TRow, TNode>();
 
     let rowWindow: AxisWindow = EMPTY_WINDOW;
     let columnWindow: AxisWindow = EMPTY_WINDOW;
     /** the view's `rowsRevision`: only a change to rows on screen moves it */
     let rowsRevision = 0;
-    /** the cell whose controls have the keys (its element's position), or `null` */
-    let interaction: CellPosition | null = null;
-    /** a cell `interact-cell` asked for before it was rendered: entered on the commit that shows it */
-    let pendingInteraction: { position: CellPosition; focus: boolean } | null =
-        null;
-    /** the controls' own `tabindex` (`null`: none), kept while the grid holds them at -1 */
-    const ownTabIndex = new WeakMap<Element, string | null>();
     /**
      * something the view shows besides the rendered ranges changed (the model, the sizes, the
      * interaction): the next update builds a view, which it skips otherwise (D9)
      */
     let viewStale = false;
+    /** the cell whose controls have the keys, and an entry waiting for its cell (Epic #52) */
+    const interaction = createInteraction<TRow, TNode>({
+        getViewport: () => viewport,
+        getState: () => state,
+        model,
+        cellElement,
+        cellOf,
+        isCellElement,
+        same,
+        markStale: () => {
+            viewStale = true;
+        },
+        update,
+        emit,
+    });
     let view: GridView<TRow, TNode> = makeView();
     let committed: GridView<TRow, TNode> | null = null;
     let endReachedAt = -1;
@@ -677,11 +195,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return a !== null && sameCell(a, b, state.header.cellAt);
     }
 
-    /** The header cell at a header position (a group, or a column's on its rows). */
-    function headerCellAt({ rowIndex, columnIndex }: CellPosition) {
-        return state.header.cellAt(rowIndex, columnIndex);
-    }
-
     /** Makes a cell active, unless it is already. */
     function activate(position: CellPosition) {
         if (!same(state.activePosition, position)) {
@@ -689,130 +202,24 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
     }
 
-    /** A column window without the pinned columns (the overscan may reach into them). */
-    function scrollingWindow(columns: AxisWindow): AxisWindow {
-        const { visible, rendered } = columns;
-        if (rendered.start >= pinnedCount) return columns;
-        const clamp = (range: Range): Range =>
-            range.start >= pinnedCount
-                ? range
-                : {
-                      start: pinnedCount,
-                      end: Math.max(range.end, pinnedCount),
-                  };
-        return { visible: clamp(visible), rendered: clamp(rendered) };
-    }
-
-    /**
-     * The column rendered outside the window for the active cell: its own, or none for a header
-     * cell whose span reaches into the window (it is rendered with the window's cells).
-     */
-    function activeColumn(): number | null {
-        const active = state.activePosition;
-        // a pinned column is always rendered
-        if (!active || active.columnIndex < pinnedCount) return null;
-        if (active.rowIndex < 0) {
-            const cell = headerCellAt(active);
-            if (
-                cell &&
-                overlaps(
-                    columnWindow.rendered,
-                    cell.columnIndex,
-                    cell.columnIndex + cell.columnSpan,
-                )
-            ) {
-                return null;
-            }
-        }
-        return active.columnIndex;
-    }
-
     function makeView(): GridView<TRow, TNode> {
-        const active = state.activePosition;
-        const extraColumn = activeColumn();
-        const rowsOfHeader = headerRowCount(state);
-        const { start, end } = columnWindow.rendered;
-        return {
-            rows: indexes(
-                rowWindow.rendered.start,
-                rowWindow.rendered.end,
-                active && active.rowIndex >= 0 ? active.rowIndex : null,
-            ),
-            // the pinned columns first, always rendered
-            columns: indexes(
-                start,
-                end,
-                extraColumn,
-                indexes(0, pinnedCount, null),
-            ),
-            renderedRows: rowWindow.rendered,
-            renderedColumns: columnWindow.rendered,
-            rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
-            columnBase: columnAxis.offsetOf(start),
+        return buildView({
+            state,
+            rowWindow,
+            columnWindow,
+            rowAxis,
+            columnAxis,
             width: columnsX.mapping.physicalSize,
             height: rowsY.mapping.physicalSize,
             headerHeight: headerHeight(),
-            headerRowHeight: state.headerRowHeight,
             viewportWidth: width,
             viewportBodyHeight: bodyHeight(),
-            headerRowCount: rowsOfHeader,
-            headerRows: headerRowsFor(
-                state.header,
-                rowsOfHeader,
-                start,
-                end,
-                extraColumn,
-                pinnedCount,
-            ),
-            header: state.header,
-            rowCount: state.rowCount,
-            columnCount: state.columns.length,
-            rowAxis,
-            columnAxis,
-            columnDefs: state.columns,
-            source: state.source,
-            active,
-            rowsRevision,
-            sortColumns: state.sortColumns,
             pinnedColumnCount: pinnedCount,
             pinnedWidth,
-            expandedRows: state.expandedRows,
-            rowKey: state.rowKey,
-            rowSelection: state.rowSelection,
-            selectedRowKeys: state.selectedRowKeys,
-            isRowSelectable: state.isRowSelectable,
-            interaction,
-        };
-    }
-
-    /** Whether a view renders an expanded row (its rendered rows, or the active row). */
-    function rendersDetail(next: GridView<TRow, TNode>): boolean {
-        const { expandedRows, renderedRows, active } = next;
-        if (expandedRows.length === 0) return false;
-        return (
-            holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
-            (active !== null && holdsRow(expandedRows, active.rowIndex))
-        );
-    }
-
-    function viewChanged(next: GridView<TRow, TNode>): boolean {
-        const current = view;
-        if (
-            !sameRange(current.renderedRows, next.renderedRows) ||
-            !sameRange(current.renderedColumns, next.renderedColumns)
-        ) {
-            return true;
-        }
-        if (VIEW_KEYS.some((key) => current[key] !== next[key])) return true;
-        // the visible area matters only to an empty grid, and its width to the details on
-        // screen (as wide as the view): a resize alone renders nothing else
-        return (
-            ((current.rowCount === 0 || next.rowCount === 0) &&
-                (current.viewportWidth !== next.viewportWidth ||
-                    current.viewportBodyHeight !== next.viewportBodyHeight)) ||
-            (current.viewportWidth !== next.viewportWidth &&
-                rendersDetail(next))
-        );
+            rowsRevision,
+            interaction: interaction.cell,
+            headerRowsFor,
+        });
     }
 
     /** Takes a new mapping into an axis; returns the physical scroll it needs when that moves. */
@@ -862,6 +269,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 overscan.columns ?? 2,
                 fresh ? undefined : columnWindow,
             ),
+            pinnedCount,
         );
         const rowsMoved = !sameWindow(rowWindow, nextRows);
         const columnsMoved = !sameWindow(columnWindow, nextColumns);
@@ -875,7 +283,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (build) {
             viewStale = false;
             const next = makeView();
-            if (viewChanged(next)) {
+            if (viewChanged(view, next)) {
                 view = next;
                 // a render may remove the focused cell (a row remounting as it loads): commit restores it
                 focusBeforeRender ||= focusInside();
@@ -1169,30 +577,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         scrollWhenReady(moves);
     }
 
-    /**
-     * The column to scroll to for a cell: its own, or for a header cell spanning columns, none
-     * while any of them is in view, else the one nearest to the view.
-     */
-    function columnToScrollTo(position: CellPosition): number | undefined {
-        if (position.rowIndex >= 0) return position.columnIndex;
-        const cell = headerCellAt(position);
-        if (!cell || cell.columnSpan <= 1) return position.columnIndex;
-        // a pinned group is always in view
-        if (cell.columnIndex + cell.columnSpan <= pinnedCount) return undefined;
-        const end = cell.columnIndex + cell.columnSpan;
-        if (overlaps(columnWindow.visible, cell.columnIndex, end)) {
-            return undefined;
-        }
-        return end <= columnWindow.visible.start ? end - 1 : cell.columnIndex;
-    }
-
     /** What scrolls a cell into view: its row (a body row), its column. */
     function scrollPayloadFor(
         position: CellPosition,
     ): EngineActionMap["scroll-to-cell"] {
         return {
             rowIndex: position.rowIndex >= 0 ? position.rowIndex : undefined,
-            columnIndex: columnToScrollTo(position),
+            columnIndex: columnToScrollTo(
+                position,
+                state.header,
+                pinnedCount,
+                columnWindow.visible,
+            ),
         };
     }
 
@@ -1226,15 +622,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // the engine scrolled it into view already, through the scaling-aware mapping
             cell.focus({ preventScroll: true });
         }
-    }
-
-    /** Where a cell's element is: a header cell's top row and first column. */
-    function elementPosition(position: CellPosition): CellPosition {
-        if (position.rowIndex >= 0) return position;
-        const cell = headerCellAt(position);
-        return cell
-            ? { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex }
-            : position;
     }
 
     /** The first cell in view: where focus lands when the grid itself gets it. */
@@ -1319,7 +706,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** This grid's own element of a cell (a nested grid may have one at the same indexes). */
     function cellElement(position: CellPosition): HTMLElement | null {
         if (!viewport) return null;
-        const selector = cellSelector(elementPosition(position));
+        const selector = cellSelector(elementPosition(position, state.header));
         for (const element of viewport.querySelectorAll<HTMLElement>(
             selector,
         )) {
@@ -1331,248 +718,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** Whether an element is one of this grid's cells (or header cells) itself. */
     function isCellElement(element: Element): boolean {
         return isCellNode(element) && ownerViewport(element) === viewport;
-    }
-
-    /**
-     * A cell's controls, in order: what takes focus inside it, its own (a nested grid's are that
-     * grid's), and not disabled. `cell` is one of this grid's.
-     */
-    function controlsOf(cell: Element): HTMLElement[] {
-        return [...cell.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-            (element) =>
-                // inside the cell with no grid between (a nested grid's viewport is no control)
-                !VIEWPORTS.has(element) &&
-                cellElementOf(element) === cell &&
-                // the app's own tab stop is no control of the grid's: never cycled, never entered
-                !element.hasAttribute(TAB_STOP_ATTRIBUTE) &&
-                !element.hasAttribute("disabled") &&
-                !(
-                    element.tagName === "INPUT" &&
-                    element.getAttribute("type") === "hidden"
-                ) &&
-                // an element the app took out itself (a wrapper at -1) is no stop of its own
-                !(
-                    element.getAttribute("tabindex") === "-1" &&
-                    !ownTabIndex.has(element)
-                ) &&
-                !hiddenWithin(element, cell),
-        );
-    }
-
-    /** Whether an element is hidden or inert inside its cell (what is outside the grid aside). */
-    function hiddenWithin(element: Element, cell: Element): boolean {
-        for (
-            let node: Element | null = element;
-            node && node !== cell;
-            node = node.parentElement
-        ) {
-            if (node.hasAttribute("hidden") || node.hasAttribute("inert")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** The nearest cell holding an element (itself excluded), with no grid's viewport between. */
-    function cellElementOf(element: Element): Element | null {
-        for (
-            let node = element.parentElement;
-            node && node !== viewport;
-            node = node.parentElement
-        ) {
-            if (VIEWPORTS.has(node)) return null;
-            if (isCellNode(node)) return node;
-        }
-        return null;
-    }
-
-    /**
-     * Keeps a cell's controls out of the tab order outside interaction (`tabindex` -1, their own
-     * value kept), and gives it back in interaction. A control with `TAB_STOP_ATTRIBUTE` is the
-     * app's.
-     */
-    function manageTabOrder(cell: Element) {
-        const interacting =
-            interaction !== null && same(cellOf(cell), interaction);
-        for (const control of controlsOf(cell)) {
-            if (interacting) restoreTabIndex(control);
-            else if (control.getAttribute("tabindex") !== "-1") {
-                ownTabIndex.set(control, control.getAttribute("tabindex"));
-                writeTabIndex(control, "-1");
-            }
-        }
-        // a control the app marked as its own stop after the grid took it out: its value back
-        for (const own of cell.querySelectorAll(`[${TAB_STOP_ATTRIBUTE}]`)) {
-            restoreTabIndex(own);
-        }
-    }
-
-    /** A control's own tab index back, if the grid holds it at -1. */
-    function restoreTabIndex(control: Element) {
-        if (!ownTabIndex.has(control)) return;
-        const own = ownTabIndex.get(control) ?? null;
-        ownTabIndex.delete(control);
-        writeTabIndex(control, own);
-    }
-
-    /** What the grid wrote to a control's `tabindex`: its own change, which the observer skips. */
-    const writtenTabIndex = new WeakMap<Element, string | null>();
-
-    function writeTabIndex(control: Element, value: string | null) {
-        writtenTabIndex.set(control, value);
-        if (value === null) control.removeAttribute("tabindex");
-        else control.setAttribute("tabindex", value);
-    }
-
-    /** Every cell of this grid under a node (the node itself included). */
-    function cellsUnder(node: Node): Element[] {
-        if (!isElement(node)) return [];
-        const cells = [...node.querySelectorAll(CELL_SELECTOR)];
-        if (isCellNode(node)) cells.unshift(node);
-        return cells.filter((cell) => ownerViewport(cell) === viewport);
-    }
-
-    /** The cells a set of DOM changes touched: rendered, or whose content changed. */
-    function onMutations(records: readonly MutationRecord[]) {
-        const touched = new Set<Element>();
-        let moved = false;
-        for (const record of records) {
-            const target = record.target;
-            if (isElement(target)) {
-                const name = record.attributeName;
-                const isCell = isCellElement(target);
-                // the grid's own write, and a cell's own roving tab index, change no control
-                if (
-                    name === "tabindex" &&
-                    (isCell ||
-                        writtenTabIndex.get(target) ===
-                            target.getAttribute("tabindex"))
-                ) {
-                    continue;
-                }
-                if (name === "data-row-index" || name === "data-column-index") {
-                    moved = true;
-                }
-                const holder = isCell ? target : cellElementOf(target);
-                // a nested grid's cell is that grid's
-                if (holder && (isCell || ownerViewport(holder) === viewport)) {
-                    touched.add(holder);
-                }
-            }
-            for (const added of record.addedNodes) {
-                for (const cell of cellsUnder(added)) touched.add(cell);
-            }
-        }
-        // the cell in interaction moved to another index (a keyed row re-sorted): the
-        // interaction follows the cell that holds focus, as the active cell
-        if (moved && interaction) followFocusedCell();
-        for (const cell of touched) manageTabOrder(cell);
-    }
-
-    /** After cells moved: the interaction goes with the cell holding focus, or ends. */
-    function followFocusedCell() {
-        const focused = viewport?.ownerDocument.activeElement;
-        const holder = focused ? cellElementOf(focused) : null;
-        const now = holder ? cellOf(holder) : null;
-        if (now && same(interaction, now)) return;
-        interaction = null;
-        // an entry that does not happen (a controlled parent to follow) tells nothing itself
-        if (!now || !enterCell(now, false)) emitInteraction();
-    }
-
-    function emitInteraction() {
-        viewStale = true;
-        update();
-        emit("interaction", interaction);
-    }
-
-    /**
-     * Hands the keys to a cell's controls. `focus`: the first control takes focus (Enter, F2,
-     * the action); a control that took focus itself keeps it. Returns whether it did.
-     */
-    function enterCell(
-        position: CellPosition,
-        focus: boolean,
-        activating = true,
-    ): boolean {
-        const cell = cellElement(position);
-        if (!cell) return false;
-        const controls = controlsOf(cell);
-        if (controls.length === 0) return false;
-        const at = cellOf(cell) ?? position;
-        if (!same(state.activePosition, at)) {
-            // asked once: a caller that asked already (a focus) waits for the answer instead
-            if (activating) model.run("active-position.set", at);
-            // the cell in interaction is always the active one: a controlled parent that follows
-            // later makes it so (the entry waits for it); a middleware that redirected it, never
-            if (!same(state.activePosition, at)) {
-                pendingInteraction = { position: at, focus };
-                return false;
-            }
-        }
-        const before = interaction;
-        const previous = interaction ? cellElement(interaction) : null;
-        interaction = at;
-        pendingInteraction = null;
-        if (previous && previous !== cell) manageTabOrder(previous);
-        manageTabOrder(cell);
-        // the first control that takes focus (one hidden by the app's CSS cannot): none, and the
-        // cell stays in navigation
-        if (focus && !focusFrom(controls, 0, 1)) {
-            interaction = null;
-            manageTabOrder(cell);
-            if (before) emitInteraction();
-            return false;
-        }
-        emitInteraction();
-        return true;
-    }
-
-    /**
-     * Focuses the first of `controls` that takes focus, from `start` in `step` direction,
-     * wrapping; returns whether one did.
-     */
-    function focusFrom(
-        controls: readonly HTMLElement[],
-        start: number,
-        step: 1 | -1,
-    ): boolean {
-        const doc = viewport?.ownerDocument;
-        for (let tried = 0; tried < controls.length; tried++) {
-            const index =
-                (((start + tried * step) % controls.length) + controls.length) %
-                controls.length;
-            const control = controls[index];
-            control?.focus();
-            if (control && doc?.activeElement === control) return true;
-        }
-        return false;
-    }
-
-    /** Gives the keys back to the grid; `focusCell`: the cell takes focus (Escape, the action). */
-    function leaveCell(focusCell: boolean) {
-        if (!interaction) return;
-        const cell = cellElement(interaction);
-        interaction = null;
-        if (cell) {
-            manageTabOrder(cell);
-            if (focusCell) cell.focus({ preventScroll: true });
-        }
-        emitInteraction();
-    }
-
-    /** Tab and Shift+Tab in interaction: the cell's next or previous control, wrapping around. */
-    function cycleControls(cell: Element, from: Element, back: boolean) {
-        const controls = controlsOf(cell);
-        if (controls.length === 0) return;
-        // the control itself, else the innermost one holding it (a wrapper holds its buttons):
-        // the last one, in document order, that contains it
-        let at = controls.length - 1;
-        while (at >= 0 && !controls[at]?.contains(from)) at--;
-        const step = back ? -1 : 1;
-        const start = at < 0 ? (back ? controls.length - 1 : 0) : at + step;
-        // a control that cannot take focus (hidden by the app's CSS) is passed over
-        focusFrom(controls, start, step);
     }
 
     function onPointerDown(event: PointerEvent) {
@@ -1596,7 +741,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             if (isControl(node)) return null;
         }
-        const column = headerCellAt(cell)?.column;
+        const column = headerCellAt(state.header, cell)?.column;
         return column?.sortable === true ? column : null;
     }
 
@@ -1644,19 +789,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // focus leaving the cell in interaction (elsewhere in the page, a portal): navigation
         // focus gone from the grid: an entry waiting for its cell would pull it back, it is dropped
         if (
-            pendingInteraction &&
+            interaction.pending &&
             !inside &&
             viewport?.ownerDocument.hasFocus() !== false
         ) {
-            pendingInteraction = null;
+            interaction.cancelPending();
         }
         // (the window losing focus, alt-tab or the devtools, is no leaving: focus comes back)
         const windowBlur =
             next === null && viewport?.ownerDocument.hasFocus() === false;
-        if (interaction && !windowBlur) {
-            const cell = cellElement(interaction);
+        if (interaction.cell && !windowBlur) {
+            const cell = cellElement(interaction.cell);
             if (!cell || !(isElement(next) && cell.contains(next))) {
-                leaveCell(false);
+                interaction.leaveCell(false);
             }
         }
         if (viewport && next && !inside) pendingFocus = false;
@@ -1680,10 +825,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             ) {
                 // a control took focus (a click, a Tab in the cell): its cell is in interaction;
                 // the activation was asked above: not twice (a controlled parent reports it)
-                if (!same(interaction, cell)) enterCell(cell, false, false);
-            } else if (interaction) {
+                if (!same(interaction.cell, cell))
+                    interaction.enterCell(cell, false, false);
+            } else if (interaction.cell) {
                 // the cell itself (or another one) took focus: back to navigation
-                leaveCell(false);
+                interaction.leaveCell(false);
             }
             return;
         }
@@ -1790,22 +936,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // in interaction, the cell's controls have the keys: the grid takes Escape (back to the
         // cell) and Tab (the cell's next control, wrapping) only, from a field too
         if (
-            interaction &&
+            interaction.cell &&
             !isCellElement(target) &&
             // the app's own tab stop and a composition in progress (an IME) keep their keys
             !target.hasAttribute(TAB_STOP_ATTRIBUTE) &&
             !event.isComposing
         ) {
-            const cell = cellElement(interaction);
+            const cell = cellElement(interaction.cell);
             if (cell?.contains(target)) {
                 if (event.key === "Escape") {
                     event.preventDefault();
-                    leaveCell(true);
+                    interaction.leaveCell(true);
                     return true;
                 }
                 if (event.key === "Tab" && !ctrl) {
                     event.preventDefault();
-                    cycleControls(cell, target, event.shiftKey);
+                    interaction.cycleControls(cell, target, event.shiftKey);
                     return true;
                 }
                 // a button or a link has no use for the page keys: the container would page
@@ -1850,11 +996,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             const position = cellOf(target);
             // a held Enter repeats: once the first entered, the rest would press the control
-            if (event.repeat && interaction) {
+            if (event.repeat && interaction.cell) {
                 event.preventDefault();
                 return true;
             }
-            if (position && enterCell(position, true)) {
+            if (position && interaction.enterCell(position, true)) {
                 event.preventDefault();
                 return true;
             }
@@ -1909,23 +1055,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
-        const detailsChanged =
-            after.expandedRows !== before.expandedRows ||
-            (after.expandedRows.length > 0 &&
-                (after.detailHeight !== before.detailHeight ||
-                    // a detail's height may be a function of its row, whose data changed
-                    (typeof after.detailHeight === "function" &&
-                        (after.source !== before.source ||
-                            (after.rowsChanged !== before.rowsChanged &&
-                                holdsRowIn(
-                                    after.expandedRows,
-                                    after.rowsChanged.start,
-                                    after.rowsChanged.end,
-                                ))))));
+        const changedDetails = detailsChanged(before, after);
         if (after.rowsChanged !== before.rowsChanged) {
             const rendered = rendersRows(after.rowsChanged);
             // rows' data changed, and nothing else did: off screen, there is nothing to do
-            if (!rendered && !detailsChanged) return;
+            if (!rendered && !changedDetails) return;
             if (rendered) rowsRevision += 1;
         }
         const rowsResized =
@@ -1938,7 +1072,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     : rowAxisOf(after);
         }
         let anchored = false;
-        if (rowsResized || detailsChanged) {
+        if (rowsResized || changedDetails) {
             const anchor = rowsResized ? null : anchorOf(rowAxis);
             rowAxis = withDetails(baseRowAxis, after);
             // a row expanding or collapsing above the view keeps the view where it is (M2)
@@ -1956,7 +1090,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         relayout(
             rowsResized ||
-                detailsChanged ||
+                changedDetails ||
                 columnsChanged ||
                 after.headerRowHeight !== before.headerRowHeight ||
                 after.header !== before.header,
@@ -1970,15 +1104,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // another cell made active (the app, a middleware): the interaction ends, and an entry
         // waiting for another cell is dropped
-        if (interaction && !same(after.activePosition, interaction)) {
-            leaveCell(false);
+        if (interaction.cell && !same(after.activePosition, interaction.cell)) {
+            interaction.leaveCell(false);
         }
-        const waiting = pendingInteraction;
+        const waiting = interaction.pending;
         if (waiting && same(after.activePosition, waiting.position)) {
             // a controlled parent followed: the cell enters now (once rendered)
-            enterCell(waiting.position, waiting.focus);
+            interaction.enterCell(waiting.position, waiting.focus);
         } else if (waiting && after.activePosition !== before.activePosition) {
-            pendingInteraction = null;
+            interaction.cancelPending();
         }
         const active = after.activePosition;
         if (active && active !== before.activePosition) {
@@ -2010,7 +1144,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // kept out of the tab order outside interaction (only cells that changed are read)
             const mutations =
                 defaultView && "MutationObserver" in defaultView
-                    ? new defaultView.MutationObserver(onMutations)
+                    ? new defaultView.MutationObserver(interaction.onMutations)
                     : null;
             mutations?.observe(element, {
                 subtree: true,
@@ -2028,7 +1162,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     "data-column-index",
                 ],
             });
-            for (const cell of cellsUnder(element)) manageTabOrder(cell);
+            for (const cell of interaction.cellsUnder(element))
+                interaction.manageTabOrder(cell);
             // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("focusin", onFocusIn);
@@ -2141,15 +1276,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 update();
             }
             writeLayers();
-            // the cell in interaction scrolled out of the rendered ones: back to navigation
-            if (interaction && !cellElement(interaction)) {
-                interaction = null;
-                emitInteraction();
-            }
+            interaction.dropUnrendered();
             // an entry waiting for its cell (out of view, a row loading): it enters once shown with
             // controls, and waits on otherwise
-            const waiting = pendingInteraction;
-            if (waiting) enterCell(waiting.position, waiting.focus);
+            const waiting = interaction.pending;
+            if (waiting) interaction.enterCell(waiting.position, waiting.focus);
             flushFocus();
         },
         keydown,
@@ -2177,7 +1308,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rows: rowsY.mapping.scaled,
             columns: columnsX.mapping.scaled,
         }),
-        interaction: () => interaction,
+        interaction: () => interaction.cell,
     };
 
     const actions: {
@@ -2187,14 +1318,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "scroll-to": scrollTo,
         "interact-cell": (position) => {
             activate(position);
-            if (enterCell(position, true, false)) return;
+            if (interaction.enterCell(position, true, false)) return;
             // not rendered (out of view), no controls yet (a row loading), or a controlled parent
             // to follow: entered once its cell is active and shows controls
-            pendingInteraction = { position, focus: true };
+            interaction.wait(position, true);
         },
         "leave-cell": () => {
-            pendingInteraction = null;
-            leaveCell(true);
+            interaction.cancelPending();
+            interaction.leaveCell(true);
         },
     };
 
@@ -2220,288 +1351,5 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             detachViewport?.();
         },
         adapter,
-    };
-}
-
-/** A body row's top in its layer. */
-export function rowTop<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): number {
-    return view.rowAxis.offsetOf(rowIndex) - view.rowBase;
-}
-
-/**
- * A row's left in its layer (a header row's too). With pinned columns, it starts their width and
- * the rendered columns' width (at least the view's width less theirs) before the layer, so its
- * box holds them where the browser keeps them (a row's background, its hover), and sticky, which
- * keeps a cell inside its row, holds them in place through a scroll the engine has not rendered
- * yet (the frame a browser paints before the `scroll` event), to the left as far as to the right.
- * It moves only with the rendered columns. 0 without.
- */
-export function rowLeft<TRow, TNode>(view: GridView<TRow, TNode>): number {
-    if (view.pinnedColumnCount === 0) return 0;
-    const rendered =
-        view.columnAxis.offsetOf(view.renderedColumns.end) - view.columnBase;
-    return -(view.pinnedWidth + Math.max(0, rendered));
-}
-
-/**
- * A row's structural `display` (a header row's too): with pinned columns, `flex`, so the pinned
- * cells (in its flow, sticky) stack by their widths; nothing without, a row is then as it was.
- */
-export function rowDisplay<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-): "flex" | undefined {
-    return view.pinnedColumnCount > 0 ? "flex" : undefined;
-}
-
-/**
- * Whether columns `columnIndex` to `columnIndex + columnSpan` (a cell, a header cell's span) are
- * pinned, and whether they end at the last pinned column (its edge).
- */
-export function columnPinning<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    columnIndex: number,
-    columnSpan = 1,
-): { readonly pinned: boolean; readonly pinnedEdge: boolean } {
-    const end = columnIndex + columnSpan;
-    const pinned = end <= view.pinnedColumnCount;
-    return { pinned, pinnedEdge: pinned && end === view.pinnedColumnCount };
-}
-
-/**
- * A pinned cell's sticky `left` inset: its column's offset less the layers' horizontal offset
- * `layerX` (what they are translated by). The browser resolves sticky in layout, before the
- * transform, against the scrolled view: the cell shows at its offset from the view's start
- * whatever the scroll, on every painted frame. Unscaled, `layerX` is the view's `columnBase`.
- */
-export function pinnedInset(
-    columnAxis: Axis,
-    columnIndex: number,
-    layerX: number,
-): number {
-    return columnAxis.offsetOf(columnIndex) - layerX;
-}
-
-/**
- * Where something at virtual `offset` sits in its row, after the row's start (`rowLeft`): a
- * column that scrolls, from the base. A pinned one is in the row's flow and the engine's sticky
- * inset places it (its box follows the scroll): it reports its column's offset, which is its
- * place in a body row's flow (every pinned column is rendered there, in order).
- */
-function leftInRow<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    offset: number,
-    pinned: boolean,
-): number {
-    return pinned ? offset : offset - view.columnBase - rowLeft(view);
-}
-
-/** A column's left in its row (the same in the header rows and in every row). */
-export function columnLeft<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    columnIndex: number,
-): number {
-    return leftInRow(
-        view,
-        view.columnAxis.offsetOf(columnIndex),
-        columnPinning(view, columnIndex).pinned,
-    );
-}
-
-/**
- * The width of a row's rendered cells: from the row's start (`rowLeft`) to the last rendered
- * column's end.
- */
-export function renderedWidth<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-): number {
-    const last = view.columns[view.columns.length - 1];
-    if (last === undefined) return 0;
-    return leftInRow(view, view.columnAxis.offsetOf(last + 1), false);
-}
-
-/**
- * A header cell's box in the header layer: its row's top, its first column's left, as wide as its
- * columns and as tall as its rows. When the columns' scroll is scaled, a group can be wider than a
- * browser lays out: its box is then cut to the rendered columns (they reach past the view).
- */
-export function headerCellBox<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-): {
-    readonly top: number;
-    readonly left: number;
-    readonly width: number;
-    readonly height: number;
-} {
-    const axis = view.columnAxis;
-    const from = cell.columnIndex;
-    const to = cell.columnIndex + cell.columnSpan;
-    let start = axis.offsetOf(from);
-    let end = axis.offsetOf(to);
-    const { pinned } = columnPinning(view, from, cell.columnSpan);
-    // a pinned cell is always whole: its columns are all rendered
-    if (axis.totalSize > view.width && !pinned) {
-        // the rendered columns it reaches into, or the active column it is rendered for
-        const rendered = view.renderedColumns;
-        const reaches = overlaps(rendered, from, to);
-        const extra = view.columns.find(
-            (c) =>
-                (c < rendered.start || c >= rendered.end) &&
-                c >= from &&
-                c < to,
-        );
-        const clipFrom = reaches ? rendered.start : (extra ?? from);
-        const clipTo = reaches ? rendered.end : (extra ?? from) + 1;
-        start = Math.max(start, axis.offsetOf(clipFrom));
-        end = Math.min(end, axis.offsetOf(clipTo));
-    }
-    return {
-        top: (cell.rowIndex + view.headerRowCount) * view.headerRowHeight,
-        // in its header row, as `columnLeft`
-        left: leftInRow(view, start, pinned),
-        width: Math.max(0, end - start),
-        height: cell.rowSpan * view.headerRowHeight,
-    };
-}
-
-/** A header cell's `aria-colspan` and `aria-rowspan`, each only when it spans more than one. */
-export function ariaHeaderCellSpans<TRow, TNode>(
-    cell: HeaderCellLayout<TRow, TNode>,
-): { readonly "aria-colspan"?: number; readonly "aria-rowspan"?: number } {
-    return {
-        ...(cell.columnSpan > 1 ? { "aria-colspan": cell.columnSpan } : {}),
-        ...(cell.rowSpan > 1 ? { "aria-rowspan": cell.rowSpan } : {}),
-    };
-}
-
-/** Whether a row shows its detail (M1): loaded, and its key expanded. */
-export function rowExpanded<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): boolean {
-    return holdsRow(view.expandedRows, rowIndex);
-}
-
-/** Whether a row is selected (R7): rows are selectable, it is loaded and its key selected. */
-export function rowSelected<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): boolean {
-    return isRowSelected(view, rowIndex);
-}
-
-/** Whether a row can be selected (R7): rows are selectable, it is loaded and not refused. */
-export function rowSelectable<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): boolean {
-    return isRowSelectable(view, rowIndex);
-}
-
-/** A row's own height: its cells', without its detail. */
-export function rowCellsHeight<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): number {
-    return cellsSizeOf(view.rowAxis, rowIndex);
-}
-
-/**
- * An expanded row's detail area in its row (M3): below its cells (`top`, its place in the row's
- * flow), as tall as its detail and as wide as the visible area. Sticky in the flow, it is held at
- * the view's start by the inset the engine writes (the `detail` layer); `start` moves its box to
- * the row's start, before the pinned cells (−their width, 0 without), so that inset can reach the
- * view's start from wherever the row is scrolled. `null` while the row is collapsed.
- */
-export function rowDetailBox<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): {
-    readonly top: number;
-    readonly start: number;
-    readonly width: number;
-    readonly height: number;
-} | null {
-    if (!rowExpanded(view, rowIndex)) return null;
-    return {
-        top: rowCellsHeight(view, rowIndex),
-        start: view.pinnedWidth > 0 ? -view.pinnedWidth : 0,
-        width: view.viewportWidth,
-        height: view.rowAxis.extraSizeOf(rowIndex),
-    };
-}
-
-/**
- * A body row's width: its rendered cells' (`renderedWidth`), and for an expanded row at least
- * what holds its detail at the view's start, as wide as the view (sticky keeps an element inside
- * its row): in a grid narrower than the view, the row reaches the view's end.
- */
-export function rowWidth<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): number {
-    const width = renderedWidth(view);
-    if (!rowExpanded(view, rowIndex)) return width;
-    return Math.max(width, leftInRow(view, view.viewportWidth, false));
-}
-
-/**
- * A detail's ARIA (M4): one cell of its row spanning every column, so expanding a row changes no
- * row count or index.
- */
-export function ariaRowDetail<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-): { readonly "aria-colindex": number; readonly "aria-colspan"?: number } {
-    return {
-        "aria-colindex": 1,
-        ...(view.columnCount > 1 ? { "aria-colspan": view.columnCount } : {}),
-    };
-}
-
-/** The grid's `aria-rowcount`: the header rows and every body row. */
-export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
-    return view.rowCount + view.headerRowCount;
-}
-
-/** A row's `aria-rowindex`: 1-based, the header rows first (they are -depth … -1). */
-export function ariaRowIndex<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): number {
-    return rowIndex + view.headerRowCount + 1;
-}
-
-/** A header cell's sort, as the adapters show it (S6). */
-export interface HeaderCellSort {
-    /** its column sorts the grid (never a group) */
-    readonly sortable: boolean;
-    /** the direction its column is sorted in, when it is */
-    readonly direction: SortDirection | undefined;
-    /** its column's place among the sorted columns, 1-based, when it is sorted */
-    readonly priority: number | undefined;
-    /**
-     * `aria-sort`, on the first sorted column's header cell only (ARIA 1.2: one header at a time)
-     */
-    readonly ariaSort: SortDirection | undefined;
-}
-
-/** How a header cell shows the sort: sortable, and its direction and priority when sorted. */
-export function headerCellSort<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-): HeaderCellSort {
-    const column = cell.column;
-    const index = column
-        ? view.sortColumns.findIndex((entry) => entry.columnKey === column.key)
-        : -1;
-    const sorted = view.sortColumns[index];
-    return {
-        sortable: column?.sortable === true,
-        direction: sorted?.direction,
-        priority: sorted ? index + 1 : undefined,
-        ariaSort: index === 0 ? sorted?.direction : undefined,
     };
 }
