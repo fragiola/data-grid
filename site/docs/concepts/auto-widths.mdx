@@ -13,7 +13,8 @@ yours.
 
 ## The width on screen
 
-A column's width on screen is the first of these, always within its `minWidth` and `maxWidth`:
+A column's width on screen is the first of these, within its `minWidth` and `maxWidth` when it is
+resizable (a column that does not resize has no limits):
 
 1. the width a person set (`columnWidths`: a drag, a key, a fit, or your own
    `column-widths.set`, see [Column resizing](/docs/concepts/column-resizing));
@@ -28,7 +29,8 @@ change of the view's width changes no column.
 
 `flex` is a column's part of the width left in the view: what the root's width leaves once every
 other column has its own. Flex columns share it in proportion to their `flex` (`flex: 2` takes two
-parts where `flex: 1` takes one), each never below its `width` (its base) nor past its `maxWidth`.
+parts where `flex: 1` takes one), each never below its `width` (its base) nor, when it is
+resizable, outside its `minWidth` and `maxWidth`.
 What one cannot take goes to the others. When nothing is left (the other columns already fill the
 view), a flex column is its base width, and the grid scrolls sideways as usual.
 
@@ -54,7 +56,8 @@ flexes, and the other flex columns share what is left. A reset makes it flex aga
 A fit measures this grid's own rendered cells of a column: its header cell and its body cells of
 loaded rows. Each one is laid out once at its content's width (its inline `width` set to
 `max-content`, read, and put back in the same task, so nothing paints in between); the column gets
-the widest, rounded up and held within its limits. A group's fit fits each of its resizable
+the widest, rounded up and, for a resizable column, held within its limits. A group's fit fits
+each of its resizable
 columns. Content placed out of the flow, such as an absolutely positioned
 [resize handle](/docs/concepts/column-resizing#the-handle), adds nothing.
 
@@ -86,14 +89,17 @@ const gridRef = useDataGridRef<Person>();
 ```
 
 A fit resizes: it reaches only resizable columns, a column not rendered is not measured, and its
-width is one a person set, kept in `columnWidths` and told to `onColumnWidthsChange`. A column
-fitted to the width it has without one (its automatic width, else its `width`) keeps no entry; a
-flex column's fit always gives it one, so it stops flexing.
+width is one a person set, kept in `columnWidths` and told to `onColumnWidthsChange`, so a flex
+column stops flexing. A column fitted to the width it has without an override (its share or its
+automatic width as they would be without it, else its `width`) keeps no entry, as a drag or a key
+back to that width does.
 
 ## Fitting once at the start
 
 `autoSize: true` fits a column by itself once, after the first render that shows it with loaded
-rows, while the grid has a size (a grid in a hidden tab fits when it is laid out). That width is
+rows, while the grid has a size (a grid in a hidden tab fits when it is laid out; a column whose
+cells measure nothing then keeps its width). Without `resizable`, it is its content's width as
+is, with no limits. That width is
 the grid's, not a person's: it is not in `columnWidths`, it is never reported, and a reset gives
 it back. With `flex` too, it is the column's base. It runs once per column key while the grid is
 on screen, and a new `columns` keeps it for the keys that stay; `fit-columns` (or a double click)
@@ -114,10 +120,10 @@ set: a flex column flexes again and an `autoSize` column has its automatic width
 `engine.get("column-auto-widths")` is the widths the grid gives columns itself, by key: the
 automatic widths and the flex shares in effect, never a width a person set. The engine's
 `column-auto-widths` event tells each change, for a readout of your own.
-`get("column-width-by", { columnKey })` stays the model's width (a person's, else the column's
-own); the width on screen is the engine's one for the key when it has one. A handle's
-`aria-valuenow`, `useColumnResizer`'s `state.width` and the header cells read the width on screen;
-`aria-valuemin` and `aria-valuemax` stay the column's limits.
+`get("column-width-by", { columnKey })` stays the model's width: the width a person set, else
+the column's own, not the width on screen. The width on screen is a handle's `aria-valuenow` and
+`useColumnResizer`'s `state.width`, and a header cell's box (`headerCellBox`), all read from the
+view's column axis; `aria-valuemin` and `aria-valuemax` stay the column's limits.
 
 ## A group with a column that flexes and does not resize
 

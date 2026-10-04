@@ -172,11 +172,14 @@ keeps the view on the column it shows first, as far into it as before, scaled or
 | command | does |
 | --- | --- |
 | `column-widths.set { columnWidths }` | replaces the widths |
-| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together; a column back to its own `width` keeps no entry, and nothing changing commits nothing |
+| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together; a column back to the width it has without an override (its `width`, or its [automatic width or flex share](/docs/concepts/auto-widths)) keeps no entry, and nothing changing commits nothing |
 | `column-widths.reset { columnKey? }` | gives a column (or a group's columns) its own `width` back (or the grid's [automatic width](/docs/concepts/auto-widths)), or every column without a key |
 
-Reads: `get("column-widths")`, and `get("column-width-by", { columnKey })`, a column's width on
-screen (or a group's). Reach them with
+Reads: `get("column-widths")`, and `get("column-width-by", { columnKey })`, a column's width a
+person set, else its own `width` (a group's: its columns'). That is not always the width on
+screen: an [automatic width or a flex share](/docs/concepts/auto-widths) takes the place of
+`width` there. The width on screen is a handle's `aria-valuenow` and `useColumnResizer`'s
+`state.width`, and a header cell's box (`headerCellBox`, the view's column axis). Reach them with
 [`useDataGrid()` or a `gridRef`](/docs/concepts/model-and-engine#from-outside-the-root).
 
 ## What it shows

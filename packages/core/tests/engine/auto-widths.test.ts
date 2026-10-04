@@ -65,7 +65,7 @@ describe("flex columns", () => {
     it("stop at their maximum and their base, the others taking the rest", () => {
         const { view } = mount([
             { key: "a", width: 100 },
-            { key: "b", width: 50, flex: 1, maxWidth: 80 },
+            { key: "b", width: 50, flex: 1, maxWidth: 80, resizable: true },
             { key: "c", width: 50, flex: 1 },
             { key: "d", width: 120, flex: 1 },
         ]);
@@ -77,7 +77,7 @@ describe("flex columns", () => {
         const { view } = mount(
             [
                 { key: "a", width: 100, flex: 1 },
-                { key: "b", width: 40, flex: 1, maxWidth: 50 },
+                { key: "b", width: 40, flex: 1, maxWidth: 50, resizable: true },
             ],
             { width: 180 },
         );
@@ -148,6 +148,47 @@ describe("flex columns", () => {
         model.run("column-widths.reset", { columnKey: "b" });
         expect(sizes(view())).toEqual([100, 100, 200]);
         expect(events.at(-1)).toEqual({ b: 100, c: 200 });
+    });
+
+    it("have no limits but their base when they do not resize", () => {
+        const { view } = mount(
+            [
+                { key: "a", width: 100, flex: 1, maxWidth: 120 },
+                { key: "b", width: 20, flex: 1, minWidth: 90 },
+            ],
+            { width: 400 },
+        );
+        expect(sizes(view())).toEqual([200, 200]);
+        const narrow = mount(
+            [
+                { key: "a", width: 100, flex: 1 },
+                { key: "b", width: 20, flex: 1 },
+            ],
+            { width: 100 },
+        );
+        // nothing left: each at its base, no floor of 40
+        expect(sizes(narrow.view())).toEqual([100, 20]);
+    });
+
+    it("drop the override when the keys bring one back to its share, as a drag does", () => {
+        const grid = document.createElement("div");
+        const cell = cellElement(
+            grid,
+            -1,
+            1,
+            `<div role="separator" tabindex="0" ${COLUMN_RESIZER_ATTRIBUTE}="b"></div>`,
+        );
+        const { engine, model, view } = mount(FLEX, { grid });
+        const resizer = cell.firstElementChild;
+        if (!resizer) throw new Error("no resizer");
+        keydown(engine, cell, "F2");
+        keydown(engine, resizer, "ArrowRight");
+        expect(model.get("column-widths")).toEqual({ b: 110 });
+        expect(sizes(view())).toEqual([100, 110, 190]);
+        keydown(engine, resizer, "ArrowLeft");
+        // its share without the override: 100
+        expect(model.get("column-widths")).toEqual({});
+        expect(sizes(view())).toEqual([100, 100, 200]);
     });
 
     it("follow the view's width, and only its width", () => {
@@ -377,6 +418,26 @@ describe("fitting columns to their content", () => {
         expect(model.get("column-widths")).toEqual({ c15: 300 });
     });
 
+    it("measures layout pixels under a scaling transform", () => {
+        const { engine, model, viewport } = measured(FIT, [[0, 300, 0]]);
+        // the grid shown at twice its size: its boxes are twice as wide on screen
+        Object.defineProperty(viewport, "offsetWidth", { value: 400 });
+        viewport.getBoundingClientRect = () =>
+            DOMRect.fromRect({ width: 800, height: 520 });
+        engine.run("fit-columns", { columnKeys: ["a"] });
+        expect(model.get("column-widths")).toEqual({ a: 150 });
+    });
+
+    it("fits a flex column back to its share without an override: none", () => {
+        const { engine, model } = measured(FLEX, [
+            [0, 0, 0],
+            [100, 0, 0],
+        ]);
+        model.run("column-widths.set", { columnWidths: { b: 150 } });
+        engine.run("fit-columns", { columnKeys: ["b"] });
+        expect(model.get("column-widths")).toEqual({});
+    });
+
     it("fits a group's resizable columns", () => {
         const { engine, model } = measured(
             [
@@ -525,8 +586,17 @@ describe("autoSize columns", () => {
     }
 
     it("fit once, after the first commit with loaded rows, as the engine's width only", () => {
-        const { view, engine, model, measure, load, events, commit, cells } =
-            autoSized();
+        const {
+            view,
+            engine,
+            model,
+            measure,
+            load,
+            events,
+            commit,
+            cells,
+            viewport,
+        } = autoSized();
         expect(measure).not.toHaveBeenCalled();
         expect(sizes(view())).toEqual([100, 100]);
         load();
@@ -537,11 +607,18 @@ describe("autoSize columns", () => {
         // never reported: the model keeps no width
         expect(model.get("column-widths")).toEqual({});
         expect(model.get("column-width-by", { columnKey: "a" })).toBe(100);
-        // once: wider content later is not measured again
+        // once: wider content later is not measured again, nor looked for
         const [, first] = cells;
         if (first) fakeContentWidth(first, 400);
+        const query = vi.spyOn(viewport, "querySelectorAll");
+        commit();
         commit();
         expect(measure).toHaveBeenCalledTimes(3);
+        expect(
+            query.mock.calls.filter(([selector]) =>
+                selector.startsWith("[data-row-index][data-column-index="),
+            ),
+        ).toEqual([]);
         expect(sizes(view())).toEqual([130, 100]);
     });
 
@@ -578,8 +655,8 @@ describe("autoSize columns", () => {
         expect(model.get("column-widths")).toEqual({});
     });
 
-    it("wait until the grid is laid out, and for a column measured wider than 0", () => {
-        const { load, measure, view, size, resize, commit, cells } = autoSized(
+    it("wait until the grid is laid out", () => {
+        const { load, measure, view, size, resize, commit } = autoSized(
             undefined,
             { width: 0, height: 0 },
         );
@@ -588,13 +665,28 @@ describe("autoSize columns", () => {
         expect(measure).not.toHaveBeenCalled();
         size.width = 400;
         size.height = 260;
-        // its cells hidden: 0 wide
-        for (const cell of cells) fakeContentWidth(cell, 0);
         resize();
         commit();
+        expect(sizes(view())).toEqual([130, 100]);
+    });
+
+    it("keep their width when laid out but measured 0 wide, and never measure again", () => {
+        const { load, view, commit, cells, engine } = autoSized();
+        for (const cell of cells) fakeContentWidth(cell, 0);
+        load();
         expect(sizes(view())).toEqual([100, 100]);
         for (const cell of cells) fakeContentWidth(cell, 130);
         commit();
+        expect(sizes(view())).toEqual([100, 100]);
+        expect(engine.get("column-auto-widths")).toEqual({});
+    });
+
+    it("take their content's width as is when they do not resize: no limits", () => {
+        const { view, load } = autoSized([
+            { key: "a", width: 100, autoSize: true, maxWidth: 50 },
+            { key: "b", width: 100 },
+        ]);
+        load();
         expect(sizes(view())).toEqual([130, 100]);
     });
 

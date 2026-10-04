@@ -36,41 +36,48 @@ export function isFlex(column: SizedColumn): boolean {
     return column.flex !== undefined && column.flex > 0;
 }
 
-/** Whether the engine may size a column itself (A1, A5): it flexes, or it fits itself once. */
-function isEngineSized(column: SizedColumn): boolean {
-    return isFlex(column) || column.autoSize === true;
+/** What a grid's columns ask of the widths: worked out once per list (`columnTraits`). */
+export interface ColumnTraits {
+    /** a column is resizable */
+    readonly resizable: boolean;
+    /** a column flexes: the view's width lays the columns out */
+    readonly flex: boolean;
+    /** the `autoSize` columns' keys, in order */
+    readonly autoSizeKeys: readonly string[];
 }
 
-/** Whether a column of a list passes `test`: found once per list (the state's are never mutated). */
-function someColumn(
-    test: (column: SizedColumn) => boolean,
-): (columns: readonly SizedColumn[]) => boolean {
-    const lists = new WeakMap<readonly SizedColumn[], boolean>();
-    return (columns) => {
-        let has = lists.get(columns);
-        if (has === undefined) {
-            has = columns.some(test);
-            lists.set(columns, has);
-        }
-        return has;
-    };
+const traits = new WeakMap<readonly SizedColumn[], ColumnTraits>();
+
+/** What a grid's columns ask of the widths, found once per list (the state's are never mutated). */
+export function columnTraits(columns: readonly SizedColumn[]): ColumnTraits {
+    let found = traits.get(columns);
+    if (!found) {
+        found = {
+            resizable: columns.some(isResizable),
+            flex: columns.some(isFlex),
+            autoSizeKeys: columns
+                .filter((column) => column.autoSize === true)
+                .map((column) => column.key),
+        };
+        traits.set(columns, found);
+    }
+    return found;
 }
 
 /** Whether a column of the grid is resizable. */
-export const hasResizable = someColumn(isResizable);
+export function hasResizable(columns: readonly SizedColumn[]): boolean {
+    return columnTraits(columns).resizable;
+}
 
-/** Whether a column of the grid flexes: the view's width lays the columns out. */
-export const hasFlex = someColumn(isFlex);
-
-/** Whether a column of the grid flexes or fits itself: the engine has widths of its own. */
-export const hasEngineSized = someColumn(isEngineSized);
-
-/** Whether a column of the grid fits itself once (`autoSize`). */
-export const hasAutoSize = someColumn((column) => column.autoSize === true);
+/** Whether the engine sizes a column of the grid itself (A1, A5): one flexes or fits itself. */
+export function hasEngineSized(columns: readonly SizedColumn[]): boolean {
+    const { flex, autoSizeKeys } = columnTraits(columns);
+    return flex || autoSizeKeys.length > 0;
+}
 
 /**
- * A column's limits, which a resize, a flex share and a fit keep to: `max` is infinite without
- * one, and `min` never passes it.
+ * A resizable column's limits, which a resize, a flex share and a fit keep to: `max` is infinite
+ * without one, and `min` never passes it.
  */
 export function widthLimits(column: SizedColumn): {
     readonly min: number;
@@ -96,9 +103,20 @@ function resizedWidth(
     return resized === undefined ? undefined : withinLimits(column, resized);
 }
 
-/** A width kept within a column's limits. */
-function withinLimits(column: SizedColumn, width: number): number {
-    const { min, max } = widthLimits(column);
+/** No limits: a column that is not resizable has none (W2). */
+const NO_LIMITS = { min: 0, max: Number.POSITIVE_INFINITY } as const;
+
+/** A column's limits: a resizable one's (`widthLimits`); none for the others. */
+function limitsOf(column: SizedColumn): {
+    readonly min: number;
+    readonly max: number;
+} {
+    return isResizable(column) ? widthLimits(column) : NO_LIMITS;
+}
+
+/** A width kept within a column's limits: a resizable one's, as is for the others. */
+export function withinLimits(column: SizedColumn, width: number): number {
+    const { min, max } = limitsOf(column);
     return clamp(width, min, max);
 }
 
@@ -230,6 +248,18 @@ export function sharedWidths(
 }
 
 /**
+ * The width a column has without an override: the engine's for it (`autoWidths`: an automatic
+ * width, a flex share, as it is without that override), else its own, within its limits. A
+ * resize or a fit back to it writes none.
+ */
+export function unresizedWidth(
+    column: SizedColumn,
+    autoWidths: ColumnWidths,
+): number {
+    return columnWidth(column, NO_WIDTHS, autoWidths);
+}
+
+/**
  * The widths after resizing `columns` (a column, or a group's) to `width` together (W5): the
  * resizable ones share the change in proportion to their widths, each within its limits
  * (`sharedWidths`). The widths start from the ones on screen: a column without an override is the
@@ -257,8 +287,8 @@ export function resizedWidths(
         return {
             key: column.key,
             current,
-            // its width without an override: resized back to it, it needs none of the record's
-            own: columnWidth(column, NO_WIDTHS, autoWidths),
+            // resized back to the width it has without one, it needs none of the record's
+            own: unresizedWidth(column, autoWidths),
             weight: current,
             start: current,
             ...widthLimits(column),
@@ -306,7 +336,7 @@ export function autoWidthsOf(
             measured === undefined ? undefined : withinLimits(column, measured);
         if (resized === undefined && isFlex(column)) {
             const base = auto ?? columnWidth(column, NO_WIDTHS);
-            const { min, max } = widthLimits(column);
+            const { min, max } = limitsOf(column);
             flexing.push({
                 key: column.key,
                 share: {

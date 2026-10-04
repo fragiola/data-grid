@@ -20,10 +20,8 @@ import type {
 } from "../model/types";
 import {
     autoWidthsOf,
-    columnWidth,
-    hasAutoSize,
+    columnTraits,
     hasEngineSized,
-    hasFlex,
     hasResizable,
     isFlex,
     isResizable,
@@ -33,7 +31,8 @@ import {
     sameWidths,
     spanResizable,
     spanWidths,
-    widthLimits,
+    unresizedWidth,
+    withinLimits,
     withoutWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
@@ -227,6 +226,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let automatic: ColumnWidths = NO_WIDTHS;
     /** the `autoSize` columns measured since the viewport attached: once each */
     const autoSized = new Set<string>();
+    /** the columns whose `autoSize` ones are all measured: a commit has nothing to measure */
+    let autoSizedFor: readonly Column<TRow, TNode>[] | null = null;
     /** the engine's widths in effect: automatic widths and flex shares (`column-auto-widths`) */
     let autoWidths: ColumnWidths = NO_WIDTHS;
     updateAutoWidths();
@@ -997,7 +998,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     pointerId: event.pointerId,
                     startX: event.clientX,
                     startWidth: span.width,
-                    autoWidths,
+                    autoWidths: resizeFrom(columnKey),
                     element,
                     doc,
                     x: event.clientX,
@@ -1327,14 +1328,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 }
             }
         }
-        maxContentWidths(elements, layers.pinned).forEach((width, index) => {
-            const columnIndex = columnOf[index];
-            if (columnIndex === undefined) return;
-            measured.set(
-                columnIndex,
-                Math.max(width, measured.get(columnIndex) ?? 0),
-            );
-        });
+        maxContentWidths(elements, layers.pinned, viewport).forEach(
+            (width, index) => {
+                const columnIndex = columnOf[index];
+                if (columnIndex === undefined) return;
+                measured.set(
+                    columnIndex,
+                    Math.max(width, measured.get(columnIndex) ?? 0),
+                );
+            },
+        );
         return measured;
     }
 
@@ -1343,16 +1346,62 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         column: Column<TRow, TNode>,
         measured: number,
     ): number {
-        const { min, max } = widthLimits(column);
-        return clamp(Math.ceil(measured), min, max);
+        return withinLimits(column, Math.ceil(measured));
+    }
+
+    /**
+     * The engine's widths a resize or a fit of `columns` starts from (A2): the ones in effect,
+     * and for each of them with an override the engine would size otherwise (a flex share, an
+     * automatic width), the width it has without that override: back to it, it needs none, by a
+     * drag, a key or a fit alike.
+     */
+    function unresizedWidthsOf(
+        columns: readonly Column<TRow, TNode>[],
+    ): ColumnWidths {
+        if (!hasEngineSized(state.columns)) return NO_WIDTHS;
+        let record: Record<string, number> | null = null;
+        for (const column of columns) {
+            const { key } = column;
+            if (
+                !isResizable(column) ||
+                !Object.hasOwn(state.columnWidths, key) ||
+                !(isFlex(column) || column.autoSize === true)
+            ) {
+                continue;
+            }
+            const own = autoWidthsOf(
+                state.columns,
+                withoutWidths(state.columnWidths, [key]),
+                automatic,
+                width,
+            )[key];
+            if (own !== undefined) {
+                record ??= { ...autoWidths };
+                record[key] = own;
+            }
+        }
+        return record ?? autoWidths;
+    }
+
+    /** What a resize of a column or a group starts from (`unresizedWidthsOf` its columns). */
+    function resizeFrom(columnKey: string): ColumnWidths {
+        const cell = state.header.cellByKey(columnKey);
+        return cell
+            ? unresizedWidthsOf(
+                  state.columns.slice(
+                      cell.columnIndex,
+                      cell.columnIndex + cell.columnSpan,
+                  ),
+              )
+            : autoWidths;
     }
 
     /**
      * Fits columns to their content (A3, A4): each resizable column of each key (a column, or a
      * group's), or every rendered one without keys, measured on the view on screen in one
      * layout. One `column-widths.set` with the other widths as they are, none when no width
-     * changes. A column fitted to the width it has without an override (its automatic width,
-     * else its own) needs none; a flex column's fit fixes it.
+     * changes. A column fitted to the width it has without an override (`unresizedWidth`: its
+     * flex share or automatic width as they are without it, else its own) needs none.
      */
     function fitColumns(columnKeys?: readonly string[]) {
         const shown = committed;
@@ -1377,19 +1426,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         const fitted: [string, number][] = [];
         const keys: string[] = [];
-        for (const [columnIndex, measured] of measureColumns(shown, indexes)) {
+        const measuredColumns = measureColumns(shown, indexes);
+        const from = unresizedWidthsOf(
+            [...measuredColumns.keys()].flatMap((columnIndex) => {
+                const column = columnDefs[columnIndex];
+                return column ? [column] : [];
+            }),
+        );
+        for (const [columnIndex, measured] of measuredColumns) {
             const column = columnDefs[columnIndex];
             if (!column) continue;
             const width = fittedWidth(column, measured);
-            const unresized = isFlex(column)
-                ? undefined
-                : columnWidth(
-                      column,
-                      NO_WIDTHS,
-                      column.autoSize === true ? automatic : NO_WIDTHS,
-                  );
             keys.push(column.key);
-            if (width !== unresized) fitted.push([column.key, width]);
+            if (width !== unresizedWidth(column, from)) {
+                fitted.push([column.key, width]);
+            }
         }
         const columnWidths = {
             ...withoutWidths(state.columnWidths, keys),
@@ -1403,16 +1454,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /**
      * Fits the `autoSize` columns a committed view renders with loaded rows (A5), each once per
      * attach, in one layout: their widths are the engine's (`automatic`), never the model's. Not
-     * while the grid is not laid out (no size: a hidden tab, a closed dialog), nor a column
-     * measured 0 wide: the first commit where it is laid out measures it.
+     * while the grid is not laid out (no size: a hidden tab, a closed dialog): the first commit
+     * where it is measures them. A column measured 0 wide keeps its width. Once every one of a
+     * list of columns is measured, a commit returns at once.
      */
     function autoSize(shown: GridView<TRow, TNode>) {
-        if (!hasAutoSize(shown.columnDefs) || width === 0 || height === 0) {
+        const columns = shown.columnDefs;
+        if (autoSizedFor === columns || width === 0 || height === 0) return;
+        const { autoSizeKeys } = columnTraits(columns);
+        if (autoSizeKeys.every((key) => autoSized.has(key))) {
+            autoSizedFor = columns;
             return;
         }
         const indexes: number[] = [];
         for (const columnIndex of shown.columns) {
-            const column = shown.columnDefs[columnIndex];
+            const column = columns[columnIndex];
             if (column?.autoSize === true && !autoSized.has(column.key)) {
                 indexes.push(columnIndex);
             }
@@ -1427,9 +1483,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         let next: Record<string, number> | null = null;
         for (const [columnIndex, measured] of measureColumns(shown, indexes)) {
-            const column = shown.columnDefs[columnIndex];
-            if (!column || measured <= 0) continue;
+            const column = columns[columnIndex];
+            if (!column) continue;
             autoSized.add(column.key);
+            if (measured <= 0) continue;
             next ??= { ...automatic };
             next[column.key] = fittedWidth(column, measured);
         }
@@ -2031,16 +2088,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * A resize, the app's own too, starts from the widths on screen (A2): the engine's widths fill
-     * its `autoWidths` when it has some and the resize names none.
+     * A resize, the app's own too, starts from the widths on screen (A2): while the engine sizes
+     * columns itself, it fills a resize's `autoWidths` when it names none (`resizeFrom`).
      */
     const unuseModel = model.use((ctx, next) => {
         if (
             ctx.command === "column-widths.resize" &&
             ctx.payload.autoWidths === undefined &&
-            autoWidths !== NO_WIDTHS
+            hasEngineSized(state.columns)
         ) {
-            ctx.payload = { ...ctx.payload, autoWidths };
+            ctx.payload = {
+                ...ctx.payload,
+                autoWidths: resizeFrom(ctx.payload.columnKey),
+            };
         }
         return next();
     });
@@ -2165,7 +2225,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                           // the flex columns follow the view's width (A1), and only they
                           if (
                               width === before ||
-                              !hasFlex(state.columns) ||
+                              !columnTraits(state.columns).flex ||
                               !relayoutColumns()
                           ) {
                               relayout(false);
@@ -2214,6 +2274,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // the `autoSize` columns fit again once in this attach (A5); the flex columns take
             // the view's width
             autoSized.clear();
+            autoSizedFor = null;
             if (!relayoutColumns()) relayout(true);
             writeLayers();
             // what was asked before the grid had a size: a scroll to a cell, or the active cell

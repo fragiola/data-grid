@@ -159,7 +159,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    controlled or not on `Root` like the sort (`columnWidths`/`defaultColumnWidths`/
    `onColumnWidthsChange`); `column-widths.set { columnWidths }`, `.resize { columnKey, width }`,
    `.reset { columnKey? }`; `get("column-widths")`, `get("column-width-by", { columnKey })` (the
-   width on screen, a group's its columns'). `resizable: true` opts a column in; `minWidth`
+   override, else `width`, a group's its columns'; the width on screen is the view's column axis,
+   Epic #80). `resizable: true` opts a column in; `minWidth`
    (default 40) and `maxWidth` (default none) clamp every resize, and a `width` outside them is
    clamped where used; `columnsError` refuses a negative minimum or one above the maximum. The
    column axis reads the effective width, so pinned widths, header spans, windows and scroll
@@ -188,9 +189,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    view and measures its own rendered cells; which columns flex or fit, the buttons that fit and
    what a reset means are the app's. `flex?: number` on a column (refused on a group, like
    `autoSize`; `columnsError`): flex columns share the view's width minus every other column's
-   effective width, in proportion to `flex`, each within `[max(width, minWidth), maxWidth]`, what
-   one cannot take going to the others (`sharedWidths` in `model/widths.ts`, shared with a group's
-   resize); nothing left, each is its `width` and the grid scrolls. The shares are the engine's
+   effective width, in proportion to `flex`, each within `[max(width, minWidth), maxWidth]` when
+   resizable, else `[width, ∞)` (limits are a resizable column's only), what
+   one cannot take going to the others, limits settled as a flexbox does (`sharedWidths` in
+   `model/widths.ts`, shared with a group's resize); nothing left, each is its `width` and the grid scrolls. The shares are the engine's
    (they depend on the view, D3), worked out again when the view's width, the columns, the order
    or the overrides change, and only while a column flexes (no measure, no recompute otherwise);
    the view keeps its first column across one (as a resize). Resizing a flex column (a drag, a
@@ -198,14 +200,16 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    fit measures this grid's own rendered header cell of the column and its body cells of loaded
    rows (`ownerViewport`): each one's inline `width` set to `max-content` (important; a pinned
    cell's `flex-shrink` 0), every box read, every `style` attribute put back, in one task; the
-   widest, rounded up, within the limits (a group: each resizable column). Only rendered rows are
+   widest, rounded up, within a resizable column's limits (a group: each resizable column), in
+   layout pixels (a transform above the viewport scaled back). Only rendered rows are
    measured (virtualization; a full-data width is the app's `column-widths.set`). Triggers: a
    double click on a resizer, Enter on a focused resizer (in interaction), the engine action
    `fit-columns { columnKeys? }` (no dot; without keys every rendered resizable column), each one
-   `column-widths.set` with the other overrides as they are; a column fitted to the width it has
-   without an override keeps none, a flex one always gets one. `autoSize?: boolean`: after the
-   first commit rendering the column with loaded rows while the grid has a size, the engine
-   measures it once per key per attach and keeps that width as engine state (`automatic`), never
+   `column-widths.set` with the other overrides as they are; a column fitted, dragged or keyed
+   back to the width it has without an override (`unresizedWidth`: its share or automatic width
+   as they are without it, else its own) keeps none. `autoSize?: boolean`: after the first commit
+   rendering the column with loaded rows while the grid has a size, the engine measures it once
+   per key per attach (measured 0, it keeps its width; unclamped when it does not resize) and keeps that width as engine state (`automatic`), never
    an override: not reported, not in `columnWidths`, a reset gives it back, with `flex` it is the
    base, a new `columns` keeps it for the same keys. `engine.get("column-auto-widths")` (and its
    event) is the automatic widths and flex shares in effect, by key; `column-width-by` stays the

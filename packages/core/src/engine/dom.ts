@@ -178,11 +178,13 @@ export function isPagelessControl(element: Element): boolean {
  * Elements' widths at their content's widest (Epic #80, A3), in one layout: each one's inline
  * `width` set to `max-content` (and, for a pinned cell in its row's flex, `flex-shrink` to 0: it
  * could shrink), important so no style sheet holds it; then every box read; then every `style`
- * attribute put back exactly as it was. All in one go: nothing paints between.
+ * attribute put back exactly as it was. All in one go: nothing paints between. The widths are
+ * layout pixels: a box scaled by a transform above `reference` (the viewport) is scaled back.
  */
 export function maxContentWidths(
     elements: readonly HTMLElement[],
     pinned: ReadonlySet<Element>,
+    reference: HTMLElement,
 ): number[] {
     const previous = elements.map((element) => element.getAttribute("style"));
     for (const element of elements) {
@@ -191,8 +193,11 @@ export function maxContentWidths(
             element.style.setProperty("flex-shrink", "0", "important");
         }
     }
+    const layout = reference.offsetWidth;
+    const box = reference.getBoundingClientRect().width;
+    const scale = layout > 0 && box > 0 ? box / layout : 1;
     const widths = elements.map(
-        (element) => element.getBoundingClientRect().width,
+        (element) => element.getBoundingClientRect().width / scale,
     );
     elements.forEach((element, index) => {
         const style = previous[index] ?? null;

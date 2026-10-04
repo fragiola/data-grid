@@ -76,14 +76,15 @@ export interface Column<TRow, TNode = unknown> {
     readonly maxWidth?: number | undefined;
     /**
      * its part of the view's width the other columns leave (Epic #80, A1), in proportion to the
-     * other flex columns' (`1` is a part): never below its `width` (its base) nor past its
-     * `maxWidth`; nothing left, its base, and the grid scrolls. A resized width replaces it, and a
-     * reset gives it back
+     * other flex columns' (`1` is a part): never below its `width` (its base), nor, resizable,
+     * outside its `minWidth`/`maxWidth`; nothing left, its base, and the grid scrolls. A resized
+     * width replaces it, and a reset gives it back
      */
     readonly flex?: number | undefined;
     /**
      * whether it fits its content once, when its first loaded rows render (A5): the widest of its
-     * rendered cells, within its limits. That width is the grid's, never reported: a reset gives
+     * rendered cells (within its limits when it is resizable). That width is the grid's, never
+     * reported: a reset gives
      * it back, and with `flex` it is the base
      */
     readonly autoSize?: boolean | undefined;
