@@ -67,8 +67,10 @@ order (to storage, to a server) is yours: it is a plain array.
 - **Among siblings only.** A column moves among the columns of its group, a group among the
   entries beside it. Moving a column into another group is not a move.
 - **Groups whole.** A group's header cell moves the group and every column under it.
-- **Pinned with pinned.** A [pinned column](/docs/concepts/pinned-columns) moves among the pinned
-  ones, the others among the others: pinned columns always lead, whatever the order says.
+- **Pinned with pinned.** A [pinned column](/docs/concepts/pinned-columns) lands among the pinned
+  ones, the others among the others: pinned columns always lead, whatever the order says. What
+  counts is where it lands: a pinned column before the first column that scrolls becomes the last
+  pinned one, and a column after the last pinned one becomes the first that scrolls.
 - **Fixed entries.** An entry without `reorderable` is never dragged nor moved by the keys, but
   its siblings may land on either side of it.
 
@@ -100,8 +102,11 @@ While the cell drags, at most once a frame, the grid works out where it would la
 sibling under the pointer, before or after it by the side of its middle. It reads the column
 positions, not the elements, so a sibling scrolled out of the rendered columns counts, under
 [scroll scaling](/docs/concepts/scroll-scaling) too. Near the left or right edge of the columns
-that scroll, the grid scrolls them, faster nearer the edge, so a far column comes into reach. A
-pinned column's drag stays over the pinned ones and scrolls nothing.
+that scroll, the grid scrolls them, faster nearer the edge, so a far column comes into reach; it
+stops once the siblings the column moves among all show on that side, so a drag inside a small
+group never scrolls the grid away. A pinned column's drag stays over the pinned ones and scrolls
+nothing. A scroll during the drag (the wheel, the scrollbar) works the target out again from where
+the pointer is, so the release lands where the indicator shows.
 
 The columns do not move during the drag: only the state changes. The release runs one
 `column-order.move`, one question to a controlled parent. Escape, a cancelled pointer or a lost
@@ -162,21 +167,35 @@ does not move, they move the active cell as the arrows alone do. See
 ## Announcements
 
 The grid announces nothing: what a screen reader hears after a move is your text, in a live region
-of yours. `onColumnOrderChange` tells the new order; compared with the one before, it tells which
-column moved and where, in your columns' names.
+of yours. Tell it from what the grid shows, not by working the order out again: the model's header
+before and after the change (`state.header.rows`, the pinned columns first, as on screen) tells
+which column moved and where, in your columns' names.
 
 ```tsx title="people.tsx"
 const [order, setOrder] = useState<ColumnOrder>([]);
 const [message, setMessage] = useState("");
+const gridRef = useDataGridRef<Person>();
+const moving = useRef(false);
+
+useEffect(
+    () =>
+        gridRef.current?.model.subscribe(({ before, after }) => {
+            if (!moving.current || after.header === before.header) return;
+            moving.current = false;
+            // "Moved Email after City.", from the header's rows and the columns' names
+            setMessage(describeMove(before.header.rows, after.header.rows) ?? "");
+        }),
+    [gridRef],
+);
 
 <span role="status">{message}</span>
 <DataGrid.Root
     columns={columns}
     rows={people}
+    gridRef={gridRef}
     columnOrder={order}
     onColumnOrderChange={(next) => {
-        // "Moved Email after City.", from the two orders and the columns' names
-        setMessage(describeMove(columns, order, next) ?? "");
+        moving.current = true;
         setOrder(next);
     }}
 >
@@ -184,7 +203,8 @@ const [message, setMessage] = useState("");
 </DataGrid.Root>
 ```
 
-The [example](/examples/column-reordering) writes `describeMove` in a few lines (`announce.ts`).
+The [example](/examples/column-reordering) writes `describeMove` in a few lines (`announce.ts`),
+and follows the root its ref holds (`gridRef.subscribe`).
 `role="status"` is a polite live region: it speaks once the person is done.
 
 ## The commands
@@ -200,7 +220,7 @@ model.run("column-order.move", { columnKey: "email", targetKey: "city", side: "a
 ```
 
 A move naming a key that is no column or group fails (`not_found`); one that is not reorderable,
-not a sibling, or across the pinned columns' edge is refused (`refused`). Reads:
+not a sibling, or landing across the pinned columns' edge is refused (`refused`). Reads:
 `get("column-order")`, `get("columns")` (the columns in their order) and `get("column-entries")`
 (as declared). Reach them with
 [`useDataGrid()` or a `gridRef`](/docs/concepts/model-and-engine#from-outside-the-root).

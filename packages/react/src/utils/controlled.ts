@@ -11,10 +11,11 @@ import type { ReactNode, RefObject } from "react";
 // controlled, a change is asked for (`on…Change`) and applied only when the prop follows;
 // uncontrolled, the grid applies it and tells.
 //
-// One piece can move another: following a controlled order moves the active cell with its
-// column. Uncontrolled, the moved piece is told at once. Controlled, the moved value stands
-// (its prop, unchanged, never pulls it back to a stale place) and the parent is told it once
-// the root settles, as when the data props move it; a prop that changes wins again.
+// One piece can move another: an order moves the active cell with its column. Uncontrolled, the
+// moved piece is told at once. Controlled, the moved value stands (its prop, unchanged, never
+// pulls it back to a stale place) and the parent is told it once: when the root settles, moved
+// by another piece's prop (as when the data props move it), or at once, moved by another
+// piece's own commit (an uncontrolled order's drop); a prop that changes wins again.
 
 export interface ControlledState<TRow, V> {
     /** the commands that change it: their names start with this */
@@ -94,6 +95,9 @@ export function bindControlled<TRow, V>(
             if (flags.syncing.current) sync.carried = "moved";
             // controlled: decided once every prop is applied (settleControlled)
             if (flags.syncing.current || flags.applying.current) return;
+            // controlled, moved by another piece's own commit (an uncontrolled order's move):
+            // told now, and its value stands too, its prop unchanged never pulling it back
+            sync.carried = "told";
         }
         spec.report(spec.read(after));
     });

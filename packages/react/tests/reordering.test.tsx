@@ -390,6 +390,53 @@ describe("the active cell", () => {
     });
 });
 
+describe("an uncontrolled order and a controlled position", () => {
+    it("keeps the position a move carried with its column when the parent keeps its old one, told once", () => {
+        const onActivePositionChange = vi.fn();
+        const props: GridProps = {
+            defaultColumnOrder: [],
+            activePosition: { rowIndex: -1, columnIndex: 0 },
+            onActivePositionChange,
+        };
+        const { container, model, rerender } = withRef(props);
+        const a = headerAt(container, 0);
+        act(() => a.focus());
+        const set: unknown[] = [];
+        model()?.use((ctx, next) => {
+            if (ctx.command === "active-position.set") set.push(ctx.payload);
+            return next();
+        });
+        // the order's own commit moves the position in the same commit
+        fireEvent.keyDown(a, {
+            key: "ArrowRight",
+            ctrlKey: true,
+            shiftKey: true,
+        });
+        expect(headerOrder(container)).toEqual(["b", "a", "c", "d"]);
+        expect(onActivePositionChange).toHaveBeenCalledTimes(1);
+        expect(onActivePositionChange).toHaveBeenCalledWith({
+            rowIndex: -1,
+            columnIndex: 1,
+        });
+        // the parent renders again with its old position: it never pulls the cell back
+        rerender({ ...props });
+        expect(set).toEqual([]);
+        expect(model()?.get("active-position")).toEqual({
+            rowIndex: -1,
+            columnIndex: 1,
+        });
+        expect(headerAt(container, 1)).toHaveAttribute("data-active", "");
+        expect(headerAt(container, 1).textContent).toBe("a");
+        expect(onActivePositionChange).toHaveBeenCalledTimes(1);
+        // a position the parent changes wins again
+        rerender({ ...props, activePosition: { rowIndex: 2, columnIndex: 3 } });
+        expect(model()?.get("active-position")).toEqual({
+            rowIndex: 2,
+            columnIndex: 3,
+        });
+    });
+});
+
 describe("a header cell's drag", () => {
     const press = (target: HTMLElement, clientX: number) =>
         fireEvent.pointerDown(target, { button: 0, pointerId: 1, clientX });

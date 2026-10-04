@@ -3,6 +3,7 @@ import { headerRowCount, pinnedColumnCount } from "../header/header";
 import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import {
+    cellKeyAt,
     hasReorderable,
     isReorderable,
     landingIndex,
@@ -560,6 +561,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // the scroll the engine made itself lands where it is: the layers only
         if (syncScroll()) update();
         else writeLayers();
+        retargetAfterScroll();
+    }
+
+    /**
+     * A scroll during a header cell's drag (the wheel, the scrollbar, the edge scroll): its
+     * target is worked out again from the pointer's last x, in the next frame.
+     */
+    function retargetAfterScroll() {
+        if (drag?.kind === "reorder" && drag.dragged) askFrame(drag);
     }
 
     /**
@@ -615,6 +625,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // the scroll event follows (or not, for a sub-pixel move): update now either way
         syncScroll();
         update();
+        retargetAfterScroll();
     }
 
     /** a scroll to a cell asked for before the viewport attached: applied on attach */
@@ -1123,17 +1134,33 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * After the widths or the columns changed during a drag: the resize reports the width on
-     * screen; a column gone (or no longer resizable) ends the drag.
+     * After the widths or the columns changed during a drag: it follows its column or group (a
+     * resize reports the width on screen, a header cell's drag its target), and ends when that
+     * is gone or can no longer be resized or moved. The state is set, not published: the model's
+     * change publishes it.
      */
-    function followResize() {
-        const span = drag && resizeSpan(drag.columnKey);
-        if (!drag || !span) {
-            stopDrag();
-            columnResize = null;
-        } else if (columnResize?.width !== span.width) {
-            columnResize = { columnKey: drag.columnKey, width: span.width };
+    function followDrag(current: Drag<TRow, TNode>) {
+        if (current.kind === "resize") {
+            const span = resizeSpan(current.columnKey);
+            if (span) {
+                if (columnResize?.width !== span.width) {
+                    columnResize = {
+                        columnKey: current.columnKey,
+                        width: span.width,
+                    };
+                }
+                return;
+            }
+        } else {
+            const siblings = siblingsFor(current);
+            if (siblings && isReorderable(siblings.cell)) {
+                columnReorder = reorderTarget(current, viewXOf(current.x));
+                return;
+            }
         }
+        stopDrag();
+        columnResize = null;
+        columnReorder = null;
     }
 
     /**
@@ -1289,24 +1316,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const right = width - zone;
         const depth = x < left ? x - left : x > right ? x - right : 0;
         if (depth === 0) return false;
+        // nothing more comes into reach that way: the siblings end inside the view on that side
+        const { cells, start, end } = siblings;
+        const edge = depth > 0 ? cells[end - 1] : cells[start];
+        if (
+            !edge ||
+            (depth > 0
+                ? columnAxis.offsetOf(edge.columnIndex + edge.columnSpan) <=
+                  columnsX.virtual + width
+                : columnAxis.offsetOf(edge.columnIndex) >=
+                  columnsX.virtual + pinnedWidth)
+        ) {
+            return false;
+        }
         const step = Math.ceil(EDGE_STEP * Math.min(1, Math.abs(depth) / zone));
         const before = columnsX.virtual;
         scrollTo({ left: before + Math.sign(depth) * step });
         return columnsX.virtual !== before;
-    }
-
-    /**
-     * After the columns changed during a header cell's drag: it follows its column or group, and
-     * ends when that is gone or no longer reorderable.
-     */
-    function followReorder(current: ReorderDrag<TRow, TNode>) {
-        const siblings = siblingsFor(current);
-        if (!siblings || !isReorderable(siblings.cell)) {
-            stopDrag();
-            columnReorder = null;
-            return;
-        }
-        columnReorder = reorderTarget(current, viewXOf(current.x));
     }
 
     /**
@@ -1333,13 +1359,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (!siblings) return false;
         event.preventDefault();
         const neighbour = siblings.cells[siblings.index + (left ? -1 : 1)];
-        // focus follows once the cells render in their new order (the commit)
-        if (neighbour) {
+        // focus follows once the cells render in their new order (the commit); the cell moved
+        // by the keys is kept in view
+        if (
+            neighbour &&
             model.run("column-order.move", {
                 columnKey: siblings.cell.key,
                 targetKey: neighbour.key,
                 side: left ? "before" : "after",
-            });
+            }).ok &&
+            state.activePosition
+        ) {
+            scrollToCell(scrollPayloadFor(state.activePosition));
         }
         return true;
     }
@@ -1729,6 +1760,34 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
     }
 
+    /**
+     * The active cell's element positions before and after a change that only moved its column
+     * (a new order: the same row, the same column or header cell by key), else `null`.
+     */
+    function followedActive(
+        before: DataGridModel<TRow, TNode>["state"],
+        after: DataGridModel<TRow, TNode>["state"],
+    ): { from: CellPosition; to: CellPosition } | null {
+        const from = before.activePosition;
+        const to = after.activePosition;
+        if (
+            !from ||
+            !to ||
+            from === to ||
+            after.header === before.header ||
+            from.rowIndex !== to.rowIndex
+        ) {
+            return null;
+        }
+        const key = cellKeyAt(before.header, from);
+        return key !== undefined && key === cellKeyAt(after.header, to)
+            ? {
+                  from: elementPosition(from, before.header),
+                  to: elementPosition(to, after.header),
+              }
+            : null;
+    }
+
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
         const changedDetails = detailsChanged(before, after);
@@ -1784,17 +1843,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     anchoredOffset(columnAxis, columnAnchor) - pinnedWidth,
                 );
             }
-            if (drag?.kind === "resize") followResize();
         }
         const reordering = columnReorder;
-        // a header cell's drag follows its column or group (O3)
+        // a drag follows its column or group (W4, O3)
         if (
-            drag?.kind === "reorder" &&
-            drag.dragged &&
+            drag?.dragged &&
             (columnsChanged || after.header !== before.header)
         ) {
-            followReorder(drag);
+            followDrag(drag);
         }
+        // the active cell's column moved (an order): the same cell at a new index, which is no
+        // other cell made active: its interaction goes with it, nothing scrolls
+        const followed = followedActive(before, after);
+        if (followed) interaction.cellMoved(followed.from, followed.to);
         relayout(
             rowsResized ||
                 changedDetails ||
@@ -1818,6 +1879,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (Math.abs(left - (viewport?.scrollLeft ?? 0)) > 0.5) {
                 scrollWhenReady({ left });
             }
+        }
+        if (followed) {
+            // focus goes to its element once the cells render in their new order (the commit)
+            if (focusInside()) pendingFocus = true;
+            return;
         }
         // another cell made active (the app, a middleware): the interaction ends, and an entry
         // waiting for another cell is dropped

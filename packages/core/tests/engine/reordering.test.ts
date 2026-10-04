@@ -630,6 +630,66 @@ describe("a drag's pointer and the page", () => {
     });
 });
 
+describe("review: the drag follows the view, the active cell its column", () => {
+    it("never scrolls a group's column's drag away: its siblings are all in reach", () => {
+        const { cells, drag, press, engine, target } = setup();
+        // "c" and "d" (400–600) are in view: near the right edge, nothing comes into reach
+        drag(cells.c, 450, 595);
+        expect(engine.get("scroll-position").left).toBe(0);
+        expect(frames.size).toBe(0);
+        expect(target()).toMatchObject({ targetKey: "d", side: "after" });
+        press(cells.c, "pointerup", 595);
+    });
+
+    it("works the target out again after any scroll, from the pointer's last place", () => {
+        const { cells, drag, press, viewport, target, moves } = setup();
+        drag(cells.a, 250, 370);
+        expect(target()).toMatchObject({ targetKey: "b", side: "after" });
+        // the wheel or the scrollbar: not the engine's own scroll
+        viewport.scrollLeft = 500;
+        viewport.dispatchEvent(new Event("scroll"));
+        expect(frames.size).toBe(1);
+        frame();
+        // 500 + 370 is in "f1" (800–900), right of its middle
+        expect(target()).toMatchObject({ targetKey: "f1", side: "after" });
+        press(cells.a, "pointerup", 370);
+        expect(moves).toEqual([
+            { columnKey: "a", targetKey: "f1", side: "after" },
+        ]);
+    });
+
+    it("keeps the active cell, its interaction and the scroll when only its column moves", () => {
+        const { cells, engine, model, view } = setup();
+        const button = document.createElement("button");
+        cells.a.append(button);
+        cells.a.focus();
+        keydown(engine, cells.a, "F2");
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: -2,
+            columnIndex: 2,
+        });
+        engine.run("scroll-to", { left: 300 });
+        model.run("column-order.move", {
+            columnKey: "a",
+            targetKey: "b",
+            side: "after",
+        });
+        expect(model.state.activePosition).toEqual({
+            rowIndex: -2,
+            columnIndex: 3,
+        });
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: -2,
+            columnIndex: 3,
+        });
+        expect(view().interaction).toEqual({ rowIndex: -2, columnIndex: 3 });
+        expect(engine.get("scroll-position").left).toBe(300);
+        // another cell made active still ends it
+        model.run("active-position.set", { rowIndex: -2, columnIndex: 2 });
+        expect(engine.get("interaction")).toBeNull();
+    });
+});
+
 describe("the keys on a header cell", () => {
     const reorderKey = (
         engine: ReturnType<typeof setup>["engine"],

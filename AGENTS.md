@@ -192,16 +192,21 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    key-based: `column-order.set { columnOrder }` (keys, each once, else `invalid`),
    `column-order.move { columnKey, targetKey, side: "before" | "after" }` (an unknown key
    `not_found`; `refused` when the entry is not `reorderable`, the target is not its sibling, or
-   the move crosses the pinned columns' edge; the target may be fixed; landing where it is
+   it lands across the pinned columns' edge, judged by where it lands: a pinned entry before the
+   first unpinned sibling, an unpinned one after the last pinned, are in their part; the target
+   may be fixed; landing where it is
    commits nothing; it writes the whole sibling list where the first of it was listed),
    `column-order.reset`; `get("column-order")`. `reorderable: true` opts a column or a group in
    (default off); a group moves whole, its columns inside it by their own flag; never into
    another group. When the order changes, the active position follows its column or header cell
-   by key (unrelated `columns.set` keeps the `reconcile` rules). The controlled cross-piece rule
-   (`utils/controlled.ts`): following a controlled order moves the active cell with its column;
-   uncontrolled, the moved piece is told at once; controlled, the moved value stands (its prop,
-   unchanged, never pulls it back) and is told once when the root settles; a prop that changes
-   wins again. `Root` settles the pieces widths, order, position, selection, sort, expansion. The
+   by key (unrelated `columns.set` keeps the `reconcile` rules); the engine treats that as the
+   same cell at a new index (compared by key), not another cell made active: no scroll, its
+   interaction kept, focus to its element at the commit. The controlled cross-piece rule
+   (`utils/controlled.ts`): an order moves the active cell with its column; uncontrolled, the
+   moved piece is told at once; controlled, the moved value stands (its prop, unchanged, never
+   pulls it back) and is told once: when the root settles (another piece's prop moved it) or at
+   once (another piece's own commit, an uncontrolled order's drop); a prop that changes wins
+   again. `Root` settles the pieces widths, order, position, selection, sort, expansion. The
    engine drags a reorderable header cell: a primary press (after the consumer's
    `onPointerDown`, which vetoes with `preventDefault`), not on a control inside the cell nor a
    resizer, is not prevented: under `CLICK_SLOP` it stays a click (focus, a sort); past it the
@@ -209,8 +214,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the allowed sibling under the pointer and the side of its middle, from the column axis and the
    header layout (not the DOM: off-screen and scaled siblings count), the pointer kept over the
    pinned strip or the columns that scroll; within 40 px of the scrolling columns' left or right
-   edge (or past it) the engine's own scroll moves them up to 20 px a frame, none for a pinned
-   cell. The release runs one `column-order.move`; Escape (anywhere, after the app's handlers, a
+   edge (or past it; the zones at most half the scrolling width each) the engine's own scroll
+   moves them up to 20 px a frame, none for a pinned cell, and none toward an edge its allowed
+   siblings already end inside; any scroll during the drag (the wheel, the scrollbar) works the
+   target out again from the pointer's last x, once a frame. The release runs one `column-order.move`; Escape (anywhere, after the app's handlers, a
    prevented one keeps the drag), `pointercancel`, a lost capture or a move with no button end it
    moving nothing; the click ending a drag is swallowed (never a sort); columns changing mid-drag
    keep it on its entry, gone or no longer reorderable ends it. Nothing moves during the drag

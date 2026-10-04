@@ -166,7 +166,7 @@ describe("column-order.move", () => {
         ).toMatchObject({ ok: false, error: { code: "refused" } });
     });
 
-    it("moves the pinned among the pinned, the others among the others", () => {
+    it("lands the pinned among the pinned, the others among the others", () => {
         const model = grid();
         expect(
             model.run("column-order.move", {
@@ -176,20 +176,32 @@ describe("column-order.move", () => {
             }).ok,
         ).toBe(true);
         expect(leaves(model).slice(0, 2)).toEqual(["q", "p"]);
-        for (const [columnKey, targetKey] of [
-            ["p", "a"],
-            ["a", "p"],
-            ["b", "q"],
+        // landing across the pinned columns' edge, either way
+        for (const [columnKey, targetKey, side] of [
+            ["q", "a", "after"],
+            ["q", "fixed", "before"],
+            ["a", "p", "before"],
+            ["b", "q", "before"],
         ] as const) {
             expect(
-                model.run("column-order.move", {
-                    columnKey,
-                    targetKey,
-                    side: "after",
-                }),
-                columnKey,
+                model.run("column-order.move", { columnKey, targetKey, side }),
+                `${columnKey} ${side} ${targetKey}`,
             ).toMatchObject({ ok: false, error: { code: "refused" } });
         }
+        expect(leaves(model).slice(0, 3)).toEqual(["q", "p", "a"]);
+        // beside the first one past the edge, on its near side: the last pinned, the first not
+        model.run("column-order.move", {
+            columnKey: "q",
+            targetKey: "a",
+            side: "before",
+        });
+        expect(leaves(model).slice(0, 3)).toEqual(["p", "q", "a"]);
+        model.run("column-order.move", {
+            columnKey: "b",
+            targetKey: "q",
+            side: "after",
+        });
+        expect(leaves(model).slice(0, 4)).toEqual(["p", "q", "b", "a"]);
     });
 
     it("refuses what does not move, what is not there and a side that is none", () => {

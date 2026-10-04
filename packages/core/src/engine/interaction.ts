@@ -1,4 +1,5 @@
 import type { CellPosition } from "../model/types";
+import { sameCell } from "../navigation/navigation";
 import {
     CELL_SELECTOR,
     FOCUSABLE,
@@ -32,6 +33,11 @@ export interface Interaction {
      * made another one active
      */
     activeChanged(moved: boolean): void;
+    /**
+     * The active cell's column moved (a new column order): the same cell, at its element's new
+     * position `to`. The interaction and an entry waiting for it go with it
+     */
+    cellMoved(from: CellPosition, to: CellPosition): void;
     /**
      * After a commit: the interaction ends, without focusing, when its cell is no longer rendered;
      * an entry waiting for its cell (out of view, a row loading) enters once it is shown with
@@ -326,6 +332,15 @@ export function createInteraction({
         },
         cancelPending() {
             pendingInteraction = null;
+        },
+        cellMoved(from, to) {
+            if (interaction && sameCell(interaction, from)) interaction = to;
+            if (
+                pendingInteraction &&
+                sameCell(pendingInteraction.position, from)
+            ) {
+                pendingInteraction = { ...pendingInteraction, position: to };
+            }
         },
         activeChanged(moved) {
             if (interaction && !isActive(interaction)) leaveCell(false);

@@ -19,6 +19,7 @@ import {
     withRow,
 } from "./expansion";
 import {
+    cellKeyAt,
     isReorderable,
     keptOrder,
     landingIndex,
@@ -366,11 +367,7 @@ function withOrder<TRow, TNode>(
     }
     const { columns, header } = layoutOf(state.columnEntries, columnOrder);
     const active = state.activePosition;
-    // a body cell's column is the leaf covering the header's last row
-    const key = active
-        ? state.header.cellAt(Math.min(active.rowIndex, -1), active.columnIndex)
-              ?.key
-        : undefined;
+    const key = active ? cellKeyAt(state.header, active) : undefined;
     const moved = key === undefined ? undefined : header.cellByKey(key);
     const activePosition =
         active && moved && moved.columnIndex !== active.columnIndex
@@ -772,14 +769,15 @@ function createHandlers<TRow, TNode>(
                     `"${targetKey}" is not a sibling of "${columnKey}"`,
                 );
             }
-            // pinned columns lead (P1): the pinned move among the pinned, the others among theirs
-            if (target < start || target >= end) {
+            // pinned columns lead (P1): the pinned land among the pinned, the others among theirs
+            // (beside the first one past the edge, on its near side, is still their own part)
+            const to = landingIndex(index, target, side);
+            if (to < start || to >= end) {
                 return fail(
                     "refused",
                     `"${columnKey}" moves among the ${siblings.pinned ? "pinned" : "unpinned"} ones only`,
                 );
             }
-            const to = landingIndex(index, target, side);
             if (to === index) return done(state, state.columnOrder);
             const keys = cells.map((cell) => cell.key);
             keys.splice(index, 1);

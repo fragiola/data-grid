@@ -164,6 +164,18 @@ export function siblingsOf<TRow, TNode>(
 }
 
 /**
+ * The key of a cell's column or group: a header cell's own, a body cell's column's (the leaf
+ * covering the header's last row). What an order change keeps the active cell on.
+ */
+export function cellKeyAt<TRow, TNode>(
+    header: HeaderLayout<TRow, TNode>,
+    position: { readonly rowIndex: number; readonly columnIndex: number },
+): string | undefined {
+    return header.cellAt(Math.min(position.rowIndex, -1), position.columnIndex)
+        ?.key;
+}
+
+/**
  * Where an entry at `index` among its siblings lands, dropped on `side` of the one at
  * `targetIndex` (itself included): its index once moved.
  */

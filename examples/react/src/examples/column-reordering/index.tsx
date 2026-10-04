@@ -12,10 +12,10 @@ import {
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { ArrowDown, ArrowUp, GripVertical, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { formatMoney, type Person, people } from "../_kit/data";
-import { describeMove } from "./announce";
+import { activeHeaderKey, describeMove } from "./announce";
 import * as styles from "./styles";
 
 const all = people(1_000);
@@ -142,15 +142,40 @@ function HeaderCell({ cell }: { cell: HeaderCellInfo<Person> }) {
 }
 
 /**
- * The active header cell's column or group: the one a drag or the keys move (a press on a header
- * cell makes it the active one), read when the order changes.
+ * Says what a move asked by the person (`moving`) did, once the grid shows it: from the grid's
+ * own header before and after the change, whatever the order's rules made of it. Follows the
+ * root the ref holds (a remount included).
  */
-function activeHeaderKey(gridRef: DataGridRef<Person>): string | undefined {
-    const model = gridRef.current?.model;
-    const active = model?.get("active-position");
-    return active && active.rowIndex < 0
-        ? model?.get("header-cell-by", active)?.key
-        : undefined;
+function useMoveAnnouncements(
+    gridRef: DataGridRef<Person>,
+    moving: { current: boolean },
+    announce: (message: string) => void,
+) {
+    useEffect(() => {
+        let unsubscribe = () => {};
+        const follow = () => {
+            unsubscribe();
+            unsubscribe =
+                gridRef.current?.model.subscribe(({ before, after }) => {
+                    if (!moving.current || after.header === before.header) {
+                        return;
+                    }
+                    moving.current = false;
+                    const moved = describeMove(
+                        before.header.rows,
+                        after.header.rows,
+                        activeHeaderKey(after),
+                    );
+                    if (moved) announce(moved);
+                }) ?? (() => {});
+        };
+        follow();
+        const stop = gridRef.subscribe(follow);
+        return () => {
+            stop();
+            unsubscribe();
+        };
+    }, [gridRef, moving, announce]);
 }
 
 export default function ColumnReorderingExample() {
@@ -159,6 +184,9 @@ export default function ColumnReorderingExample() {
     const [order, setOrder] = useState<ColumnOrder>([]);
     const [announcement, setAnnouncement] = useState("");
     const gridRef = useDataGridRef<Person>();
+    // a move the person asked for: told once the grid shows it
+    const moving = useRef(false);
+    useMoveAnnouncements(gridRef, moving, setAnnouncement);
     // a click on a sortable header still sorts: the rows in memory, ordered by the app
     const local = useLocalRows(all, columns);
 
@@ -200,13 +228,7 @@ export default function ColumnReorderingExample() {
                 rowHeight={36}
                 columnOrder={order}
                 onColumnOrderChange={(next) => {
-                    const moved = describeMove(
-                        columns,
-                        order,
-                        next,
-                        activeHeaderKey(gridRef),
-                    );
-                    if (moved) setAnnouncement(moved);
+                    moving.current = true;
                     setOrder(next);
                 }}
                 gridRef={gridRef}
