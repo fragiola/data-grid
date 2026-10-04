@@ -71,12 +71,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
-    compare?, filter?, meta? }`. Without children, a header cell renders
+    reorderable?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
     entry is a `Column` or a `ColumnGroup<TRow>` `{ key, name?, renderHeaderCell?, children,
-    meta? }`, nested to any depth, keys unique across both; the leaves, in order, are the grid's
+    reorderable?, meta? }`, nested to any depth, keys unique across both; the leaves, in order, are the grid's
     columns (the column axis, cells and windows never see groups). The header has a row per level
     (rows `-depth … -1`, each `headerRowHeight` tall); a leaf with fewer groups above it spans the
     rows down to -1 (G2). The core lays the header cells out per column window (G3, a cut group
@@ -180,7 +180,47 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    element with `data-grid-column-resizer` is a control of its header cell; no ARIA role changes
    for grids without resizing). `data-resizable` on a resizable header cell (a group's when
    one of its columns is), `data-resizing` on the header cell and the handle during a drag. Auto
-   widths, reordering, RTL and persisting the widths are not the grid's (yet, or ever).
+   widths, RTL and persisting the widths are not the grid's (yet, or ever).
+   **Column reordering (Epic #75, O1–O6):** the model keeps `columnOrder` (keys of columns and
+   groups, the order siblings take: in each sibling list, a group's children or the top level,
+   the listed entries take the listed ones' places in its order, the others keep theirs; pinned
+   and unpinned are ordered apart, so the pinned lead whatever it says; a key that is not an entry
+   is kept: it may come back), controlled or not on `Root` like the widths (`columnOrder`/
+   `defaultColumnOrder`/`onColumnOrderChange`; a prop listing a key twice, or a value that is not
+   a key, is kept without it and the app told). `columnEntries` stays as declared; the model
+   derives `columns` (leaves), the header layout, the axis and windows in the order. Commands,
+   key-based: `column-order.set { columnOrder }` (keys, each once, else `invalid`),
+   `column-order.move { columnKey, targetKey, side: "before" | "after" }` (an unknown key
+   `not_found`; `refused` when the entry is not `reorderable`, the target is not its sibling, or
+   the move crosses the pinned columns' edge; the target may be fixed; landing where it is
+   commits nothing; it writes the whole sibling list where the first of it was listed),
+   `column-order.reset`; `get("column-order")`. `reorderable: true` opts a column or a group in
+   (default off); a group moves whole, its columns inside it by their own flag; never into
+   another group. When the order changes, the active position follows its column or header cell
+   by key (unrelated `columns.set` keeps the `reconcile` rules). The controlled cross-piece rule
+   (`utils/controlled.ts`): following a controlled order moves the active cell with its column;
+   uncontrolled, the moved piece is told at once; controlled, the moved value stands (its prop,
+   unchanged, never pulls it back) and is told once when the root settles; a prop that changes
+   wins again. `Root` settles the pieces widths, order, position, selection, sort, expansion. The
+   engine drags a reorderable header cell: a primary press (after the consumer's
+   `onPointerDown`, which vetoes with `preventDefault`), not on a control inside the cell nor a
+   resizer, is not prevented: under `CLICK_SLOP` it stays a click (focus, a sort); past it the
+   cell drags, holding the pointer; at most once per animation frame (the view's) the target is
+   the allowed sibling under the pointer and the side of its middle, from the column axis and the
+   header layout (not the DOM: off-screen and scaled siblings count), the pointer kept over the
+   pinned strip or the columns that scroll; within 40 px of the scrolling columns' left or right
+   edge (or past it) the engine's own scroll moves them up to 20 px a frame, none for a pinned
+   cell. The release runs one `column-order.move`; Escape (anywhere, after the app's handlers, a
+   prevented one keeps the drag), `pointercancel`, a lost capture or a move with no button end it
+   moving nothing; the click ending a drag is swallowed (never a sort); columns changing mid-drag
+   keep it on its entry, gone or no longer reorderable ends it. Nothing moves during the drag
+   (no render beyond the state change): `engine.get("column-reorder")` → `{ columnKey } &
+   ({ targetKey, side } | { targetKey: null, side: null })` (null while a release would move
+   nothing) or `null`, the `column-reorder` event, `view.columnReorder`; `data-reorderable`,
+   `data-dragging` on the dragged header cell, `data-drop-target="before" | "after"` on the
+   target; `useHeaderCell` reports `reorderable`, `dragging`, `dropTarget` (`engine/parts.ts`).
+   The indicator, the cursor, `touch-action` and any announcement (a live region) are the
+   app's; live reordering, pinning by drag, rows, RTL and touch gestures are not the grid's.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. With
@@ -200,7 +240,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     controls), on the focused handle ←/→ resize by 10 px (Shift: 50), Home/End go to the minimum
     and the maximum (its `aria-valuemax`: without a `maxWidth`, the view's width), each one
     `column-widths.resize` after the consumer's handlers; the other page keys and Space do
-    nothing there (no paging); Escape leaves interaction and keeps the width. A consumer can
+    nothing there (no paging); Escape leaves interaction and keeps the width. On a reorderable
+    header cell in navigation, Ctrl/⌘+Shift+←/→ run one `column-order.move` before the previous
+    sibling or after the next (handled at an end or at the pinned edge too, moving nothing),
+    after the consumer's handlers; the active cell follows and focus stays on it; on a body cell
+    or a fixed header cell they are plain arrows (Epic #75). A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. ARIA: `role="grid"`,
     `aria-rowcount`/`aria-colcount` are totals, `aria-rowindex`/`aria-colindex` 1-based.
 12. **Versions (D12).** Exact versions published at least 7 days ago, checked against the registry
@@ -348,10 +392,12 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and
   Escape of interactive cells included. **Clicks too (Epic
   #27):** `Root` calls the engine's `click` (a header cell's sort) after the consumer's
-  `onClick`, the same way. **Presses on a resizer too (Epic #70):** `Root` calls the engine's
-  `pointerdown` (a resizer's drag) after the consumer's `onPointerDown`; during a drag, Escape
-  goes to the engine's `keydown` the same way, and from outside the grid to a listener on the
-  document's bubble phase, after the app's own handlers (a prevented Escape keeps the drag).
+  `onClick`, the same way. **Presses on a resizer or a reorderable header cell too (Epics #70,
+  #75):** `Root` calls the engine's `pointerdown` (a resizer's drag; a header cell's once past
+  the click slop, the press not prevented so a click still focuses and sorts) after the
+  consumer's `onPointerDown`; during a drag, Escape goes to the engine's `keydown` the same way,
+  and from outside the grid to a listener on the document's bubble phase, after the app's own
+  handlers (a prevented Escape keeps the drag); the click ending a drag is the drag's.
   Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.

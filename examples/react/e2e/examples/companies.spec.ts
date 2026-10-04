@@ -2,8 +2,8 @@ import { expect, type Page, test } from "@playwright/test";
 import { openExample, part } from "../helpers";
 import { boxOf, dragBy, header, rows } from "./helpers";
 
-// The grid's selection (the app keeps the keys and deletes those rows), and the grid's sort (the
-// app orders the rows by it).
+// The grid's selection (the app keeps the keys and deletes those rows), the grid's sort (the app
+// orders the rows by it), and its columns resized and moved.
 
 /** The rendered rows' domains: they identify the companies (the name cell holds initials too). */
 /** The order the local pipeline sorts text in: the reader's, numbers by value ("3" before "10"). */
@@ -153,4 +153,34 @@ test("resizes a column by its handle without sorting it", async ({ page }) => {
         "ascending",
     );
     await expect(header(page, "Domain")).not.toHaveAttribute("data-sort");
+});
+
+test("moves a column by dragging its header cell, without sorting it", async ({
+    page,
+}) => {
+    await openExample(page, "companies");
+    // the checkboxes stay where they are
+    await expect(
+        page.locator('[data-grid-part="header-cell"][data-column-index="0"]'),
+    ).not.toHaveAttribute("data-reorderable");
+    const [domain] = await domains(page);
+    // Domain (170px) from its middle to the second half of Categories (360px): after it
+    await dragBy(page, header(page, "Domain"), 85 + 270);
+    await expect(header(page, "Categories")).toHaveAttribute(
+        "data-column-index",
+        "2",
+    );
+    await expect(header(page, "Domain")).toHaveAttribute(
+        "data-column-index",
+        "3",
+    );
+    // the body follows: the domains are the fourth column now
+    await expect(
+        rows(page).first().locator('[data-column-index="3"]'),
+    ).toHaveText(domain ?? "");
+    await expect(header(page, "Domain")).not.toHaveAttribute("data-sort");
+    await expect(header(page, "Company")).toHaveAttribute(
+        "aria-sort",
+        "ascending",
+    );
 });

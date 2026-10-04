@@ -38,6 +38,10 @@ export const headerCell = cn(
     "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
     // a sortable header cell sorts on a click: it reads as one, and its text is not selected
     "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
+    // a drag moves it (a hand where a click does not sort): the cell in hand dimmed, a line
+    // inside the target on the side it lands
+    "data-reorderable:not-data-sortable:cursor-grab data-reorderable:select-none data-reorderable:data-dragging:cursor-grabbing data-dragging:opacity-50",
+    "data-[drop-target=before]:shadow-[inset_3px_0_0_var(--dg-active-line)] data-[drop-target=after]:shadow-[inset_-3px_0_0_var(--dg-active-line)]",
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 

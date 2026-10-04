@@ -55,6 +55,10 @@
                     "path": "concepts/column-resizing"
                 },
                 {
+                    "label": "Column reordering",
+                    "path": "concepts/column-reordering"
+                },
+                {
                     "label": "Sorting",
                     "path": "concepts/sorting"
                 },
