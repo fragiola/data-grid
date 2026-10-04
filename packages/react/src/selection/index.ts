@@ -10,7 +10,7 @@ import {
 } from "@fragiola/data-grid/selection";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useDataGrid } from "../context";
-import type { DataGridRef } from "../gridRef";
+import { type DataGridRef, noSubscription } from "../gridRef";
 
 export {
     type SelectionStatus,
@@ -39,7 +39,6 @@ export interface SelectAll {
 }
 
 const NONE = { status: "none", count: 0 } as const;
-const noSubscription = () => () => {};
 
 /**
  * A "select all" control's state over the rows the app names (`rowKeys`: the rows on screen, a

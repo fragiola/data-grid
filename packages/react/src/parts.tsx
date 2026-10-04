@@ -1,15 +1,14 @@
 import {
     ariaRowCount,
     ariaRowIndex,
+    type DataGridEngine,
     type EngineLayer,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
-    cloneElement,
+    Fragment,
     isValidElement,
     type ReactNode,
-    useCallback,
-    useContext,
     useLayoutEffect,
 } from "react";
 import {
@@ -19,7 +18,7 @@ import {
     type HeaderRowInfo,
     RowContext,
     type RowInfo,
-    useDataGrid,
+    useRootGrid,
     useRowContext,
 } from "./context";
 import {
@@ -33,6 +32,7 @@ import {
     useGridView,
     useHeaderCell,
     useHeaderCells,
+    useHeaderRowOf,
     useHeaderRows,
     useRow,
     useRowDetail,
@@ -46,52 +46,33 @@ import {
 
 export { Root, type RootProps, type RootState } from "./Root";
 
-/** A ref that registers an element as one of the layers the engine writes. */
-function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
-    const { engine } = useDataGrid();
-    return useCallback(
-        (element: HTMLElement | null) =>
-            element ? engine.adapter.registerLayer(layer, element) : undefined,
-        [engine, layer],
-    );
+type LayerRef = React.RefCallback<HTMLElement>;
+
+/** Each engine's layer refs, made once: a part's ref keeps its identity across renders. */
+const layerRefs = new WeakMap<object, Map<EngineLayer, LayerRef>>();
+
+/** A ref that registers an element as one of the layers an engine writes. */
+function layerRef(
+    engine: DataGridEngine<unknown, ReactNode>,
+    layer: EngineLayer,
+): LayerRef {
+    let refs = layerRefs.get(engine);
+    if (!refs) {
+        refs = new Map();
+        layerRefs.set(engine, refs);
+    }
+    let ref = refs.get(layer);
+    if (!ref) {
+        ref = (element) =>
+            element ? engine.adapter.registerLayer(layer, element) : undefined;
+        refs.set(layer, ref);
+    }
+    return ref;
 }
 
-type LayerStyle<State> = DivPrimitiveProps<State>["style"];
-
-/**
- * Props without some keys in their style, nor in their `render` element's: the keys the engine
- * writes itself (a layer's `transform`, a pinned cell's `left`) and, on a pinned cell, the insets
- * that would move it from its place (`position: sticky` obeys every inset it is given).
- */
-function withoutStyleKeys<
-    State,
-    P extends { style?: LayerStyle<State>; render?: unknown },
->(props: P, keys: readonly (keyof React.CSSProperties)[]): P {
-    const strip = (value: React.CSSProperties | undefined) => {
-        if (!value || !keys.some((key) => key in value)) return value;
-        const rest: React.CSSProperties = { ...value };
-        for (const key of keys) delete rest[key];
-        return rest;
-    };
-    const { style, render } = props;
-    const element = isValidElement<{ style?: React.CSSProperties }>(render)
-        ? render
-        : undefined;
-    const renderStyle = element?.props.style;
-    return {
-        ...props,
-        ...(style === undefined
-            ? {}
-            : {
-                  style:
-                      typeof style === "function"
-                          ? (state: State) => strip(style(state))
-                          : strip(style),
-              }),
-        ...(element && renderStyle && keys.some((key) => key in renderStyle)
-            ? { render: cloneElement(element, { style: strip(renderStyle) }) }
-            : {}),
-    };
+/** A ref that registers an element as one of the layers the engine of the `Root` around writes. */
+function useLayer(layer: EngineLayer): LayerRef {
+    return layerRef(useRootGrid().engine, layer);
 }
 
 /** The layers' `transform` is the engine's: a consumer's would move the rows. */
@@ -99,7 +80,7 @@ const LAYER_KEYS = ["transform"] as const;
 
 /**
  * A pinned cell's `left` inset is the engine's, and the other insets and a `transform` would let it
- * move from its place.
+ * move from its place (`position: sticky` obeys every inset it is given).
  */
 const PINNED_KEYS = [
     "transform",
@@ -115,6 +96,31 @@ const PINNED_KEYS = [
     "insetBlockStart",
     "insetBlockEnd",
 ] as const;
+
+/**
+ * A cell's props with its table spans: a `render` element that is a `th` or a `td` takes `colSpan`
+ * and `rowSpan`, each only over 1 (a render function finds them in the state). The same props
+ * without.
+ */
+function withTableSpans(
+    props: Record<string, unknown>,
+    render: unknown,
+    colSpan: number,
+    rowSpan = 1,
+): Record<string, unknown> {
+    if (
+        (colSpan <= 1 && rowSpan <= 1) ||
+        !isValidElement(render) ||
+        (render.type !== "th" && render.type !== "td")
+    ) {
+        return props;
+    }
+    return {
+        ...props,
+        ...(colSpan > 1 ? { colSpan } : {}),
+        ...(rowSpan > 1 ? { rowSpan } : {}),
+    };
+}
 
 // ── the grid ─────────────────────────────────────────────────────────────────
 
@@ -133,7 +139,7 @@ export type GridProps = DivPrimitiveProps<GridState> & { children?: ReactNode };
  */
 export function Grid(props: GridProps) {
     const { children, ...rest } = props;
-    const { engine } = useDataGrid();
+    const { engine } = useRootGrid();
     const view = useGridView();
     // the view is on screen: the engine writes the layers' offsets for it and moves focus
     useLayoutEffect(() => {
@@ -145,7 +151,8 @@ export function Grid(props: GridProps) {
     const wide = empty || view.expandedRows.length > 0;
     return useRenderElement("div", rest, {
         state: { rowCount: view.rowCount, columnCount: view.columnCount },
-        ref: useLayer("grid"),
+        ref: layerRef(engine, "grid"),
+        children,
         props: {
             role: "grid",
             "aria-rowcount": ariaRowCount(view),
@@ -154,24 +161,26 @@ export function Grid(props: GridProps) {
             ...(view.rowSelection === "multiple"
                 ? { "aria-multiselectable": true }
                 : {}),
+            // the grid's tab stop until a cell is active (roving: then that cell is)
             tabIndex: view.active ? -1 : 0,
             ...dataAttributes({ "grid-part": "grid", empty }),
-            children,
-        },
-        style: {
-            position: "relative",
-            display: "block",
-            // without rows, the sizer still spans the visible area: the empty state has room
-            width: wide ? Math.max(view.width, view.viewportWidth) : view.width,
-            height:
-                view.headerHeight +
-                (empty
-                    ? Math.max(view.height, view.viewportBodyHeight)
-                    : view.height),
-            // clips the rendered rows to the sizer without being a scroll container (sticky
-            // headers stick to the viewport)
-            overflow: "clip",
-            boxSizing: "border-box",
+            style: {
+                position: "relative",
+                display: "block",
+                // without rows, the sizer still spans the visible area: the empty state has room
+                width: wide
+                    ? Math.max(view.width, view.viewportWidth)
+                    : view.width,
+                height:
+                    view.headerHeight +
+                    (empty
+                        ? Math.max(view.height, view.viewportBodyHeight)
+                        : view.height),
+                // clips the rendered rows to the sizer without being a scroll container (sticky
+                // headers stick to the viewport)
+                overflow: "clip",
+                boxSizing: "border-box",
+            },
         },
     });
 }
@@ -193,17 +202,17 @@ export function Header(props: HeaderProps) {
     const view = useGridView();
     const element = useRenderElement("div", rest, {
         state: {},
+        children,
         props: {
             role: "rowgroup",
             ...dataAttributes({ "grid-part": "header" }),
-            children,
-        },
-        style: {
-            position: "sticky",
-            top: 0,
-            display: "block",
-            height: view.headerHeight,
-            boxSizing: "border-box",
+            style: {
+                position: "sticky",
+                top: 0,
+                display: "block",
+                height: view.headerHeight,
+                boxSizing: "border-box",
+            },
         },
     });
     return view.headerRowCount > 0 ? element : null;
@@ -251,46 +260,35 @@ export type HeaderRowProps<TRow = unknown> =
  * Without children, its header cells.
  */
 export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
-    const {
-        row: given,
-        children = <HeaderCells />,
-        ...rest
-    } = withoutStyleKeys<HeaderRowState, HeaderRowProps<TRow>>(
-        props,
-        LAYER_KEYS,
-    );
+    const { row: given, children = <HeaderCells />, ...rest } = props;
     const view = useGridView<TRow>();
-    // the header rows that provide it were rendered for this grid's row type
-    const rendering = useContext(
-        HeaderRowContext,
-    ) as HeaderRowInfo<TRow> | null;
-    const row =
-        given ?? rendering ?? view.headerRows[view.headerRows.length - 1];
+    const row = useHeaderRowOf(given);
     const rowIndex = row?.rowIndex ?? -1;
     return useRenderElement("div", rest, {
         state: { rowIndex },
         ref: useLayer("header"),
+        drop: LAYER_KEYS,
+        children: (
+            <HeaderRowContext
+                value={(row as HeaderRowInfo | undefined) ?? null}
+            >
+                {children}
+            </HeaderRowContext>
+        ),
         props: {
             role: "row",
             "aria-rowindex": ariaRowIndex(view, rowIndex),
             ...dataAttributes({ "grid-part": "header-row" }),
-            children: (
-                <HeaderRowContext
-                    value={(row as HeaderRowInfo | undefined) ?? null}
-                >
-                    {children}
-                </HeaderRowContext>
-            ),
-        },
-        style: {
-            ...rowStyle(
-                view,
-                (rowIndex + view.headerRowCount) * view.headerRowHeight,
-                view.headerRowHeight,
-            ),
-            // with several rows, an upper one stays above the next: a cell spanning down from it
-            // is not covered by the row it reaches into
-            ...(view.headerRowCount > 1 ? { zIndex: -rowIndex } : {}),
+            style: {
+                ...rowStyle(
+                    view,
+                    (rowIndex + view.headerRowCount) * view.headerRowHeight,
+                    view.headerRowHeight,
+                ),
+                // with several rows, an upper one stays above the next: a cell spanning down
+                // from it is not covered by the row it reaches into
+                ...(view.headerRowCount > 1 ? { zIndex: -rowIndex } : {}),
+            },
         },
     });
 }
@@ -309,14 +307,10 @@ export function HeaderCells<TRow = unknown>({
 }: HeaderCellsProps<TRow>) {
     const cells = useHeaderCells<TRow>();
     return cells.map((cell) => (
-        <HeaderCellSlot key={cell.key}>
+        <Fragment key={cell.key}>
             {children ? children(cell) : <HeaderCell cell={cell} />}
-        </HeaderCellSlot>
+        </Fragment>
     ));
-}
-
-function HeaderCellSlot({ children }: { children: ReactNode }) {
-    return children;
 }
 
 export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
@@ -325,40 +319,26 @@ export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
     children?: ReactNode;
 };
 
-/** Whether a `render` element is a table cell, which takes `colSpan` and `rowSpan`. */
-function isTableCell(render: unknown): boolean {
-    return (
-        isValidElement(render) && (render.type === "th" || render.type === "td")
-    );
-}
-
 /**
  * A header cell (`role="columnheader"`), a group's or a column's. A `<th>` through `render`, which
  * then gets `colSpan`/`rowSpan` too (a render function finds them in the state).
  */
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
-    const { state, props: own } = useHeaderCell(props.cell);
-    // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
-    const { cell, children, ...rest } = state.pinned
-        ? withoutStyleKeys<HeaderCellState, HeaderCellProps<TRow>>(
-              props,
-              PINNED_KEYS,
-          )
-        : props;
-    const pinnedRef = useLayer("pinned");
-    const { style, ...cellProps } = own;
-    const content = children !== undefined ? children : headerCellContent(cell);
-    const spans = isTableCell(rest.render)
-        ? {
-              ...(cell.columnSpan > 1 ? { colSpan: cell.columnSpan } : {}),
-              ...(cell.rowSpan > 1 ? { rowSpan: cell.rowSpan } : {}),
-          }
-        : {};
+    const { cell, children, ...rest } = props;
+    const own = useHeaderCell(cell);
+    const { engine } = useRootGrid();
     return useRenderElement("div", rest, {
-        state,
-        ref: state.pinned ? pinnedRef : undefined,
-        props: { ...cellProps, ...spans, children: content },
-        style,
+        state: own.state,
+        props: withTableSpans(
+            own.props,
+            rest.render,
+            cell.columnSpan,
+            cell.rowSpan,
+        ),
+        children: children !== undefined ? children : headerCellContent(cell),
+        // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
+        ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
+        drop: own.state.pinned ? PINNED_KEYS : undefined,
     });
 }
 
@@ -398,17 +378,17 @@ export function Empty(props: EmptyProps) {
     const view = useGridView();
     const element = useRenderElement("div", rest, {
         state: {},
+        children,
         props: {
             ...dataAttributes({ "grid-part": "empty" }),
-            children,
-        },
-        style: {
-            position: "sticky",
-            left: 0,
-            display: "block",
-            width: view.viewportWidth,
-            height: view.viewportBodyHeight,
-            boxSizing: "border-box",
+            style: {
+                position: "sticky",
+                left: 0,
+                display: "block",
+                width: view.viewportWidth,
+                height: view.viewportBodyHeight,
+                boxSizing: "border-box",
+            },
         },
     });
     return view.rowCount === 0 ? element : null;
@@ -422,24 +402,22 @@ export type BodyProps = DivPrimitiveProps<Record<string, never>> & {
 
 /** The body (`role="rowgroup"`), the layer the engine moves with the rows. A `<tbody>`. */
 export function Body(props: BodyProps) {
-    const { children = <Rows />, ...rest } = withoutStyleKeys<
-        Record<string, never>,
-        BodyProps
-    >(props, LAYER_KEYS);
+    const { children = <Rows />, ...rest } = props;
     const view = useGridView();
     return useRenderElement("div", rest, {
         state: {},
         ref: useLayer("body"),
+        drop: LAYER_KEYS,
+        children,
         props: {
             role: "rowgroup",
             ...dataAttributes({ "grid-part": "body" }),
-            children,
-        },
-        style: {
-            position: "absolute",
-            top: view.headerHeight,
-            left: 0,
-            boxSizing: "border-box",
+            style: {
+                position: "absolute",
+                top: view.headerHeight,
+                left: 0,
+                boxSizing: "border-box",
+            },
         },
     });
 }
@@ -451,21 +429,18 @@ export interface RowsProps<TRow> {
 
 /** The rendered rows (the row window, plus the active row), in order. */
 export function Rows<TRow = unknown>({ children }: RowsProps<TRow>) {
-    const { model } = useDataGrid();
-    const keyed = model.state.rowKey !== undefined;
     const rows = useRows<TRow>();
+    const keyed = useGridView().rowKey !== undefined;
     return rows.map((row) => (
         // keyed by the app's keys when it gives some (a row not loaded yet has none: its index),
         // else by index, so a row loading in place keeps its elements (and focus); the prefixes
         // keep a key and an index apart
-        <RowSlot key={keyed && row.loaded ? `k${row.key}` : `i${row.rowIndex}`}>
+        <Fragment
+            key={keyed && row.loaded ? `k${row.key}` : `i${row.rowIndex}`}
+        >
             {children ? children(row) : <Row row={row} />}
-        </RowSlot>
+        </Fragment>
     ));
-}
-
-function RowSlot({ children }: { children: ReactNode }) {
-    return children;
 }
 
 export type RowProps<TRow> = DivPrimitiveProps<RowState> & {
@@ -480,13 +455,7 @@ export type RowProps<TRow> = DivPrimitiveProps<RowState> & {
  */
 export function Row<TRow>(props: RowProps<TRow>) {
     const { row, children = <Cells />, ...rest } = props;
-    const { state, props: own } = useRow(row);
-    const { style, ...rowProps } = own;
-    const element = useRenderElement("div", rest, {
-        state,
-        props: { ...rowProps, children },
-        style,
-    });
+    const element = useRenderElement("div", rest, { ...useRow(row), children });
     return <RowContext value={row as RowInfo}>{element}</RowContext>;
 }
 
@@ -500,25 +469,21 @@ export function Cells<TRow = unknown>({ children }: CellsProps<TRow>) {
     const row = useRowContext<TRow>("Cells");
     const cells = useCells(row);
     return cells.map((cell) => (
-        <CellSlot key={cell.column.key}>
+        <Fragment key={cell.column.key}>
             {children ? children(cell) : <Cell cell={cell} />}
-        </CellSlot>
+        </Fragment>
     ));
-}
-
-function CellSlot({ children }: { children: ReactNode }) {
-    return children;
 }
 
 /** A value rendered as text when the cell has no children and its column no `renderCell`. */
 function plain(value: unknown): ReactNode {
-    return typeof value === "string" ||
-        typeof value === "number" ||
-        typeof value === "bigint"
+    const type = typeof value;
+    return type === "string" ||
+        type === "number" ||
+        type === "bigint" ||
+        type === "boolean"
         ? String(value)
-        : typeof value === "boolean"
-          ? String(value)
-          : null;
+        : null;
 }
 
 export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
@@ -535,13 +500,9 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
  * cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on click.
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
-    const { state, props: own } = useCell(props.cell);
-    // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
-    const { cell, children, ...rest } = state.pinned
-        ? withoutStyleKeys<CellState, CellProps<TRow>>(props, PINNED_KEYS)
-        : props;
-    const pinnedRef = useLayer("pinned");
-    const { style, ...cellProps } = own;
+    const { cell, children, ...rest } = props;
+    const own = useCell(cell);
+    const { engine } = useRootGrid();
     let content: ReactNode = null;
     if (children !== undefined) {
         content = children;
@@ -557,10 +518,11 @@ export function Cell<TRow>(props: CellProps<TRow>) {
             : plain(cell.value);
     }
     return useRenderElement("div", rest, {
-        state,
-        ref: state.pinned ? pinnedRef : undefined,
-        props: { ...cellProps, children: content },
-        style,
+        ...own,
+        children: content,
+        // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
+        ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
+        drop: own.state.pinned ? PINNED_KEYS : undefined,
     });
 }
 
@@ -578,25 +540,16 @@ export type RowDetailProps = DivPrimitiveProps<RowDetailState> & {
  * grid's: a grid inside it is its own grid. A `<td>` through `render`, which then gets `colSpan`.
  */
 export function RowDetail(props: RowDetailProps) {
-    const row = useRowContext("RowDetail");
-    const { state, props: own } = useRowDetail(row);
-    const view = useGridView();
-    // its inset is the engine's, and the other insets would move it from its place
-    const { children, ...rest } = withoutStyleKeys<
-        RowDetailState,
-        RowDetailProps
-    >(props, PINNED_KEYS);
-    const ref = useLayer("detail");
-    const spans =
-        isTableCell(rest.render) && view.columnCount > 1
-            ? { colSpan: view.columnCount }
-            : {};
-    const { style, ...detailProps } = own;
+    const { children, ...rest } = props;
+    const own = useRowDetail(useRowContext("RowDetail"));
+    const { columnCount } = useGridView();
     const element = useRenderElement("div", rest, {
-        state,
-        ref,
-        props: { ...detailProps, ...spans, children },
-        style,
+        state: own.state,
+        props: withTableSpans(own.props, rest.render, columnCount),
+        children,
+        ref: useLayer("detail"),
+        // its inset is the engine's, and the other insets would move it from its place
+        drop: PINNED_KEYS,
     });
-    return state.expanded ? element : null;
+    return own.state.expanded ? element : null;
 }

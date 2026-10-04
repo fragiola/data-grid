@@ -28,7 +28,21 @@ export interface ControlledState<TRow, V> {
      * a command the parent was asked about, vetoed meanwhile, with the value it would have
      * returned: what of it is the grid's own (a toggle's anchor) still happens
      */
-    readonly vetoed?: (command: CommandName, value: unknown) => void;
+    readonly vetoed?:
+        | ((command: CommandName, value: unknown) => void)
+        | undefined;
+    /** the value to start with, uncontrolled (`default…`): the grid may not take all of it */
+    readonly start?: (() => V | undefined) | undefined;
+}
+
+/** A piece of state bound to the model: what the root runs on it, whatever its value's type. */
+export interface Controlled {
+    /** moves the model to the controlled value, when it is not there */
+    readonly follow: () => void;
+    /** after the data props: follows, and tells the parent a value the model could not take */
+    readonly settle: () => void;
+    /** at mount, uncontrolled: tells the app a value to start with the model did not take as given */
+    readonly start: () => void;
 }
 
 /** What the root's guards share: whether it is syncing a prop, or applying the data props. */
@@ -47,7 +61,7 @@ export function bindControlled<TRow, V>(
     model: DataGridModel<TRow, ReactNode>,
     flags: ControlledFlags,
     spec: ControlledState<TRow, V>,
-): void {
+): Controlled {
     model.use((ctx, next) => {
         if (!ctx.command.startsWith(spec.prefix)) return next();
         const result = next();
@@ -75,10 +89,15 @@ export function bindControlled<TRow, V>(
         }
         spec.report(spec.read(after));
     });
+    return {
+        follow: () => followControlled(model, flags, spec),
+        settle: () => settleControlled(model, flags, spec),
+        start: () => startControlled(model, spec),
+    };
 }
 
 /** Moves the model to the controlled value, when it is not there. */
-export function followControlled<TRow, V>(
+function followControlled<TRow, V>(
     model: DataGridModel<TRow, ReactNode>,
     flags: ControlledFlags,
     spec: ControlledState<TRow, V>,
@@ -99,7 +118,7 @@ export function followControlled<TRow, V>(
  * After the data props: the controlled value follows, and one the model could not take (a cell
  * the rows no longer have, a column no longer sortable) is told to the parent as it settled.
  */
-export function settleControlled<TRow, V>(
+function settleControlled<TRow, V>(
     model: DataGridModel<TRow, ReactNode>,
     flags: ControlledFlags,
     spec: ControlledState<TRow, V>,
@@ -108,4 +127,18 @@ export function settleControlled<TRow, V>(
     const value = spec.prop();
     const settled = spec.read(model.state);
     if (value !== undefined && !spec.same(value, settled)) spec.report(settled);
+}
+
+/**
+ * At mount, uncontrolled: a value to start with that the model could not take as given (a column
+ * not sortable, single mode keeping one key) is told to the app as the grid holds it.
+ */
+function startControlled<TRow, V>(
+    model: DataGridModel<TRow, ReactNode>,
+    spec: ControlledState<TRow, V>,
+): void {
+    const start = spec.start?.();
+    if (start === undefined || spec.prop() !== undefined) return;
+    const held = spec.read(model.state);
+    if (!spec.same(start, held)) spec.report(held);
 }

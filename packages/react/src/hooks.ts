@@ -3,32 +3,33 @@ import {
     ariaHeaderCellSpans,
     ariaRowDetail,
     ariaRowIndex,
+    type CellPart,
+    type CellState,
+    cellBox,
+    cellPart,
     cellValue,
-    columnLeft,
-    columnPinning,
     EMPTY_WINDOW,
     type GridView,
+    type HeaderCellPart,
+    type HeaderCellState,
     headerCellBox,
-    headerCellSort,
+    headerCellPart,
+    type RowDetailState,
+    type RowState,
     renderedWidth,
     rowAt,
-    rowCellsHeight,
-    rowDetailBox,
+    rowDetailPart,
     rowDisplay,
-    rowExpanded,
     rowLeft,
-    rowSelectable,
-    rowSelected,
+    rowPart,
     rowTop,
     rowWidth,
-    type SortDirection,
-    sameCell,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
     type ReactNode,
-    useCallback,
     useContext,
+    useMemo,
     useSyncExternalStore,
 } from "react";
 import {
@@ -37,14 +38,26 @@ import {
     HeaderRowContext,
     type HeaderRowInfo,
     type RowInfo,
-    useDataGrid,
     useGrid,
+    useRootGrid,
     ViewContext,
 } from "./context";
-import type { DataGridRef } from "./gridRef";
+import { type DataGridRef, noSubscription } from "./gridRef";
 import { dataAttributes } from "./utils/useRender";
 
+export type {
+    CellState,
+    HeaderCellState,
+    RowDetailState,
+    RowState,
+} from "@fragiola/data-grid";
 export { useDataGrid } from "./context";
+
+/** What a part hook returns: its state, and the props for its element (the structural style in `props.style`). */
+interface PartHookResult<S> {
+    state: S;
+    props: Record<string, unknown> & { style: React.CSSProperties };
+}
 
 /** The view the engine reports: what to render. A component re-renders only when it changes. */
 export function useGridView<TRow = unknown>(): GridView<TRow, ReactNode> {
@@ -60,16 +73,15 @@ function useWindow<TRow>(
     event: "row-window" | "column-window",
     gridRef: DataGridRef<TRow> | undefined,
 ): AxisWindow {
-    const grid = useGrid(gridRef);
-    if (!grid && !gridRef) {
-        throw new Error(
-            "a window hook must be used inside <DataGrid.Root>, or be given a gridRef",
-        );
-    }
-    const engine = grid?.engine;
-    const subscribe = useCallback(
-        (listener: () => void) =>
-            engine ? engine.subscribe(event, listener) : () => {},
+    const engine = useGrid(
+        gridRef,
+        "a window hook must be used inside <DataGrid.Root>, or be given a gridRef",
+    )?.engine;
+    const subscribe = useMemo(
+        () =>
+            engine
+                ? (listener: () => void) => engine.subscribe(event, listener)
+                : noSubscription,
         [engine, event],
     );
     const read = () => (engine ? engine.get(event) : EMPTY_WINDOW);
@@ -89,26 +101,14 @@ export function useColumnWindow<TRow>(gridRef?: DataGridRef<TRow>): AxisWindow {
     return useWindow("column-window", gridRef);
 }
 
-/** Whether a cell (at its element's position) is the one whose controls have the keys. */
-function isInteracting<TRow>(
-    view: GridView<TRow, ReactNode>,
-    cell: { readonly rowIndex: number; readonly columnIndex: number },
-): boolean {
-    const { interaction } = view;
-    return (
-        interaction !== null &&
-        interaction.rowIndex === cell.rowIndex &&
-        interaction.columnIndex === cell.columnIndex
-    );
-}
-
 /** The rows a render shows, with their data and keys. */
 export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
-    const { model } = useDataGrid<TRow>();
+    // outside a `Root`, the grid's own error first
+    useRootGrid();
     const view = useGridView<TRow>();
+    const { rowKey } = view;
     return view.rows.map((rowIndex) => {
         const row = rowAt(view.source, rowIndex);
-        const rowKey = model.state.rowKey;
         return {
             rowIndex,
             row,
@@ -116,18 +116,6 @@ export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
             key: row !== undefined && rowKey ? rowKey(row, rowIndex) : rowIndex,
         };
     });
-}
-
-/** The state of a body row: what its `className`/`style` functions and `render` receive. */
-export interface RowState {
-    readonly rowIndex: number;
-    readonly loaded: boolean;
-    /** it holds the active cell */
-    readonly active: boolean;
-    /** it shows its detail (`DataGrid.RowDetail`): loaded, and its key expanded */
-    readonly expanded: boolean;
-    /** it is selected: rows are selectable, it is loaded and its key selected */
-    readonly selected: boolean;
 }
 
 /**
@@ -154,28 +142,17 @@ export function rowStyle<TRow>(
 }
 
 /** A body row's state, and the props for its element (ARIA, `data-*`, structural style). */
-export function useRow<TRow>(row: RowInfo<TRow>): {
-    state: RowState;
-    props: Record<string, unknown> & { style: React.CSSProperties };
-} {
+export function useRow<TRow>(row: RowInfo<TRow>): PartHookResult<RowState> {
     const view = useGridView<TRow>();
-    const state: RowState = {
-        rowIndex: row.rowIndex,
-        loaded: row.loaded,
-        active: view.active?.rowIndex === row.rowIndex,
-        expanded: rowExpanded(view, row.rowIndex),
-        selected: rowSelected(view, row.rowIndex),
-    };
+    const { state, ariaSelected } = rowPart(view, row.rowIndex, row.loaded);
     return {
         state,
         props: {
             role: "row",
             "aria-rowindex": ariaRowIndex(view, row.rowIndex),
-            // ARIA's own vocabulary (R7): "false" is "selectable, not selected"; a row that
-            // cannot be selected (or is not loaded) carries none
-            ...(rowSelectable(view, row.rowIndex) || state.selected
-                ? { "aria-selected": state.selected }
-                : {}),
+            ...(ariaSelected === undefined
+                ? {}
+                : { "aria-selected": ariaSelected }),
             ...dataAttributes({
                 "grid-part": "row",
                 "row-index": row.rowIndex,
@@ -193,29 +170,6 @@ export function useRow<TRow>(row: RowInfo<TRow>): {
             ),
         },
     };
-}
-
-/**
- * A cell's structural style (a header cell's too). A cell that scrolls is positioned in its row. A
- * pinned one is in the row's flow, `sticky`: the browser's scrolling keeps it in place, at the
- * `left` inset the engine writes (it is the engine's, like a layer's transform).
- */
-function cellStyle(
-    pinned: boolean,
-    left: number,
-    width: number,
-    height: number,
-): React.CSSProperties {
-    return pinned
-        ? { position: "sticky", width, height, boxSizing: "border-box" }
-        : {
-              position: "absolute",
-              top: 0,
-              left,
-              width,
-              height,
-              boxSizing: "border-box",
-          };
 }
 
 /** The cells a row renders, with their columns and values. */
@@ -240,74 +194,67 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
     });
 }
 
-/** The state of a body cell. */
-export interface CellState {
-    readonly rowIndex: number;
-    readonly columnIndex: number;
-    readonly loaded: boolean;
-    /** it is the active cell (the one the keyboard moves) */
-    readonly active: boolean;
-    /** its column is pinned at the start: sticky, it stays in view sideways */
-    readonly pinned: boolean;
-    /** its column is the last pinned one (for a divider or a shadow) */
-    readonly pinnedEdge: boolean;
-    /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
-    readonly interacting: boolean;
-}
-
-/** A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. */
-export function useCell<TRow>(cell: CellInfo<TRow>): {
-    state: CellState;
-    props: Record<string, unknown> & { style: React.CSSProperties };
-} {
-    const view = useGridView<TRow>();
-    const active =
-        view.active?.rowIndex === cell.rowIndex &&
-        view.active.columnIndex === cell.columnIndex;
-    const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
-    const interacting = isInteracting(view, cell);
+/**
+ * The props a body cell and a header cell share, in one record: the roving tab stop, ARIA,
+ * `data-*` and their structural style. A cell that scrolls is positioned in its row; a pinned one
+ * is in the row's flow, `sticky`: the browser's scrolling keeps it in place, at the `left` inset
+ * the engine writes (it is the engine's, like a layer's transform).
+ */
+function cellProps(
+    part: CellPart | HeaderCellPart,
+    box: {
+        readonly left: number;
+        readonly width: number;
+        readonly height: number;
+    },
+): PartHookResult<unknown>["props"] {
+    const { state } = part;
+    // a header cell's state is the one with a `group` (its sort comes with it)
+    const header = "group" in state ? state : undefined;
+    const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
+    const { pinned } = state;
+    const { width, height } = box;
     return {
-        state: {
-            rowIndex: cell.rowIndex,
-            columnIndex: cell.columnIndex,
-            loaded: cell.loaded,
-            active,
-            pinned,
-            pinnedEdge,
-            interacting,
-        },
-        props: {
-            role: "gridcell",
-            "aria-colindex": cell.columnIndex + 1,
-            tabIndex: active ? 0 : -1,
-            ...dataAttributes({
-                "grid-part": "cell",
-                "row-index": cell.rowIndex,
-                "column-index": cell.columnIndex,
-                loading: !cell.loaded,
-                active,
-                pinned: pinned ? "start" : undefined,
-                "pinned-edge": pinnedEdge,
-                interacting,
-            }),
-            style: cellStyle(
-                pinned,
-                columnLeft(view, cell.columnIndex),
-                view.columnAxis.sizeOf(cell.columnIndex),
-                // its row's own height: a detail below the cells is not theirs
-                rowCellsHeight(view, cell.rowIndex),
-            ),
-        },
+        role: header ? "columnheader" : "gridcell",
+        "aria-colindex": state.columnIndex + 1,
+        ...(header ? ariaHeaderCellSpans(header) : undefined),
+        ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
+        tabIndex: part.tabIndex,
+        ...dataAttributes({
+            "grid-part": header ? "header-cell" : "cell",
+            "row-index": state.rowIndex,
+            "column-index": state.columnIndex,
+            loading: "loaded" in state && !state.loaded,
+            active: state.active,
+            group: header?.group,
+            sortable: header?.sortable,
+            sort: header?.sortDirection,
+            "sort-priority": header?.sortPriority,
+            pinned: pinned ? "start" : undefined,
+            "pinned-edge": state.pinnedEdge,
+            interacting: state.interacting,
+        }),
+        style: pinned
+            ? { position: "sticky", width, height, boxSizing: "border-box" }
+            : {
+                  position: "absolute",
+                  top: 0,
+                  left: box.left,
+                  width,
+                  height,
+                  boxSizing: "border-box",
+              },
     };
 }
 
-/** The state of a row's detail. */
-export interface RowDetailState {
-    readonly rowIndex: number;
-    /** its row is expanded: the detail renders only meanwhile */
-    readonly expanded: boolean;
-    /** its height: the detail height the grid was given for this row (0 while collapsed) */
-    readonly height: number;
+/** A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. */
+export function useCell<TRow>(cell: CellInfo<TRow>): PartHookResult<CellState> {
+    const view = useGridView<TRow>();
+    const part = cellPart(view, cell);
+    return {
+        state: part.state,
+        props: cellProps(part, cellBox(view, cell.rowIndex, cell.columnIndex)),
+    };
 }
 
 /**
@@ -316,21 +263,15 @@ export interface RowDetailState {
  * in the row's flow below its cells, sticky at the view's start (the engine writes its `left`),
  * as wide as the visible area.
  */
-export function useRowDetail<TRow>(row: RowInfo<TRow>): {
-    state: RowDetailState;
-    props: Record<string, unknown> & { style: React.CSSProperties };
-} {
+export function useRowDetail<TRow>(
+    row: RowInfo<TRow>,
+): PartHookResult<RowDetailState> {
     const view = useGridView<TRow>();
-    const box = rowDetailBox(view, row.rowIndex);
-    if (!box) {
-        return {
-            state: { rowIndex: row.rowIndex, expanded: false, height: 0 },
-            props: { style: {} },
-        };
-    }
+    const { state, box } = rowDetailPart(view, row.rowIndex);
+    if (!box) return { state, props: { style: {} } };
     const flex = rowDisplay(view) === "flex";
     return {
-        state: { rowIndex: row.rowIndex, expanded: true, height: box.height },
+        state,
         props: {
             role: "gridcell",
             ...ariaRowDetail(view),
@@ -360,103 +301,39 @@ export function useHeaderRows<
 }
 
 /**
+ * A header row: the given one, else the one rendering (inside `DataGrid.HeaderRows` or
+ * `DataGrid.HeaderRow`), else the last (a grid without groups has only that one).
+ */
+export function useHeaderRowOf<TRow>(
+    row?: HeaderRowInfo<TRow>,
+): HeaderRowInfo<TRow> | undefined {
+    const view = useGridView<TRow>();
+    // the header row that provides it was rendered for this grid's row type
+    const rendering = useContext(
+        HeaderRowContext,
+    ) as HeaderRowInfo<TRow> | null;
+    return row ?? rendering ?? view.headerRows[view.headerRows.length - 1];
+}
+
+/**
  * The header cells a render shows in a header row: the given one, else the one rendering (inside
  * `DataGrid.HeaderRow`), else the last (a grid without groups has only that one).
  */
 export function useHeaderCells<TRow = unknown>(
     row?: HeaderRowInfo<TRow>,
 ): readonly HeaderCellInfo<TRow>[] {
-    const view = useGridView<TRow>();
-    // the header row that provides it was rendered for this grid's row type
-    const rendering = useContext(
-        HeaderRowContext,
-    ) as HeaderRowInfo<TRow> | null;
-    const current =
-        row ?? rendering ?? view.headerRows[view.headerRows.length - 1];
-    return current?.cells ?? [];
-}
-
-/** The state of a header cell. */
-export interface HeaderCellState {
-    /** its (top) header row: -1 for the columns' row; above it for groups and for a column spanning rows */
-    readonly rowIndex: number;
-    /** its first column */
-    readonly columnIndex: number;
-    readonly columnSpan: number;
-    readonly rowSpan: number;
-    /** it is a group's cell */
-    readonly group: boolean;
-    /** it is the active cell */
-    readonly active: boolean;
-    /** its column sorts the grid: a click, Enter or Space toggles it (never a group) */
-    readonly sortable: boolean;
-    /** the direction its column is sorted in, when it is */
-    readonly sortDirection: SortDirection | undefined;
-    /** its column's place among the sorted columns, 1-based, when it is sorted */
-    readonly sortPriority: number | undefined;
-    /** its columns are pinned at the start: sticky, it stays in view sideways */
-    readonly pinned: boolean;
-    /** it ends at the last pinned column (for a divider or a shadow) */
-    readonly pinnedEdge: boolean;
-    /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
-    readonly interacting: boolean;
+    return useHeaderRowOf(row)?.cells ?? [];
 }
 
 /** A header cell's state, and the props for its element. */
-export function useHeaderCell<TRow>(cell: HeaderCellInfo<TRow>): {
-    state: HeaderCellState;
-    props: Record<string, unknown> & { style: React.CSSProperties };
-} {
+export function useHeaderCell<TRow>(
+    cell: HeaderCellInfo<TRow>,
+): PartHookResult<HeaderCellState> {
     const view = useGridView<TRow>();
-    // a column spanning header rows is active on any of them
-    const active =
-        view.active !== null && sameCell(view.active, cell, view.header.cellAt);
-    const group = cell.group !== undefined;
-    const box = headerCellBox(view, cell);
-    const sort = headerCellSort(view, cell);
-    const interacting = isInteracting(view, cell);
-    const { pinned, pinnedEdge } = columnPinning(
-        view,
-        cell.columnIndex,
-        cell.columnSpan,
-    );
+    const part = headerCellPart(view, cell);
     return {
-        state: {
-            rowIndex: cell.rowIndex,
-            columnIndex: cell.columnIndex,
-            columnSpan: cell.columnSpan,
-            rowSpan: cell.rowSpan,
-            group,
-            active,
-            sortable: sort.sortable,
-            sortDirection: sort.direction,
-            sortPriority: sort.priority,
-            pinned,
-            pinnedEdge,
-            interacting,
-        },
-        props: {
-            role: "columnheader",
-            "aria-colindex": cell.columnIndex + 1,
-            ...ariaHeaderCellSpans(cell),
-            // on the first sorted column only (ARIA 1.2: one header at a time)
-            ...(sort.ariaSort ? { "aria-sort": sort.ariaSort } : {}),
-            tabIndex: active ? 0 : -1,
-            ...dataAttributes({
-                "grid-part": "header-cell",
-                "row-index": cell.rowIndex,
-                "column-index": cell.columnIndex,
-                active,
-                group,
-                sortable: sort.sortable,
-                sort: sort.direction,
-                "sort-priority": sort.priority,
-                pinned: pinned ? "start" : undefined,
-                "pinned-edge": pinnedEdge,
-                interacting,
-            }),
-            // at its row's top: a cell spanning rows reaches down past it
-            style: cellStyle(pinned, box.left, box.width, box.height),
-        },
+        state: part.state,
+        // at its row's top: a cell spanning rows reaches down past it
+        props: cellProps(part, headerCellBox(view, cell)),
     };
 }

@@ -1,6 +1,7 @@
 import {
     type AxisWindow,
     type CellPosition,
+    type CommandName,
     createDataGridEngine,
     createDataGridModel,
     type DataGridState,
@@ -22,9 +23,8 @@ import {
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
-    cloneElement,
-    isValidElement,
     type ReactNode,
+    type RefObject,
     useCallback,
     useLayoutEffect,
     useRef,
@@ -44,21 +44,12 @@ import {
     bindControlled,
     type ControlledFlags,
     type ControlledState,
-    followControlled,
-    settleControlled,
 } from "./utils/controlled";
 import {
     type DivPrimitiveProps,
     dataAttributes,
     useRenderElement,
 } from "./utils/useRender";
-
-interface HandlerProps {
-    onKeyDown?:
-        | ((event: React.KeyboardEvent<HTMLDivElement>) => void)
-        | undefined;
-    onClick?: ((event: React.MouseEvent<HTMLDivElement>) => void) | undefined;
-}
 
 /** The root's state: what its `className`/`style` functions and `render` receive. */
 export type RootState = Record<string, never>;
@@ -179,6 +170,41 @@ function samePosition(
     );
 }
 
+/** A controlled state of keys (the sort, the expanded rows, the selection), over the root's props. */
+interface KeysState<TRow, V>
+    extends Pick<
+        ControlledState<TRow, V>,
+        "prefix" | "read" | "same" | "apply" | "vetoed"
+    > {
+    readonly prop: (props: RootProps<TRow>) => V | undefined;
+    readonly onChange: (
+        props: RootProps<TRow>,
+    ) => ((value: V) => void) | undefined;
+    /** the value to start with, uncontrolled, when the grid may not take all of it */
+    readonly start?: (props: RootProps<TRow>) => V | undefined;
+    /** the keys a command makes; without it, the command's value is the keys themselves */
+    readonly keysOf?: (command: CommandName, value: unknown) => V;
+}
+
+/** The controlled state of keys a root's latest props hold: its prop, its handler, its default. */
+function keysState<TRow, V>(
+    latest: RefObject<RootProps<TRow>>,
+    spec: KeysState<TRow, V>,
+): ControlledState<TRow, V> {
+    const { start } = spec;
+    return {
+        prefix: spec.prefix,
+        read: spec.read,
+        same: spec.same,
+        apply: spec.apply,
+        vetoed: spec.vetoed,
+        valueOf: spec.keysOf ?? ((_, value) => value as V),
+        prop: () => spec.prop(latest.current),
+        report: (value) => spec.onChange(latest.current)?.(value),
+        start: start && (() => start(latest.current)),
+    };
+}
+
 function sourceMatches<TRow>(
     state: DataGridState<TRow, ReactNode>,
     rows: readonly TRow[] | undefined,
@@ -233,16 +259,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
         maxScrollSize,
         gridRef,
         children,
-        onKeyDown,
-        onClick,
         ...rest
     } = props;
     const latest = useRef(props);
     latest.current = props;
-    const flags: ControlledFlags = {
-        syncing: useRef(false),
-        applying: useRef(false),
-    };
 
     const [grid] = useState(() => {
         const model = createDataGridModel<TRow, ReactNode>({
@@ -264,7 +284,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
         });
-        const position: ControlledState<TRow, CellPosition | null> = {
+        const flags: ControlledFlags = {
+            syncing: { current: false },
+            applying: { current: false },
+        };
+        // each piece guarded in this order, the active position first: it settles first too
+        const bind = <V,>(spec: ControlledState<TRow, V>) =>
+            bindControlled(model, flags, spec);
+        const position = bind<CellPosition | null>({
             prefix: "active-position.",
             prop: () => latest.current.activePosition,
             read: (state) => state.activePosition,
@@ -278,70 +305,80 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 if (value === null) model.run("active-position.clear");
                 else model.run("active-position.set", value);
             },
-        };
-        const sort: ControlledState<TRow, readonly SortColumn[]> = {
-            prefix: "sort-columns.",
-            prop: () => latest.current.sortColumns,
-            read: (state) => state.sortColumns,
-            same: sameSortColumns,
-            valueOf: (_, value) => value as readonly SortColumn[],
-            report: (value) => latest.current.onSortColumnsChange?.(value),
-            // what the columns cannot take (a column not sortable, twice) is left out, as at
-            // mount, and the parent is told the sort as it settled
-            apply: (value) => {
-                model.run("sort-columns.set", {
-                    sortColumns: validSortColumns(model.state.columns, value),
-                });
-            },
-        };
-        const expanded: ControlledState<TRow, readonly RowKey[]> = {
-            prefix: "expanded-rows.",
-            prop: () => latest.current.expandedRowKeys,
-            read: (state) => state.expandedRowKeys,
-            same: sameRowKeys,
-            valueOf: (_, value) => value as readonly RowKey[],
-            report: (value) => latest.current.onExpandedRowKeysChange?.(value),
-            apply: (value) => {
-                model.run("expanded-rows.set", { rowKeys: value });
-            },
-        };
-        const selection: ControlledState<TRow, readonly RowKey[]> = {
-            prefix: "selected-rows.",
-            // the keys follow the prop while rows are selectable; off, the model keeps the keys it
-            // had (no row shows them) and the prop waits until it is on again
-            prop: () =>
-                latest.current.rowSelection
-                    ? latest.current.selectedRowKeys
-                    : undefined,
-            read: (state) => state.selectedRowKeys,
-            same: sameRowKeys,
-            valueOf: (command, value) =>
-                command === "selected-rows.toggle"
-                    ? (value as ToggleResult).rowKeys
-                    : (value as readonly RowKey[]),
-            report: (value) => latest.current.onSelectedRowKeysChange?.(value),
-            apply: (value) => {
-                model.run("selected-rows.set", { rowKeys: value });
-            },
-            // the parent answers the keys; where a range starts is the grid's: a toggle's anchor
-            // is kept as the model would have left it
-            vetoed: (command, value) => {
-                if (command !== "selected-rows.toggle") return;
-                const { anchor } = value as ToggleResult;
-                if (anchor) {
-                    model.run("selection-anchor.set", {
-                        rowIndex: anchor.rowIndex,
-                        selected: anchor.selected,
+        });
+        const sort = bind(
+            keysState<TRow, readonly SortColumn[]>(latest, {
+                prefix: "sort-columns.",
+                prop: (props) => props.sortColumns,
+                onChange: (props) => props.onSortColumnsChange,
+                // an uncontrolled sort the columns could not take all of (a column not
+                // sortable) starts without it: the app is told the sort the grid holds
+                start: (props) => props.defaultSortColumns,
+                read: (state) => state.sortColumns,
+                same: sameSortColumns,
+                // what the columns cannot take (a column not sortable, twice) is left out, as at
+                // mount, and the parent is told the sort as it settled
+                apply: (value) => {
+                    model.run("sort-columns.set", {
+                        sortColumns: validSortColumns(
+                            model.state.columns,
+                            value,
+                        ),
                     });
-                } else {
-                    model.run("selection-anchor.clear", {});
-                }
-            },
-        };
-        bindControlled(model, flags, position);
-        bindControlled(model, flags, sort);
-        bindControlled(model, flags, expanded);
-        bindControlled(model, flags, selection);
+                },
+            }),
+        );
+        const expanded = bind(
+            keysState<TRow, readonly RowKey[]>(latest, {
+                prefix: "expanded-rows.",
+                prop: (props) => props.expandedRowKeys,
+                onChange: (props) => props.onExpandedRowKeysChange,
+                read: (state) => state.expandedRowKeys,
+                same: sameRowKeys,
+                apply: (rowKeys) => {
+                    model.run("expanded-rows.set", { rowKeys });
+                },
+            }),
+        );
+        const selection = bind(
+            keysState<TRow, readonly RowKey[]>(latest, {
+                prefix: "selected-rows.",
+                // the keys follow the prop while rows are selectable; off, the model keeps the
+                // keys it had (no row shows them) and the prop waits until it is on again
+                prop: (props) =>
+                    props.rowSelection ? props.selectedRowKeys : undefined,
+                onChange: (props) => props.onSelectedRowKeysChange,
+                // an uncontrolled selection to start with that single mode trimmed (its last key
+                // kept): the app is told the keys the grid holds
+                start: (props) =>
+                    props.rowSelection
+                        ? props.defaultSelectedRowKeys
+                        : undefined,
+                read: (state) => state.selectedRowKeys,
+                same: sameRowKeys,
+                keysOf: (command, value) =>
+                    command === "selected-rows.toggle"
+                        ? (value as ToggleResult).rowKeys
+                        : (value as readonly RowKey[]),
+                apply: (rowKeys) => {
+                    model.run("selected-rows.set", { rowKeys });
+                },
+                // the parent answers the keys; where a range starts is the grid's: a toggle's
+                // anchor is kept as the model would have left it
+                vetoed: (command, value) => {
+                    if (command !== "selected-rows.toggle") return;
+                    const { anchor } = value as ToggleResult;
+                    if (anchor) {
+                        model.run("selection-anchor.set", {
+                            rowIndex: anchor.rowIndex,
+                            selected: anchor.selected,
+                        });
+                    } else {
+                        model.run("selection-anchor.clear", {});
+                    }
+                },
+            }),
+        );
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -358,9 +395,25 @@ export function Root<TRow>(props: RootProps<TRow>) {
             latest.current.onRowsEndReached?.(info),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
-        return { context, position, sort, expanded, selection };
+        // the grid's keys and header clicks (sorting) run after the consumer's onKeyDown and
+        // onClick, on the root or on its render element, so preventDefault cancels them
+        const after = {
+            onKeyDown: (event: React.KeyboardEvent) =>
+                engine.adapter.keydown(event.nativeEvent),
+            onClick: (event: React.MouseEvent) =>
+                engine.adapter.click(event.nativeEvent),
+        };
+        return {
+            context,
+            flags,
+            position,
+            sort,
+            selection,
+            controlled: [position, sort, expanded, selection],
+            after,
+        };
     });
-    const { context } = grid;
+    const { context, flags } = grid;
     const { model, engine } = context;
     // before paint; the components that follow the ref (useRowWindow(gridRef), …) are told
     useLayoutEffect(
@@ -373,17 +426,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
         engine.adapter.getView,
     );
     const [, rerender] = useState(0);
-    // the viewport attaches after the parts' first layout effects (refs attach child first) and
-    // its size makes a new view: render it before the first paint, not after
     useLayoutEffect(() => {
+        // the viewport attaches after the parts' first layout effects (refs attach child first)
+        // and its size makes a new view: render it before the first paint, not after
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
-    });
-
-    // the props follow onto the model, before paint. A controlled position first: valid before
-    // the data changes (rows filtered down), it survives them
-    useLayoutEffect(() => followControlled(model, flags, grid.position));
-
-    useLayoutEffect(() => {
+        // the props follow onto the model, before paint. A controlled position first: valid
+        // before the data changes (rows filtered down), it survives them
+        grid.position.follow();
         flags.applying.current = true;
     });
 
@@ -450,40 +499,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
     // controlled sort follows the columns, and one they cannot take is told as it settled
     useLayoutEffect(() => {
         flags.applying.current = false;
-        settleControlled(model, flags, grid.position);
-        settleControlled(model, flags, grid.sort);
-        settleControlled(model, flags, grid.expanded);
-        settleControlled(model, flags, grid.selection);
+        for (const piece of grid.controlled) piece.settle();
     });
 
-    // an uncontrolled selection to start with that single mode trimmed (its last key kept): the
-    // app is told the keys the grid holds
+    // uncontrolled, a value to start with the grid could not take as given (the selection single
+    // mode trimmed, the sort the columns could not take all of): the app is told the one it holds
     useLayoutEffect(() => {
-        const start = latest.current.defaultSelectedRowKeys;
-        if (
-            latest.current.selectedRowKeys === undefined &&
-            latest.current.rowSelection !== undefined &&
-            start !== undefined &&
-            !sameRowKeys(start, model.state.selectedRowKeys)
-        ) {
-            latest.current.onSelectedRowKeysChange?.(
-                model.state.selectedRowKeys,
-            );
-        }
-    }, [model]);
-
-    // an uncontrolled sort to start with that the columns could not take all of (a column not
-    // sortable) started without it: the app is told the sort the grid holds
-    useLayoutEffect(() => {
-        const start = latest.current.defaultSortColumns;
-        if (
-            latest.current.sortColumns === undefined &&
-            start !== undefined &&
-            !sameSortColumns(start, model.state.sortColumns)
-        ) {
-            latest.current.onSortColumnsChange?.(model.state.sortColumns);
-        }
-    }, [model]);
+        for (const piece of [grid.selection, grid.sort]) piece.start();
+    }, [grid]);
 
     const overscanRows = overscan?.rows;
     const overscanColumns = overscan?.columns;
@@ -507,53 +530,21 @@ export function Root<TRow>(props: RootProps<TRow>) {
         [engine],
     );
 
-    // the consumer's onKeyDown and onClick, on the root or on its render element, run before the
-    // grid's keys and header clicks (sorting), so preventDefault cancels them
-    const { render } = rest;
-    const renderElement = isValidElement<HandlerProps>(render)
-        ? render
-        : undefined;
-    const renderKeyDown = renderElement?.props.onKeyDown;
-    const renderClick = renderElement?.props.onClick;
-    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-        onKeyDown?.(event);
-        renderKeyDown?.(event);
-        engine.adapter.keydown(event.nativeEvent);
-    };
-    const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-        onClick?.(event);
-        renderClick?.(event);
-        engine.adapter.click(event.nativeEvent);
-    };
-
-    const element = useRenderElement(
-        "div",
-        renderElement && (renderKeyDown || renderClick)
-            ? {
-                  ...rest,
-                  render: cloneElement(renderElement, {
-                      onKeyDown: undefined,
-                      onClick: undefined,
-                  }),
-              }
-            : rest,
-        {
-            state: {},
-            ref,
-            props: {
-                ...dataAttributes({
-                    "grid-part": "root",
-                    empty: view.rowCount === 0,
-                }),
-                // a scroll container is a tab stop in some browsers: the grid has its own
-                tabIndex: -1,
-                onKeyDown: handleKeyDown,
-                onClick: handleClick,
-                children,
-            },
+    const element = useRenderElement("div", rest, {
+        state: {},
+        ref,
+        after: grid.after,
+        children,
+        props: {
+            ...dataAttributes({
+                "grid-part": "root",
+                empty: view.rowCount === 0,
+            }),
+            // a scroll container is a tab stop in some browsers: the grid has its own
+            tabIndex: -1,
             style: { position: "relative", overflow: "auto" },
         },
-    );
+    });
 
     return (
         <DataGridContext value={context as unknown as DataGridContextValue}>

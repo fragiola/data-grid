@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createRef, StrictMode, useState } from "react";
+import { createRef, Profiler, StrictMode, useState } from "react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
@@ -1189,6 +1189,25 @@ describe("the engine's life", () => {
             start: 5,
             end: 15,
         });
+    });
+
+    it("does not render React for a scroll that keeps the rendered window (D9)", () => {
+        let commits = 0;
+        const { container } = render(
+            <Profiler id="grid" onRender={() => commits++}>
+                <DivGrid />
+            </Profiler>,
+        );
+        const root = parts(container, "root")[0] as HTMLElement;
+        commits = 0;
+        // every column is rendered (450px in a 400px view): sideways, the windows stay
+        root.scrollLeft = 30;
+        fireEvent.scroll(root);
+        expect(commits).toBe(0);
+        // down past the overscan: a new rendered window, one commit
+        root.scrollTop = 200;
+        fireEvent.scroll(root);
+        expect(commits).toBe(1);
     });
 
     it("reports the first windows", () => {

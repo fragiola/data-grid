@@ -31,11 +31,16 @@ export function mergeRefs<T>(
 
 type AnyProps = Record<string, unknown>;
 
+/** Whether a prop is an event handler: a function under `on` and a capital (`onKeyDown`). */
 function isHandler(
     key: string,
     value: unknown,
 ): value is (...args: unknown[]) => void {
-    return /^on[A-Z]/.test(key) && typeof value === "function";
+    if (typeof value !== "function" || key[0] !== "o" || key[1] !== "n") {
+        return false;
+    }
+    const third = key.charCodeAt(2);
+    return third >= 65 && third <= 90;
 }
 
 /**
