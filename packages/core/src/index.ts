@@ -37,6 +37,8 @@ export {
     rowDisplay,
     rowExpanded,
     rowLeft,
+    rowSelectable,
+    rowSelected,
     rowTop,
     rowWidth,
     TAB_STOP_ATTRIBUTE,

@@ -21,7 +21,8 @@ export function isRowSelectionMode(value: unknown): value is RowSelection {
     return value === "single" || value === "multiple";
 }
 
-type Selecting<TRow> = Pick<
+/** What tells whether a row is selected, or can be: the model's state, or a view. */
+export type RowSelectionState<TRow> = Pick<
     DataGridState<TRow>,
     | "source"
     | "rowCount"
@@ -29,8 +30,10 @@ type Selecting<TRow> = Pick<
     | "rowSelection"
     | "selectedRowKeys"
     | "isRowSelectable"
-    | "selectionAnchor"
 >;
+
+type Selecting<TRow> = RowSelectionState<TRow> &
+    Pick<DataGridState<TRow>, "selectionAnchor">;
 
 type Outcome =
     | { readonly ok: true; readonly keys: readonly RowKey[] }
@@ -58,7 +61,7 @@ export function keptRowKeys(
 
 /** Whether a loaded row can be selected, the rows being selectable. */
 function selectable<TRow>(
-    state: Selecting<TRow>,
+    state: RowSelectionState<TRow>,
     row: TRow,
     rowIndex: number,
 ): boolean {
@@ -67,7 +70,7 @@ function selectable<TRow>(
 
 /** Whether the row is selected: rows are selectable, it is loaded and its key is selected. */
 export function isRowSelected<TRow>(
-    state: Selecting<TRow>,
+    state: RowSelectionState<TRow>,
     rowIndex: number,
 ): boolean {
     if (!state.rowSelection || state.selectedRowKeys.length === 0) return false;
@@ -77,7 +80,7 @@ export function isRowSelected<TRow>(
 
 /** Whether the row can be selected: rows are selectable, it is loaded and not refused. */
 export function isRowSelectable<TRow>(
-    state: Selecting<TRow>,
+    state: RowSelectionState<TRow>,
     rowIndex: number,
 ): boolean {
     if (!state.rowSelection) return false;

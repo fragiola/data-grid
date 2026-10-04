@@ -254,6 +254,31 @@ function selectionOff(): { readonly ok: false; readonly error: CommandError } {
     return fail("refused", "rows are not selectable (no rowSelection)");
 }
 
+/** A toggle's value: the keys, and the anchor it leaves (a controlled root keeps that part). */
+function toggled<TRow, TNode>(
+    applied: Applied<TRow, TNode, readonly RowKey[]>,
+): Applied<
+    TRow,
+    TNode,
+    {
+        readonly rowKeys: readonly RowKey[];
+        readonly anchor: SelectionAnchor | null;
+    }
+> {
+    if (!applied.ok) return applied;
+    const { state } = applied.value;
+    return {
+        ok: true,
+        value: {
+            state,
+            value: {
+                rowKeys: state.selectedRowKeys,
+                anchor: state.selectionAnchor,
+            },
+        },
+    };
+}
+
 /** The state with the selected keys and the anchor, the same object when neither changed. */
 function selected<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
@@ -552,10 +577,8 @@ function createHandlers<TRow, TNode>(
                     );
                 }
                 // no index to start a range from: the anchor goes
-                return selected(
-                    state,
-                    toggledKeys(state, payload.rowKey),
-                    null,
+                return toggled(
+                    selected(state, toggledKeys(state, payload.rowKey), null),
                 );
             }
             const rowIndex = payload.rowIndex;
@@ -576,7 +599,13 @@ function createHandlers<TRow, TNode>(
                 // the range starts where it did: the anchor stays
                 if (extended) {
                     return extended.ok
-                        ? selected(state, extended.keys, state.selectionAnchor)
+                        ? toggled(
+                              selected(
+                                  state,
+                                  extended.keys,
+                                  state.selectionAnchor,
+                              ),
+                          )
                         : extended;
                 }
                 // nothing to extend from: a toggle
@@ -589,12 +618,23 @@ function createHandlers<TRow, TNode>(
                 return fail("refused", `row ${rowIndex} cannot be selected`);
             }
             const was = keySet(state.selectedRowKeys).has(key);
-            return selected(state, toggledKeys(state, key), {
-                rowKey: key,
-                rowIndex,
-                selected: !was,
-            });
+            return toggled(
+                selected(state, toggledKeys(state, key), {
+                    rowKey: key,
+                    rowIndex,
+                    selected: !was,
+                }),
+            );
         },
+        "selection-anchor.clear": (state) => ({
+            ok: true,
+            value: {
+                state: state.selectionAnchor
+                    ? { ...state, selectionAnchor: null }
+                    : state,
+                value: undefined,
+            },
+        }),
         "selection-anchor.set": (state, { rowIndex, selected: selects }) => {
             if (!state.rowSelection) return selectionOff();
             if (
@@ -1079,6 +1119,7 @@ export const COMMANDS: readonly CommandName[] = [
     "selected-rows.toggle",
     "selected-rows.select-all",
     "selection-anchor.set",
+    "selection-anchor.clear",
     "row-selection.set",
     "sizes.set",
     "active-position.set",

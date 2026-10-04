@@ -68,7 +68,13 @@ describe("selected rows", () => {
 
     it("toggle by index makes the row the anchor; by key, there is none", () => {
         const model = grid();
-        model.run("selected-rows.toggle", { rowIndex: 2 });
+        expect(model.run("selected-rows.toggle", { rowIndex: 2 })).toEqual({
+            ok: true,
+            value: {
+                rowKeys: ["p2"],
+                anchor: { rowKey: "p2", rowIndex: 2, selected: true },
+            },
+        });
         expect(model.state.selectionAnchor).toEqual({
             rowKey: "p2",
             rowIndex: 2,
@@ -76,6 +82,9 @@ describe("selected rows", () => {
         });
         model.run("selected-rows.toggle", { rowKey: "p7" });
         expect(model.state.selectionAnchor).toBeNull();
+        model.run("selected-rows.toggle", { rowIndex: 5 });
+        model.run("selection-anchor.clear", {});
+        expect(model.get("selection-anchor")).toBeNull();
     });
 
     it("extends from the anchor with its state: adding, then removing", () => {
@@ -264,6 +273,7 @@ describe("without selection", () => {
         expect(model.is("row-selectable", { rowIndex: 1 })).toBe(false);
         for (const result of [
             model.run("selected-rows.set", { rowKeys: [] }),
+            model.run("selection-anchor.set", { rowIndex: 1 }),
             model.run("selected-rows.toggle", { rowIndex: 1 }),
             model.run("selected-rows.select-all", {}),
         ]) {

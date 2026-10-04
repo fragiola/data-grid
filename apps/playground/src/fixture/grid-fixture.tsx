@@ -4,8 +4,10 @@ import {
     DataGrid,
     type DataGridContextValue,
     type HeaderRowInfo,
+    type RowKey,
     type SortColumn,
     useDataGrid,
+    useGridView,
 } from "@fragiola/data-grid-react";
 import { Profiler, StrictMode, useMemo } from "react";
 import { createRoot } from "react-dom/client";
@@ -31,10 +33,13 @@ import { createRoot } from "react-dom/client";
 //   &controls=1          controls in cells: C2 a button (`edit-<row>`) and a link
 //                        (`open-<row>`), C3 a field (`field-<row>`) and a header button
 //                        (`header-menu`), C4 of row 0 an app's own tab stop (`kept`)
+//   &selection=multiple  selectable rows (or `single`), uncontrolled: C1's cell holds a checkbox
+//                        (`select-<row>`, Shift+click extends); &locked=5 makes row 5 not
+//                        selectable
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
-// commits of the grid (a Profiler), `window.sortChanges` the sorts reported, and a button before
-// and after the grid take Tab.
+// commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
+// `window.selectionChanges` the selections, and a button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -45,6 +50,7 @@ declare global {
         grid?: DataGridContextValue<FixtureRow>;
         commits: number;
         sortChanges: (readonly SortColumn[])[];
+        selectionChanges: (readonly RowKey[])[];
     }
 }
 
@@ -114,6 +120,29 @@ function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
         };
     }
     return {};
+}
+
+/** A row's checkbox, as an app writes it: the grid's command, Shift+click extending. */
+function SelectBox({ rowIndex }: { rowIndex: number }) {
+    const { model } = useDataGrid<FixtureRow>();
+    // the view moves with the selection: this re-renders
+    useGridView();
+    return (
+        <input
+            type="checkbox"
+            data-testid={`select-${rowIndex}`}
+            aria-label={`Select ${rowIndex}`}
+            checked={model.is("row-selected", { rowIndex })}
+            disabled={!model.is("row-selectable", { rowIndex })}
+            readOnly
+            onClick={(event) =>
+                model.run("selected-rows.toggle", {
+                    rowIndex,
+                    extend: event.shiftKey,
+                })
+            }
+        />
+    );
 }
 
 const INNER_COLUMNS: Column<FixtureRow>[] = Array.from(
@@ -257,6 +286,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const pinnedCount = numberParam(params, "pinned", 0);
     const details = params.get("details") === "1";
     const controls = params.get("controls") === "1";
+    const selectionParam = params.get("selection");
+    const rowSelection =
+        selectionParam === "single" || selectionParam === "multiple"
+            ? selectionParam
+            : undefined;
+    const locked = numberParam(params, "locked", -1);
+    const isRowSelectable = useMemo(
+        () =>
+            locked >= 0 ? (row: FixtureRow) => row.index !== locked : undefined,
+        [locked],
+    );
     const detailHeight = numberParam(params, "detailHeight", 200);
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
@@ -274,6 +314,13 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     ? { pinned: "start" as const }
                     : {}),
                 ...(controls ? controlColumn(columnIndex) : {}),
+                ...(rowSelection && columnIndex === 1
+                    ? {
+                          renderCell: ({ row }) => (
+                              <SelectBox rowIndex={row.index} />
+                          ),
+                      }
+                    : {}),
                 ...(sort && columnIndex === 1
                     ? {
                           renderHeaderCell: () => (
@@ -289,7 +336,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             }),
         );
         return groups ? grouped(leaves) : leaves;
-    }, [columnCount, groups, sort, pinnedCount, controls]);
+    }, [columnCount, groups, sort, pinnedCount, controls, rowSelection]);
     const rowHeight = useMemo(
         () =>
             variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
@@ -317,6 +364,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     maxScrollSize={maxScrollSize}
                     onSortColumnsChange={(sortColumns) =>
                         window.sortChanges.push(sortColumns)
+                    }
+                    rowSelection={rowSelection}
+                    isRowSelectable={isRowSelectable}
+                    onSelectedRowKeysChange={(keys) =>
+                        window.selectionChanges.push(keys)
                     }
                     data-testid="viewport"
                     style={{ width, height }}
@@ -425,6 +477,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
 export function mountGridFixture(kind: "table" | "div") {
     window.commits = 0;
     window.sortChanges = [];
+    window.selectionChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

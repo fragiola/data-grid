@@ -92,6 +92,12 @@ export interface LocalRowsView<TRow> {
     readonly total: number;
     /** the rows passing the filters and the search */
     readonly filteredCount: number;
+    /**
+     * every page's rows, filtered, searched and sorted: what "select all" means across pages
+     * (Epic #57). Built when first read (the rows given, when nothing filters or sorts them),
+     * the same array until the rows, the filters, the search or the sort change
+     */
+    readonly filteredRows: readonly TRow[];
     /** the current page, kept inside the pages there are */
     readonly pageIndex: number;
     readonly pageSize: number | undefined;
@@ -177,9 +183,14 @@ export function createLocalRows<TRow, TNode = unknown>(
     // each row's text, folded, for the search: worked out once per rows and columns, not per key
     const texts = memo(searchTextsOf<TRow, TNode>);
     const sorted = memo(sortEntries<TRow, TNode>);
+    const rowsOf = memo((ordered: readonly RowEntry<TRow>[]) =>
+        ordered.map((entry) => entry.row),
+    );
     const view = memo(
         (
             ordered: readonly RowEntry<TRow>[],
+            all: readonly RowEntry<TRow>[],
+            given: readonly TRow[],
             total: number,
             pageIndex: number,
             pageSize: number | undefined,
@@ -191,6 +202,9 @@ export function createLocalRows<TRow, TNode = unknown>(
                 ),
                 total,
                 filteredCount: ordered.length,
+                get filteredRows() {
+                    return ordered === all ? given : rowsOf(ordered);
+                },
                 pageIndex: index,
                 pageSize,
                 pageCount: pageCount(ordered.length, pageSize),
@@ -225,7 +239,14 @@ export function createLocalRows<TRow, TNode = unknown>(
             );
             // pure: a page past the last shows the last; the state keeps what was set (an adapter
             // may write the shown page back once it is on screen)
-            return view(ordered, rows.length, state.pageIndex, state.pageSize);
+            return view(
+                ordered,
+                all,
+                rows,
+                rows.length,
+                state.pageIndex,
+                state.pageSize,
+            );
         },
         setSortColumns: (sortColumns) => update({ sortColumns }, true),
         setFilter: (columnKey, value) => {

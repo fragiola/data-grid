@@ -478,3 +478,20 @@ describe("the entry point", () => {
         expect(main).not.toMatch(/["']\.\/local/);
     });
 });
+
+describe("filteredRows (Epic #57)", () => {
+    it("is every page's rows, the rows given when nothing filters or sorts them", () => {
+        const rows = Array.from({ length: 30 }, (_, i) => ({ n: i }));
+        const local = createLocalRows<{ n: number }>({ pageSize: 10 });
+        const columns = [{ key: "n", width: 10 }];
+        const all = local.derive(rows, columns);
+        expect(all.rows).toHaveLength(10);
+        expect(all.filteredRows).toBe(rows);
+        local.setFilter("n", 3);
+        const some = local.derive(rows, columns);
+        expect(some.filteredRows).toEqual([{ n: 3 }]);
+        expect(local.derive(rows, columns).filteredRows).toBe(
+            some.filteredRows,
+        );
+    });
+});

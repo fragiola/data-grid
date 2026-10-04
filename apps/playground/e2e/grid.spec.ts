@@ -1351,6 +1351,110 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("row selection", () => {
+            const SELECTION = {
+                rows: 1_000,
+                columns: 20,
+                selection: "multiple",
+            };
+
+            const row = (page: Page, rowIndex: number) =>
+                page.locator(
+                    `[data-grid-part="row"][data-row-index="${rowIndex}"]`,
+                );
+            const selected = (page: Page) =>
+                page.evaluate(
+                    () => window.grid?.model.state.selectedRowKeys ?? [],
+                );
+
+            test("Shift+Space selects and clears the active row", async ({
+                page,
+            }) => {
+                await open(page, kind, SELECTION);
+                await expect(
+                    page.locator('[data-grid-part="grid"]'),
+                ).toHaveAttribute("aria-multiselectable", "true");
+                await expect(row(page, 2)).toHaveAttribute(
+                    "aria-selected",
+                    "false",
+                );
+                await cell(page, 2, 0).click();
+                await page.keyboard.press("Shift+Space");
+                await expect(row(page, 2)).toHaveAttribute("data-selected", "");
+                await expect(row(page, 2)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                await expect(page.getByTestId("select-2")).toBeChecked();
+                await page.keyboard.press("Shift+Space");
+                await expect(row(page, 2)).not.toHaveAttribute(
+                    "data-selected",
+                    /.*/,
+                );
+                expect(await selected(page)).toEqual([]);
+            });
+
+            test("Shift+Down extends from the row it starts on, Ctrl+A selects every row", async ({
+                page,
+            }) => {
+                await open(page, kind, SELECTION);
+                await cell(page, 3, 0).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 5,
+                    columnIndex: 0,
+                });
+                expect(await selected(page)).toEqual([3, 4, 5]);
+                await page.keyboard.press("ControlOrMeta+a");
+                expect((await selected(page)).length).toBe(1_000);
+                await expect(row(page, 0)).toHaveAttribute("data-selected", "");
+            });
+
+            test("a row's checkbox toggles through the grid, Enter and Space included, and Shift+click extends", async ({
+                page,
+            }) => {
+                await open(page, kind, SELECTION);
+                await page.getByTestId("select-1").click();
+                expect(await selected(page)).toEqual([1]);
+                await page
+                    .getByTestId("select-4")
+                    .click({ modifiers: ["Shift"] });
+                expect(await selected(page)).toEqual([1, 2, 3, 4]);
+                await page.keyboard.press("Escape");
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("Enter");
+                await expect(page.getByTestId("select-5")).toBeFocused();
+                await page.keyboard.press("Space");
+                expect(await selected(page)).toEqual([1, 2, 3, 4, 5]);
+                expect(
+                    await page.evaluate(() => window.selectionChanges.length),
+                ).toBe(3);
+            });
+
+            test("a row that cannot be selected carries no aria-selected, and a single selection no aria-multiselectable", async ({
+                page,
+            }) => {
+                await open(page, kind, {
+                    ...SELECTION,
+                    selection: "single",
+                    locked: 2,
+                });
+                await expect(
+                    page.locator('[data-grid-part="grid"]'),
+                ).not.toHaveAttribute("aria-multiselectable", /.*/);
+                await expect(row(page, 2)).not.toHaveAttribute(
+                    "aria-selected",
+                    /.*/,
+                );
+                await cell(page, 3, 0).click();
+                await page.keyboard.press("Shift+Space");
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("Shift+Space");
+                expect(await selected(page)).toEqual([4]);
+            });
+        });
+
         test.describe("sorting", () => {
             const SORT = { rows: 1_000, columns: 20, sort: 1 };
 

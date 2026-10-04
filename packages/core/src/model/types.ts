@@ -372,8 +372,8 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: readonly RowKey[];
     };
     /**
-     * replaces the selected rows' keys (each once; in single mode, the last one only). A key whose
-     * row is not loaded is kept. Returns them
+     * replaces the selected rows' keys (each once; in single mode, the last one only): the app's
+     * keys, as given (`isRowSelectable` is not asked: a key's row may not be loaded). Returns them
      */
     "selected-rows.set": {
         payload: { readonly rowKeys: readonly RowKey[] };
@@ -386,7 +386,8 @@ export interface CommandMap<TRow, TNode = unknown> {
      * `extend` (multiple mode), every selectable row from the anchor to it takes the anchor's
      * state instead, and the anchor stays (without one, a toggle); a row not loaded on the way
      * refuses it all (`not_loaded`). In single mode, selecting a row clears the others. Returns
-     * the selected rows' keys
+     * the selected rows' keys and the anchor it leaves (what a controlled root keeps of a toggle
+     * its parent answers)
      */
     "selected-rows.toggle": {
         payload:
@@ -400,7 +401,10 @@ export interface CommandMap<TRow, TNode = unknown> {
                   readonly rowIndex?: undefined;
                   readonly extend?: undefined;
               };
-        result: readonly RowKey[];
+        result: {
+            readonly rowKeys: readonly RowKey[];
+            readonly anchor: SelectionAnchor | null;
+        };
     };
     /**
      * makes a loaded row the anchor, where the next range starts, changing no selection: a range
@@ -412,6 +416,11 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly selected?: boolean | undefined;
         };
         result: SelectionAnchor;
+    };
+    /** leaves no anchor: the next range is a toggle */
+    "selection-anchor.clear": {
+        payload: Record<string, never>;
+        result: undefined;
     };
     /**
      * selects every selectable row (multiple mode), keeping the keys already selected; a row not

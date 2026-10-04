@@ -2,6 +2,7 @@ import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import { headerCellsIn, pinnedColumnCount } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
+import { isRowSelectable, isRowSelected } from "../model/selection";
 import { rowAt } from "../model/source";
 import type {
     CellPosition,
@@ -9,6 +10,10 @@ import type {
     DataGridState,
     HeaderCellLayout,
     HeaderLayout,
+    RowKey,
+    RowKeyGetter,
+    RowSelectable,
+    RowSelection,
     RowSource,
     SortColumn,
     SortDirection,
@@ -125,6 +130,14 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly pinnedWidth: number;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
+    /** a row's key: `rowKey`, else its index */
+    readonly rowKey: RowKeyGetter<TRow> | undefined;
+    /** how rows are selected; `undefined` when they are not */
+    readonly rowSelection: RowSelection | undefined;
+    /** the selected rows' keys (`rowSelected` tells a row's state) */
+    readonly selectedRowKeys: readonly RowKey[];
+    /** whether a loaded row can be selected; `undefined`: every row can */
+    readonly isRowSelectable: RowSelectable<TRow> | undefined;
     /**
      * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
      * leaves), at its element's position (a header cell's top row and first column); `null` in
@@ -698,6 +711,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pinnedColumnCount: pinnedCount,
             pinnedWidth,
             expandedRows: state.expandedRows,
+            rowKey: state.rowKey,
+            rowSelection: state.rowSelection,
+            selectedRowKeys: state.selectedRowKeys,
+            isRowSelectable: state.isRowSelectable,
             interaction,
         };
     }
@@ -746,6 +763,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.sortColumns !== next.sortColumns ||
             current.pinnedColumnCount !== next.pinnedColumnCount ||
             current.expandedRows !== next.expandedRows ||
+            current.rowKey !== next.rowKey ||
+            current.rowSelection !== next.rowSelection ||
+            current.selectedRowKeys !== next.selectedRowKeys ||
+            current.isRowSelectable !== next.isRowSelectable ||
             current.interaction !== next.interaction
         );
     }
@@ -2389,6 +2410,22 @@ export function rowExpanded<TRow, TNode>(
     rowIndex: number,
 ): boolean {
     return holdsRow(view.expandedRows, rowIndex);
+}
+
+/** Whether a row is selected (R7): rows are selectable, it is loaded and its key selected. */
+export function rowSelected<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): boolean {
+    return isRowSelected(view, rowIndex);
+}
+
+/** Whether a row can be selected (R7): rows are selectable, it is loaded and not refused. */
+export function rowSelectable<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): boolean {
+    return isRowSelectable(view, rowIndex);
 }
 
 /** A row's own height: its cells', without its detail. */
