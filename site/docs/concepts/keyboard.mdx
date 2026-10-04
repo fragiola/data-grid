@@ -18,9 +18,13 @@ it, the grid scrolls it into view and focuses it.
 | Shift+Space | selects the active row, or clears it ([row selection](/docs/concepts/row-selection) on) |
 | Shift+↑, Shift+↓ | the next row, selecting from the anchor (many rows selectable) |
 | Ctrl+A, ⌘+A | selects every row (many rows selectable) |
+| Ctrl+Shift+←, Ctrl+Shift+→ | moves a reorderable header cell's column or group, the active cell following it (⌘ on a Mac) |
 
 Moves stop at the edges. A click or a Tab into a cell makes it active. On a sortable column's
 header cell, Enter and Space toggle its [sort](/docs/concepts/sorting) (Ctrl adds the column).
+On a [reorderable](/docs/concepts/column-reordering) header cell, Ctrl+Shift+← and Ctrl+Shift+→
+move its column (or group) before the previous sibling or after the next one, focus staying on
+it; elsewhere they move the active cell as the arrows do.
 
 <Example id="keyboard-navigation" />
 

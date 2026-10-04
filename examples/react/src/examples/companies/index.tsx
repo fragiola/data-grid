@@ -58,8 +58,9 @@ function rank(
     return range ? ranges.indexOf(range) : -1;
 }
 
-// Every column but the checkboxes resizes (a handle in its header cell); its `name` is the
-// handle's, the header showing its own label.
+// Every column but the checkboxes resizes (a handle in its header cell) and moves (its header cell
+// dragged, or Ctrl/⌘+Shift+←/→ on it); its `name` is the handle's, the header showing its own
+// label.
 const columns: Column<Company>[] = [
     {
         key: "select",
@@ -74,6 +75,7 @@ const columns: Column<Company>[] = [
         name: "Company",
         width: 220,
         resizable: true,
+        reorderable: true,
         sortable: true,
         renderHeaderCell: () => (
             <SortLabel
@@ -101,6 +103,7 @@ const columns: Column<Company>[] = [
         name: "Domain",
         width: 170,
         resizable: true,
+        reorderable: true,
         sortable: true,
         renderHeaderCell: () => (
             <SortLabel
@@ -119,6 +122,7 @@ const columns: Column<Company>[] = [
         name: "Categories",
         width: 360,
         resizable: true,
+        reorderable: true,
         renderHeaderCell: () => (
             <span className={styles.headerLabel}>
                 <Tags aria-hidden className={styles.icon} />
@@ -143,6 +147,7 @@ const columns: Column<Company>[] = [
         name: "Description",
         width: 300,
         resizable: true,
+        reorderable: true,
         renderHeaderCell: () => (
             <span className={styles.headerLabel}>
                 <FileText aria-hidden className={styles.icon} />
@@ -160,6 +165,7 @@ const columns: Column<Company>[] = [
         name: "LinkedIn",
         width: 170,
         resizable: true,
+        reorderable: true,
         renderHeaderCell: () => (
             <span className={styles.headerLabel}>
                 <AtSign aria-hidden className={styles.icon} />
@@ -175,6 +181,7 @@ const columns: Column<Company>[] = [
         name: "Employees",
         width: 150,
         resizable: true,
+        reorderable: true,
         sortable: true,
         // ranges sort by their scale, not as text
         compare: (a, b) =>
@@ -203,6 +210,7 @@ const columns: Column<Company>[] = [
         name: "Estimated ARR",
         width: 160,
         resizable: true,
+        reorderable: true,
         sortable: true,
         compare: (a, b) => rank(ARR_RANGES, a.arr) - rank(ARR_RANGES, b.arr),
         renderHeaderCell: () => (
@@ -225,6 +233,7 @@ const columns: Column<Company>[] = [
         name: "Primary location",
         width: 210,
         resizable: true,
+        reorderable: true,
         sortable: true,
         renderHeaderCell: () => (
             <SortLabel

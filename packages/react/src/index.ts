@@ -3,11 +3,13 @@
 export type {
     AxisWindow,
     CellPosition,
+    ColumnOrder,
     ColumnWidths,
     DataGridEngine,
     DataGridModel,
     DetailHeight,
     Range,
+    ReorderSide,
     RowKey,
     RowKeyGetter,
     RowSelectable,

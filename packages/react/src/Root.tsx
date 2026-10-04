@@ -1,6 +1,7 @@
 import {
     type AxisWindow,
     type CellPosition,
+    type ColumnOrder,
     type ColumnWidths,
     type CommandName,
     createDataGridEngine,
@@ -11,6 +12,7 @@ import {
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
     type GridView,
+    keptOrder,
     keptWidths,
     type ResultOf,
     type RowKey,
@@ -19,6 +21,7 @@ import {
     type RowSelection,
     type Size,
     type SortColumn,
+    sameOrder,
     sameRowKeys,
     sameSortColumns,
     sameWidths,
@@ -157,6 +160,18 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onColumnWidthsChange?:
             | ((columnWidths: ColumnWidths) => void)
             | undefined;
+        /**
+         * the order columns and groups take among their siblings, by key, controlled; pair it
+         * with `onColumnOrderChange`. The ones not listed keep their place
+         */
+        columnOrder?: ColumnOrder | undefined;
+        /** the column order to start with, uncontrolled */
+        defaultColumnOrder?: ColumnOrder | undefined;
+        /**
+         * the order changed (or, controlled, asks to): a header cell was dropped or moved with
+         * the keys, or a command ran
+         */
+        onColumnOrderChange?: ((columnOrder: ColumnOrder) => void) | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -189,7 +204,7 @@ function samePosition(
 
 /**
  * A controlled state over the root's props (the active position, the sort, the expanded rows, the
- * selection, the column widths): its prop, its handler, its default.
+ * selection, the column widths and order): its prop, its handler, its default.
  */
 interface PropsState<TRow, V>
     extends Pick<
@@ -272,6 +287,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         columnWidths,
         defaultColumnWidths,
         onColumnWidthsChange,
+        columnOrder,
+        defaultColumnOrder,
+        onColumnOrderChange,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -305,12 +323,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
             columnWidths: columnWidths ?? defaultColumnWidths,
+            columnOrder: columnOrder ?? defaultColumnOrder,
         });
         const flags: ControlledFlags = {
             syncing: { current: false },
             applying: { current: false },
         };
-        // each piece guarded in this order, the active position first: it settles first too
+        // each piece guarded on its own commands (the order they are bound in tells uncontrolled
+        // changes in that order)
         const bind = <V,>(spec: ControlledState<TRow, V>) =>
             bindControlled(model, flags, spec);
         const position = bind(
@@ -422,6 +442,24 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const order = bind(
+            propsState<TRow, ColumnOrder>(latest, {
+                prefix: "column-order.",
+                prop: (props) => props.columnOrder,
+                onChange: (props) => props.onColumnOrderChange,
+                // an uncontrolled order to start with that listed a key twice (or a value that is
+                // no key) starts without those: the app is told the order the grid holds
+                start: (props) => props.defaultColumnOrder,
+                read: (state) => state.columnOrder,
+                same: sameOrder,
+                // kept as at mount, and the parent told the order as it settled
+                apply: (columnOrder) => {
+                    model.run("column-order.set", {
+                        columnOrder: keptOrder(columnOrder),
+                    });
+                },
+            }),
+        );
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -456,7 +494,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
             sort,
             selection,
             widths,
-            controlled: [position, sort, expanded, selection, widths],
+            order,
+            // settled (and started) in this order: the layout inputs first, so a position the order
+            // moved settles in the same pass; then the selection before the sort, as their
+            // values to start with are told
+            controlled: [widths, order, position, selection, sort, expanded],
             after,
         };
     });
@@ -477,10 +519,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // the viewport attaches after the parts' first layout effects (refs attach child first)
         // and its size makes a new view: render it before the first paint, not after
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
-        // the props follow onto the model, before paint. Controlled widths first: a layout
-        // input, the axis a position scrolls into view against. Then a controlled position:
-        // valid before the data changes (rows filtered down), it survives them
+        // the props follow onto the model, before paint. Controlled widths and order first: layout
+        // inputs, the axis a position scrolls into view against (an order moves the active cell
+        // with its column: there it stays unless its own prop changed, told at the settle). Then
+        // a controlled position: valid before the data changes (rows filtered down), it survives
+        // them
         grid.widths.follow();
+        grid.order.follow();
         grid.position.follow();
         flags.applying.current = true;
     });
@@ -553,11 +598,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
 
     // uncontrolled, a value to start with the grid could not take as given (the selection single
     // mode trimmed, the sort the columns could not take all of, widths that were not all
-    // widths): the app is told the one it holds
+    // widths, an order listing a key twice): the app is told the one it holds
     useLayoutEffect(() => {
-        for (const piece of [grid.selection, grid.sort, grid.widths]) {
-            piece.start();
-        }
+        for (const piece of grid.controlled) piece.start();
     }, [grid]);
 
     const overscanRows = overscan?.rows;

@@ -1,5 +1,6 @@
 import {
     type Column,
+    type ColumnOrder,
     type ColumnOrGroup,
     type ColumnWidths,
     DataGrid,
@@ -45,11 +46,15 @@ import { createRoot } from "react-dom/client";
 //                        at its right edge, placed by the fixture's own CSS; `controlled`
 //                        holds the widths in the fixture's state (`columnWidths` and
 //                        `onColumnWidthsChange`)
+//   &reorder=1           C1–C5 reorderable (C0 too when pinned), and the groups with &groups=1,
+//                        the order uncontrolled: a drop target is marked by the fixture's own
+//                        CSS; `controlled` holds the order in the fixture's state
+//                        (`columnOrder` and `onColumnOrderChange`)
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
-// `window.selectionChanges` the selections, `window.widthChanges` the widths, and a button
-// before and after the grid take Tab.
+// `window.selectionChanges` the selections, `window.widthChanges` the widths,
+// `window.orderChanges` the column orders, and a button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -62,6 +67,7 @@ declare global {
         sortChanges: (readonly SortColumn[])[];
         selectionChanges: (readonly RowKey[])[];
         widthChanges: ColumnWidths[];
+        orderChanges: ColumnOrder[];
     }
 }
 
@@ -240,8 +246,14 @@ function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
     );
 }
 
-/** The columns under groups: C0 alone, then groups of 4 and 12 columns in turn. */
-function grouped(columns: Column<FixtureRow>[]): ColumnOrGroup<FixtureRow>[] {
+/**
+ * The columns under groups: C0 alone, then groups of 4 and 12 columns in turn (reorderable
+ * with `reorderable`).
+ */
+function grouped(
+    columns: Column<FixtureRow>[],
+    reorderable: boolean,
+): ColumnOrGroup<FixtureRow>[] {
     const [first, ...rest] = columns;
     const entries: ColumnOrGroup<FixtureRow>[] = first ? [first] : [];
     for (let start = 0, group = 0; start < rest.length; group++) {
@@ -250,6 +262,7 @@ function grouped(columns: Column<FixtureRow>[]): ColumnOrGroup<FixtureRow>[] {
             key: `G${group}`,
             name: `G${group}`,
             children: rest.slice(start, start + size),
+            ...(reorderable ? { reorderable } : {}),
         });
         start += size;
     }
@@ -279,6 +292,17 @@ function resizeColumn(columnIndex: number): Partial<Column<FixtureRow>> {
         ? { resizable: true, minWidth: 60, maxWidth: 200 }
         : { resizable: true };
 }
+
+/** Whether `&reorder=1` makes a column reorderable: C1–C5, and C0 when pinned. */
+function reorderColumn(columnIndex: number, pinnedCount: number): boolean {
+    return columnIndex <= 5 && (columnIndex > 0 || pinnedCount > 0);
+}
+
+// The drop indicator is the app's (O4): a line on the target's side, from its attribute
+const DROP_TARGET_CSS = `
+[data-drop-target="before"] { box-shadow: inset 3px 0 0 blue; }
+[data-drop-target="after"] { box-shadow: inset -3px 0 0 blue; }
+`;
 
 // A resizer's place is the app's (W3): a strip at the right edge of its header cell (which is
 // positioned, absolute or sticky), the browser's touch panning off
@@ -361,6 +385,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const resize = resizeParam === "1" || resizeParam === "controlled";
     const controlledWidths = resizeParam === "controlled";
     const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
+    const reorderParam = params.get("reorder");
+    const reorder = reorderParam === "1" || reorderParam === "controlled";
+    const controlledOrder = reorderParam === "controlled";
+    const [columnOrder, setColumnOrder] = useState<ColumnOrder>([]);
     const selectionParam = params.get("selection");
     const rowSelection =
         selectionParam === "single" || selectionParam === "multiple"
@@ -390,6 +418,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     : {}),
                 ...(controls ? controlColumn(columnIndex) : {}),
                 ...(resize ? resizeColumn(columnIndex) : {}),
+                ...(reorder && reorderColumn(columnIndex, pinnedCount)
+                    ? { reorderable: true }
+                    : {}),
                 ...(rowSelection && columnIndex === 1
                     ? {
                           renderCell: ({ row }) => (
@@ -411,7 +442,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     : {}),
             }),
         );
-        return groups ? grouped(leaves) : leaves;
+        return groups ? grouped(leaves, reorder) : leaves;
     }, [
         columnCount,
         groups,
@@ -419,6 +450,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         pinnedCount,
         controls,
         resize,
+        reorder,
         rowSelection,
     ]);
     const rowHeight = useMemo(
@@ -431,6 +463,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
 
     return (
         <>
+            {reorder ? <style>{DROP_TARGET_CSS}</style> : null}
             <button type="button" data-testid="before">
                 before
             </button>
@@ -459,6 +492,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     onColumnWidthsChange={(widths) => {
                         window.widthChanges.push(widths);
                         if (controlledWidths) setColumnWidths(widths);
+                    }}
+                    columnOrder={controlledOrder ? columnOrder : undefined}
+                    onColumnOrderChange={(order) => {
+                        window.orderChanges.push(order);
+                        if (controlledOrder) setColumnOrder(order);
                     }}
                     data-testid="viewport"
                     style={{ width, height }}
@@ -561,6 +599,7 @@ export function mountGridFixture(kind: "table" | "div") {
     window.sortChanges = [];
     window.selectionChanges = [];
     window.widthChanges = [];
+    window.orderChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

@@ -115,8 +115,8 @@ function limitsError(column: object): string | null {
     return null;
 }
 
-/** Whether a column below `list` is pinned. */
-function pinnedIn(list: readonly unknown[]): boolean {
+/** Whether a column below `list` is pinned (a group's columns are all pinned, or none). */
+export function pinnedIn(list: readonly unknown[]): boolean {
     return list.some((entry) => {
         if (typeof entry !== "object" || entry === null) return false;
         const children: unknown = Reflect.get(entry, "children");
@@ -178,16 +178,20 @@ function cellsByKey<TRow, TNode>(
 }
 
 /**
- * Lays the entries of `columns` out: their leaves, and the header's rows and cells. Without a
- * group, the columns are the entries themselves (the same array). It never throws: a group inside
- * itself is not entered again, and a group without columns has no cell (`columnsError` refuses
- * both).
+ * Lays the entries of `columns` out: their leaves, and the header's rows and cells, each sibling
+ * list in the order `order` gives it (the column order, Epic #75). Without a group and an order,
+ * the columns are the entries themselves (the same array). It never throws: a group inside itself
+ * is not entered again, and a group without columns has no cell (`columnsError` refuses both).
  */
 export function layoutColumns<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],
+    order?: <E extends ColumnOrGroup<TRow, TNode>>(
+        list: readonly E[],
+    ) => readonly E[],
 ): ColumnLayout<TRow, TNode> {
     if (entries.every((entry) => !isColumnGroup(entry))) {
-        return { columns: entries, header: flatHeader(entries) };
+        const columns = order ? order(entries) : entries;
+        return { columns, header: flatHeader(columns) };
     }
     // the depth first: a cell's row counts from the top
     const path = new Set<ColumnGroup<TRow, TNode>>();
@@ -215,7 +219,7 @@ export function layoutColumns<TRow, TNode>(
         list: readonly ColumnOrGroup<TRow, TNode>[],
         level: number,
     ) => {
-        for (const entry of list) {
+        for (const entry of order ? order(list) : list) {
             const row = rows[level];
             if (!row) return;
             if (!isColumnGroup(entry)) {

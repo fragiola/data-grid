@@ -6,9 +6,16 @@ import {
 } from "@fragiola/data-grid";
 import type { ReactNode, RefObject } from "react";
 
-// A piece of the model's state a root prop can control (D3): the active position, the sort. One
-// way for all of them: controlled, a change is asked for (`on…Change`) and applied only when the
-// prop follows; uncontrolled, the grid applies it and tells.
+// A piece of the model's state a root prop can control (D3): the column widths and order, the
+// active position, the selection, the sort, the expanded rows. One way for all of them:
+// controlled, a change is asked for (`on…Change`) and applied only when the prop follows;
+// uncontrolled, the grid applies it and tells.
+//
+// One piece can move another: an order moves the active cell with its column. Uncontrolled, the
+// moved piece is told at once. Controlled, the moved value stands (its prop, unchanged, never
+// pulls it back to a stale place) and the parent is told it once: when the root settles, moved
+// by another piece's prop (as when the data props move it), or at once, moved by another
+// piece's own commit (an uncontrolled order's drop); a prop that changes wins again.
 
 export interface ControlledState<TRow, V> {
     /** the commands that change it: their names start with this */
@@ -78,55 +85,91 @@ export function bindControlled<TRow, V>(
         spec.vetoed?.(ctx.command, result.value);
         return veto(`${spec.prefix}* is controlled`);
     });
+    const sync: Sync<V> = { following: false, carried: null, prop: undefined };
     model.subscribe(({ before, after }) => {
-        if (
-            flags.syncing.current ||
-            spec.same(spec.read(before), spec.read(after)) ||
-            // controlled: decided once every prop is applied (settleControlled)
-            (flags.applying.current && spec.prop() !== undefined)
-        ) {
+        if (sync.following || spec.same(spec.read(before), spec.read(after))) {
             return;
+        }
+        if (spec.prop() !== undefined) {
+            // controlled, moved by another piece's prop: its value stands (followControlled)
+            if (flags.syncing.current) sync.carried = "moved";
+            // controlled: decided once every prop is applied (settleControlled)
+            if (flags.syncing.current || flags.applying.current) return;
+            // controlled, moved by another piece's own commit (an uncontrolled order's move):
+            // told now, and its value stands too, its prop unchanged never pulling it back
+            sync.carried = "told";
         }
         spec.report(spec.read(after));
     });
     return {
-        follow: () => followControlled(model, flags, spec),
-        settle: () => settleControlled(model, flags, spec),
+        follow: () => followControlled(model, flags, spec, sync),
+        settle: () => settleControlled(model, flags, spec, sync),
         start: () => startControlled(model, spec),
     };
 }
 
-/** Moves the model to the controlled value, when it is not there. */
+/** A piece's own following: its sync running, a value another piece's moved, its prop then. */
+interface Sync<V> {
+    /** its own prop is being applied: not told back */
+    following: boolean;
+    /**
+     * another piece's prop moved it (an order, the active cell) while its own prop stayed, and
+     * whether the parent was told so (once)
+     */
+    carried: "moved" | "told" | null;
+    /** its prop when the root last settled */
+    prop: V | undefined;
+}
+
+/**
+ * Moves the model to the controlled value, when it is not there; not when another piece moved it
+ * and its prop is the one it settled with (the moved value stands, told at the settle).
+ */
 function followControlled<TRow, V>(
     model: DataGridModel<TRow, ReactNode>,
     flags: ControlledFlags,
     spec: ControlledState<TRow, V>,
+    sync: Sync<V>,
 ): void {
     const value = spec.prop();
-    if (value === undefined || spec.same(value, spec.read(model.state))) {
-        return;
+    if (value === undefined) return;
+    if (sync.carried) {
+        if (sync.prop !== undefined && spec.same(value, sync.prop)) return;
+        sync.carried = null;
     }
+    if (spec.same(value, spec.read(model.state))) return;
     flags.syncing.current = true;
+    sync.following = true;
     try {
         spec.apply(value);
     } finally {
         flags.syncing.current = false;
+        sync.following = false;
     }
 }
 
 /**
  * After the data props: the controlled value follows, and one the model could not take (a cell
- * the rows no longer have, a column no longer sortable) is told to the parent as it settled.
+ * the rows no longer have, a column no longer sortable) or another piece moved is told to the
+ * parent as it settled.
  */
 function settleControlled<TRow, V>(
     model: DataGridModel<TRow, ReactNode>,
     flags: ControlledFlags,
     spec: ControlledState<TRow, V>,
+    sync: Sync<V>,
 ): void {
-    followControlled(model, flags, spec);
+    followControlled(model, flags, spec, sync);
     const value = spec.prop();
+    sync.prop = value;
     const settled = spec.read(model.state);
-    if (value !== undefined && !spec.same(value, settled)) spec.report(settled);
+    if (value === undefined) return;
+    if (spec.same(value, settled)) {
+        sync.carried = null;
+    } else if (sync.carried !== "told") {
+        if (sync.carried) sync.carried = "told";
+        spec.report(settled);
+    }
 }
 
 /**

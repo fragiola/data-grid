@@ -238,6 +238,9 @@ function cellProps(
             interacting: state.interacting,
             resizable: header?.resizable,
             resizing: header?.resizing,
+            reorderable: header?.reorderable,
+            dragging: header?.dragging,
+            "drop-target": header?.dropTarget ?? undefined,
         }),
         style: pinned
             ? { position: "sticky", width, height, boxSizing: "border-box" }

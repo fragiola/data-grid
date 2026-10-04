@@ -4,6 +4,7 @@ import type {
     Column,
     HeaderCellLayout,
     HeaderLayout,
+    ReorderSide,
     RowKey,
     RowKeyGetter,
     RowSelectable,
@@ -113,6 +114,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly interaction: CellPosition | null;
     /** the column a drag is resizing (W4), or `null` */
     readonly columnResize: ColumnResize | null;
+    /** the column or group a drag is moving, and where it would land (O4), or `null` */
+    readonly columnReorder: ColumnReorder | null;
 }
 
 /** A column (or a group) a person is resizing with the pointer, and its width on screen. */
@@ -121,6 +124,23 @@ export interface ColumnResize {
     readonly columnKey: string;
     readonly width: number;
 }
+
+/**
+ * A column (or a group) a person is dragging by its header cell, and where a drop would move it:
+ * before or after a sibling (the app draws the indicator there), or, while a drop would leave it
+ * where it is, nowhere (`targetKey` and `side` both `null`).
+ */
+export type ColumnReorder = {
+    /** the dragged column's or group's key */
+    readonly columnKey: string;
+} & (
+    | {
+          /** the sibling it would land beside, of the ones it may move among */
+          readonly targetKey: string;
+          readonly side: ReorderSide;
+      }
+    | { readonly targetKey: null; readonly side: null }
+);
 
 /** What `engine.get` reads. */
 export interface EngineQueryMap {
@@ -140,6 +160,8 @@ export interface EngineQueryMap {
     interaction: CellPosition | null;
     /** the column a drag is resizing, or `null` (see `GridView.columnResize`) */
     "column-resize": ColumnResize | null;
+    /** the column or group a drag is moving, or `null` (see `GridView.columnReorder`) */
+    "column-reorder": ColumnReorder | null;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
@@ -180,6 +202,8 @@ export interface EngineEventMap {
     interaction: CellPosition | null;
     /** a drag started resizing a column, resized it (its width on screen), or ended (`null`) */
     "column-resize": ColumnResize | null;
+    /** a drag started moving a column or a group, changed its target, or ended (`null`) */
+    "column-reorder": ColumnReorder | null;
 }
 
 export type EngineEventKey = keyof EngineEventMap;
@@ -217,15 +241,18 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
     /**
      * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
      * (Ctrl/⌘ adds the column); the click ending a press on a column resizer is the resizer's,
-     * and a double click there resets the column's width. Returns whether the click was the
+     * and a double click there resets the column's width; the click ending a header cell's drag
+     * is the drag's. Returns whether the click was the
      * grid's: a toggle ran, even when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
      * after the consumer's own handlers, so `preventDefault` cancels it.
      */
     click(event: MouseEvent): boolean;
     /**
      * Handles a press in the grid: a primary press on one of its column resizers starts a drag
-     * (and is prevented: no focus, no text selection). Returns whether it did. Like `click`, an
-     * adapter calls it after the consumer's own handlers, so `preventDefault` cancels it.
+     * (and is prevented: no focus, no text selection); one on a reorderable header cell (not on a
+     * control inside it) drags the cell once it moves past a click's slop (and is not prevented:
+     * a click still focuses and sorts). Returns whether it did either. Like `click`, an adapter
+     * calls it after the consumer's own handlers, so `preventDefault` cancels it.
      */
     pointerdown(event: PointerEvent): boolean;
     /** changes the options */

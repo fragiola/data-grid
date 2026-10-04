@@ -18,6 +18,16 @@ import {
     withExpandedRows,
     withRow,
 } from "./expansion";
+import {
+    cellKeyAt,
+    isReorderable,
+    keptOrder,
+    landingIndex,
+    movedOrder,
+    sameOrder,
+    siblingOrder,
+    siblingsOf,
+} from "./order";
 import { done, fail, veto } from "./result";
 import {
     allKeys,
@@ -43,6 +53,8 @@ import { cellValue, loadedRowKey, type RowsState, rowAt } from "./source";
 import type {
     CellPosition,
     Column,
+    ColumnOrder,
+    ColumnOrGroup,
     ColumnWidths,
     CommandArgs,
     CommandContext,
@@ -60,6 +72,7 @@ import type {
     QueryMap,
     QuestionKey,
     QuestionMap,
+    ReorderSide,
     ResultOf,
     RowKey,
     RowKeyGetter,
@@ -135,6 +148,9 @@ type Handlers<TRow, TNode> = {
 /** The refusal of a toggle given neither a row's index nor its key. */
 const TOGGLE_BY =
     "toggle a rowIndex, or a rowKey (a string or a finite number)";
+
+/** The sides a column lands on, beside a sibling. */
+const REORDER_SIDES: readonly ReorderSide[] = ["before", "after"];
 
 /** The refusal of a payload that is not what the command takes. */
 function invalid(message: string): CommandFailure {
@@ -329,6 +345,40 @@ function withWidths<TRow, TNode>(
     return done(next, next.columnWidths);
 }
 
+/** The columns and the header of the entries, each sibling list in the column order. */
+function layoutOf<TRow, TNode>(
+    entries: readonly ColumnOrGroup<TRow, TNode>[],
+    columnOrder: ColumnOrder,
+) {
+    return layoutColumns(entries, siblingOrder(columnOrder));
+}
+
+/**
+ * The state in a new column order (O1), the same object when it did not change: the columns and
+ * the header laid out again, and the active cell on its column, wherever it went (a header
+ * cell's at its cell's new first column, on the same row).
+ */
+function withOrder<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    columnOrder: ColumnOrder,
+): Applied<TRow, TNode, ColumnOrder> {
+    if (sameOrder(columnOrder, state.columnOrder)) {
+        return done(state, state.columnOrder);
+    }
+    const { columns, header } = layoutOf(state.columnEntries, columnOrder);
+    const active = state.activePosition;
+    const key = active ? cellKeyAt(state.header, active) : undefined;
+    const moved = key === undefined ? undefined : header.cellByKey(key);
+    const activePosition =
+        active && moved && moved.columnIndex !== active.columnIndex
+            ? { rowIndex: active.rowIndex, columnIndex: moved.columnIndex }
+            : active;
+    return done(
+        { ...state, columnOrder, columns, header, activePosition },
+        columnOrder,
+    );
+}
+
 function validSize(size: unknown): boolean {
     return (
         typeof size === "function" ||
@@ -347,7 +397,7 @@ function createHandlers<TRow, TNode>(
         "columns.set": (state, { columns: entries }) => {
             const error = columnsError(entries);
             if (error) return invalid(error);
-            const { columns, header } = layoutColumns(entries);
+            const { columns, header } = layoutOf(entries, state.columnOrder);
             const next = reconcile({
                 ...state,
                 columns,
@@ -683,6 +733,58 @@ function createHandlers<TRow, TNode>(
                 withoutWidths(state.columnWidths, keys ?? [columnKey]),
             );
         },
+        "column-order.set": (state, { columnOrder }) => {
+            if (
+                !Array.isArray(columnOrder) ||
+                columnOrder.some((key) => typeof key !== "string")
+            ) {
+                return invalid("columnOrder must be an array of keys");
+            }
+            if (new Set(columnOrder).size !== columnOrder.length) {
+                return invalid("columnOrder lists a key twice");
+            }
+            return withOrder(state, [...columnOrder]);
+        },
+        "column-order.move": (state, { columnKey, targetKey, side }) => {
+            if (!REORDER_SIDES.includes(side)) {
+                return notOneOf("side", REORDER_SIDES);
+            }
+            const siblings = siblingsOf(state.columns, state.header, columnKey);
+            const missing = !siblings
+                ? columnKey
+                : state.header.cellByKey(targetKey)
+                  ? null
+                  : targetKey;
+            if (!siblings || missing !== null) {
+                return fail("not_found", `no column or group "${missing}"`);
+            }
+            const { cells, index, start, end } = siblings;
+            if (!isReorderable(siblings.cell)) {
+                return fail("refused", `"${columnKey}" is not reorderable`);
+            }
+            const target = cells.findIndex((cell) => cell.key === targetKey);
+            if (target < 0) {
+                return fail(
+                    "refused",
+                    `"${targetKey}" is not a sibling of "${columnKey}"`,
+                );
+            }
+            // pinned columns lead (P1): the pinned land among the pinned, the others among theirs
+            // (beside the first one past the edge, on its near side, is still their own part)
+            const to = landingIndex(index, target, side);
+            if (to < start || to >= end) {
+                return fail(
+                    "refused",
+                    `"${columnKey}" moves among the ${siblings.pinned ? "pinned" : "unpinned"} ones only`,
+                );
+            }
+            if (to === index) return done(state, state.columnOrder);
+            const keys = cells.map((cell) => cell.key);
+            keys.splice(index, 1);
+            keys.splice(to, 0, columnKey);
+            return withOrder(state, movedOrder(state.columnOrder, keys));
+        },
+        "column-order.reset": (state) => withOrder(state, []),
         "sizes.set": (state, { rowHeight, headerRowHeight, detailHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return invalid("rowHeight must be a size or a function");
@@ -783,7 +885,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
     // the same rules as `columns.set`: a grid never starts with columns it would refuse
     const error = columnsError(entries);
     if (error) throw new TypeError(`invalid columns: ${error}`);
-    const { columns, header } = layoutColumns(entries);
+    const columnOrder = keptOrder(options.columnOrder);
+    const { columns, header } = layoutOf(entries, columnOrder);
     const selectionMode =
         options.rowSelection && ROW_SELECTIONS.includes(options.rowSelection)
             ? options.rowSelection
@@ -814,6 +917,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         isRowSelectable: options.isRowSelectable,
         selectionAnchor: null,
         columnWidths: keptWidths(options.columnWidths),
+        columnOrder,
     };
     let state = withSource(
         blank,
@@ -988,6 +1092,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
                   )
                 : undefined;
         },
+        "column-order": () => state.columnOrder,
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
         "expanded-row-keys": () => state.expandedRowKeys,
@@ -1078,6 +1183,9 @@ export const COMMANDS = [
     "column-widths.set",
     "column-widths.resize",
     "column-widths.reset",
+    "column-order.set",
+    "column-order.move",
+    "column-order.reset",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

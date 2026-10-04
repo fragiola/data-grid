@@ -15,6 +15,7 @@ const REPRESENTATIVE: string[] = [
     "keyboard-navigation", // the app's panel and buttons (Fragiola UI) around the grid
     "grouped-headers", // two header rows: group cells, a column spanning both
     "column-resizing", // the resize handles, drawn with the theme's tokens
+    "column-reordering", // the drop indicator and the dragged cell, drawn with the theme's tokens
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));
