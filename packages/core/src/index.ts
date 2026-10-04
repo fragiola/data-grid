@@ -24,6 +24,21 @@ export {
     rowTop,
     rowWidth,
 } from "./engine/geometry";
+export {
+    type CellPart,
+    type CellState,
+    cellBox,
+    cellPart,
+    type HeaderCellPart,
+    type HeaderCellState,
+    headerCellPart,
+    type RowDetailPart,
+    type RowDetailState,
+    type RowPart,
+    type RowState,
+    rowDetailPart,
+    rowPart,
+} from "./engine/parts";
 export type {
     DataGridEngine,
     DataGridEngineOptions,

@@ -1,79 +1,21 @@
 import { describe, expect, it } from "vitest";
-import {
-    type Column,
-    type ColumnOrGroup,
-    createDataGridModel,
-    type DataGridModelOptions,
-    type GridView,
-} from "../../src";
+import type { ColumnOrGroup, GridView } from "../../src";
 import {
     activeColumn,
     buildView,
-    columnAxisOf,
-    createHeaderRows,
-    rowAxisOf,
     scrollingWindow,
-    type ViewInputs,
     viewChanged,
-    withDetails,
 } from "../../src/engine/view";
-import type { AxisWindow } from "../../src/viewport/window";
+import {
+    COLUMNS,
+    column,
+    inputsOf,
+    type Row,
+    stateOf,
+    windowOf,
+} from "./views";
 
 // The view as pure functions of the state, the windows and the sizes: no engine, no DOM.
-
-interface Row {
-    id: number;
-}
-
-const column = (key: string, pinned = false): Column<Row> => ({
-    key,
-    width: 100,
-    ...(pinned ? { pinned: "start" as const } : {}),
-});
-
-const COLUMNS: Column<Row>[] = Array.from({ length: 10 }, (_, i) =>
-    column(`c${i}`),
-);
-
-const windowOf = (start: number, end: number): AxisWindow => ({
-    visible: { start, end },
-    rendered: { start, end },
-});
-
-function stateOf(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
-        columns: COLUMNS,
-        rows: Array.from({ length: 100 }, (_, id) => ({ id })),
-        rowHeight: 20,
-        headerRowHeight: 30,
-        ...options,
-    }).state;
-}
-
-/** The inputs of a view of `state`, the rows 10–20 and the columns 2–5 rendered. */
-function inputsOf(
-    state = stateOf(),
-    overrides: Partial<ViewInputs<Row, unknown>> = {},
-): ViewInputs<Row, unknown> {
-    return {
-        state,
-        rowWindow: windowOf(10, 20),
-        columnWindow: windowOf(2, 5),
-        rowAxis: withDetails(rowAxisOf(state), state),
-        columnAxis: columnAxisOf(state),
-        width: 1_000,
-        height: 2_000,
-        headerHeight: 30,
-        viewportWidth: 300,
-        viewportBodyHeight: 170,
-        pinnedColumnCount: 0,
-        pinnedWidth: 0,
-        rowsRevision: 0,
-        interaction: null,
-        headerRowsFor: createHeaderRows<Row, unknown>(),
-        ...overrides,
-    };
-}
 
 describe("scrollingWindow", () => {
     it("is the window itself without pinned columns in it", () => {

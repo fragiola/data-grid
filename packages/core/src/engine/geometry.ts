@@ -159,9 +159,10 @@ export function headerCellBox<TRow, TNode>(
 }
 
 /** A header cell's `aria-colspan` and `aria-rowspan`, each only when it spans more than one. */
-export function ariaHeaderCellSpans<TRow, TNode>(
-    cell: HeaderCellLayout<TRow, TNode>,
-): { readonly "aria-colspan"?: number; readonly "aria-rowspan"?: number } {
+export function ariaHeaderCellSpans(cell: {
+    readonly columnSpan: number;
+    readonly rowSpan: number;
+}): { readonly "aria-colspan"?: number; readonly "aria-rowspan"?: number } {
     return {
         ...(cell.columnSpan > 1 ? { "aria-colspan": cell.columnSpan } : {}),
         ...(cell.rowSpan > 1 ? { "aria-rowspan": cell.rowSpan } : {}),
