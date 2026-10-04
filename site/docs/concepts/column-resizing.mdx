@@ -1,0 +1,192 @@
+---
+title: Column resizing
+description: Columns a person resizes with a handle you render, dragged or moved with the arrows, within limits you set, the widths kept by the grid or by you.
+---
+
+The grid keeps the widths, drags the handle, takes its keys, holds each column within its limits
+and gives the handle the ARIA of a separator. The handle is yours: the element, its place, its
+look, its cursor and its name. The grid renders none.
+
+<Example id="column-resizing" />
+
+## Resizable columns
+
+A column with `resizable: true` can be resized; the others keep their `width`. A resizable column
+stays within `minWidth` (40 by default, a floor against a column that disappears) and `maxWidth`
+(none by default). A group is never resizable itself: its handle resizes its columns.
+
+```tsx title="columns.tsx"
+const columns: Column<Person>[] = [
+    { key: "id", name: "#", width: 64 }, // keeps its width
+    { key: "name", name: "Name", width: 180, resizable: true, minWidth: 120, maxWidth: 320 },
+    { key: "email", name: "Email", width: 240, resizable: true, minWidth: 160 },
+];
+```
+
+`width` stays the width a column starts with, and the one a reset gives back. A `minWidth` above
+`maxWidth`, or a negative one, is refused (`columnsError`); a `width` outside its own limits is
+clamped where it is used.
+
+## The widths
+
+The grid keeps `columnWidths`: the width of each column a person resized, by column key, over its
+`width`. Like the [sort](/docs/concepts/sorting), it is controlled or not:
+
+- `columnWidths` with `onColumnWidthsChange`: a change is asked for, and only the prop applies it;
+- `defaultColumnWidths`: the grid starts from it, applies changes and tells
+  `onColumnWidthsChange`.
+
+```tsx title="people.tsx"
+const [widths, setWidths] = useState<ColumnWidths>({});
+
+<button onClick={() => setWidths({})}>Reset widths</button>
+<DataGrid.Root
+    columns={columns}
+    rows={people}
+    columnWidths={widths}
+    onColumnWidthsChange={setWidths}
+>
+    {/* … */}
+</DataGrid.Root>
+```
+
+`{}` gives every column its own `width` back. A key that is not a column is kept, so a column
+that comes back has its width again. Saving the widths (to storage, to a server) is yours: they
+are a plain object.
+
+## The handle
+
+`useColumnResizer(cell)` returns the state and the props of a handle you render inside a header
+cell. Under a cell that does not resize, `state.resizable` is false and there are no props:
+render nothing there. A header cell given children shows only them, so
+`headerCellContent(cell)` writes what it would show by default (the column's or the group's
+`renderHeaderCell`, else its `name`) before your handle:
+
+```tsx title="resizer.tsx"
+import {
+    DataGrid,
+    type HeaderCellInfo,
+    headerCellContent,
+    useColumnResizer,
+} from "@fragiola/data-grid-react";
+
+function Resizer({ cell }: { cell: HeaderCellInfo<Person> }) {
+    const { state, props } = useColumnResizer(cell);
+    if (!state.resizable) return null;
+    const name = (cell.group ?? cell.column).name;
+    return <div {...props} aria-label={`Resize ${name}`} className="resizer" />;
+}
+
+<DataGrid.HeaderCells<Person>>
+    {(cell) => (
+        <DataGrid.HeaderCell cell={cell}>
+            {headerCellContent(cell)}
+            <Resizer cell={cell} />
+        </DataGrid.HeaderCell>
+    )}
+</DataGrid.HeaderCells>
+```
+
+The props make the element a vertical `separator` whose values are widths in pixels, focusable
+(the splitter of the ARIA practices, which an `<hr>` cannot be), and mark it for the grid with
+`data-grid-column-resizer`. They carry no style and no name. Yours:
+
+- **a name**: `aria-label`, such as "Resize Email";
+- **a place**: a header cell is positioned (absolute, or sticky when pinned), so
+  `position: absolute; inset-block: 0; right: 0` puts a strip on its right edge;
+- **`touch-action: none`**, so a touch drags the handle instead of scrolling the page;
+- **a look and a cursor**: `cursor: col-resize`, a line shown on hover, on `:focus-visible` and
+  while `data-resizing` is present.
+
+```css title="grid.css"
+.resizer {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: 8px;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.resizer:hover,
+.resizer:focus-visible,
+.resizer[data-resizing] {
+    background: var(--accent);
+}
+```
+
+## Dragging
+
+A press with the primary button on a handle captures the pointer; the column follows it, right
+growing, one resize per frame, within its limits. The press reaches the grid after your own
+`onPointerDown` (so `preventDefault` there keeps it from dragging), and the grid prevents it: the
+handle takes no focus and no text is selected. The release keeps the width (as does a pointer the
+handle loses), and Escape (or a cancelled pointer) resizes the column back to the width the drag
+started from, leaving every other column as it is. Escape reaches the grid after your handlers,
+wherever focus is: one you prevent keeps the drag going. A double click gives the column its own
+`width` back. A press, a click or a drag on a handle is never a
+[sort](/docs/concepts/sorting), even in a sortable column's header cell.
+
+While a drag lasts, the header cell and its handle carry `data-resizing`, and
+`engine.get("column-resize")` is `{ columnKey, width }` (else `null`); the engine's
+`column-resize` event tells each change, for a readout or a guide line of your own.
+
+## Keys
+
+A handle is a control of its header cell, like a button in a cell: no tab stop of its own. F2
+(or Enter, on a header cell that does not sort) hands it the keys, and Tab moves among the cell's
+controls ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)).
+
+| key | on a focused handle |
+| --- | --- |
+| ←, → | 10 px narrower, wider |
+| Shift+←, Shift+→ | 50 px narrower, wider |
+| Home | the minimum |
+| End | the maximum it reports (`aria-valuemax`): without a `maxWidth`, the view's width |
+| other page keys, Space | nothing: the grid's container never pages under it |
+| Escape | back to navigation, on the header cell; the width stays |
+
+They run after your handlers, so `preventDefault` cancels them, and each is one
+`column-widths.resize`, which a middleware can refuse.
+
+## Groups
+
+A handle in a group's header cell resizes the group's resizable columns together. A change is
+shared in proportion to their widths, each within its limits, and what one cannot take goes to the
+others that still can, so the group reaches the minimum and the maximum its handle reports. Its values are the group's: `aria-valuenow` is the sum of its columns' widths. A double
+click resets every column of the group.
+
+## Pinned columns and scaling
+
+A [pinned column](/docs/concepts/pinned-columns) resizes like any other and stays pinned, the
+columns after it moving along. Windows, the header's spans and
+[scroll scaling](/docs/concepts/scroll-scaling) follow the widths on their own: a resize is a new
+layout, not a scroll. A column resized left of the view (a pinned one, or one scrolled past)
+keeps the view on the column it shows first, as far into it as before, scaled or not.
+
+## The commands
+
+| command | does |
+| --- | --- |
+| `column-widths.set { columnWidths }` | replaces the widths |
+| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together; a column back to its own `width` keeps no entry, and nothing changing commits nothing |
+| `column-widths.reset { columnKey? }` | gives a column (or a group's columns) its own `width` back, or every column without a key |
+
+Reads: `get("column-widths")`, and `get("column-width-by", { columnKey })`, a column's width on
+screen (or a group's). Reach them with
+[`useDataGrid()` or a `gridRef`](/docs/concepts/model-and-engine#from-outside-the-root).
+
+## What it shows
+
+| on | attribute | when |
+| --- | --- | --- |
+| header cell | `data-resizable` | its column is resizable, or for a group one of its columns |
+| header cell | `data-resizing` | a drag is resizing it |
+| handle | `data-grid-part` | `column-resizer` |
+| handle | `data-resizing` | a drag on it is resizing its column |
+| handle | `role`, `aria-orientation` | `separator`, `vertical` |
+| handle | `aria-valuenow`, `aria-valuemin`, `aria-valuemax` | the width, the minimum, the maximum (the view's width, at least the width, when there is none), in pixels |
+
+`useHeaderCell` reports `resizable` and `resizing`, as does the state a header cell's `className`
+and `style` functions receive. `useColumnResizer` reports `columnKey`, `resizable`, `resizing`,
+`width`, `minWidth` and `maxWidth`.

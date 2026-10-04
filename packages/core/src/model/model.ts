@@ -42,6 +42,8 @@ import {
 import { cellValue, loadedRowKey, type RowsState, rowAt } from "./source";
 import type {
     CellPosition,
+    Column,
+    ColumnWidths,
     CommandArgs,
     CommandContext,
     CommandFailure,
@@ -65,6 +67,15 @@ import type {
     SelectionAnchor,
     SortColumn,
 } from "./types";
+import {
+    type ColumnSpan,
+    columnWidth,
+    keptWidths,
+    resizedWidths,
+    sameWidths,
+    spanResizable,
+    withoutWidths,
+} from "./widths";
 
 // The model (D3): the grid's data and rules, the single source of truth. Every change is a
 // command through the middleware chain; reads are `get`/`is` keys. It loads and runs in plain
@@ -293,6 +304,29 @@ function selected<TRow, TNode>(
 /** A setting's next value: `undefined` keeps the current one, `null` clears it. */
 function setting<T>(value: T | null | undefined, current: T | undefined) {
     return value === undefined ? current : (value ?? undefined);
+}
+
+/** The columns of a span: a column's or a group's header cell (`header.cellByKey`). */
+function columnsOf<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    span: ColumnSpan,
+): readonly Column<TRow, TNode>[] {
+    return state.columns.slice(
+        span.columnIndex,
+        span.columnIndex + span.columnSpan,
+    );
+}
+
+/** The state with the columns' widths (the same object when they did not change), and them. */
+function withWidths<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    columnWidths: ColumnWidths,
+): Applied<TRow, TNode, ColumnWidths> {
+    const next =
+        columnWidths === state.columnWidths
+            ? state
+            : { ...state, columnWidths };
+    return done(next, next.columnWidths);
 }
 
 function validSize(size: unknown): boolean {
@@ -589,6 +623,66 @@ function createHandlers<TRow, TNode>(
                       };
             return done(next, undefined);
         },
+        "column-widths.set": (state, { columnWidths }) => {
+            const kept = keptWidths(columnWidths);
+            if (
+                typeof columnWidths !== "object" ||
+                columnWidths === null ||
+                Array.isArray(columnWidths) ||
+                Object.keys(kept).length !== Object.keys(columnWidths).length
+            ) {
+                return invalid(
+                    "columnWidths must map column keys to widths (finite, not negative)",
+                );
+            }
+            return withWidths(
+                state,
+                sameWidths(kept, state.columnWidths)
+                    ? state.columnWidths
+                    : kept,
+            );
+        },
+        "column-widths.resize": (state, { columnKey, width }) => {
+            if (!Number.isFinite(width)) {
+                return invalid("width must be a finite number");
+            }
+            const span = state.header.cellByKey(columnKey);
+            if (!span) {
+                return fail("not_found", `no column or group "${columnKey}"`);
+            }
+            if (!spanResizable(state.columns, span)) {
+                return fail("refused", `"${columnKey}" is not resizable`);
+            }
+            return withWidths(
+                state,
+                resizedWidths(
+                    columnsOf(state, span),
+                    state.columnWidths,
+                    width,
+                ),
+            );
+        },
+        "column-widths.reset": (state, { columnKey }) => {
+            if (columnKey === undefined) {
+                return withWidths(
+                    state,
+                    Object.keys(state.columnWidths).length > 0
+                        ? {}
+                        : state.columnWidths,
+                );
+            }
+            // a key that is no column (kept by a `set`) drops too
+            const span = state.header.cellByKey(columnKey);
+            const keys =
+                span && columnsOf(state, span).map((column) => column.key);
+            if (!keys && !Object.hasOwn(state.columnWidths, columnKey)) {
+                return fail("not_found", `no column or group "${columnKey}"`);
+            }
+            return withWidths(
+                state,
+                withoutWidths(state.columnWidths, keys ?? [columnKey]),
+            );
+        },
         "sizes.set": (state, { rowHeight, headerRowHeight, detailHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return invalid("rowHeight must be a size or a function");
@@ -719,6 +813,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         ),
         isRowSelectable: options.isRowSelectable,
         selectionAnchor: null,
+        columnWidths: keptWidths(options.columnWidths),
     };
     let state = withSource(
         blank,
@@ -882,6 +977,17 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "sort-columns": () => state.sortColumns,
         "sort-column-by": ({ columnKey }) =>
             state.sortColumns.find((entry) => entry.columnKey === columnKey),
+        "column-widths": () => state.columnWidths,
+        "column-width-by": ({ columnKey }) => {
+            const span = state.header.cellByKey(columnKey);
+            return span
+                ? columnsOf(state, span).reduce(
+                      (sum, column) =>
+                          sum + columnWidth(column, state.columnWidths),
+                      0,
+                  )
+                : undefined;
+        },
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
         "expanded-row-keys": () => state.expandedRowKeys,
@@ -969,6 +1075,9 @@ export const COMMANDS = [
     "selection-anchor.set",
     "selection-anchor.clear",
     "row-selection.set",
+    "column-widths.set",
+    "column-widths.resize",
+    "column-widths.reset",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

@@ -32,12 +32,25 @@ export const headerRow = cn(
 );
 
 export const headerCell = cn(
-    "flex items-center gap-1.5 px-(--dg-cell-padding) outline-none",
+    // `group/header`: its resizer's line shows while it is hovered
+    "group/header flex items-center gap-1.5 px-(--dg-cell-padding) outline-none",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
     "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
     // a sortable header cell sorts on a click: it reads as one, and its text is not selected
     "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+);
+
+/**
+ * A column's resize handle: a strip at its header cell's right edge (the cell is positioned), its
+ * line shown on hover, focus or while dragged. `touch-none`: a touch drags it, not the page.
+ */
+export const resizer = cn(
+    "absolute inset-y-0 right-0 w-2 cursor-col-resize touch-none select-none outline-none",
+    "after:absolute after:inset-y-2 after:right-0 after:w-0.5 after:rounded-full after:bg-(--dg-active-line)",
+    "after:opacity-0 after:transition-opacity after:duration-(--dg-motion)",
+    "group-hover/header:after:opacity-40 hover:after:opacity-100",
+    "focus-visible:after:opacity-100 data-resizing:after:opacity-100",
 );
 
 export const headerLabel = "flex items-center gap-1.5";

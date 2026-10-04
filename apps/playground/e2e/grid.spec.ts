@@ -1,5 +1,10 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { cell, settle } from "../../../examples/react/e2e/examples/helpers.ts";
+import {
+    boxOf,
+    cell,
+    dragBy,
+    settle,
+} from "../../../examples/react/e2e/examples/helpers.ts";
 
 // One spec, two structures (D5): every test runs against the same unstyled grid rendered as real
 // table elements (fixtures/table-grid) and as divs (fixtures/div-grid), in Chromium and Firefox.
@@ -1539,6 +1544,272 @@ for (const kind of KINDS) {
                     [null, null, null],
                     [null, null, null],
                 ]);
+            });
+        });
+
+        test.describe("column resizing", () => {
+            const RESIZE = { rows: 1_000, columns: 20, resize: 1 };
+
+            /** A column's header cell (not a group's above it). */
+            function headerCell(page: Page, columnIndex: number) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]:not([data-group])`,
+                );
+            }
+
+            const resizer = (page: Page, key: string) =>
+                page.getByTestId(`resizer-${key}`);
+
+            /** The widths on screen of a column's header cell and its first body cell. */
+            async function widths(page: Page, columnIndex: number) {
+                return [
+                    (await boxOf(headerCell(page, columnIndex))).width,
+                    (await boxOf(cell(page, 0, columnIndex))).width,
+                ];
+            }
+
+            /** Drags a resizer by `dx` and, unless told to hold it, releases it. */
+            const drag = (
+                page: Page,
+                key: string,
+                dx: number,
+                options?: { hold?: boolean },
+            ) => dragBy(page, resizer(page, key), dx, options);
+
+            const lastWidths = (page: Page) =>
+                page.evaluate(() => window.widthChanges.at(-1));
+
+            test("resizes a column live as its resizer is dragged", async ({
+                page,
+            }) => {
+                await open(page, kind, RESIZE);
+                await expect(headerCell(page, 0)).toHaveAttribute(
+                    "data-resizable",
+                    "",
+                );
+                await expect(headerCell(page, 4)).not.toHaveAttribute(
+                    "data-resizable",
+                );
+                await drag(page, "c0", 60, { hold: true });
+                // before the release: the header cell, the body cells and the next column follow
+                expect(await widths(page, 0)).toEqual([160, 160]);
+                expect((await boxOf(cell(page, 0, 1))).x).toBe(
+                    (await boxOf(cell(page, 0, 0))).x + 160,
+                );
+                expect((await boxOf(headerCell(page, 1))).x).toBe(
+                    (await boxOf(cell(page, 0, 1))).x,
+                );
+                await expect(headerCell(page, 0)).toHaveAttribute(
+                    "data-resizing",
+                    "",
+                );
+                await expect(resizer(page, "c0")).toHaveAttribute(
+                    "data-resizing",
+                    "",
+                );
+                await expect(resizer(page, "c0")).toHaveAttribute(
+                    "aria-valuenow",
+                    "160",
+                );
+                await page.mouse.up();
+                await settle(page);
+                await expect(headerCell(page, 0)).not.toHaveAttribute(
+                    "data-resizing",
+                );
+                expect(await widths(page, 0)).toEqual([160, 160]);
+                expect(await lastWidths(page)).toEqual({ c0: 160 });
+            });
+
+            test("holds a column within its minimum and its maximum", async ({
+                page,
+            }) => {
+                await open(page, kind, RESIZE);
+                await expect(resizer(page, "c2")).toHaveAttribute(
+                    "aria-valuemin",
+                    "60",
+                );
+                await expect(resizer(page, "c2")).toHaveAttribute(
+                    "aria-valuemax",
+                    "200",
+                );
+                await drag(page, "c2", -80);
+                expect(await widths(page, 2)).toEqual([60, 60]);
+                await drag(page, "c2", 300);
+                expect(await widths(page, 2)).toEqual([200, 200]);
+                // the default minimum
+                await drag(page, "c0", -90);
+                expect(await widths(page, 0)).toEqual([40, 40]);
+            });
+
+            test("restores the width on Escape during a drag, and resets it on a double click", async ({
+                page,
+            }) => {
+                await open(page, kind, RESIZE);
+                await drag(page, "c1", 50, { hold: true });
+                expect(await widths(page, 1)).toEqual([150, 150]);
+                await page.keyboard.press("Escape");
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                await expect(headerCell(page, 1)).not.toHaveAttribute(
+                    "data-resizing",
+                );
+                // the release after Escape changes nothing
+                await page.mouse.move(400, 10);
+                await page.mouse.up();
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                await drag(page, "c1", 70);
+                expect(await widths(page, 1)).toEqual([170, 170]);
+                await resizer(page, "c1").dblclick();
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                expect(await lastWidths(page)).toEqual({});
+            });
+
+            test("resizes with the keys from inside its header cell, aria-valuenow following", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, RESIZE);
+                await headerCell(page, 0).click({ position: { x: 5, y: 5 } });
+                await page.keyboard.press("F2");
+                await expect(resizer(page, "c0")).toBeFocused();
+                const valueNow = resizer(page, "c0");
+                await page.keyboard.press("ArrowRight");
+                await expect(valueNow).toHaveAttribute("aria-valuenow", "110");
+                await page.keyboard.press("Shift+ArrowRight");
+                await expect(valueNow).toHaveAttribute("aria-valuenow", "160");
+                await page.keyboard.press("ArrowLeft");
+                await expect(valueNow).toHaveAttribute("aria-valuenow", "150");
+                expect(await widths(page, 0)).toEqual([150, 150]);
+                // no maximum: End goes to the one it reports, the view's width
+                await page.keyboard.press("End");
+                const valueMax = await valueNow.getAttribute("aria-valuemax");
+                expect(Number(valueMax)).toBeGreaterThan(600);
+                await expect(valueNow).toHaveAttribute(
+                    "aria-valuenow",
+                    String(valueMax),
+                );
+                // Space and PageDown page nothing on it
+                await page.keyboard.press(" ");
+                await page.keyboard.press("PageDown");
+                await settle(page);
+                expect(await viewport.evaluate((el) => el.scrollTop)).toBe(0);
+                await expect(valueNow).toHaveAttribute(
+                    "aria-valuenow",
+                    String(valueMax),
+                );
+                await page.keyboard.press("Home");
+                await expect(valueNow).toHaveAttribute("aria-valuenow", "40");
+                // Escape gives the keys back; the width stays
+                await page.keyboard.press("ArrowRight");
+                await page.keyboard.press("Escape");
+                await expect(headerCell(page, 0)).toBeFocused();
+                expect(await widths(page, 0)).toEqual([50, 50]);
+                // Enter on a header cell that does not sort reaches it too
+                await page.keyboard.press("ArrowRight");
+                await page.keyboard.press("ArrowRight");
+                await page.keyboard.press("Enter");
+                await expect(resizer(page, "c2")).toBeFocused();
+                await page.keyboard.press("End");
+                await expect(resizer(page, "c2")).toHaveAttribute(
+                    "aria-valuenow",
+                    "200",
+                );
+                expect(await widths(page, 2)).toEqual([200, 200]);
+            });
+
+            test("resizes a group's columns together with its resizer", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...RESIZE, groups: 1 });
+                const group = page.locator(
+                    '[data-grid-part="header-cell"][data-group]',
+                    { hasText: "G0" },
+                );
+                await expect(group).toHaveAttribute("data-resizable", "");
+                await expect(resizer(page, "G0")).toHaveAttribute(
+                    "aria-valuenow",
+                    "400",
+                );
+                // G0 holds C1–C4: the three resizable ones share the 60px
+                await drag(page, "G0", 60);
+                expect((await boxOf(group)).width).toBe(460);
+                for (const columnIndex of [1, 2, 3]) {
+                    expect(await widths(page, columnIndex)).toEqual([120, 120]);
+                }
+                expect(await widths(page, 4)).toEqual([100, 100]);
+                await expect(resizer(page, "G0")).toHaveAttribute(
+                    "aria-valuenow",
+                    "460",
+                );
+                // a column spanning both header rows has its resizer too
+                await drag(page, "c0", 20);
+                expect(await widths(page, 0)).toEqual([120, 120]);
+            });
+
+            test("resizes a pinned column, which stays pinned", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...RESIZE,
+                    pinned: 2,
+                });
+                await drag(page, "c1", 50);
+                expect(await widths(page, 1)).toEqual([150, 150]);
+                await scroll(page, viewport, 0, 400);
+                const left = (await boxOf(viewport)).x;
+                for (const target of [headerCell(page, 1), cell(page, 0, 1)]) {
+                    const box = await boxOf(target);
+                    expect(box.x).toBe(left + 100);
+                    expect(box.width).toBe(150);
+                }
+                await expect(headerCell(page, 1)).toHaveAttribute(
+                    "data-pinned-edge",
+                    "",
+                );
+            });
+
+            test("resizes controlled widths live, restores them on Escape and resets them on a double click", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...RESIZE, resize: "controlled" });
+                // each frame asks the fixture, which follows: the column follows the pointer
+                await drag(page, "c1", 50, { hold: true });
+                expect(await widths(page, 1)).toEqual([150, 150]);
+                await expect(resizer(page, "c1")).toHaveAttribute(
+                    "aria-valuenow",
+                    "150",
+                );
+                expect(await lastWidths(page)).toEqual({ c1: 150 });
+                await page.keyboard.press("Escape");
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                expect(await lastWidths(page)).toEqual({});
+                await page.mouse.up();
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                await drag(page, "c1", 70);
+                expect(await widths(page, 1)).toEqual([170, 170]);
+                expect(await lastWidths(page)).toEqual({ c1: 170 });
+                await resizer(page, "c1").dblclick();
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                expect(await lastWidths(page)).toEqual({});
+            });
+
+            test("does not sort on a press, a drag or a double click on a sortable header's resizer", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...RESIZE, sort: 1 });
+                await drag(page, "c0", 40);
+                await resizer(page, "c0").click();
+                await resizer(page, "c1").dblclick();
+                await settle(page);
+                expect(await widths(page, 0)).toEqual([140, 140]);
+                expect(
+                    await page.evaluate(() => window.sortChanges.length),
+                ).toBe(0);
+                expect(await page.locator("[aria-sort]").count()).toBe(0);
             });
         });
     });

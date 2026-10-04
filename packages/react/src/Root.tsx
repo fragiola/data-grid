@@ -1,6 +1,7 @@
 import {
     type AxisWindow,
     type CellPosition,
+    type ColumnWidths,
     type CommandName,
     createDataGridEngine,
     createDataGridModel,
@@ -10,6 +11,7 @@ import {
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
     type GridView,
+    keptWidths,
     type ResultOf,
     type RowKey,
     type RowKeyGetter,
@@ -19,6 +21,7 @@ import {
     type SortColumn,
     sameRowKeys,
     sameSortColumns,
+    sameWidths,
     validSortColumns,
 } from "@fragiola/data-grid";
 import type * as React from "react";
@@ -140,6 +143,20 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onSelectedRowKeysChange?:
             | ((selectedRowKeys: readonly RowKey[]) => void)
             | undefined;
+        /**
+         * the resized columns' widths in pixels, by column key, controlled; pair it with
+         * `onColumnWidthsChange`. A resizable column is its width here, else its own `width`
+         */
+        columnWidths?: ColumnWidths | undefined;
+        /** the resized columns' widths to start with, uncontrolled */
+        defaultColumnWidths?: ColumnWidths | undefined;
+        /**
+         * the widths changed (or, controlled, ask to): a resizer was dragged (once per frame),
+         * moved with the keys or double clicked, or a command ran
+         */
+        onColumnWidthsChange?:
+            | ((columnWidths: ColumnWidths) => void)
+            | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -172,7 +189,7 @@ function samePosition(
 
 /**
  * A controlled state over the root's props (the active position, the sort, the expanded rows, the
- * selection): its prop, its handler, its default.
+ * selection, the column widths): its prop, its handler, its default.
  */
 interface PropsState<TRow, V>
     extends Pick<
@@ -225,7 +242,8 @@ function sourceMatches<TRow>(
 /**
  * The grid's root: the scroll container (a `div`, overflow auto; give it a size). It holds the
  * model and the engine, maps its props onto the model's commands (controlled or not), and runs
- * the grid's keys after the consumer's own `onKeyDown`, so `preventDefault` cancels one.
+ * the grid's keys, clicks and presses after the consumer's own handlers, so `preventDefault`
+ * cancels one.
  */
 export function Root<TRow>(props: RootProps<TRow>) {
     const {
@@ -251,6 +269,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         selectedRowKeys,
         defaultSelectedRowKeys,
         onSelectedRowKeysChange,
+        columnWidths,
+        defaultColumnWidths,
+        onColumnWidthsChange,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -283,6 +304,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             rowSelection,
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
+            columnWidths: columnWidths ?? defaultColumnWidths,
         });
         const flags: ControlledFlags = {
             syncing: { current: false },
@@ -381,6 +403,25 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const widths = bind(
+            propsState<TRow, ColumnWidths>(latest, {
+                prefix: "column-widths.",
+                prop: (props) => props.columnWidths,
+                onChange: (props) => props.onColumnWidthsChange,
+                // uncontrolled widths to start with that were not all widths start without
+                // those: the app is told the ones the grid holds
+                start: (props) => props.defaultColumnWidths,
+                read: (state) => state.columnWidths,
+                same: sameWidths,
+                // an entry that is not a width is left out, as at mount, and the parent is told
+                // the widths as they settled
+                apply: (columnWidths) => {
+                    model.run("column-widths.set", {
+                        columnWidths: keptWidths(columnWidths),
+                    });
+                },
+            }),
+        );
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -397,13 +438,16 @@ export function Root<TRow>(props: RootProps<TRow>) {
             latest.current.onRowsEndReached?.(info),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
-        // the grid's keys and header clicks (sorting) run after the consumer's onKeyDown and
-        // onClick, on the root or on its render element, so preventDefault cancels them
+        // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
+        // consumer's onKeyDown, onClick and onPointerDown, on the root or on its render element,
+        // so preventDefault cancels them
         const after = {
             onKeyDown: (event: React.KeyboardEvent) =>
                 engine.adapter.keydown(event.nativeEvent),
             onClick: (event: React.MouseEvent) =>
                 engine.adapter.click(event.nativeEvent),
+            onPointerDown: (event: React.PointerEvent) =>
+                engine.adapter.pointerdown(event.nativeEvent),
         };
         return {
             context,
@@ -411,7 +455,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
             position,
             sort,
             selection,
-            controlled: [position, sort, expanded, selection],
+            widths,
+            controlled: [position, sort, expanded, selection, widths],
             after,
         };
     });
@@ -432,8 +477,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // the viewport attaches after the parts' first layout effects (refs attach child first)
         // and its size makes a new view: render it before the first paint, not after
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
-        // the props follow onto the model, before paint. A controlled position first: valid
-        // before the data changes (rows filtered down), it survives them
+        // the props follow onto the model, before paint. Controlled widths first: a layout
+        // input, the axis a position scrolls into view against. Then a controlled position:
+        // valid before the data changes (rows filtered down), it survives them
+        grid.widths.follow();
         grid.position.follow();
         flags.applying.current = true;
     });
@@ -505,9 +552,12 @@ export function Root<TRow>(props: RootProps<TRow>) {
     });
 
     // uncontrolled, a value to start with the grid could not take as given (the selection single
-    // mode trimmed, the sort the columns could not take all of): the app is told the one it holds
+    // mode trimmed, the sort the columns could not take all of, widths that were not all
+    // widths): the app is told the one it holds
     useLayoutEffect(() => {
-        for (const piece of [grid.selection, grid.sort]) piece.start();
+        for (const piece of [grid.selection, grid.sort, grid.widths]) {
+            piece.start();
+        }
     }, [grid]);
 
     const overscanRows = overscan?.rows;

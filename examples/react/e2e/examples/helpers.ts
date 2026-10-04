@@ -88,3 +88,33 @@ export async function expectInView(page: Page, target: Locator) {
         body.bottom + 0.5,
     );
 }
+
+/** An element's box on the page; it must be rendered. */
+export async function boxOf(target: Locator) {
+    const box = await target.boundingBox();
+    if (!box) throw new Error("no box: the element is not rendered");
+    return box;
+}
+
+/**
+ * Presses the primary button on an element's centre (a column resizer), moves the pointer by `dx`
+ * and, unless told to hold it, releases it.
+ */
+export async function dragBy(
+    page: Page,
+    target: Locator,
+    dx: number,
+    { hold = false } = {},
+) {
+    const box = await boxOf(target);
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y, { steps: 5 });
+    await settle(page);
+    if (!hold) {
+        await page.mouse.up();
+        await settle(page);
+    }
+}

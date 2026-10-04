@@ -3,6 +3,7 @@
 export type {
     AxisWindow,
     CellPosition,
+    ColumnWidths,
     DataGridEngine,
     DataGridModel,
     DetailHeight,
@@ -33,11 +34,14 @@ export {
 } from "./gridRef";
 export {
     type CellState,
+    type ColumnResizerState,
     type HeaderCellState,
+    headerCellContent,
     type RowDetailState,
     type RowState,
     useCell,
     useCells,
+    useColumnResizer,
     useColumnWindow,
     useGridView,
     useHeaderCell,

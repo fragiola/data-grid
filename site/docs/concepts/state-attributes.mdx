@@ -9,7 +9,8 @@ present (empty) or absent, never `"false"`.
 ## Parts
 
 Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
-`body`, `row`, `cell`, `row-detail` or `empty`. Rows and cells carry their indexes: `data-row-index` (header
+`body`, `row`, `cell`, `row-detail` or `empty`, and `column-resizer` on a resize handle you render
+with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)). Rows and cells carry their indexes: `data-row-index` (header
 rows are `-1` and above, a header cell spanning rows is at its top one) and `data-column-index`
 (a header cell spanning columns is at its first). Tests select by them, never by class names.
 
@@ -30,6 +31,8 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
 | `data-sort` | header cell | `ascending` or `descending`, while its column is sorted |
 | `data-sort-priority` | header cell | its column's place in the sort, 1-based |
+| `data-resizable` | header cell | its column can be resized, or for a group one of its columns ([Column resizing](/docs/concepts/column-resizing)) |
+| `data-resizing` | header cell, resize handle | a drag is resizing its column (or group) |
 
 ## ARIA
 
@@ -45,6 +48,9 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `aria-sort` | header cell | the first sorted column's direction |
 | `aria-multiselectable` | grid | `true` when many rows can be selected |
 | `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected") |
+| `role` | resize handle | `separator`, with `aria-orientation="vertical"`; its name (`aria-label`) is yours |
+| `aria-valuenow` | resize handle | its column's width in pixels (a group's: its columns') |
+| `aria-valuemin`, `aria-valuemax` | resize handle | the narrowest and widest it resizes to; without a maximum, the view's width (at least the width) |
 
 ## Styling a state
 

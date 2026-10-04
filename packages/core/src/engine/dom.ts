@@ -115,6 +115,17 @@ export const TAB_STOP_ATTRIBUTE = "data-grid-tab-stop";
 /** The keys a scroll container pages itself by: every navigation key (`KEYS`) is one of them. */
 export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
 
+/**
+ * A column resizer (Epic #70, W3): an element the app renders in a resizable header cell, its
+ * value the column's or the group's key. The engine drags it and gives it the arrows.
+ */
+export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
+
+/** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
+export function isResizer(element: Element): boolean {
+    return element.hasAttribute(COLUMN_RESIZER_ATTRIBUTE);
+}
+
 /** Whether a control moves through its group with the arrows (a radio, a menu item, a tab). */
 export function movesWithArrows(element: Element): boolean {
     const role = element.getAttribute("role");

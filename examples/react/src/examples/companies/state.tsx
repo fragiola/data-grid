@@ -1,10 +1,16 @@
 "use client";
 
-import { useDataGrid, useGridView } from "@fragiola/data-grid-react";
+import {
+    type HeaderCellInfo,
+    useColumnResizer,
+    useDataGrid,
+    useGridView,
+} from "@fragiola/data-grid-react";
 import { useSelectAll } from "@fragiola/data-grid-react/selection";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
+import type { Company } from "../_kit/companies";
 import * as styles from "./styles";
 
 // The cells that read the grid's state: the selection is the grid's (the app keeps the keys it
@@ -98,6 +104,23 @@ export function SortLabel({
                     <ArrowDown aria-hidden className={styles.sortIcon} />
                 ))}
         </span>
+    );
+}
+
+/**
+ * A resizable column's handle, at its header cell's right edge: the grid drags it, moves it with
+ * the arrows (F2 on the header reaches it) and resets it on a double click. None elsewhere.
+ */
+export function Resizer({ cell }: { cell: HeaderCellInfo<Company> }) {
+    const { state, props } = useColumnResizer(cell);
+    if (!state.resizable) return null;
+    return (
+        // biome-ignore lint/a11y/useAriaPropsSupportedByRole: the hook's props make it a separator, a focusable one (the APG's splitter), which an <hr> cannot be
+        <div
+            {...props}
+            aria-label={`Resize ${cell.column?.name ?? cell.key}`}
+            className={styles.resizer}
+        />
     );
 }
 

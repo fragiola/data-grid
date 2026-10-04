@@ -3,6 +3,7 @@ import { headerCellsIn, headerRowCount } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import { rowAt } from "../model/source";
 import type { CellPosition, DataGridState, HeaderLayout } from "../model/types";
+import { columnWidth } from "../model/widths";
 import { memo } from "../utils";
 import {
     type AxisWindow,
@@ -45,8 +46,12 @@ export function withDetails<TRow, TNode>(
 export function columnAxisOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
 ): Axis {
-    const { columns } = state;
-    return createAxis(columns.length, (index) => columns[index]?.width ?? 0);
+    const { columns, columnWidths } = state;
+    // a resized column's width, within its limits (W1)
+    return createAxis(columns.length, (index) => {
+        const column = columns[index];
+        return column ? columnWidth(column, columnWidths) : 0;
+    });
 }
 
 /** `list` with `start` … `end` appended, and `extra` added in order when it is outside. */
@@ -160,6 +165,7 @@ export interface ViewInputs<TRow, TNode>
         | "pinnedWidth"
         | "rowsRevision"
         | "interaction"
+        | "columnResize"
     > {
     readonly state: DataGridState<TRow, TNode>;
     readonly rowWindow: AxisWindow;
@@ -253,6 +259,7 @@ const VIEW_KEYS = [
     "selectedRowKeys",
     "isRowSelectable",
     "interaction",
+    "columnResize",
 ] as const satisfies readonly (keyof GridView)[];
 
 /** Whether `next` renders anything `current` does not: a new view to publish. */

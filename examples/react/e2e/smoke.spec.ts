@@ -14,6 +14,7 @@ const REPRESENTATIVE: string[] = [
     "windowed-loading", // placeholders and the request log beside the grid
     "keyboard-navigation", // the app's panel and buttons (Fragiola UI) around the grid
     "grouped-headers", // two header rows: group cells, a column spanning both
+    "column-resizing", // the resize handles, drawn with the theme's tokens
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

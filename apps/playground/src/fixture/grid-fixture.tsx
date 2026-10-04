@@ -1,15 +1,19 @@
 import {
     type Column,
     type ColumnOrGroup,
+    type ColumnWidths,
     DataGrid,
     type DataGridContextValue,
+    type HeaderCellInfo,
     type HeaderRowInfo,
+    headerCellContent,
     type RowKey,
     type SortColumn,
+    useColumnResizer,
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
-import { Profiler, StrictMode, useMemo } from "react";
+import { Profiler, StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
@@ -36,10 +40,16 @@ import { createRoot } from "react-dom/client";
 //   &selection=multiple  selectable rows (or `single`), uncontrolled: C1's cell holds a checkbox
 //                        (`select-<row>`, Shift+click extends); &locked=5 makes row 5 not
 //                        selectable
+//   &resize=1            C0–C3 resizable (C2 between 60 and 200px), the widths uncontrolled: a
+//                        resizable header cell (a group's too) holds a resizer (`resizer-<key>`)
+//                        at its right edge, placed by the fixture's own CSS; `controlled`
+//                        holds the widths in the fixture's state (`columnWidths` and
+//                        `onColumnWidthsChange`)
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
-// `window.selectionChanges` the selections, and a button before and after the grid take Tab.
+// `window.selectionChanges` the selections, `window.widthChanges` the widths, and a button
+// before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -51,6 +61,7 @@ declare global {
         commits: number;
         sortChanges: (readonly SortColumn[])[];
         selectionChanges: (readonly RowKey[])[];
+        widthChanges: ColumnWidths[];
     }
 }
 
@@ -261,13 +272,52 @@ function pinnedStyle(state: { pinned: boolean }) {
     return state.pinned ? { background: "white", zIndex: 1 } : undefined;
 }
 
+/** The limits `&resize=1` gives C0–C3 (C2 between 60 and 200px). */
+function resizeColumn(columnIndex: number): Partial<Column<FixtureRow>> {
+    if (columnIndex > 3) return {};
+    return columnIndex === 2
+        ? { resizable: true, minWidth: 60, maxWidth: 200 }
+        : { resizable: true };
+}
+
+// A resizer's place is the app's (W3): a strip at the right edge of its header cell (which is
+// positioned, absolute or sticky), the browser's touch panning off
+const RESIZER_STYLE = {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 6,
+    height: "100%",
+    touchAction: "none",
+} as const;
+
+/**
+ * A header cell's resizer, as an app writes it: the hook's props on an element of its own; none
+ * when no column under the cell resizes.
+ */
+function Resizer({ cell }: { cell: HeaderCellInfo<FixtureRow> }) {
+    const { state, props } = useColumnResizer(cell);
+    if (!state.resizable) return null;
+    return (
+        // biome-ignore lint/a11y/useAriaPropsSupportedByRole: the hook's props make it a separator (a focusable one, APG: not an <hr>)
+        <div
+            {...props}
+            aria-label={`Resize ${cell.key}`}
+            data-testid={`resizer-${cell.key}`}
+            style={RESIZER_STYLE}
+        />
+    );
+}
+
 /** A header row of the fixture: `row` from `HeaderRows`, or the columns' row without one. */
 function HeaderRow({
     table,
     row,
+    resize = false,
 }: {
     table: boolean;
-    row?: HeaderRowInfo<FixtureRow>;
+    row?: HeaderRowInfo<FixtureRow> | undefined;
+    resize?: boolean;
 }) {
     const tag = tags(table);
     return (
@@ -278,7 +328,15 @@ function HeaderRow({
                         cell={cell}
                         render={tag.headerCell}
                         style={pinnedStyle}
-                    />
+                    >
+                        {resize ? (
+                            // its own content, then its resizer
+                            <>
+                                {headerCellContent(cell)}
+                                <Resizer cell={cell} />
+                            </>
+                        ) : undefined}
+                    </DataGrid.HeaderCell>
                 )}
             </DataGrid.HeaderCells>
         </DataGrid.HeaderRow>
@@ -299,6 +357,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const pinnedCount = numberParam(params, "pinned", 0);
     const details = params.get("details") === "1";
     const controls = params.get("controls") === "1";
+    const resizeParam = params.get("resize");
+    const resize = resizeParam === "1" || resizeParam === "controlled";
+    const controlledWidths = resizeParam === "controlled";
+    const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
     const selectionParam = params.get("selection");
     const rowSelection =
         selectionParam === "single" || selectionParam === "multiple"
@@ -327,6 +389,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     ? { pinned: "start" as const }
                     : {}),
                 ...(controls ? controlColumn(columnIndex) : {}),
+                ...(resize ? resizeColumn(columnIndex) : {}),
                 ...(rowSelection && columnIndex === 1
                     ? {
                           renderCell: ({ row }) => (
@@ -349,7 +412,15 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             }),
         );
         return groups ? grouped(leaves) : leaves;
-    }, [columnCount, groups, sort, pinnedCount, controls, rowSelection]);
+    }, [
+        columnCount,
+        groups,
+        sort,
+        pinnedCount,
+        controls,
+        resize,
+        rowSelection,
+    ]);
     const rowHeight = useMemo(
         () =>
             variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
@@ -384,6 +455,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     onSelectedRowKeysChange={(keys) =>
                         window.selectionChanges.push(keys)
                     }
+                    columnWidths={controlledWidths ? columnWidths : undefined}
+                    onColumnWidthsChange={(widths) => {
+                        window.widthChanges.push(widths);
+                        if (controlledWidths) setColumnWidths(widths);
+                    }}
                     data-testid="viewport"
                     style={{ width, height }}
                 >
@@ -397,12 +473,16 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 // a header row per level
                                 <DataGrid.HeaderRows<FixtureRow>>
                                     {(row) => (
-                                        <HeaderRow table={table} row={row} />
+                                        <HeaderRow
+                                            table={table}
+                                            row={row}
+                                            resize={resize}
+                                        />
                                     )}
                                 </DataGrid.HeaderRows>
                             ) : (
                                 // without groups, the single header row (the markup most grids use)
-                                <HeaderRow table={table} />
+                                <HeaderRow table={table} resize={resize} />
                             )}
                         </DataGrid.Header>
                         <DataGrid.Body render={tag.body}>
@@ -480,6 +560,7 @@ export function mountGridFixture(kind: "table" | "div") {
     window.commits = 0;
     window.sortChanges = [];
     window.selectionChanges = [];
+    window.widthChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(
