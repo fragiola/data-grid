@@ -19,6 +19,8 @@ import { cellAt, headerAt, root, stubViewportSize, tags } from "./helpers";
 // Column resizing (Epic #70): the widths controlled or not on `Root` (W1), a resizer's props and
 // state from `useColumnResizer` (W3), the header cells' `data-resizable`/`data-resizing` (W8).
 // The drag, the keys and the double click are the engine's (core tests, the shared e2e spec).
+// Automatic widths (Epic #80): the parts and the handle read the width on screen, a flex share or
+// an automatic width, which is the engine's and never reported (A6).
 
 interface Person {
     id: number;
@@ -158,15 +160,19 @@ function withRef(props: GridProps) {
         return <Grid gridRef={ref} {...given} />;
     }
     const view = render(<App {...props} />);
+    /** The model and the engine of the root on screen. */
+    const grid = () => {
+        const current = gridRef?.current;
+        if (!current) throw new Error("no grid");
+        return current;
+    };
     const resize = (columnKey: string, width: number) =>
         act(() => {
-            gridRef?.current?.model.run("column-widths.resize", {
-                columnKey,
-                width,
-            });
+            grid().model.run("column-widths.resize", { columnKey, width });
         });
     return {
         ...view,
+        grid,
         resize,
         rerender: (next: GridProps) => view.rerender(<App {...next} />),
     };
@@ -531,5 +537,207 @@ describe("a controlled drag", () => {
         expect(onChange).toHaveBeenLastCalledWith({});
         expect(widthsOf(container, 1)).toEqual(["80px", "80px"]);
         expect(age).not.toHaveAttribute("data-resizing");
+    });
+});
+
+describe("automatic widths (Epic #80)", () => {
+    /** "name" flexes one part, "age" two up to its 120px; "id" is fixed. */
+    const flexing: Column<Person>[] = [
+        { key: "name", name: "Name", width: 150, resizable: true, flex: 1 },
+        {
+            key: "age",
+            name: "Age",
+            width: 80,
+            resizable: true,
+            minWidth: 60,
+            maxWidth: 120,
+            flex: 2,
+        },
+        { key: "id", name: "Id", width: 80 },
+    ];
+
+    /**
+     * Fakes the layout a measure reads (A3): an element is 8px a character of its text while
+     * its inline width is `max-content`, else 0 wide (jsdom lays nothing out). Returns how many
+     * elements were measured.
+     */
+    function fakeContentWidths() {
+        let measured = 0;
+        vi.spyOn(
+            HTMLElement.prototype,
+            "getBoundingClientRect",
+        ).mockImplementation(function (this: HTMLElement) {
+            const content = this.style.width === "max-content";
+            if (content) measured += 1;
+            return DOMRect.fromRect({
+                width: content ? (this.textContent?.length ?? 0) * 8 : 0,
+                height: 20,
+            });
+        });
+        return () => measured;
+    }
+
+    /** The widest of a column's rendered cells as the fake measures it: 8px a character. */
+    function fakedWidth(container: HTMLElement, columnIndex: number) {
+        const cells = container.querySelectorAll(
+            `[data-row-index][data-column-index="${columnIndex}"]`,
+        );
+        return Math.max(
+            ...[...cells].map((cell) => (cell.textContent?.length ?? 0) * 8),
+        );
+    }
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it.each([
+        ["divs", false],
+        ["a table", true],
+    ])(
+        "gives flex columns their share of the view on screen, as %s",
+        (_, table) => {
+            const onColumnWidthsChange = vi.fn();
+            const { container, grid } = withRef({
+                cells: flexing,
+                table,
+                onColumnWidthsChange,
+            });
+            // 520 left of 600: "age" stops at 120, "name" takes the rest
+            expect(widthsOf(container, 0)).toEqual(["400px", "400px"]);
+            expect(widthsOf(container, 1)).toEqual(["120px", "120px"]);
+            expect(headerAt(container, 2).style.left).toBe("520px");
+            // the handle and its state read the width on screen; the limits are the column's
+            const name = resizerOf(container, "name");
+            expect(name).toHaveAttribute("aria-valuenow", "400");
+            expect(name).toHaveAttribute("aria-valuemin", "40");
+            expect(name).toHaveAttribute("aria-valuemax", "600");
+            expect(states.get("name")?.width).toBe(400);
+            expect(resizerOf(container, "age")).toHaveAttribute(
+                "aria-valuenow",
+                "120",
+            );
+            // the shares are the engine's, never the model's widths
+            expect(grid().engine.get("column-auto-widths")).toEqual({
+                name: 400,
+                age: 120,
+            });
+            expect(grid().model.get("column-widths")).toEqual({});
+            expect(onColumnWidthsChange).not.toHaveBeenCalled();
+        },
+    );
+
+    it("gives a group's handle its flex columns' widths on screen", () => {
+        const { container } = render(
+            <Grid
+                cells={[
+                    {
+                        key: "person",
+                        name: "Person",
+                        children: flexing.slice(0, 2),
+                    },
+                    { key: "rest", name: "Rest", children: flexing.slice(2) },
+                ]}
+            />,
+        );
+        expect(resizerOf(container, "person")).toHaveAttribute(
+            "aria-valuenow",
+            "520",
+        );
+        expect(states.get("person")?.width).toBe(520);
+    });
+
+    it("makes a resized flex column fixed, and a reset makes it flex again", () => {
+        const onColumnWidthsChange = vi.fn();
+        const { container, grid, resize } = withRef({
+            cells: flexing,
+            onColumnWidthsChange,
+        });
+        resize("name", 200);
+        expect(onColumnWidthsChange).toHaveBeenLastCalledWith({ name: 200 });
+        // "age" keeps its maximum: the view is not filled
+        expect(widthsOf(container, 0)).toEqual(["200px", "200px"]);
+        expect(resizerOf(container, "name")).toHaveAttribute(
+            "aria-valuenow",
+            "200",
+        );
+        act(() => {
+            grid().model.run("column-widths.reset", { columnKey: "name" });
+        });
+        expect(onColumnWidthsChange).toHaveBeenLastCalledWith({});
+        expect(widthsOf(container, 0)).toEqual(["400px", "400px"]);
+        expect(resizerOf(container, "name")).toHaveAttribute(
+            "aria-valuenow",
+            "400",
+        );
+    });
+
+    it("fits an autoSize column once its rows render: the grid's width, never reported", () => {
+        const measured = fakeContentWidths();
+        const onColumnWidthsChange = vi.fn();
+        const { container, grid, resize } = withRef({
+            cells: [
+                {
+                    key: "name",
+                    name: "Name",
+                    width: 150,
+                    resizable: true,
+                    autoSize: true,
+                },
+                ...columns.slice(1),
+            ],
+            onColumnWidthsChange,
+        });
+        // its widest rendered text, "Person 10", 9 characters
+        expect(fakedWidth(container, 0)).toBe(72);
+        expect(widthsOf(container, 0)).toEqual(["72px", "72px"]);
+        expect(resizerOf(container, "name")).toHaveAttribute(
+            "aria-valuenow",
+            "72",
+        );
+        expect(states.get("name")?.width).toBe(72);
+        expect(grid().engine.get("column-auto-widths")).toEqual({ name: 72 });
+        expect(onColumnWidthsChange).not.toHaveBeenCalled();
+        // once: a resize and a reset measure nothing again, the reset gives its width back
+        const count = measured();
+        resize("name", 200);
+        expect(widthsOf(container, 0)).toEqual(["200px", "200px"]);
+        act(() => {
+            grid().model.run("column-widths.reset", {});
+        });
+        expect(widthsOf(container, 0)).toEqual(["72px", "72px"]);
+        expect(measured()).toBe(count);
+    });
+
+    it("fits every rendered resizable column with fit-columns, in one change", () => {
+        fakeContentWidths();
+        const onColumnWidthsChange = vi.fn();
+        const { container, grid } = withRef({ onColumnWidthsChange });
+        // the premise: "name" measures within its limits, "age" under its 60px minimum
+        expect(fakedWidth(container, 0)).toBe(72);
+        expect(fakedWidth(container, 1)).toBeGreaterThan(0);
+        expect(fakedWidth(container, 1)).toBeLessThan(60);
+        act(() => {
+            grid().engine.run("fit-columns", {});
+        });
+        // "age" at its minimum; "id" does not resize
+        expect(onColumnWidthsChange).toHaveBeenCalledTimes(1);
+        expect(onColumnWidthsChange).toHaveBeenLastCalledWith({
+            name: 72,
+            age: 60,
+        });
+        expect(widthsOf(container, 0)).toEqual(["72px", "72px"]);
+        expect(resizerOf(container, "age")).toHaveAttribute(
+            "aria-valuenow",
+            "60",
+        );
+        expect(widthsOf(container, 2)).toEqual(["80px", "80px"]);
+    });
+
+    it("measures nothing and has no widths of its own without flex or autoSize", () => {
+        const measured = fakeContentWidths();
+        const { grid } = withRef({});
+        expect(grid().engine.get("column-auto-widths")).toEqual({});
+        expect(measured()).toBe(0);
     });
 });

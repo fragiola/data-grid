@@ -12,6 +12,7 @@ import {
     type SortColumn,
     useColumnResizer,
     useDataGrid,
+    useDataGridRef,
     useGridView,
 } from "@fragiola/data-grid-react";
 import { Profiler, StrictMode, useMemo, useState } from "react";
@@ -41,11 +42,16 @@ import { createRoot } from "react-dom/client";
 //   &selection=multiple  selectable rows (or `single`), uncontrolled: C1's cell holds a checkbox
 //                        (`select-<row>`, Shift+click extends); &locked=5 makes row 5 not
 //                        selectable
-//   &resize=1            C0–C3 resizable (C2 between 60 and 200px), the widths uncontrolled: a
+//   &resize=1            C0–C3 resizable (C2 between 60 and 200px), C1's values wider than its
+//                        minimum (a fit lands under its 100px), the widths uncontrolled: a
 //                        resizable header cell (a group's too) holds a resizer (`resizer-<key>`)
 //                        at its right edge, placed by the fixture's own CSS; `controlled`
 //                        holds the widths in the fixture's state (`columnWidths` and
-//                        `onColumnWidthsChange`)
+//                        `onColumnWidthsChange`); a button after the grid (`fit-all`) runs
+//                        `fit-columns` through the grid's ref, as an app's would
+//   &flex=1              C1 `flex: 1` and C2 `flex: 2`, at most 300px (over &resize=1's 200);
+//                        the spec resizes the viewport through its style
+//   &autosize=1          C3 `autoSize`, its values wider than its 100px
 //   &reorder=1           C1–C5 reorderable (C0 too when pinned), and the groups with &groups=1,
 //                        the order uncontrolled: a drop target is marked by the fixture's own
 //                        CSS; `controlled` holds the order in the fixture's state
@@ -293,6 +299,25 @@ function resizeColumn(columnIndex: number): Partial<Column<FixtureRow>> {
         : { resizable: true };
 }
 
+/** What `&flex=1` gives C1 and C2: a part and two, C2 at most 300px. */
+function flexColumn(columnIndex: number): Partial<Column<FixtureRow>> {
+    if (columnIndex === 1) return { flex: 1 };
+    return columnIndex === 2 ? { flex: 2, maxWidth: 300 } : {};
+}
+
+/** A cell's value: C1's wider with `&resize=1`, C3's wider still with `&autosize=1`. */
+function cellValue(
+    columnIndex: number,
+    resize: boolean,
+    autoSize: boolean,
+): (row: FixtureRow) => string {
+    if (resize && columnIndex === 1) return (row) => `${row.index}:1 wide`;
+    if (autoSize && columnIndex === 3) {
+        return (row) => `${row.index}:3, a value wider than its column`;
+    }
+    return (row) => `${row.index}:${columnIndex}`;
+}
+
 /** Whether `&reorder=1` makes a column reorderable: C1–C5, and C0 when pinned. */
 function reorderColumn(columnIndex: number, pinnedCount: number): boolean {
     return columnIndex <= 5 && (columnIndex > 0 || pinnedCount > 0);
@@ -385,6 +410,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const resize = resizeParam === "1" || resizeParam === "controlled";
     const controlledWidths = resizeParam === "controlled";
     const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
+    const gridRef = useDataGridRef<FixtureRow>();
+    const flex = params.get("flex") === "1";
+    const autoSize = params.get("autosize") === "1";
     const reorderParam = params.get("reorder");
     const reorder = reorderParam === "1" || reorderParam === "controlled";
     const controlledOrder = reorderParam === "controlled";
@@ -411,13 +439,15 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                 key: `c${columnIndex}`,
                 name: `C${columnIndex}`,
                 width: 100,
-                getValue: (row) => `${row.index}:${columnIndex}`,
+                getValue: cellValue(columnIndex, resize, autoSize),
                 ...(sort && columnIndex < 2 ? { sortable: true } : {}),
                 ...(columnIndex < pinnedCount
                     ? { pinned: "start" as const }
                     : {}),
                 ...(controls ? controlColumn(columnIndex) : {}),
                 ...(resize ? resizeColumn(columnIndex) : {}),
+                ...(flex ? flexColumn(columnIndex) : {}),
+                ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
                 ...(reorder && reorderColumn(columnIndex, pinnedCount)
                     ? { reorderable: true }
                     : {}),
@@ -449,7 +479,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         sort,
         pinnedCount,
         controls,
+        flex,
         resize,
+        autoSize,
         reorder,
         rowSelection,
     ]);
@@ -498,6 +530,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         window.orderChanges.push(order);
                         if (controlledOrder) setColumnOrder(order);
                     }}
+                    gridRef={gridRef}
                     data-testid="viewport"
                     style={{ width, height }}
                 >
@@ -590,6 +623,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             <button type="button" data-testid="after">
                 after
             </button>
+            {resize ? (
+                <button
+                    type="button"
+                    data-testid="fit-all"
+                    onClick={() =>
+                        gridRef.current?.engine.run("fit-columns", {})
+                    }
+                >
+                    fit all
+                </button>
+            ) : null}
         </>
     );
 }
