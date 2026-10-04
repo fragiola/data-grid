@@ -4,6 +4,7 @@ import {
     type Column,
     type ColumnGroup,
     type ColumnOrGroup,
+    createDataGridEngine,
     createDataGridModel,
 } from "../../src";
 
@@ -225,6 +226,39 @@ const reorderableGroup: ColumnOrGroup<Person> = {
     children: [{ key: "name", width: 80, reorderable: true }],
 };
 void reorderableGroup;
+
+// a column flexes or fits itself (Epic #80); a group does neither
+const flexColumn: Column<Person> = {
+    key: "name",
+    width: 80,
+    flex: 1,
+    autoSize: true,
+};
+void flexColumn;
+// @ts-expect-error
+const flexGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    flex: 1,
+    children: [{ key: "name", width: 80 }],
+};
+void flexGroup;
+grid.run("column-widths.resize", {
+    columnKey: "name",
+    width: 120,
+    autoWidths: { name: 100 },
+});
+
+// the engine's widths are a read of their own (Epic #80)
+const engine = createDataGridEngine(grid);
+// @ts-expect-error
+engine.get("column-auto-widths", { columnKey: "name" });
+const autoWidths: Readonly<Record<string, number>> =
+    engine.get("column-auto-widths");
+void autoWidths;
+engine.run("fit-columns", {});
+engine.run("fit-columns", { columnKeys: ["name"] });
+// @ts-expect-error
+engine.run("fit-columns", { columnKeys: "name" });
 
 void groupWithCells;
 void groupWithWidth;

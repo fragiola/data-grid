@@ -75,6 +75,19 @@ export interface Column<TRow, TNode = unknown> {
     /** a resizable column's widest width in pixels (default: none) */
     readonly maxWidth?: number | undefined;
     /**
+     * its part of the view's width the other columns leave (Epic #80, A1), in proportion to the
+     * other flex columns' (`1` is a part): never below its `width` (its base) nor past its
+     * `maxWidth`; nothing left, its base, and the grid scrolls. A resized width replaces it, and a
+     * reset gives it back
+     */
+    readonly flex?: number | undefined;
+    /**
+     * whether it fits its content once, when its first loaded rows render (A5): the widest of its
+     * rendered cells, within its limits. That width is the grid's, never reported: a reset gives
+     * it back, and with `flex` it is the base
+     */
+    readonly autoSize?: boolean | undefined;
+    /**
      * whether a person can move it among its siblings (its header cell dragged, or Ctrl/⌘+Shift
      * with the arrows), the pinned ones among the pinned. The grid keeps the order
      */
@@ -127,6 +140,9 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly resizable?: never;
     readonly minWidth?: never;
     readonly maxWidth?: never;
+    /** a group neither flexes nor fits itself: its columns do */
+    readonly flex?: never;
+    readonly autoSize?: never;
     /**
      * whether a person can move it, whole, among its siblings (see {@link Column.reorderable});
      * its columns move inside it by their own
@@ -504,7 +520,17 @@ export interface CommandMap<TRow, TNode = unknown> {
      * going to the next ones. Widths are whole pixels. Returns the columns' widths
      */
     "column-widths.resize": {
-        payload: { readonly columnKey: string; readonly width: number };
+        payload: {
+            readonly columnKey: string;
+            readonly width: number;
+            /**
+             * the widths an engine gives columns without an override (its `column-auto-widths`:
+             * automatic widths, flex shares): the resize starts from them, and a column back to
+             * its one needs no width. Filled by the engine on screen: an app or an adapter
+             * needn't pass it
+             */
+            readonly autoWidths?: ColumnWidths | undefined;
+        };
         result: ColumnWidths;
     };
     /**
@@ -724,8 +750,9 @@ export interface QueryMap<TRow, TNode = unknown> {
     /** the resized columns' widths, by column key */
     "column-widths": { payload: undefined; result: ColumnWidths };
     /**
-     * a column's width on screen (its resized width, else its `width`, within its limits), or a
-     * group's (its columns'); `undefined` for a key that is neither
+     * a column's width (its resized width, else its `width`, within its limits), or a group's
+     * (its columns'); `undefined` for a key that is neither. On screen, an engine's automatic
+     * widths and flex shares take the place of `width` (its view's column axis)
      */
     "column-width-by": {
         payload: { readonly columnKey: string };

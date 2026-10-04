@@ -10,18 +10,31 @@ import {
     type Siblings,
     siblingsOf,
 } from "../model/order";
+import { rowAt } from "../model/source";
 import type {
     CellPosition,
     Column,
+    ColumnWidths,
     HeaderCellLayout,
     HeaderLayout,
 } from "../model/types";
 import {
+    autoWidthsOf,
+    columnWidth,
+    hasAutoSize,
+    hasEngineSized,
+    hasFlex,
     hasResizable,
+    isFlex,
+    isResizable,
+    NO_WIDTHS,
     resizeMaximum,
     type SpanWidths,
+    sameWidths,
     spanResizable,
     spanWidths,
+    widthLimits,
+    withoutWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
 import { clamp, lowerBound } from "../utils";
@@ -55,6 +68,7 @@ import {
     isResizer,
     KEYS,
     LINE_HEIGHT,
+    maxContentWidths,
     movesWithArrows,
     ownerViewport,
     PAGE_KEYS,
@@ -133,6 +147,8 @@ interface ResizeDrag extends PointerDrag {
     readonly kind: "resize";
     /** the column's (or the group's) width when it started */
     readonly startWidth: number;
+    /** the engine's widths when it started: its columns resized back to them need none of theirs */
+    readonly autoWidths: ColumnWidths;
     /** the x the last resize was for */
     appliedX: number;
 }
@@ -206,8 +222,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** the rows' own heights; `rowAxis` adds the details */
     let baseRowAxis = rowAxisOf(state);
     let rowAxis = withDetails(baseRowAxis, state);
-    let columnAxis = columnAxisOf(state);
     let width = 0;
+    /** the automatic widths measured for `autoSize` columns, by key (A5): kept across new columns */
+    let automatic: ColumnWidths = NO_WIDTHS;
+    /** the `autoSize` columns measured since the viewport attached: once each */
+    const autoSized = new Set<string>();
+    /** the engine's widths in effect: automatic widths and flex shares (`column-auto-widths`) */
+    let autoWidths: ColumnWidths = NO_WIDTHS;
+    updateAutoWidths();
+    let columnAxis = columnAxisOf(state, autoWidths);
     /** the pinned columns in effect, and their width */
     let pinnedCount = 0;
     let pinnedWidth = 0;
@@ -281,6 +304,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         interaction: new Set(),
         "column-resize": new Set(),
         "column-reorder": new Set(),
+        "column-auto-widths": new Set(),
     };
 
     function emit<K extends EngineEventKey>(
@@ -544,6 +568,62 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const fits = width === 0 || pinned < width;
         pinnedCount = fits ? count : 0;
         pinnedWidth = fits ? pinned : 0;
+    }
+
+    /**
+     * The engine's widths for the state and the view's width (A1, A5): computed only while a
+     * column flexes or fits itself. Returns whether they changed.
+     */
+    function updateAutoWidths(): boolean {
+        const next = hasEngineSized(state.columns)
+            ? autoWidthsOf(state.columns, state.columnWidths, automatic, width)
+            : NO_WIDTHS;
+        if (sameWidths(next, autoWidths)) return false;
+        autoWidths = next;
+        return true;
+    }
+
+    /** The column the view shows first right of the pinned ones, and how far into it (W8). */
+    function columnAnchor() {
+        return anchorOf(
+            columnAxis,
+            columnsX.virtual,
+            columnsX.virtual + pinnedWidth,
+        );
+    }
+
+    /** Keeps the view on an anchor's column, as far into it as it was, on a new column axis. */
+    function keepColumnAnchor(anchor: { index: number; within: number }) {
+        columnsX.virtual = Math.max(
+            0,
+            anchoredOffset(columnAxis, anchor) - pinnedWidth,
+        );
+    }
+
+    /** The physical scroll follows a kept anchor, even when the total did not change. */
+    function followColumnAnchor() {
+        const left = columnsX.scrollTo(columnsX.virtual);
+        if (Math.abs(left - (viewport?.scrollLeft ?? 0)) > 0.5) {
+            scrollWhenReady({ left });
+        }
+    }
+
+    /**
+     * Lays the columns out again after the view's width or the automatic widths changed: when the
+     * engine's widths moved, a new column axis, the view kept on the column it shows first (as for
+     * a resize), and their event. Returns whether they moved: the view is laid out, else it is the
+     * caller's to.
+     */
+    function relayoutColumns(): boolean {
+        if (!updateAutoWidths()) return false;
+        const anchor = columnAnchor();
+        columnAxis = columnAxisOf(state, autoWidths);
+        updatePinning();
+        if (anchor) keepColumnAnchor(anchor);
+        relayout(true);
+        if (anchor) followColumnAnchor();
+        emit("column-auto-widths", autoWidths);
+        return true;
     }
 
     /** The sizes or the content changed: remap, then update; scroll once the sizer has its size. */
@@ -917,6 +997,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     pointerId: event.pointerId,
                     startX: event.clientX,
                     startWidth: span.width,
+                    autoWidths,
                     element,
                     doc,
                     x: event.clientX,
@@ -1079,9 +1160,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** Resizes a drag's column to its pointer: right grows (LTR). */
     function resizeTo(resize: ResizeDrag) {
         resize.appliedX = resize.x;
+        // from the engine's widths when it started: dragged back, a column needs no width (A2)
         model.run("column-widths.resize", {
             columnKey: resize.columnKey,
             width: resize.startWidth + resize.x - resize.startX,
+            autoWidths: resize.autoWidths,
         });
     }
 
@@ -1165,15 +1248,25 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * A key on a focused resizer (W6): its arrows (Shift: farther), Home and End resize its
-     * column, through the column's limits; the other page keys and Space are no use to it (the
-     * container would page itself). Returns whether the key was the resizer's.
+     * column, through the column's limits; Enter fits it to its content (A4), once per press; the
+     * other page keys and Space are no use to it (the container would page itself). Returns
+     * whether the key was the resizer's.
      */
     function resizerKey(event: KeyboardEvent, target: Element): boolean {
         const key = event.key;
-        if (!PAGE_KEYS.has(key) && key !== " ") return false;
+        const enter =
+            key === "Enter" &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.shiftKey;
+        if (!enter && !PAGE_KEYS.has(key) && key !== " ") return false;
         const resizer = resizerOf(target);
         if (!resizer) return false;
         event.preventDefault();
+        if (enter) {
+            if (!event.repeat) fitColumns([resizer.columnKey]);
+            return true;
+        }
         const span =
             RESIZE_KEYS.has(key) && !event.ctrlKey && !event.metaKey
                 ? resizeSpan(resizer.columnKey)
@@ -1195,6 +1288,155 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             width: to,
         });
         return true;
+    }
+
+    // ── fitting columns to their content (Epic #80) ──────────────────────────
+
+    /**
+     * The columns' content widths (A3), measured in one layout: for each column index (in
+     * `shown`, the view on screen), the widest of this grid's own rendered header cell of the
+     * column and its body cells of loaded rows, at `max-content`. A column with none rendered has
+     * none.
+     */
+    function measureColumns(
+        shown: GridView<TRow, TNode>,
+        columnIndexes: Iterable<number>,
+    ): Map<number, number> {
+        const measured = new Map<number, number>();
+        if (!viewport) return measured;
+        const elements: HTMLElement[] = [];
+        const columnOf: number[] = [];
+        for (const columnIndex of columnIndexes) {
+            const key = shown.columnDefs[columnIndex]?.key;
+            for (const element of viewport.querySelectorAll<HTMLElement>(
+                `[data-row-index][data-column-index="${columnIndex}"]`,
+            )) {
+                const rowIndex = Number(element.getAttribute("data-row-index"));
+                if (
+                    Number.isInteger(rowIndex) &&
+                    ownerViewport(element) === viewport &&
+                    // a body cell of a loaded row, or the column's own header cell (not a
+                    // group's starting at it)
+                    (rowIndex >= 0
+                        ? rowAt(shown.source, rowIndex) !== undefined
+                        : shown.header.cellAt(rowIndex, columnIndex)?.key ===
+                          key)
+                ) {
+                    elements.push(element);
+                    columnOf.push(columnIndex);
+                }
+            }
+        }
+        maxContentWidths(elements, layers.pinned).forEach((width, index) => {
+            const columnIndex = columnOf[index];
+            if (columnIndex === undefined) return;
+            measured.set(
+                columnIndex,
+                Math.max(width, measured.get(columnIndex) ?? 0),
+            );
+        });
+        return measured;
+    }
+
+    /** A measured content width as a column's width: rounded up, within its limits. */
+    function fittedWidth(
+        column: Column<TRow, TNode>,
+        measured: number,
+    ): number {
+        const { min, max } = widthLimits(column);
+        return clamp(Math.ceil(measured), min, max);
+    }
+
+    /**
+     * Fits columns to their content (A3, A4): each resizable column of each key (a column, or a
+     * group's), or every rendered one without keys, measured on the view on screen in one
+     * layout. One `column-widths.set` with the other widths as they are, none when no width
+     * changes. A column fitted to the width it has without an override (its automatic width,
+     * else its own) needs none; a flex column's fit fixes it.
+     */
+    function fitColumns(columnKeys?: readonly string[]) {
+        const shown = committed;
+        if (!viewport || !shown) return;
+        const { columnDefs, header } = shown;
+        const indexes = new Set<number>();
+        const add = (columnIndex: number) => {
+            const column = columnDefs[columnIndex];
+            if (column && isResizable(column)) indexes.add(columnIndex);
+        };
+        if (columnKeys === undefined) {
+            for (const columnIndex of shown.columns) add(columnIndex);
+        } else {
+            for (const key of columnKeys) {
+                const cell = header.cellByKey(key);
+                if (!cell) continue;
+                const end = cell.columnIndex + cell.columnSpan;
+                for (let index = cell.columnIndex; index < end; index++) {
+                    add(index);
+                }
+            }
+        }
+        const fitted: [string, number][] = [];
+        const keys: string[] = [];
+        for (const [columnIndex, measured] of measureColumns(shown, indexes)) {
+            const column = columnDefs[columnIndex];
+            if (!column) continue;
+            const width = fittedWidth(column, measured);
+            const unresized = isFlex(column)
+                ? undefined
+                : columnWidth(
+                      column,
+                      NO_WIDTHS,
+                      column.autoSize === true ? automatic : NO_WIDTHS,
+                  );
+            keys.push(column.key);
+            if (width !== unresized) fitted.push([column.key, width]);
+        }
+        const columnWidths = {
+            ...withoutWidths(state.columnWidths, keys),
+            ...Object.fromEntries(fitted),
+        };
+        if (!sameWidths(columnWidths, state.columnWidths)) {
+            model.run("column-widths.set", { columnWidths });
+        }
+    }
+
+    /**
+     * Fits the `autoSize` columns a committed view renders with loaded rows (A5), each once per
+     * attach, in one layout: their widths are the engine's (`automatic`), never the model's. Not
+     * while the grid is not laid out (no size: a hidden tab, a closed dialog), nor a column
+     * measured 0 wide: the first commit where it is laid out measures it.
+     */
+    function autoSize(shown: GridView<TRow, TNode>) {
+        if (!hasAutoSize(shown.columnDefs) || width === 0 || height === 0) {
+            return;
+        }
+        const indexes: number[] = [];
+        for (const columnIndex of shown.columns) {
+            const column = shown.columnDefs[columnIndex];
+            if (column?.autoSize === true && !autoSized.has(column.key)) {
+                indexes.push(columnIndex);
+            }
+        }
+        if (
+            indexes.length === 0 ||
+            !shown.rows.some(
+                (rowIndex) => rowAt(shown.source, rowIndex) !== undefined,
+            )
+        ) {
+            return;
+        }
+        let next: Record<string, number> | null = null;
+        for (const [columnIndex, measured] of measureColumns(shown, indexes)) {
+            const column = shown.columnDefs[columnIndex];
+            if (!column || measured <= 0) continue;
+            autoSized.add(column.key);
+            next ??= { ...automatic };
+            next[column.key] = fittedWidth(column, measured);
+        }
+        if (next) {
+            automatic = next;
+            relayoutColumns();
+        }
     }
 
     // ── column reordering: the drag, the edge scroll, the keys (Epic #75) ────
@@ -1429,13 +1671,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // no press (`detail` 0: a screen reader, `element.click()`) has nothing to compare
         const press = pressedAt;
         pressedAt = null;
-        // the click ending a drag is the drag's, never a sort: a resizer's (a double click gives
-        // the column its own width back, W7) or a header cell's (O3)
+        // the click ending a drag is the drag's, never a sort: a resizer's (a double click fits
+        // its column to its content, A4) or a header cell's (O3)
         const last = lastPress;
         lastPress = null;
         if (last?.dragged && event.detail > 0) {
             if (last.kind === "resize" && event.detail === 2) {
-                model.run("column-widths.reset", { columnKey: last.columnKey });
+                fitColumns([last.columnKey]);
             }
             return true;
         }
@@ -1788,6 +2030,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             : null;
     }
 
+    /**
+     * A resize, the app's own too, starts from the widths on screen (A2): the engine's widths fill
+     * its `autoWidths` when it has some and the resize names none.
+     */
+    const unuseModel = model.use((ctx, next) => {
+        if (
+            ctx.command === "column-widths.resize" &&
+            ctx.payload.autoWidths === undefined &&
+            autoWidths !== NO_WIDTHS
+        ) {
+            ctx.payload = { ...ctx.payload, autoWidths };
+        }
+        return next();
+    });
+
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
         const changedDetails = detailsChanged(before, after);
@@ -1823,26 +2080,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             after.columns !== before.columns ||
             after.columnWidths !== before.columnWidths;
         const resizing = columnResize;
+        const engineWidths = autoWidths;
         // a width changing left of the view keeps the view on the column it shows first, right
         // of the pinned ones, as far into it as it was (as a row expanding above it, M2)
-        const columnAnchor =
+        const anchor =
             after.columns === before.columns &&
             after.columnWidths !== before.columnWidths
-                ? anchorOf(
-                      columnAxis,
-                      columnsX.virtual,
-                      columnsX.virtual + pinnedWidth,
-                  )
+                ? columnAnchor()
                 : null;
         if (columnsChanged) {
-            columnAxis = columnAxisOf(after);
+            // the flex shares follow the columns, their order and the overrides (A1)
+            updateAutoWidths();
+            columnAxis = columnAxisOf(after, autoWidths);
             updatePinning();
-            if (columnAnchor) {
-                columnsX.virtual = Math.max(
-                    0,
-                    anchoredOffset(columnAxis, columnAnchor) - pinnedWidth,
-                );
-            }
+            if (anchor) keepColumnAnchor(anchor);
         }
         const reordering = columnReorder;
         // a drag follows its column or group (W4, O3)
@@ -1864,6 +2115,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 after.header !== before.header,
         );
         if (columnResize !== resizing) emit("column-resize", columnResize);
+        if (autoWidths !== engineWidths) {
+            emit("column-auto-widths", autoWidths);
+        }
         if (columnReorder !== reordering) {
             emit("column-reorder", columnReorder);
         }
@@ -1874,12 +2128,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 scrollWhenReady({ top });
             }
         }
-        if (columnAnchor) {
-            const left = columnsX.scrollTo(columnsX.virtual);
-            if (Math.abs(left - (viewport?.scrollLeft ?? 0)) > 0.5) {
-                scrollWhenReady({ left });
-            }
-        }
+        if (anchor) followColumnAnchor();
         if (followed) {
             // focus goes to its element once the cells render in their new order (the commit)
             if (focusInside()) pendingFocus = true;
@@ -1911,8 +2160,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const observer =
                 defaultView && "ResizeObserver" in defaultView
                     ? new defaultView.ResizeObserver(() => {
+                          const before = width;
                           readSize();
-                          relayout(false);
+                          // the flex columns follow the view's width (A1), and only they
+                          if (
+                              width === before ||
+                              !hasFlex(state.columns) ||
+                              !relayoutColumns()
+                          ) {
+                              relayout(false);
+                          }
                       })
                     : null;
             observer?.observe(element);
@@ -1954,7 +2211,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             syncScroll();
             // pinned cells may have registered while it was detached: write them all
             pinnedFor = null;
-            relayout(true);
+            // the `autoSize` columns fit again once in this attach (A5); the flex columns take
+            // the view's width
+            autoSized.clear();
+            if (!relayoutColumns()) relayout(true);
             writeLayers();
             // what was asked before the grid had a size: a scroll to a cell, or the active cell
             const active = state.activePosition;
@@ -2055,6 +2315,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             writeLayers();
             interaction.committed();
             flushFocus();
+            autoSize(rendered);
         },
         keydown,
         click,
@@ -2085,6 +2346,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         interaction: () => interaction.cell,
         "column-resize": () => columnResize,
         "column-reorder": () => columnReorder,
+        "column-auto-widths": () => autoWidths,
     };
 
     const actions: {
@@ -2097,6 +2359,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             interaction.cancelPending();
             interaction.leaveCell(true);
         },
+        "fit-columns": ({ columnKeys }) => fitColumns(columnKeys),
     };
 
     return {
@@ -2118,6 +2381,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         },
         destroy() {
             unsubscribeModel();
+            unuseModel();
             detachViewport?.();
         },
         adapter,

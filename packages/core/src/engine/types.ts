@@ -2,6 +2,7 @@ import type { Axis } from "../axis/axis";
 import type {
     CellPosition,
     Column,
+    ColumnWidths,
     HeaderCellLayout,
     HeaderLayout,
     ReorderSide,
@@ -162,6 +163,12 @@ export interface EngineQueryMap {
     "column-resize": ColumnResize | null;
     /** the column or group a drag is moving, or `null` (see `GridView.columnReorder`) */
     "column-reorder": ColumnReorder | null;
+    /**
+     * the widths the engine gives columns without an override, by key (Epic #80, A6): an
+     * `autoSize` column's automatic width and the flex columns' shares of the view. Never
+     * reported to the model: a reset gives a column its one back
+     */
+    "column-auto-widths": ColumnWidths;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
@@ -186,6 +193,13 @@ export interface EngineActionMap {
     "interact-cell": CellPosition;
     /** gives the keys back to the grid and focuses the cell (as Escape does) */
     "leave-cell": Record<string, never>;
+    /**
+     * fits columns to their content (A3, A4): each resizable column of each key (a column, or a
+     * group's columns), or without keys every resizable column, gets the widest of its rendered
+     * header cell and loaded body cells, within its limits, in one `column-widths.set`. A column
+     * not rendered is not measured
+     */
+    "fit-columns": { readonly columnKeys?: readonly string[] | undefined };
 }
 
 export type EngineActionKey = keyof EngineActionMap;
@@ -204,6 +218,8 @@ export interface EngineEventMap {
     "column-resize": ColumnResize | null;
     /** a drag started moving a column or a group, changed its target, or ended (`null`) */
     "column-reorder": ColumnReorder | null;
+    /** the automatic widths or the flex shares changed (see `column-auto-widths`) */
+    "column-auto-widths": ColumnWidths;
 }
 
 export type EngineEventKey = keyof EngineEventMap;
@@ -241,7 +257,7 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
     /**
      * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
      * (Ctrl/⌘ adds the column); the click ending a press on a column resizer is the resizer's,
-     * and a double click there resets the column's width; the click ending a header cell's drag
+     * and a double click there fits its column to its content (`fit-columns`); the click ending a header cell's drag
      * is the drag's. Returns whether the click was the
      * grid's: a toggle ran, even when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
      * after the consumer's own handlers, so `preventDefault` cancels it.

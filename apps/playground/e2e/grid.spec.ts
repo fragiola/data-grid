@@ -1641,7 +1641,7 @@ for (const kind of KINDS) {
                 expect(await widths(page, 0)).toEqual([40, 40]);
             });
 
-            test("restores the width on Escape during a drag, and resets it on a double click", async ({
+            test("restores the width on Escape during a drag, and fits it to its content on a double click", async ({
                 page,
             }) => {
                 await open(page, kind, RESIZE);
@@ -1662,8 +1662,9 @@ for (const kind of KINDS) {
                 expect(await widths(page, 1)).toEqual([170, 170]);
                 await resizer(page, "c1").dblclick();
                 await settle(page);
-                expect(await widths(page, 1)).toEqual([100, 100]);
-                expect(await lastWidths(page)).toEqual({});
+                // its content is narrower than its minimum (Epic #80, A4)
+                expect(await widths(page, 1)).toEqual([40, 40]);
+                expect(await lastWidths(page)).toEqual({ c1: 40 });
             });
 
             test("resizes with the keys from inside its header cell, aria-valuenow following", async ({
@@ -1769,7 +1770,7 @@ for (const kind of KINDS) {
                 );
             });
 
-            test("resizes controlled widths live, restores them on Escape and resets them on a double click", async ({
+            test("resizes controlled widths live, restores them on Escape and fits them on a double click", async ({
                 page,
             }) => {
                 await open(page, kind, { ...RESIZE, resize: "controlled" });
@@ -1793,8 +1794,9 @@ for (const kind of KINDS) {
                 expect(await lastWidths(page)).toEqual({ c1: 170 });
                 await resizer(page, "c1").dblclick();
                 await settle(page);
-                expect(await widths(page, 1)).toEqual([100, 100]);
-                expect(await lastWidths(page)).toEqual({});
+                // its content is narrower than its minimum (Epic #80, A4)
+                expect(await widths(page, 1)).toEqual([40, 40]);
+                expect(await lastWidths(page)).toEqual({ c1: 40 });
             });
 
             test("does not sort on a press, a drag or a double click on a sortable header's resizer", async ({

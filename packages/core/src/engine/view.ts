@@ -2,8 +2,13 @@ import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import { headerCellsIn, headerRowCount } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import { rowAt } from "../model/source";
-import type { CellPosition, DataGridState, HeaderLayout } from "../model/types";
-import { columnWidth } from "../model/widths";
+import type {
+    CellPosition,
+    ColumnWidths,
+    DataGridState,
+    HeaderLayout,
+} from "../model/types";
+import { columnWidth, NO_WIDTHS } from "../model/widths";
 import { memo } from "../utils";
 import {
     type AxisWindow,
@@ -43,14 +48,18 @@ export function withDetails<TRow, TNode>(
     );
 }
 
+/**
+ * The columns' axis: each one's width on screen, its resized width, else the engine's for it
+ * (`autoWidths`: an automatic width, a flex share), else its own, within its limits (W1, A1).
+ */
 export function columnAxisOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
+    autoWidths: ColumnWidths = NO_WIDTHS,
 ): Axis {
     const { columns, columnWidths } = state;
-    // a resized column's width, within its limits (W1)
     return createAxis(columns.length, (index) => {
         const column = columns[index];
-        return column ? columnWidth(column, columnWidths) : 0;
+        return column ? columnWidth(column, columnWidths, autoWidths) : 0;
     });
 }
 

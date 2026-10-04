@@ -286,3 +286,20 @@ export function pointer(
     if (type === "pointerdown") engine.adapter.pointerdown(event);
     return event;
 }
+
+/**
+ * Fakes the layout a measure reads (Epic #80, A3): `element`'s box is `content` wide while its
+ * inline width is `max-content`, else as wide as its inline width (0 without one).
+ */
+export function fakeContentWidth(element: HTMLElement, content: number): void {
+    element.getBoundingClientRect = () => {
+        const { width } = element.style;
+        return DOMRect.fromRect({
+            width:
+                width === "max-content"
+                    ? content
+                    : Number.parseFloat(width) || 0,
+            height: 20,
+        });
+    };
+}

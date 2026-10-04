@@ -2,15 +2,26 @@ import type { Axis } from "../axis/axis";
 import { clamp, isWidth } from "../utils";
 import type { Column, ColumnWidths, HeaderCellLayout } from "./types";
 
-// Column widths (Epic #70, W1–W5): a resizable column's width is its resized one, else its
-// `width`, always within its limits; a column that is not resizable is its `width`, as before.
-// Pure: the model resizes with them, the column axis and the parts read them.
+// Column widths (Epic #70, W1–W5; Epic #80, A1–A5): a resizable column's width is its resized
+// one, else the engine's for it (an automatic width, a flex share), else its `width`, always
+// within its limits; a column that is not resizable is the engine's width or its `width`. Pure:
+// the model resizes with them, the engine lays out its flex columns with them, the column axis
+// and the parts read them.
 
-/** What sizes a column: its key, its width, and whether and within what it resizes. */
+/** What sizes a column: its key, its width, and whether and within what it resizes or flexes. */
 type SizedColumn = Pick<
     Column<unknown>,
-    "key" | "width" | "resizable" | "minWidth" | "maxWidth"
+    | "key"
+    | "width"
+    | "resizable"
+    | "minWidth"
+    | "maxWidth"
+    | "flex"
+    | "autoSize"
 >;
+
+/** No widths: a grid whose engine sizes no column itself (one record, not one per read). */
+export const NO_WIDTHS: ColumnWidths = Object.freeze({});
 
 /** A resizable column's narrowest width when it gives none: a floor against one that vanishes. */
 export const DEFAULT_MIN_WIDTH = 40;
@@ -20,19 +31,47 @@ export function isResizable(column: SizedColumn): boolean {
     return column.resizable === true;
 }
 
-const resizableLists = new WeakMap<readonly SizedColumn[], boolean>();
-
-/** Whether a column of the grid is resizable: found once per list (the state's are never mutated). */
-export function hasResizable(columns: readonly SizedColumn[]): boolean {
-    let has = resizableLists.get(columns);
-    if (has === undefined) {
-        has = columns.some(isResizable);
-        resizableLists.set(columns, has);
-    }
-    return has;
+/** Whether a column shares the view's leftover width (A1): a `flex` above 0. */
+export function isFlex(column: SizedColumn): boolean {
+    return column.flex !== undefined && column.flex > 0;
 }
 
-/** A resizable column's limits: `max` is infinite without one, and `min` never passes it. */
+/** Whether the engine may size a column itself (A1, A5): it flexes, or it fits itself once. */
+function isEngineSized(column: SizedColumn): boolean {
+    return isFlex(column) || column.autoSize === true;
+}
+
+/** Whether a column of a list passes `test`: found once per list (the state's are never mutated). */
+function someColumn(
+    test: (column: SizedColumn) => boolean,
+): (columns: readonly SizedColumn[]) => boolean {
+    const lists = new WeakMap<readonly SizedColumn[], boolean>();
+    return (columns) => {
+        let has = lists.get(columns);
+        if (has === undefined) {
+            has = columns.some(test);
+            lists.set(columns, has);
+        }
+        return has;
+    };
+}
+
+/** Whether a column of the grid is resizable. */
+export const hasResizable = someColumn(isResizable);
+
+/** Whether a column of the grid flexes: the view's width lays the columns out. */
+export const hasFlex = someColumn(isFlex);
+
+/** Whether a column of the grid flexes or fits itself: the engine has widths of its own. */
+export const hasEngineSized = someColumn(isEngineSized);
+
+/** Whether a column of the grid fits itself once (`autoSize`). */
+export const hasAutoSize = someColumn((column) => column.autoSize === true);
+
+/**
+ * A column's limits, which a resize, a flex share and a fit keep to: `max` is infinite without
+ * one, and `min` never passes it.
+ */
 export function widthLimits(column: SizedColumn): {
     readonly min: number;
     readonly max: number;
@@ -41,18 +80,62 @@ export function widthLimits(column: SizedColumn): {
     return { min: column.minWidth ?? Math.min(DEFAULT_MIN_WIDTH, max), max };
 }
 
-/** A column's width on screen: resizable, its resized width or its own, within its limits. */
+/** A record's width for a key, own keys only: a column called "constructor" is no inherited function. */
+function widthIn(widths: ColumnWidths, key: string): number | undefined {
+    return Object.hasOwn(widths, key) ? widths[key] : undefined;
+}
+
+/** A column's resized width (its override), when it resizes and has one; within its limits. */
+function resizedWidth(
+    column: SizedColumn,
+    columnWidths: ColumnWidths,
+): number | undefined {
+    const resized = isResizable(column)
+        ? widthIn(columnWidths, column.key)
+        : undefined;
+    return resized === undefined ? undefined : withinLimits(column, resized);
+}
+
+/** A width kept within a column's limits. */
+function withinLimits(column: SizedColumn, width: number): number {
+    const { min, max } = widthLimits(column);
+    return clamp(width, min, max);
+}
+
+/**
+ * A column's width on screen: resizable, its resized width, else the engine's for it
+ * (`autoWidths`: an automatic width, a flex share), else its own, within its limits; not
+ * resizable, the engine's or its own.
+ */
 export function columnWidth(
     column: SizedColumn,
     columnWidths: ColumnWidths,
+    autoWidths: ColumnWidths = NO_WIDTHS,
 ): number {
-    if (!isResizable(column)) return column.width;
-    const { min, max } = widthLimits(column);
-    // own keys only: a column called "constructor" is no inherited function
-    const resized = Object.hasOwn(columnWidths, column.key)
-        ? columnWidths[column.key]
-        : undefined;
-    return clamp(resized ?? column.width, min, max);
+    const auto = widthIn(autoWidths, column.key);
+    if (!isResizable(column)) return auto ?? column.width;
+    return withinLimits(
+        column,
+        widthIn(columnWidths, column.key) ?? auto ?? column.width,
+    );
+}
+
+const checked = new WeakMap<object, ColumnWidths>();
+
+/**
+ * The widths kept of a record given again and again (a drag's `autoWidths`, once a frame): its
+ * entries that are widths, worked out once per record.
+ */
+export function keptWidthsOf(columnWidths: unknown): ColumnWidths {
+    if (typeof columnWidths !== "object" || columnWidths === null) {
+        return NO_WIDTHS;
+    }
+    let kept = checked.get(columnWidths);
+    if (!kept) {
+        kept = keptWidths(columnWidths);
+        checked.set(columnWidths, kept);
+    }
+    return kept;
 }
 
 /** The widths kept of a record: its entries that are widths, in a copy of the model's own. */
@@ -76,71 +159,179 @@ export function sameWidths(a: ColumnWidths, b: ColumnWidths): boolean {
 /** Below this, what is left of a change to share is nothing (floating point). */
 const EPSILON = 1e-6;
 
+/** A column's part of a width shared among columns (`sharedWidths`). */
+export interface WidthShare {
+    /** what its part is in proportion to */
+    readonly weight: number;
+    /** the width its part is added to */
+    readonly start: number;
+    readonly min: number;
+    readonly max: number;
+}
+
+/**
+ * Shares `amount` among columns, added to their `start`, in proportion to their weights, each
+ * within its limits, as a flexbox resolves its items: the parts are worked out, and when limits
+ * stopped some, only the ones stopped on the side the stops add up to (below their minimum, or
+ * past their maximum) keep their limit; the others share again what is left, until no limit
+ * stops one or every one is at a limit. The widths are then rounded to whole pixels in order,
+ * each passing its rounding on to the next. Returns them, in order. A group's resize (W5) and the
+ * flex columns (A1) share this way.
+ */
+export function sharedWidths(
+    shares: readonly WidthShare[],
+    amount: number,
+): number[] {
+    const widths = shares.map((share) => share.start);
+    const wanted = [...widths];
+    /** the columns kept at a limit */
+    const frozen = shares.map(() => false);
+    for (;;) {
+        let free = amount;
+        let weight = 0;
+        let count = 0;
+        shares.forEach((share, index) => {
+            if (frozen[index]) {
+                free -= (widths[index] ?? share.start) - share.start;
+            } else {
+                weight += share.weight;
+                count += 1;
+            }
+        });
+        if (count === 0) break;
+        let stopped = 0;
+        shares.forEach((share, index) => {
+            if (frozen[index]) return;
+            // all of them weightless: an equal part
+            const part =
+                weight > 0 ? (free * share.weight) / weight : free / count;
+            const want = share.start + part;
+            const width = clamp(want, share.min, share.max);
+            wanted[index] = want;
+            widths[index] = width;
+            stopped += width - want;
+        });
+        if (Math.abs(stopped) <= EPSILON) break;
+        shares.forEach((_, index) => {
+            const width = widths[index] ?? 0;
+            const want = wanted[index] ?? 0;
+            if (!frozen[index] && (stopped > 0 ? width > want : width < want)) {
+                frozen[index] = true;
+            }
+        });
+    }
+    let carry = 0;
+    return shares.map((share, index) => {
+        const exact = (widths[index] ?? share.start) + carry;
+        const rounded = clamp(Math.round(exact), share.min, share.max);
+        carry = exact - rounded;
+        return rounded;
+    });
+}
+
 /**
  * The widths after resizing `columns` (a column, or a group's) to `width` together (W5): the
- * resizable ones share the change in proportion to their widths, each within its limits; what one
- * could not take goes to the ones that still can, until none is left or every one is at a limit.
- * The widths are then rounded to whole pixels in order, each passing its rounding on to the next.
- * Only a column whose width changes gets one, and none when it is back to its own; nothing
- * changing, the same record.
+ * resizable ones share the change in proportion to their widths, each within its limits
+ * (`sharedWidths`). The widths start from the ones on screen: a column without an override is the
+ * engine's width for it (`autoWidths`) or its own. Only a column whose width changes gets one, and
+ * none when it is back to the width it has without one; nothing changing, the same record.
+ *
+ * A group's column that flexes and does not resize is counted at its share as it was, but the
+ * share moves once the others' widths change (the view's width is shared again): such a group
+ * ends off `width`, its handle away from the pointer, and when that column alone takes what the
+ * view leaves, the group stays as wide as it was (its share takes what the others give up).
+ * Known, documented: make such a column resizable, or keep it out of a resizable group.
  */
 export function resizedWidths(
     columns: readonly SizedColumn[],
     columnWidths: ColumnWidths,
     width: number,
+    autoWidths: ColumnWidths = NO_WIDTHS,
 ): ColumnWidths {
     let remaining = width;
     for (const column of columns) {
-        remaining -= columnWidth(column, columnWidths);
+        remaining -= columnWidth(column, columnWidths, autoWidths);
     }
-    const shares = columns.filter(isResizable).map((column) => {
-        const current = columnWidth(column, columnWidths);
+    const resizable = columns.filter(isResizable).map((column) => {
+        const current = columnWidth(column, columnWidths, autoWidths);
         return {
             key: column.key,
             current,
-            // its own width: resized back to it, it needs no width of the record's
-            own: columnWidth(column, {}),
-            next: current,
+            // its width without an override: resized back to it, it needs none of the record's
+            own: columnWidth(column, NO_WIDTHS, autoWidths),
+            weight: current,
+            start: current,
             ...widthLimits(column),
         };
     });
-    /** the columns that can still take a share */
-    let open = shares;
-    while (Math.abs(remaining) > EPSILON && open.length > 0) {
-        let weight = 0;
-        for (const share of open) weight += share.current;
-        const pool = remaining;
-        const count = open.length;
-        // the ones a limit stopped are done
-        open = open.filter((share) => {
-            // all of them 0 wide: an equal share
-            const wanted =
-                share.next +
-                (weight > 0 ? (pool * share.current) / weight : pool / count);
-            const next = clamp(wanted, share.min, share.max);
-            remaining -= next - share.next;
-            share.next = next;
-            return next === wanted;
-        });
-        // every one took its whole share: nothing is left
-        if (open.length === count) break;
-    }
+    const widths = sharedWidths(resizable, remaining);
     const changed = new Set<string>();
     const entries: [string, number][] = [];
-    let carry = 0;
-    for (const share of shares) {
-        const exact = share.next + carry;
-        const rounded = clamp(Math.round(exact), share.min, share.max);
-        carry = exact - rounded;
-        if (rounded === share.current) continue;
+    resizable.forEach((share, index) => {
+        const rounded = widths[index];
+        if (rounded === undefined || rounded === share.current) return;
         changed.add(share.key);
         if (rounded !== share.own) entries.push([share.key, rounded]);
-    }
+    });
     if (changed.size === 0) return columnWidths;
     return Object.fromEntries([
         ...Object.entries(columnWidths).filter(([key]) => !changed.has(key)),
         ...entries,
     ]);
+}
+
+/**
+ * The widths the engine gives the columns without an override (A1, A5): an `autoSize` column's
+ * automatic width (`automatic`, measured), and the flex columns' shares of what the others leave
+ * of `viewWidth` (pinned ones included), in proportion to their `flex`, each from its base (its
+ * automatic width, else its own) to its maximum (`sharedWidths`): nothing left, its base. A
+ * column with neither has none.
+ */
+export function autoWidthsOf(
+    columns: readonly SizedColumn[],
+    columnWidths: ColumnWidths,
+    automatic: ColumnWidths,
+    viewWidth: number,
+): ColumnWidths {
+    const entries: [string, number][] = [];
+    const flexing: { key: string; share: WidthShare }[] = [];
+    let left = viewWidth;
+    for (const column of columns) {
+        const resized = resizedWidth(column, columnWidths);
+        const measured =
+            column.autoSize === true
+                ? widthIn(automatic, column.key)
+                : undefined;
+        const auto =
+            measured === undefined ? undefined : withinLimits(column, measured);
+        if (resized === undefined && isFlex(column)) {
+            const base = auto ?? columnWidth(column, NO_WIDTHS);
+            const { min, max } = widthLimits(column);
+            flexing.push({
+                key: column.key,
+                share: {
+                    weight: column.flex ?? 0,
+                    start: 0,
+                    min: Math.max(base, min),
+                    max,
+                },
+            });
+            continue;
+        }
+        if (resized === undefined && auto !== undefined) {
+            entries.push([column.key, auto]);
+        }
+        left -= resized ?? auto ?? columnWidth(column, NO_WIDTHS);
+    }
+    const shares = sharedWidths(
+        flexing.map(({ share }) => share),
+        left,
+    );
+    flexing.forEach(({ key }, index) => {
+        const share = shares[index];
+        if (share !== undefined) entries.push([key, share]);
+    });
+    return entries.length === 0 ? NO_WIDTHS : Object.fromEntries(entries);
 }
 
 /** The widths without the overrides of `keys`. */
