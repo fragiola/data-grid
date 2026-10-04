@@ -1,0 +1,228 @@
+import type {
+    CellPosition,
+    HeaderCellLayout,
+    SortDirection,
+} from "../model/types";
+import { sameCell } from "../navigation/navigation";
+import {
+    columnLeft,
+    columnPinning,
+    headerCellSort,
+    rowCellsHeight,
+    rowDetailBox,
+    rowExpanded,
+    rowSelectable,
+    rowSelected,
+} from "./geometry";
+import type { GridView } from "./types";
+
+// What a part of a view is, as pure functions of a `GridView`: a row's, a cell's, a header cell's
+// and a detail's state, with what ARIA says of it beyond the state, and a cell's box. An adapter
+// maps them to attributes and style, and adds nothing.
+
+/** The state of a body row: what its `className`/`style` functions and `render` receive. */
+export interface RowState {
+    readonly rowIndex: number;
+    readonly loaded: boolean;
+    /** it holds the active cell */
+    readonly active: boolean;
+    /** it shows its detail (`DataGrid.RowDetail`): loaded, and its key expanded */
+    readonly expanded: boolean;
+    /** it is selected: rows are selectable, it is loaded and its key selected */
+    readonly selected: boolean;
+}
+
+/** The state of a body cell. */
+export interface CellState {
+    readonly rowIndex: number;
+    readonly columnIndex: number;
+    readonly loaded: boolean;
+    /** it is the active cell (the one the keyboard moves) */
+    readonly active: boolean;
+    /** its column is pinned at the start: sticky, it stays in view sideways */
+    readonly pinned: boolean;
+    /** its column is the last pinned one (for a divider or a shadow) */
+    readonly pinnedEdge: boolean;
+    /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
+    readonly interacting: boolean;
+}
+
+/** The state of a header cell. */
+export interface HeaderCellState {
+    /** its (top) header row: -1 for the columns' row; above it for groups and for a column spanning rows */
+    readonly rowIndex: number;
+    /** its first column */
+    readonly columnIndex: number;
+    readonly columnSpan: number;
+    readonly rowSpan: number;
+    /** it is a group's cell */
+    readonly group: boolean;
+    /** it is the active cell */
+    readonly active: boolean;
+    /** its column sorts the grid: a click, Enter or Space toggles it (never a group) */
+    readonly sortable: boolean;
+    /** the direction its column is sorted in, when it is */
+    readonly sortDirection: SortDirection | undefined;
+    /** its column's place among the sorted columns, 1-based, when it is sorted */
+    readonly sortPriority: number | undefined;
+    /** its columns are pinned at the start: sticky, it stays in view sideways */
+    readonly pinned: boolean;
+    /** it ends at the last pinned column (for a divider or a shadow) */
+    readonly pinnedEdge: boolean;
+    /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
+    readonly interacting: boolean;
+}
+
+/** The state of a row's detail. */
+export interface RowDetailState {
+    readonly rowIndex: number;
+    /** its row is expanded: the detail renders only meanwhile */
+    readonly expanded: boolean;
+    /** its height: the detail height the grid was given for this row (0 while collapsed) */
+    readonly height: number;
+}
+
+/** A body row's state, and its `aria-selected`. */
+export interface RowPart {
+    readonly state: RowState;
+    /**
+     * `aria-selected` (R7), in ARIA's own vocabulary: `false` is "selectable, not selected"; a row
+     * that cannot be selected (or is not loaded) carries none (`undefined`)
+     */
+    readonly ariaSelected: boolean | undefined;
+}
+
+/** A body cell's state, and its `tabIndex`. */
+export interface CellPart {
+    readonly state: CellState;
+    /** the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others */
+    readonly tabIndex: 0 | -1;
+}
+
+/** A header cell's state, its `tabIndex` and its `aria-sort`. */
+export interface HeaderCellPart {
+    readonly state: HeaderCellState;
+    /** the roving tab stop, as a body cell's */
+    readonly tabIndex: 0 | -1;
+    /** on the first sorted column's header cell only (ARIA 1.2: one header at a time) */
+    readonly ariaSort: SortDirection | undefined;
+}
+
+/** A row's detail's state, and its box while its row is expanded (`rowDetailBox`). */
+export interface RowDetailPart {
+    readonly state: RowDetailState;
+    readonly box: ReturnType<typeof rowDetailBox>;
+}
+
+/** Whether a cell (at its element's position) is the one whose controls have the keys. */
+function interacting<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: CellPosition,
+): boolean {
+    return view.interaction !== null && sameCell(view.interaction, cell);
+}
+
+/** A body row's state, and its `aria-selected`. */
+export function rowPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+    loaded: boolean,
+): RowPart {
+    const selected = rowSelected(view, rowIndex);
+    return {
+        state: {
+            rowIndex,
+            loaded,
+            active: view.active?.rowIndex === rowIndex,
+            expanded: rowExpanded(view, rowIndex),
+            selected,
+        },
+        ariaSelected:
+            selected || rowSelectable(view, rowIndex) ? selected : undefined,
+    };
+}
+
+/** A body cell's state, and its `tabIndex`. */
+export function cellPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: CellPosition & { readonly loaded: boolean },
+): CellPart {
+    const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
+    const active = view.active !== null && sameCell(view.active, cell);
+    return {
+        state: {
+            rowIndex: cell.rowIndex,
+            columnIndex: cell.columnIndex,
+            loaded: cell.loaded,
+            active,
+            pinned,
+            pinnedEdge,
+            interacting: interacting(view, cell),
+        },
+        tabIndex: active ? 0 : -1,
+    };
+}
+
+/**
+ * A body cell's box in its row: its column's left, as wide as its column and as tall as its row's
+ * own height (a detail below the cells is not theirs). As `headerCellBox` for a header cell.
+ */
+export function cellBox<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+    columnIndex: number,
+): { readonly left: number; readonly width: number; readonly height: number } {
+    return {
+        left: columnLeft(view, columnIndex),
+        width: view.columnAxis.sizeOf(columnIndex),
+        height: rowCellsHeight(view, rowIndex),
+    };
+}
+
+/**
+ * A header cell's state, its `tabIndex` and its `aria-sort`: a column spanning header rows is
+ * active on any of them.
+ */
+export function headerCellPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: HeaderCellLayout<TRow, TNode>,
+): HeaderCellPart {
+    const sort = headerCellSort(view, cell);
+    const { pinned, pinnedEdge } = columnPinning(
+        view,
+        cell.columnIndex,
+        cell.columnSpan,
+    );
+    const active =
+        view.active !== null && sameCell(view.active, cell, view.header.cellAt);
+    return {
+        state: {
+            rowIndex: cell.rowIndex,
+            columnIndex: cell.columnIndex,
+            columnSpan: cell.columnSpan,
+            rowSpan: cell.rowSpan,
+            group: cell.group !== undefined,
+            active,
+            sortable: sort.sortable,
+            sortDirection: sort.direction,
+            sortPriority: sort.priority,
+            pinned,
+            pinnedEdge,
+            interacting: interacting(view, cell),
+        },
+        tabIndex: active ? 0 : -1,
+        ariaSort: sort.ariaSort,
+    };
+}
+
+/** A row's detail's state (0 tall while collapsed), and its box while its row is expanded. */
+export function rowDetailPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): RowDetailPart {
+    const box = rowDetailBox(view, rowIndex);
+    return {
+        state: { rowIndex, expanded: box !== null, height: box?.height ?? 0 },
+        box,
+    };
+}

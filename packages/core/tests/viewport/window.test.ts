@@ -3,6 +3,7 @@ import { createAxis } from "../../src/axis/axis";
 import {
     contains,
     EMPTY_WINDOW,
+    overlaps,
     sameWindow,
     visibleRange,
     windowFor,
@@ -108,5 +109,17 @@ describe("the window", () => {
         const a = windowFor(rows, 0, 100, 3);
         expect(sameWindow(a, windowFor(rows, 0, 100, 3))).toBe(true);
         expect(sameWindow(a, windowFor(rows, 20, 100, 3))).toBe(false);
+    });
+});
+
+describe("overlaps", () => {
+    it("tells whether a run of items meets a range", () => {
+        const range = { start: 5, end: 10 };
+        expect(overlaps(range, 0, 5)).toBe(false);
+        expect(overlaps(range, 0, 6)).toBe(true);
+        expect(overlaps(range, 9, 12)).toBe(true);
+        expect(overlaps(range, 10, 12)).toBe(false);
+        expect(overlaps(range, 6, 7)).toBe(true);
+        expect(overlaps(range, 0, 20)).toBe(true);
     });
 });

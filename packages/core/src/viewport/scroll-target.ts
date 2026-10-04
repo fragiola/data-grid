@@ -1,38 +1,13 @@
-import type { Axis } from "../axis/axis";
+import { clamp } from "../utils";
 
 /** Where to put an item when scrolling to it. */
 export type ScrollAlign = "nearest" | "start" | "center" | "end";
 
 /**
- * The virtual offset that brings item `index` into view, from `offset`, with a viewport of
- * `viewportSize`. `"nearest"` moves as little as possible (not at all when the item is already
- * in view); the others put the item at the viewport's start, centre or end. Clamped to the
- * scrollable range.
- */
-export function scrollTargetFor(
-    axis: Axis,
-    index: number,
-    offset: number,
-    viewportSize: number,
-    align: ScrollAlign = "nearest",
-): number {
-    if (axis.count === 0) return 0;
-    const item = Math.min(Math.max(Math.floor(index), 0), axis.count - 1);
-    const start = axis.offsetOf(item);
-    return scrollTargetForSpan(
-        start,
-        start + axis.sizeOf(item),
-        offset,
-        viewportSize,
-        axis.totalSize,
-        align,
-    );
-}
-
-/**
- * The virtual offset that brings `[start, end)` into view, from `offset`, with a viewport of
- * `viewportSize` over content `totalSize` long: {@link scrollTargetFor} for any span (a row's
- * cells, without its detail).
+ * The virtual offset that brings `[start, end)` into view (an item, or a row's cells without its
+ * detail), from `offset`, with a viewport of `viewportSize` over content `totalSize` long.
+ * `"nearest"` moves as little as possible (not at all when the span is already in view); the
+ * others put the span at the viewport's start, centre or end. Clamped to the scrollable range.
  */
 export function scrollTargetForSpan(
     start: number,
@@ -64,5 +39,5 @@ export function scrollTargetForSpan(
                 target = offset;
             }
     }
-    return Math.min(Math.max(target, 0), max);
+    return clamp(target, 0, max);
 }

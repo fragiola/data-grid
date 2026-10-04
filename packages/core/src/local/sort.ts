@@ -1,4 +1,4 @@
-import { cellValue } from "../model/model";
+import { cellValue } from "../model/source";
 import type { Column, SortColumn } from "../model/types";
 import type { RowEntry } from "./filter";
 import { compareValues, isEmptyValue } from "./values";
@@ -21,38 +21,47 @@ export function sortEntries<TRow, TNode>(
             : [];
     });
     if (sorts.length === 0) return entries;
-    // each value read once, not once per comparison: rows decorated with their sort keys
-    const decorated = entries.map((entry) => ({
-        entry,
-        keys: sorts.map(({ column }) =>
-            column.compare
-                ? undefined
-                : cellValue(column, entry.row, entry.index),
-        ),
-    }));
+    // each value read once, not once per comparison, and whether it is empty: column-major, by
+    // the entry's position (a column's `compare` reads the rows instead)
+    const keys = sorts.map(({ column, sign }) => {
+        const values = column.compare
+            ? []
+            : entries.map(({ row, index }) => cellValue(column, row, index));
+        return { column, sign, values, empty: values.map(isEmptyValue) };
+    });
+    const positions = entries.map((_, position) => position);
     // Array.prototype.sort is stable: ties keep their order
-    decorated.sort((a, b) => {
-        for (let i = 0; i < sorts.length; i++) {
-            const sort = sorts[i];
-            if (!sort) continue;
+    positions.sort((a, b) => {
+        for (let k = 0; k < keys.length; k++) {
+            const key = keys[k];
+            if (!key) continue;
+            const { column, sign, values, empty } = key;
             let order: number;
-            if (sort.column.compare) {
+            if (column.compare) {
+                const aEntry = entries[a];
+                const bEntry = entries[b];
+                // called on its column, as before: a method may read `this`
                 order =
-                    sort.sign * sort.column.compare(a.entry.row, b.entry.row);
+                    aEntry && bEntry
+                        ? sign * column.compare(aEntry.row, bEntry.row)
+                        : 0;
             } else {
-                const aValue = a.keys[i];
-                const bValue = b.keys[i];
-                const aEmpty = isEmptyValue(aValue);
-                const bEmpty = isEmptyValue(bValue);
+                const aEmpty = empty[a] === true;
+                const bEmpty = empty[b] === true;
                 // empty values last, whichever the direction
                 order =
                     aEmpty || bEmpty
                         ? Number(aEmpty) - Number(bEmpty)
-                        : sort.sign * compareValues(aValue, bValue);
+                        : sign * compareValues(values[a], values[b]);
             }
             if (order !== 0) return order;
         }
         return 0;
     });
-    return decorated.map(({ entry }) => entry);
+    const sorted: RowEntry<TRow>[] = [];
+    for (const position of positions) {
+        const entry = entries[position];
+        if (entry) sorted.push(entry);
+    }
+    return sorted;
 }

@@ -45,13 +45,28 @@ export function cell(
     );
 }
 
+/** A header cell by its text: a column's name, or a group's. */
+export function header(page: Page, name: string): Locator {
+    return page.getByRole("columnheader").filter({ hasText: name });
+}
+
+/** The rendered body rows (the header rows are `header-row` parts). */
+export function rows(page: Page): Locator {
+    return page.locator('[data-grid-part="row"]');
+}
+
+/** A column's rendered body values, in order. */
+export function values(page: Page, columnIndex: number): Promise<string[]> {
+    return page
+        .locator(`[data-grid-part="cell"][data-column-index="${columnIndex}"]`)
+        .allTextContents();
+}
+
 /** The indexes of the rendered body rows, in order. */
 export async function renderedRows(page: Page): Promise<number[]> {
-    return page
-        .locator('[data-grid-part="row"]')
-        .evaluateAll((rows) =>
-            rows.map((row) => Number(row.getAttribute("data-row-index"))),
-        );
+    return rows(page).evaluateAll((elements) =>
+        elements.map((row) => Number(row.getAttribute("data-row-index"))),
+    );
 }
 
 /** The body's visible box: the viewport below the sticky header. */

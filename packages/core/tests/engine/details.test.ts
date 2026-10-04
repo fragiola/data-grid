@@ -1,41 +1,28 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     ariaRowCount,
     ariaRowDetail,
     ariaRowIndex,
     type Column,
-    createDataGridEngine,
-    createDataGridModel,
     type RowKey,
     rowCellsHeight,
     rowDetailBox,
     rowExpanded,
     rowTop,
 } from "../../src";
+import {
+    cellElement,
+    keydown as keydownFrom,
+    mountEngine,
+    type Row,
+} from "./harness";
 
 // Expanded rows and their details (Epic #41, M1–M4): a detail adds to its row's size in the row
 // axis, a row expanding above the view keeps the view where it is, the keys move between rows'
 // cells only, and a detail's content owns its keys.
 
-interface Row {
-    id: number;
-}
-
 let resize: (() => void) | null = null;
-
-class FakeResizeObserver {
-    constructor(callback: () => void) {
-        resize = callback;
-    }
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-    resize = null;
-});
 
 const COLUMNS: Column<Row>[] = Array.from({ length: 5 }, (_, i) => ({
     key: `c${i}`,
@@ -51,50 +38,26 @@ function setup(
         getRow?: (index: number) => Row | undefined;
     } = {},
 ) {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
-        columns: COLUMNS,
-        rowCount: options.rows ?? 1_000,
-        getRow: options.getRow ?? ((index) => ({ id: index })),
-        rowKey: (row) => row.id,
-        rowHeight: 20,
-        headerRowHeight: 30,
-        detailHeight: options.detailHeight ?? 100,
-        expandedRowKeys: options.expandedRowKeys,
-    });
-    const engine = createDataGridEngine(model, {
-        overscan: { rows: 2, columns: 1 },
-        maxScrollSize: options.maxScrollSize,
-    });
-    const size = { width: 500, height: 230 };
-    const scroll = { top: 0, left: 0 };
-    const element = document.createElement("div");
-    const view = () => engine.adapter.getView();
-    Object.defineProperties(element, {
-        clientWidth: { get: () => size.width },
-        clientHeight: { get: () => size.height },
-        scrollTop: {
-            get: () => scroll.top,
-            set: (value: number) => {
-                const max = view().headerHeight + view().height - size.height;
-                scroll.top = Math.min(Math.max(value, 0), Math.max(max, 0));
-            },
+    const mounted = mountEngine(
+        {
+            columns: COLUMNS,
+            rowCount: options.rows ?? 1_000,
+            getRow: options.getRow ?? ((index) => ({ id: index })),
+            rowKey: (row) => row.id,
+            detailHeight: options.detailHeight ?? 100,
+            expandedRowKeys: options.expandedRowKeys,
         },
-        scrollLeft: {
-            get: () => scroll.left,
-            set: (value: number) => {
-                scroll.left = Math.max(value, 0);
-            },
+        {
+            overscan: { rows: 2, columns: 1 },
+            maxScrollSize: options.maxScrollSize,
+            width: 500,
+            height: 230,
+            clamp: true,
+            layers: ["body"],
         },
-    });
-    document.body.append(element);
-    const grid = document.createElement("div");
-    const body = document.createElement("div");
-    element.append(grid);
-    grid.append(body);
-    engine.adapter.attach(element);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.registerLayer("body", body);
+    );
+    resize = mounted.resize;
+    const { model, engine, viewport: element, body, size, view } = mounted;
     /** The adapter rendering the view: a row element per row, its cells, its detail. */
     const render = () => {
         const current = view();
@@ -103,11 +66,7 @@ function setup(
                 const row = document.createElement("div");
                 row.dataset.rowIndex = String(rowIndex);
                 for (const columnIndex of current.columns) {
-                    const cell = document.createElement("div");
-                    cell.dataset.rowIndex = String(rowIndex);
-                    cell.dataset.columnIndex = String(columnIndex);
-                    cell.tabIndex = -1;
-                    row.append(cell);
+                    cellElement(row, rowIndex, columnIndex);
                 }
                 if (rowExpanded(current, rowIndex)) {
                     const detail = document.createElement("div");
@@ -125,9 +84,7 @@ function setup(
     render();
     const top = () => engine.get("scroll-position").top;
     const keydown = (key: string, target: Element = body) => {
-        const event = new KeyboardEvent("keydown", { key, cancelable: true });
-        Object.defineProperty(event, "target", { value: target });
-        const handled = engine.adapter.keydown(event);
+        const { handled } = keydownFrom(engine, target, key);
         render();
         return handled;
     };

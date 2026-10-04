@@ -1,41 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { createAxis } from "../../src/axis/axis";
-import { scrollTargetFor } from "../../src/viewport/scroll-target";
+import { scrollTargetForSpan } from "../../src/viewport/scroll-target";
 
-const rows = createAxis(100, 20);
+// Rows of 20 px: 100 of them are 2000 px long, item `i` spans [i * 20, i * 20 + 20).
+const TOTAL = 2_000;
 
-describe("scrolling to an item", () => {
-    it("does not move for an item already in view (nearest)", () => {
-        expect(scrollTargetFor(rows, 5, 0, 200)).toBe(0);
+describe("scrolling to a span", () => {
+    it("does not move for a span already in view (nearest)", () => {
+        expect(scrollTargetForSpan(100, 120, 0, 200, TOTAL)).toBe(0);
     });
 
-    it("moves as little as possible to an item above or below (nearest)", () => {
-        expect(scrollTargetFor(rows, 2, 100, 200)).toBe(40);
-        expect(scrollTargetFor(rows, 20, 0, 200)).toBe(220);
+    it("moves as little as possible to a span above or below (nearest)", () => {
+        expect(scrollTargetForSpan(40, 60, 100, 200, TOTAL)).toBe(40);
+        expect(scrollTargetForSpan(400, 420, 0, 200, TOTAL)).toBe(220);
     });
 
     it("aligns to the start, centre or end", () => {
-        expect(scrollTargetFor(rows, 50, 0, 200, "start")).toBe(1_000);
-        expect(scrollTargetFor(rows, 50, 0, 200, "end")).toBe(820);
-        expect(scrollTargetFor(rows, 50, 0, 200, "center")).toBe(910);
+        expect(scrollTargetForSpan(1_000, 1_020, 0, 200, TOTAL, "start")).toBe(
+            1_000,
+        );
+        expect(scrollTargetForSpan(1_000, 1_020, 0, 200, TOTAL, "end")).toBe(
+            820,
+        );
+        expect(scrollTargetForSpan(1_000, 1_020, 0, 200, TOTAL, "center")).toBe(
+            910,
+        );
     });
 
-    it("clamps to the scrollable range and to the axis", () => {
-        expect(scrollTargetFor(rows, 99, 0, 200, "start")).toBe(1_800);
-        expect(scrollTargetFor(rows, 0, 500, 200, "end")).toBe(0);
-        expect(scrollTargetFor(rows, 500, 0, 200)).toBe(1_800);
-        expect(scrollTargetFor(createAxis(0, 20), 3, 0, 200)).toBe(0);
+    it("clamps to the scrollable range", () => {
+        expect(scrollTargetForSpan(1_980, 2_000, 0, 200, TOTAL, "start")).toBe(
+            1_800,
+        );
+        expect(scrollTargetForSpan(0, 20, 500, 200, TOTAL, "end")).toBe(0);
+        expect(scrollTargetForSpan(0, 20, 0, 200, 100)).toBe(0);
     });
 
-    it("shows the start of an item taller than the viewport", () => {
-        const tall = createAxis(3, (i) => (i === 1 ? 500 : 20));
-        expect(scrollTargetFor(tall, 1, 0, 200)).toBe(20);
+    it("shows the start of a span taller than the viewport", () => {
+        expect(scrollTargetForSpan(20, 520, 0, 200, 540)).toBe(20);
     });
 
     it("reaches the last of 100M rows", () => {
-        const many = createAxis(100_000_000, 32);
-        expect(scrollTargetFor(many, 99_999_999, 0, 600)).toBe(
-            100_000_000 * 32 - 600,
+        const total = 100_000_000 * 32;
+        expect(scrollTargetForSpan(total - 32, total, 0, 600, total)).toBe(
+            total - 600,
         );
     });
 });

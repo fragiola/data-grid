@@ -277,4 +277,33 @@ describe("an axis with extra sizes (details)", () => {
         expect(shrunk.extraSizeOf(8)).toBe(0);
         expect(axis.withCount(10)).toBe(axis);
     });
+
+    it("counts a repeated extra once, the first one given", () => {
+        const axis = withExtraSizes(createAxis(10, 20), [
+            { index: 4, size: 30 },
+            { index: 2, size: 50 },
+            { index: 4, size: 70 },
+        ]);
+        expect(axis.totalSize).toBe(280);
+        expect(axis.extraSizeOf(4)).toBe(30);
+        expect(axis.offsetOf(5)).toBe(180);
+        expect(axis.indexAt(179)).toBe(4);
+        expect(axis.indexAt(180)).toBe(5);
+    });
+
+    it("keeps its extras through a resize, and is its base once a shrink drops them all", () => {
+        const sizes = [20, 20, 20, 20, 20];
+        const axis = withExtraSizes(
+            createAxis(5, (i) => sizes[i] ?? 0),
+            [{ index: 3, size: 100 }],
+        );
+        sizes[1] = 40;
+        const resized = axis.resized(1);
+        expect(resized.totalSize).toBe(220);
+        expect(resized.offsetOf(4)).toBe(200);
+        expect(resized.indexAt(199)).toBe(3);
+        expect(axis.totalSize).toBe(200);
+        expect(axis.withCount(3).extraSizeOf(3)).toBe(0);
+        expect(axis.withCount(3).totalSize).toBe(60);
+    });
 });

@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { openExample } from "../helpers";
+import { openExample, part } from "../helpers";
 import { cell } from "./helpers";
 
 // Row selection (Epic #57): the grid keeps the selected keys; checkboxes, Shift+click, Shift+Space,
@@ -52,7 +52,7 @@ test("Shift+Space, Shift+Down and Ctrl+A select from the keyboard; the header cl
     await openExample(page, "row-selection");
     const rows = await selectable(page, 8);
     const first = rows[0] ?? 0;
-    await page.locator('[data-grid-part="grid"]').focus();
+    await part(page, "grid").focus();
     for (let index = 0; index < first; index++) {
         await page.keyboard.press("ArrowDown");
     }
@@ -77,7 +77,7 @@ test("one at a time: a row replaces the other, and the grid is not multiselectab
     page,
 }) => {
     await openExample(page, "row-selection");
-    const grid = page.locator('[data-grid-part="grid"]');
+    const grid = part(page, "grid");
     await expect(grid).toHaveAttribute("aria-multiselectable", "true");
     await page.getByRole("switch").click();
     await expect(grid).not.toHaveAttribute("aria-multiselectable", /.*/);

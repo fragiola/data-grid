@@ -1,4 +1,6 @@
 import type { CellPosition } from "../model/types";
+import { clamp } from "../utils";
+import type { Range } from "../viewport/window";
 
 // Where the active cell goes for a key (D11, the APG grid pattern). Pure: the model commits what
 // this returns, and a middleware can refuse or rewrite it.
@@ -60,9 +62,7 @@ export interface GridBounds {
           ) => HeaderCellSpan | undefined)
         | undefined;
     /** the columns in view: a move down from a group lands on its first one in view */
-    readonly visibleColumns?:
-        | { readonly start: number; readonly end: number }
-        | undefined;
+    readonly visibleColumns?: Range | undefined;
 }
 
 /**
@@ -82,8 +82,8 @@ export function nextPosition(
     const lastRow = Math.max(bounds.rowCount - 1, firstRow);
     const lastColumn = Math.max(bounds.columnCount - 1, 0);
     const page = Math.max(1, Math.floor(pageSize));
-    const row = (index: number) => Math.min(Math.max(index, firstRow), lastRow);
-    const column = (index: number) => Math.min(Math.max(index, 0), lastColumn);
+    const row = (index: number) => clamp(index, firstRow, lastRow);
+    const column = (index: number) => clamp(index, 0, lastColumn);
     /** the cell holding a position: a header cell's span, or the body cell itself */
     const spanAt = (rowIndex: number, columnIndex: number): HeaderCellSpan => {
         const r = row(rowIndex);
@@ -147,7 +147,10 @@ export function nextPosition(
 export function sameCell(
     a: CellPosition,
     b: CellPosition,
-    headerCellAt?: GridBounds["headerCellAt"],
+    headerCellAt?: (
+        rowIndex: number,
+        columnIndex: number,
+    ) => HeaderCellSpan | undefined,
 ): boolean {
     if (a.rowIndex === b.rowIndex && a.columnIndex === b.columnIndex) {
         return true;

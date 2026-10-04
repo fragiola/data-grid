@@ -1,27 +1,21 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
     type Column,
     createDataGridEngine,
     createDataGridModel,
 } from "../../src";
+import {
+    cellElement,
+    fakeResizeObserver,
+    fakeViewport,
+    keyEvent as keyFrom,
+    type Row,
+} from "./harness";
 
 // A grid nested in a cell of another one is its own grid (#17): each engine looks only at its own
 // cells, keys and focus, and the outer grid sees focus inside the inner one as focus inside the
 // cell that holds it.
-
-interface Row {
-    id: number;
-}
-
-class FakeResizeObserver {
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-});
 
 const COLUMNS: Column<Row>[] = [
     { key: "a", width: 100 },
@@ -30,7 +24,7 @@ const COLUMNS: Column<Row>[] = [
 
 /** An engine on a viewport jsdom cannot lay out: a fixed client size, scroll offsets kept. */
 function grid(parent: Element, rowCount = 5) {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    fakeResizeObserver();
     const model = createDataGridModel<Row>({
         columns: COLUMNS,
         rowCount,
@@ -39,47 +33,13 @@ function grid(parent: Element, rowCount = 5) {
         headerRowHeight: 20,
     });
     const engine = createDataGridEngine(model);
-    const viewport = document.createElement("div");
-    let top = 0;
-    let left = 0;
-    Object.defineProperties(viewport, {
-        clientWidth: { get: () => 200 },
-        clientHeight: { get: () => 120 },
-        scrollTop: {
-            get: () => top,
-            set: (value: number) => {
-                top = value;
-            },
-        },
-        scrollLeft: {
-            get: () => left,
-            set: (value: number) => {
-                left = value;
-            },
-        },
-    });
+    const { element: viewport } = fakeViewport({ width: 200, height: 120 });
     parent.append(viewport);
     engine.adapter.attach(viewport);
     /** A cell element of this grid, appended in the given order. */
-    const cell = (rowIndex: number, columnIndex: number) => {
-        const element = document.createElement("div");
-        element.dataset.rowIndex = String(rowIndex);
-        element.dataset.columnIndex = String(columnIndex);
-        element.tabIndex = -1;
-        viewport.append(element);
-        return element;
-    };
+    const cell = (rowIndex: number, columnIndex: number) =>
+        cellElement(viewport, rowIndex, columnIndex);
     return { model, engine, viewport, cell };
-}
-
-function keyFrom(target: Element, key: string): KeyboardEvent {
-    const event = new KeyboardEvent("keydown", {
-        key,
-        cancelable: true,
-        bubbles: true,
-    });
-    Object.defineProperty(event, "target", { value: target });
-    return event;
 }
 
 /** An outer grid whose cell (0, 1) holds an inner grid, appended before the outer cell (0, 0). */

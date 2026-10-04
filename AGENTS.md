@@ -186,6 +186,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `site` |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
+| `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip): a report, after `pnpm build` |
 | `pnpm e2e` | Playwright: the playground (Chromium and Firefox) and the examples app (Chromium) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
 | `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
@@ -236,6 +237,36 @@ themes) and the source beside the stage; the state is in the URL
 - **One generic, the row type.** No casts on row data, in the packages or the examples.
 - **Type fixtures** go in `tests/types/` (checked by `tsc`, not run): `@ts-expect-error` marks
   what must not compile.
+
+## Code quality
+
+Every change keeps the packages small, simple and fast (Epic #62). Before writing code:
+
+- **Reuse first.** Look for the helper that already exists (`sameCell`, `holdsRowIn`,
+  `windowFor`, the row-key rule, the failure helper, the shared utils) before writing one. Logic
+  needed twice becomes one function; a helper several modules use goes in a small shared module
+  (`src/utils.ts` in the core, `src/utils/` in React), outside `local/` and `selection/` so the main
+  entry never reaches the extras.
+- **The core grows only for the grid's own job.** Headless first (Epic #57): what is not the
+  grid's own (ARIA, `data-*`, keys, focus, layout, data contract) is an opt-in entry point or the
+  app's.
+- **Simple over clever.** No flag that duplicates other state, no defensive branch that cannot
+  happen, no wrapper with a single caller unless its name says something the code does not.
+- **Hot paths allocate nothing they do not need**: the scroll and wheel handlers, `update`,
+  `commit`, and the per-cell hooks. Nothing runs per frame that can run per window change (D9).
+- **Size is watched.** `pnpm size` (after `pnpm build`; CI prints it too) reports each entry point;
+  a PR says when one grows noticeably, and why.
+- **Tests share their setup**, never a copy: `packages/core/tests/engine/harness.ts` (the engine
+  on a fake viewport), `packages/react/tests/helpers.tsx` and `examples/react/e2e/helpers.ts`,
+  `examples/react/e2e/examples/helpers.ts` (the playground's spec imports it too).
+
+A review checks:
+
+1. Nothing is duplicated: logic needed twice is one function.
+2. An existing helper is reused where one fits.
+3. The core grows only for the grid's own job.
+4. A hot path allocates and computes nothing it does not need.
+5. The size report: what it adds, and why, in the PR.
 
 ## The primitive contract (`@fragiola/data-grid-react`)
 

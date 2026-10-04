@@ -2,12 +2,8 @@
 // opt-in entry point: the grid itself never orders or filters rows, and an app that never imports
 // this never ships it.
 
-export {
-    isEmptyFilter,
-    type LocalFilters,
-    matchesFilter,
-} from "./filter";
-export { clampPageIndex, pageCount } from "./page";
+export type { LocalFilters } from "./filter";
+export { pageCount } from "./page";
 export {
     createLocalRows,
     filterRows,
@@ -19,4 +15,3 @@ export {
     searchRows,
     sortRows,
 } from "./rows";
-export { compareValues, isEmptyValue } from "./values";

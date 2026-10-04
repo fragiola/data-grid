@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { type Column, DataGrid, type HeaderCellState } from "../src";
+import { cellAt, settled, stubViewportSize, tags } from "./helpers";
 
 // Interactive cells (Epic #52, I5): the cell whose controls have the keys carries
 // `data-interacting`, its hooks report `interacting`, and the cells' controls stay out of the tab
@@ -31,28 +32,7 @@ const columns: Column<Task>[] = [
     },
 ];
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 400],
-        ["clientHeight", 300],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
-
-/** DOM changes reach the engine's observer as a microtask: let it run. */
-const settled = () =>
-    act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+stubViewportSize(400, 300);
 
 let headerStates: HeaderCellState[] = [];
 
@@ -63,16 +43,17 @@ function Grid({
     table?: boolean;
     cells?: Column<Task>[];
 }) {
+    const tag = tags(table);
     return (
         <DataGrid.Root columns={cells} rows={tasks} rowHeight={24}>
-            <DataGrid.Grid render={table ? <table /> : undefined}>
-                <DataGrid.Header render={table ? <thead /> : undefined}>
-                    <DataGrid.HeaderRow render={table ? <tr /> : undefined}>
+            <DataGrid.Grid render={tag.grid}>
+                <DataGrid.Header render={tag.header}>
+                    <DataGrid.HeaderRow render={tag.headerRow}>
                         <DataGrid.HeaderCells<Task>>
                             {(cell) => (
                                 <DataGrid.HeaderCell
                                     cell={cell}
-                                    render={table ? <th /> : undefined}
+                                    render={tag.headerCell}
                                     className={(state) => {
                                         headerStates.push(state);
                                         return undefined;
@@ -82,18 +63,15 @@ function Grid({
                         </DataGrid.HeaderCells>
                     </DataGrid.HeaderRow>
                 </DataGrid.Header>
-                <DataGrid.Body render={table ? <tbody /> : undefined}>
+                <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Task>>
                         {(row) => (
-                            <DataGrid.Row
-                                row={row}
-                                render={table ? <tr /> : undefined}
-                            >
+                            <DataGrid.Row row={row} render={tag.row}>
                                 <DataGrid.Cells<Task>>
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            render={table ? <td /> : undefined}
+                                            render={tag.cell}
                                             className={(state) =>
                                                 state.interacting
                                                     ? "interacting"
@@ -109,14 +87,6 @@ function Grid({
             </DataGrid.Grid>
         </DataGrid.Root>
     );
-}
-
-function cellAt(container: HTMLElement, rowIndex: number, columnIndex: number) {
-    const element = container.querySelector(
-        `[data-grid-part="cell"][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
-    );
-    if (!(element instanceof HTMLElement)) throw new Error("no cell");
-    return element;
 }
 
 for (const table of [false, true]) {

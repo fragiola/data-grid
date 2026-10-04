@@ -1,16 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
+import { header, values } from "./helpers";
 
 // The external mode (Epic #47): the app sends the sort, a filter, a search and the page to a
 // pretend server, and the grid shows the page that comes back.
-
-const header = (page: Page, name: string) =>
-    page.getByRole("columnheader").filter({ hasText: name });
-
-const values = (page: Page, columnIndex: number) =>
-    page
-        .locator(`[data-grid-part="cell"][data-column-index="${columnIndex}"]`)
-        .allTextContents();
 
 /** The newest request the app sent. */
 const lastRequest = (page: Page) =>

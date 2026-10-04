@@ -1,4 +1,6 @@
-import { rowAt } from "./source";
+import { keySet, lowerBound, sameList } from "../utils";
+import type { Range } from "../viewport/window";
+import { loadedRowKey, type RowsState } from "./source";
 import type { DataGridState, RowKey } from "./types";
 
 // Expanded rows (M1): the model keeps their keys, the app's state, and derives the indexes of the
@@ -15,18 +17,38 @@ import type { DataGridState, RowKey } from "./types";
 /** A detail's height when none is given. */
 export const DEFAULT_DETAIL_HEIGHT = 300;
 
-type Keyed<TRow> = Pick<
-    DataGridState<TRow>,
-    "source" | "rowCount" | "rowKey" | "expandedRowKeys" | "expandedRows"
->;
-
 /** Where each expanded key's row was last seen: a cache, checked before it is used. */
 export type RowKeyHints = Map<RowKey, number>;
 
-/** Rows to look in for the keys still missing: from `start` to `end` (excluded). */
-export interface SearchRange {
-    readonly start: number;
-    readonly end: number;
+/**
+ * The state with the expanded rows found again after the rows or the keys changed: a key missing
+ * from where it was is looked for in `search` (every row by default).
+ */
+export function withExpandedRows<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    hints: RowKeyHints,
+    search: Range = { start: 0, end: state.rowCount },
+): DataGridState<TRow, TNode> {
+    const expandedRows = expandedRowsOf(state, hints, search);
+    return sameRowKeys(expandedRows, state.expandedRows)
+        ? state
+        : { ...state, expandedRows };
+}
+
+/**
+ * The rows a new source may hold expanded keys in: behind the same `getRow` and `rowKey`, only
+ * the rows it added (the others change through `rows.changed`); anything else, every row.
+ */
+export function newRowsOf<TRow, TNode>(
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): Range {
+    const same =
+        "getRow" in before.source &&
+        "getRow" in after.source &&
+        before.source.getRow === after.source.getRow &&
+        before.rowKey === after.rowKey;
+    return { start: same ? before.rowCount : 0, end: after.rowCount };
 }
 
 /** A key the model accepts: a string, or a finite number. */
@@ -54,33 +76,23 @@ export function sameRowKeys(
     a: readonly RowKey[],
     b: readonly RowKey[],
 ): boolean {
-    return a.length === b.length && a.every((key, i) => key === b[i]);
-}
-
-/** The key of a loaded row; `undefined` while it is not loaded (its key is unknown). */
-export function loadedRowKey<TRow>(
-    state: Pick<Keyed<TRow>, "source" | "rowCount" | "rowKey">,
-    rowIndex: number,
-): RowKey | undefined {
-    if (!Number.isInteger(rowIndex) || rowIndex < 0) return undefined;
-    if (rowIndex >= state.rowCount) return undefined;
-    const row = rowAt(state.source, rowIndex);
-    if (row === undefined) return undefined;
-    return state.rowKey ? state.rowKey(row, rowIndex) : rowIndex;
+    return sameList(a, b, (x, y) => x === y);
 }
 
 const EMPTY: readonly number[] = [];
 
 /**
  * The indexes of the rows shown expanded, ascending: each key where it was last seen, else
- * searched for in `search`. `hints` learns where every key was found.
+ * searched for in `search` (the rows to look in for the keys still missing). `hints` learns where
+ * every key was found.
  */
 export function expandedRowsOf<TRow>(
-    state: Keyed<TRow>,
+    state: RowsState<TRow> &
+        Pick<DataGridState<TRow>, "expandedRowKeys" | "expandedRows">,
     hints: RowKeyHints,
-    search: SearchRange,
+    search: Range,
 ): readonly number[] {
-    const keys = new Set(state.expandedRowKeys);
+    const keys = keySet(state.expandedRowKeys);
     for (const key of hints.keys()) if (!keys.has(key)) hints.delete(key);
     if (keys.size === 0) return EMPTY;
     if (!state.rowKey) {
@@ -123,18 +135,50 @@ export function holdsRowIn(
     start: number,
     end: number,
 ): boolean {
-    let low = 0;
-    let high = rows.length;
-    while (low < high) {
-        const middle = (low + high) >>> 1;
-        if ((rows[middle] ?? 0) < start) low = middle + 1;
-        else high = middle;
-    }
-    const first = rows[low];
+    const first = rows[firstRowFrom(rows, start)];
     return first !== undefined && first < end;
+}
+
+/** Where the first index from `start` on is in `rows` (ascending): where `start` would go. */
+function firstRowFrom(rows: readonly number[], start: number): number {
+    return lowerBound(rows.length, (i) => (rows[i] ?? 0) < start);
+}
+
+/** `rows` (ascending) with `rowIndex` added in its place. */
+export function withRow(
+    rows: readonly number[],
+    rowIndex: number,
+): readonly number[] {
+    const next = rows.slice();
+    next.splice(firstRowFrom(rows, rowIndex), 0, rowIndex);
+    return next;
 }
 
 /** Whether `rows` (ascending) holds `rowIndex`. */
 export function holdsRow(rows: readonly number[], rowIndex: number): boolean {
     return holdsRowIn(rows, rowIndex, rowIndex + 1);
+}
+
+/**
+ * Whether the details' sizes may differ between two states: the rows shown expanded changed, or,
+ * with rows expanded, their height did.
+ */
+export function detailsChanged<TRow, TNode>(
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): boolean {
+    return (
+        after.expandedRows !== before.expandedRows ||
+        (after.expandedRows.length > 0 &&
+            (after.detailHeight !== before.detailHeight ||
+                // a detail's height may be a function of its row, whose data changed
+                (typeof after.detailHeight === "function" &&
+                    (after.source !== before.source ||
+                        (after.rowsChanged !== before.rowsChanged &&
+                            holdsRowIn(
+                                after.expandedRows,
+                                after.rowsChanged.start,
+                                after.rowsChanged.end,
+                            ))))))
+    );
 }

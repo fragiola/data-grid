@@ -1,81 +1,28 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-    createDataGridEngine,
-    createDataGridModel,
-    type RowSelection,
-    veto,
-} from "../../src";
+import { describe, expect, it } from "vitest";
+import { type RowSelection, veto } from "../../src";
+import { cellElement, keydown, keyEvent, mountEngine } from "./harness";
 
 // The selection's keys (Epic #57, R6): Shift+Space toggles the active row, Shift+Up/Down extend
 // from the anchor, Ctrl/⌘+A selects every row; on body rows only, in navigation only, with rows
 // selectable, through commands.
 
-interface Row {
-    id: number;
-}
-
-class FakeResizeObserver {
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-});
-
 /** `null`: rows not selectable */
 function setup(rowSelection: RowSelection | null = "multiple") {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
+    const { model, engine, grid } = mountEngine({
         columns: [
             { key: "id", width: 80 },
             { key: "name", width: 120 },
         ],
         rowCount: 100,
-        getRow: (id) => ({ id }),
         rowKey: (row) => `r${row.id}`,
-        rowHeight: 20,
-        headerRowHeight: 30,
         rowSelection: rowSelection ?? undefined,
     });
-    const engine = createDataGridEngine(model);
-    const view = () => engine.adapter.getView();
-    const viewport = document.createElement("div");
-    Object.defineProperties(viewport, {
-        clientWidth: { get: () => 400 },
-        clientHeight: { get: () => 260 },
-    });
-    const grid = document.createElement("div");
-    viewport.append(grid);
-    document.body.append(viewport);
-    engine.adapter.attach(viewport);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.commit(view());
     /** a cell's element, as an adapter renders it */
-    const cell = (rowIndex: number, columnIndex = 0, html = "") => {
-        const element = document.createElement("div");
-        element.dataset.rowIndex = String(rowIndex);
-        element.dataset.columnIndex = String(columnIndex);
-        element.tabIndex = -1;
-        element.innerHTML = html;
-        grid.append(element);
-        return element;
-    };
-    const key = (
-        target: Element,
-        name: string,
-        init: KeyboardEventInit = {},
-    ) => {
-        const event = new KeyboardEvent("keydown", {
-            key: name,
-            cancelable: true,
-            ...init,
-        });
-        Object.defineProperty(event, "target", { value: target });
-        const handled = engine.adapter.keydown(event);
-        return { handled, event };
-    };
+    const cell = (rowIndex: number, columnIndex = 0, html = "") =>
+        cellElement(grid, rowIndex, columnIndex, html);
+    const key = (target: Element, name: string, init: KeyboardEventInit = {}) =>
+        keydown(engine, target, name, init);
     const activate = (rowIndex: number, columnIndex = 0) => {
         model.run("active-position.set", { rowIndex, columnIndex });
         return cell(rowIndex, columnIndex);
@@ -284,13 +231,8 @@ describe("whose keys they are", () => {
     it("never a key the consumer prevented", () => {
         const { engine, activate, keys } = setup();
         const target = activate(2);
-        const event = new KeyboardEvent("keydown", {
-            key: " ",
-            shiftKey: true,
-            cancelable: true,
-        });
+        const event = keyEvent(target, " ", { shiftKey: true });
         event.preventDefault();
-        Object.defineProperty(event, "target", { value: target });
         expect(engine.adapter.keydown(event)).toBe(false);
         expect(keys()).toEqual([]);
     });

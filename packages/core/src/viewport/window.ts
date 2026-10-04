@@ -60,6 +60,11 @@ export function contains(outer: Range, inner: Range): boolean {
     );
 }
 
+/** Whether `range` and the items from `start` to `end` (excluded) have an item in common. */
+export function overlaps(range: Range, start: number, end: number): boolean {
+    return start < range.end && end > range.start;
+}
+
 export function sameRange(a: Range, b: Range): boolean {
     return a.start === b.start && a.end === b.end;
 }

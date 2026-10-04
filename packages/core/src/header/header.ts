@@ -5,6 +5,7 @@ import type {
     HeaderCellLayout,
     HeaderLayout,
 } from "../model/types";
+import { lowerBound } from "../utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,
@@ -25,10 +26,12 @@ function childrenOf<TRow, TNode>(
     return Array.isArray(group.children) ? group.children : [];
 }
 
-function isColumn<TRow, TNode>(
-    entry: ColumnOrGroup<TRow, TNode>,
-): entry is Column<TRow, TNode> {
-    return entry.children === undefined;
+/** The header's rows: its depth with a header, 0 without (a header row 0 high). */
+export function headerRowCount(state: {
+    readonly headerRowHeight: number;
+    readonly header: Pick<HeaderLayout<unknown>, "depth">;
+}): number {
+    return state.headerRowHeight > 0 ? state.header.depth : 0;
 }
 
 /** The grid's columns and its header, from the entries of `columns`. */
@@ -154,7 +157,7 @@ function flatHeader<TRow, TNode>(
 export function layoutColumns<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],
 ): ColumnLayout<TRow, TNode> {
-    if (entries.every(isColumn)) {
+    if (entries.every((entry) => !isColumnGroup(entry))) {
         return { columns: entries, header: flatHeader(entries) };
     }
     // the depth first: a cell's row counts from the top
@@ -262,17 +265,13 @@ export function headerCellsIn<TRow, TNode>(
     return header.rows.map((row, level) => {
         // the cells of a row are in column order, without overlaps: the first one ending after
         // `start` is found by bisection
-        let low = 0;
-        let high = row.length;
-        while (low < high) {
-            const middle = (low + high) >>> 1;
-            const cell = row[middle];
-            if (cell && cell.columnIndex + cell.columnSpan <= start) {
-                low = middle + 1;
-            } else {
-                high = middle;
-            }
-        }
+        const low = lowerBound(row.length, (i) => {
+            const cell = row[i];
+            return (
+                cell !== undefined &&
+                cell.columnIndex + cell.columnSpan <= start
+            );
+        });
         const cells: HeaderCellLayout<TRow, TNode>[] = [];
         for (let i = low; i < row.length; i++) {
             const cell = row[i];

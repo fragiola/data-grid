@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
     DataGrid,
@@ -9,6 +9,7 @@ import {
     type SortColumn,
     useDataGridRef,
 } from "../src";
+import { headerAt, stubViewportSize } from "./helpers";
 
 // Sorting (Epic #27): `sortable` columns, the sort controlled or not like the active position
 // (S5), toggled by a click, Enter or Space on a header cell after the consumer's handlers (S4),
@@ -41,24 +42,7 @@ const columns: Column<Person>[] = [
     },
 ];
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 400],
-        ["clientHeight", 235],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(400, 235);
 
 type GridProps = Pick<
     RootProps<Person>,
@@ -99,18 +83,10 @@ function Grid({ cells = columns, table, ...props }: GridProps) {
     );
 }
 
-function header(container: HTMLElement, columnIndex: number): HTMLElement {
-    const cell = container.querySelector(
-        `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]`,
-    );
-    if (!(cell instanceof HTMLElement)) throw new Error("no header cell");
-    return cell;
-}
-
 /** Each header cell's sort, as its attributes show it. */
 function shown(container: HTMLElement) {
     return [0, 1, 2].map((columnIndex) => {
-        const cell = header(container, columnIndex);
+        const cell = headerAt(container, columnIndex);
         return [
             cell.getAttribute("aria-sort"),
             cell.getAttribute("data-sort"),
@@ -131,7 +107,7 @@ describe("uncontrolled", () => {
             [null, null, null, true],
             [null, null, null, false],
         ]);
-        fireEvent.click(header(container, 0));
+        fireEvent.click(headerAt(container, 0));
         expect(onSortColumnsChange).toHaveBeenLastCalledWith([
             { columnKey: "name", direction: "ascending" },
         ]);
@@ -141,7 +117,7 @@ describe("uncontrolled", () => {
             "1",
             true,
         ]);
-        fireEvent.click(header(container, 0));
+        fireEvent.click(headerAt(container, 0));
         expect(shown(container)[0]).toEqual([
             "descending",
             "descending",
@@ -158,7 +134,7 @@ describe("uncontrolled", () => {
                 ]}
             />,
         );
-        fireEvent.click(header(container, 0), { ctrlKey: true });
+        fireEvent.click(headerAt(container, 0), { ctrlKey: true });
         expect(shown(container)).toEqual([
             [null, "ascending", "2", true],
             ["descending", "descending", "1", true],
@@ -168,7 +144,7 @@ describe("uncontrolled", () => {
 
     it("toggles on Enter and Space on the active header cell", () => {
         const { container } = render(<Grid />);
-        const name = header(container, 0);
+        const name = headerAt(container, 0);
         act(() => name.focus());
         fireEvent.keyDown(name, { key: "Enter" });
         expect(shown(container)[0]?.[1]).toBe("ascending");
@@ -212,7 +188,7 @@ describe("uncontrolled", () => {
                 onSortColumnsChange={onSortColumnsChange}
             />,
         );
-        const button = header(container, 0).querySelector("button");
+        const button = headerAt(container, 0).querySelector("button");
         if (!button) throw new Error("no button");
         fireEvent.click(button);
         expect(onSortColumnsChange).not.toHaveBeenCalled();
@@ -225,7 +201,7 @@ describe("controlled", () => {
         const { container, rerender } = render(
             <Grid sortColumns={[]} onSortColumnsChange={onSortColumnsChange} />,
         );
-        fireEvent.click(header(container, 1));
+        fireEvent.click(headerAt(container, 1));
         expect(onSortColumnsChange).toHaveBeenCalledWith([
             { columnKey: "age", direction: "ascending" },
         ]);
@@ -253,8 +229,8 @@ describe("controlled", () => {
             );
         }
         const { container } = render(<Parent />);
-        fireEvent.click(header(container, 0));
-        fireEvent.click(header(container, 1), { metaKey: true });
+        fireEvent.click(headerAt(container, 0));
+        fireEvent.click(headerAt(container, 1), { metaKey: true });
         expect(shown(container)).toEqual([
             ["ascending", "ascending", "1", true],
             [null, "ascending", "2", true],
@@ -369,7 +345,7 @@ describe("cancelling", () => {
             ),
         ];
         for (const { container } of views) {
-            fireEvent.click(header(container, 0));
+            fireEvent.click(headerAt(container, 0));
         }
         // on the header cell itself: its own onClick runs first (bubbling)
         const { container } = render(
@@ -394,7 +370,7 @@ describe("cancelling", () => {
                 </DataGrid.Grid>
             </DataGrid.Root>,
         );
-        fireEvent.click(header(container, 0));
+        fireEvent.click(headerAt(container, 0));
         expect(onSortColumnsChange).not.toHaveBeenCalled();
     });
 });
@@ -409,7 +385,7 @@ describe("structure", () => {
                 ]}
             />,
         );
-        const th = header(container, 0);
+        const th = headerAt(container, 0);
         expect(th.tagName).toBe("TH");
         expect(th).toHaveAttribute("aria-sort", "descending");
     });

@@ -51,7 +51,8 @@ export function dataAttributes(
     record: Record<string, string | number | boolean | undefined>,
 ) {
     const attributes: Record<string, string> = {};
-    for (const [key, value] of Object.entries(record)) {
+    for (const key in record) {
+        const value = record[key];
         if (value === true) {
             attributes[`data-${key}`] = "";
         } else if (value !== false && value !== undefined) {
@@ -65,12 +66,37 @@ type AnyProps = Record<string, unknown>;
 
 interface RenderOptions<State> {
     state: State;
-    /** the primitive's own props: ARIA, data-*, handlers, children */
+    /**
+     * the primitive's own props: ARIA, data-*, handlers, and its structural style (`style`), which
+     * always wins over the consumer's. A part hook's result (`{ state, props }`) fits as it is.
+     */
     props: Record<string, unknown>;
+    /** what the element holds */
+    children?: React.ReactNode;
     /** the primitive's ref, merged with the consumer's */
     ref?: React.Ref<HTMLElement> | undefined;
-    /** structural style: always wins over the consumer's */
-    style?: React.CSSProperties | undefined;
+    /**
+     * style keys left out of the consumer's style and its `render` element's: the keys the engine
+     * writes itself (a layer's `transform`, a pinned cell's `left`), or that would move the
+     * element from its place
+     */
+    drop?: readonly (keyof React.CSSProperties)[] | undefined;
+    /**
+     * handlers that run last, after the consumer's and the `render` element's own (the grid's
+     * keys and clicks, which `preventDefault` before them cancels)
+     */
+    after?: AnyProps | undefined;
+}
+
+/** A style without the `drop` keys: the same object when it has none of them. */
+function without(
+    style: React.CSSProperties | undefined,
+    drop: RenderOptions<unknown>["drop"],
+): React.CSSProperties | undefined {
+    if (!style || !drop?.some((key) => key in style)) return style;
+    const rest: React.CSSProperties = { ...style };
+    for (const key of drop) delete rest[key];
+    return rest;
 }
 
 /**
@@ -90,6 +116,7 @@ export function useRenderElement<State>(
         ref: externalRef,
         ...external
     } = componentProps as PrimitiveProps<State> & AnyProps;
+    const { drop, after } = options;
     const internalRef = options.ref;
     // the render element's own ref joins the merge; memoized so React does not detach and
     // re-attach the refs (and the primitive's registrations) on every render
@@ -120,15 +147,19 @@ export function useRenderElement<State>(
 
     const resolvedClassName =
         typeof className === "function" ? className(options.state) : className;
-    const resolvedStyle =
-        typeof style === "function" ? style(options.state) : style;
-    const structural = options.style;
+    const resolvedStyle = without(
+        typeof style === "function" ? style(options.state) : style,
+        drop,
+    );
+    const structural = options.props.style as React.CSSProperties | undefined;
     const mergedStyle =
         resolvedStyle || structural
             ? { ...resolvedStyle, ...structural }
             : undefined;
 
-    const props = mergeProps(options.props, external);
+    let props = mergeProps(options.props, external);
+    // a part's children are its own (the option); without it, its props' stay
+    if (options.children !== undefined) props.children = options.children;
     if (resolvedClassName !== undefined) {
         props.className = resolvedClassName;
     }
@@ -138,21 +169,24 @@ export function useRenderElement<State>(
     props.ref = ref;
 
     if (typeof render === "function") {
+        if (after) props = mergeProps(props, after);
         return render(props as unknown as RenderedProps, options.state);
     }
     if (renderElement) {
         const elementProps = renderElement.props;
-        const merged = mergeProps(props, elementProps);
+        let merged = mergeProps(props, elementProps);
         // the element's own style sits under the structural keys too
         if (elementProps.style || props.style) {
             merged.style = {
-                ...(elementProps.style as React.CSSProperties),
+                ...without(elementProps.style as React.CSSProperties, drop),
                 ...resolvedStyle,
                 ...structural,
             };
         }
         merged.ref = ref;
+        if (after) merged = mergeProps(merged, after);
         return React.cloneElement(renderElement, merged);
     }
+    if (after) props = mergeProps(props, after);
     return React.createElement(tag, props);
 }

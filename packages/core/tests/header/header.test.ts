@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { ColumnOrGroup } from "../../src";
 import {
-    type ColumnOrGroup,
     columnsError,
     headerCellsIn,
     isColumnGroup,
     layoutColumns,
-} from "../../src";
+} from "../../src/header/header";
 import { CELLS, leaf, type Row, TREE } from "./tree";
 
 const keysOf = (cells: readonly { key: string }[]) => cells.map((c) => c.key);

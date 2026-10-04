@@ -1,41 +1,23 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
     type Column,
     type ColumnOrGroup,
     columnLeft,
-    columnsError,
-    createDataGridEngine,
     createDataGridModel,
     headerCellBox,
-    pinnedInset,
     renderedWidth,
     rowDisplay,
     rowLeft,
 } from "../../src";
+import { pinnedInset } from "../../src/engine/geometry";
+import { columnsError } from "../../src/header/header";
+import { mountEngine, type Row } from "./harness";
 
 // Pinned columns at the start (Epic #31, P1–P7; Epic #38): the leading `pinned: "start"` columns
 // are always rendered, the column window covers the view right of them, their cells are sticky in
 // their row's flow at the inset the engine writes (written only when the layers' offset moves,
 // unscaled and scaled), and bringing a cell into view leaves it right of them.
-
-interface Row {
-    id: number;
-}
-
-let resize: (() => void) | null = null;
-
-class FakeResizeObserver {
-    constructor(callback: () => void) {
-        resize = callback;
-    }
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-});
 
 const column = (key: string, pinned = false): Column<Row> => ({
     key,
@@ -55,50 +37,19 @@ function setup(
         maxScrollSize?: number;
     } = {},
 ) {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
-        columns: options.columns ?? COLUMNS,
-        rowCount: 1_000,
-        getRow: (id) => ({ id }),
-        rowHeight: 20,
-        headerRowHeight: 30,
-    });
-    const engine = createDataGridEngine(model, {
-        overscan: { rows: 2, columns: 1 },
-        maxScrollSize: options.maxScrollSize,
-    });
-    const view = () => engine.adapter.getView();
-    const size = { width: options.width ?? 500, height: 230 };
-    const scroll = { top: 0, left: 0 };
-    const viewport = document.createElement("div");
-    Object.defineProperties(viewport, {
-        clientWidth: { get: () => size.width },
-        clientHeight: { get: () => size.height },
-        scrollTop: {
-            get: () => scroll.top,
-            set: (value: number) => {
-                const max = view().headerHeight + view().height - size.height;
-                scroll.top = Math.min(Math.max(value, 0), Math.max(max, 0));
-            },
+    const mounted = mountEngine(
+        { columns: options.columns ?? COLUMNS, rowCount: 1_000 },
+        {
+            overscan: { rows: 2, columns: 1 },
+            maxScrollSize: options.maxScrollSize,
+            width: options.width ?? 500,
+            height: 230,
+            clamp: true,
+            layers: ["body"],
         },
-        scrollLeft: {
-            get: () => scroll.left,
-            set: (value: number) => {
-                const max = view().width - size.width;
-                scroll.left = Math.min(Math.max(value, 0), Math.max(max, 0));
-            },
-        },
-    });
-    const grid = document.createElement("div");
-    const body = document.createElement("div");
-    viewport.append(grid);
-    grid.append(body);
-    document.body.append(viewport);
-    engine.adapter.attach(viewport);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.registerLayer("body", body);
-    engine.adapter.commit(view());
-    const commit = () => engine.adapter.commit(view());
+    );
+    const { model, engine, view, viewport, body, size, scroll, commit } =
+        mounted;
     const scrollLeft = (left: number) => {
         viewport.scrollLeft = left;
         viewport.dispatchEvent(new Event("scroll"));
@@ -124,7 +75,7 @@ function setup(
         view,
         size,
         resize: () => {
-            resize?.();
+            mounted.resize();
             commit();
         },
         scroll,

@@ -71,18 +71,23 @@ export const ViewContext = createContext<GridView<unknown, ReactNode> | null>(
     null,
 );
 
+/** What a part, or `useDataGrid()` without a ref, throws outside a `Root`. */
+const OUTSIDE_ROOT = "useDataGrid() must be used inside <DataGrid.Root>";
+
 /**
  * The grid a hook reads: the one a `gridRef` holds when it is given one (`null` until a `Root`
- * takes it), else the `Root` around the component's (`null` outside one).
+ * takes it), else the `Root` around the component's; throws `outside` without either.
  */
 export function useGrid<TRow>(
     gridRef: DataGridRef<TRow> | undefined,
+    outside: string,
 ): DataGridContextValue<TRow> | null {
     const fromRoot = useContext(DataGridContext);
     const fromRef = useGridRefCurrent(gridRef);
     if (gridRef) return fromRef;
+    if (!fromRoot) throw new Error(outside);
     // the `Root` that provides it was given the row type the hook states
-    return fromRoot as unknown as DataGridContextValue<TRow> | null;
+    return fromRoot as unknown as DataGridContextValue<TRow>;
 }
 
 /**
@@ -99,11 +104,15 @@ export function useDataGrid<TRow>(
 export function useDataGrid<TRow>(
     gridRef?: DataGridRef<TRow>,
 ): DataGridContextValue<TRow> | null {
-    const grid = useGrid(gridRef);
-    if (!grid && !gridRef) {
-        throw new Error("useDataGrid() must be used inside <DataGrid.Root>");
-    }
-    return grid;
+    return useGrid(gridRef, OUTSIDE_ROOT);
+}
+
+/** The `Root` around a part: its model and engine (a part never follows a `gridRef`). */
+export function useRootGrid<TRow = unknown>(): DataGridContextValue<TRow> {
+    const grid = useContext(DataGridContext);
+    if (!grid) throw new Error(OUTSIDE_ROOT);
+    // the `Root` that provides it was given the row type the part states
+    return grid as unknown as DataGridContextValue<TRow>;
 }
 
 /** The row a part renders in (`DataGrid.Cells`, `DataGrid.Cell`). */

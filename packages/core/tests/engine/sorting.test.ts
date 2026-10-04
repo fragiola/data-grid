@@ -1,28 +1,18 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { type ColumnOrGroup, headerCellSort } from "../../src";
 import {
-    type ColumnOrGroup,
-    createDataGridEngine,
-    createDataGridModel,
-    headerCellSort,
-} from "../../src";
+    cellElement,
+    click as clickFrom,
+    keydown,
+    keyEvent,
+    mountEngine,
+    type Row,
+} from "./harness";
 
 // Sorting from the header (Epic #27, S3–S6): a click, Enter or Space on a sortable column's
 // header cell toggles the sort, Ctrl/⌘ adds the column; a consumer's preventDefault, a control
 // inside the cell, a drag and a held key's repeats do not sort.
-
-interface Row {
-    id: number;
-}
-
-class FakeResizeObserver {
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-});
 
 // "id" spans both header rows; "who" groups the sortable "name" and the unsortable "note"
 const COLUMNS: ColumnOrGroup<Row>[] = [
@@ -37,75 +27,18 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
 ];
 
 function setup() {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
+    const { model, engine, view, grid } = mountEngine({
         columns: COLUMNS,
         rowCount: 100,
-        getRow: (id) => ({ id }),
-        rowHeight: 20,
-        headerRowHeight: 30,
     });
-    const engine = createDataGridEngine(model);
-    const view = () => engine.adapter.getView();
-    const viewport = document.createElement("div");
-    Object.defineProperties(viewport, {
-        clientWidth: { get: () => 400 },
-        clientHeight: { get: () => 260 },
-    });
-    const grid = document.createElement("div");
-    viewport.append(grid);
-    document.body.append(viewport);
-    engine.adapter.attach(viewport);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.commit(view());
     /** a header cell's element, as an adapter renders it: at its top row and first column */
-    const headerCell = (rowIndex: number, columnIndex: number) => {
-        const element = document.createElement("div");
-        element.dataset.rowIndex = String(rowIndex);
-        element.dataset.columnIndex = String(columnIndex);
-        element.tabIndex = -1;
-        grid.append(element);
-        return element;
-    };
+    const headerCell = (rowIndex: number, columnIndex: number) =>
+        cellElement(grid, rowIndex, columnIndex);
     /** a press and its click, as a browser sends them; `moved` pixels between the two */
-    const click = (
-        target: Element,
-        init: MouseEventInit = {},
-        moved = 0,
-    ): { handled: boolean; event: MouseEvent } => {
-        target.dispatchEvent(
-            new MouseEvent("pointerdown", {
-                bubbles: true,
-                clientX: 10,
-                clientY: 10,
-            }),
-        );
-        const event = new MouseEvent("click", {
-            bubbles: true,
-            cancelable: true,
-            button: 0,
-            detail: 1,
-            clientX: 10 + moved,
-            clientY: 10,
-            ...init,
-        });
-        Object.defineProperty(event, "target", { value: target });
-        return { handled: engine.adapter.click(event), event };
-    };
-    const key = (
-        target: Element,
-        name: string,
-        init: KeyboardEventInit = {},
-    ) => {
-        const event = new KeyboardEvent("keydown", {
-            key: name,
-            cancelable: true,
-            ...init,
-        });
-        Object.defineProperty(event, "target", { value: target });
-        const handled = engine.adapter.keydown(event);
-        return { handled, event };
-    };
+    const click = (target: Element, init: MouseEventInit = {}, moved = 0) =>
+        clickFrom(engine, target, init, moved);
+    const key = (target: Element, name: string, init: KeyboardEventInit = {}) =>
+        keydown(engine, target, name, init);
     const sort = () =>
         model.state.sortColumns.map(
             (entry) => `${entry.columnKey} ${entry.direction}`,
@@ -225,12 +158,8 @@ describe("Enter and Space on a header cell", () => {
         expect(key(headerCell(-2, 1), "Enter").handled).toBe(false);
         expect(key(headerCell(0, 0), "Enter").handled).toBe(false);
         const id = headerCell(-2, 0);
-        const prevented = new KeyboardEvent("keydown", {
-            key: "Enter",
-            cancelable: true,
-        });
+        const prevented = keyEvent(id, "Enter");
         prevented.preventDefault();
-        Object.defineProperty(prevented, "target", { value: id });
         expect(engine.adapter.keydown(prevented)).toBe(false);
         // a button inside the cell activates itself, and so does a widget holding controls
         const button = document.createElement("button");

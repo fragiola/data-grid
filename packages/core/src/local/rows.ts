@@ -1,5 +1,6 @@
 import { layoutColumns } from "../header/header";
 import type { Column, ColumnOrGroup, SortColumn } from "../model/types";
+import { memo } from "../utils";
 import {
     entriesOf,
     filterEntries,
@@ -130,25 +131,6 @@ export interface LocalRows<TRow, TNode = unknown> {
     setPageIndex(pageIndex: number): void;
     /** rows per page (none: a single page), from the first page */
     setPageSize(pageSize: number | undefined): void;
-}
-
-/** A function of its arguments, computed again only when one of them changes (by identity). */
-function memo<A extends readonly unknown[], R>(
-    compute: (...args: A) => R,
-): (...args: A) => R {
-    let last: { args: A; value: R } | null = null;
-    return (...args: A) => {
-        if (
-            last &&
-            last.args.length === args.length &&
-            last.args.every((arg, i) => Object.is(arg, args[i]))
-        ) {
-            return last.value;
-        }
-        const value = compute(...args);
-        last = { args, value };
-        return value;
-    };
 }
 
 /**

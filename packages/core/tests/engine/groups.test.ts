@@ -1,32 +1,18 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
     ariaHeaderCellSpans,
     ariaRowCount,
     ariaRowIndex,
     type Column,
     type ColumnOrGroup,
-    createDataGridEngine,
-    createDataGridModel,
     headerCellBox,
 } from "../../src";
+import { cellElement, keydown, mountEngine, type Row } from "./harness";
 
 // The engine with column groups (Epic #13): N header rows, the header cells a column window needs
 // (a group cut by it included), and the keyboard across header rows without scrolling a group
 // already in view out of it.
-
-interface Row {
-    id: number;
-}
-
-class FakeResizeObserver {
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-});
 
 const column = (key: string): Column<Row> => ({ key, width: 100 });
 const letters = (from: string, count: number) =>
@@ -42,67 +28,24 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
 ];
 
 function setup(columns: ColumnOrGroup<Row>[] = COLUMNS) {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
-        columns,
-        rowCount: 1_000,
-        getRow: (id) => ({ id }),
-        rowHeight: 20,
-        headerRowHeight: 30,
-    });
-    const engine = createDataGridEngine(model, {
-        overscan: { rows: 2, columns: 1 },
-    });
-    const view = () => engine.adapter.getView();
-    const scroll = { top: 0, left: 0 };
-    const viewport = document.createElement("div");
-    Object.defineProperties(viewport, {
-        clientWidth: { get: () => 300 },
-        clientHeight: { get: () => 260 },
-        scrollTop: {
-            get: () => scroll.top,
-            set: (value: number) => {
-                scroll.top = Math.max(0, value);
-            },
-        },
-        scrollLeft: {
-            get: () => scroll.left,
-            set: (value: number) => {
-                scroll.left = Math.min(Math.max(0, value), view().width - 300);
-            },
-        },
-    });
-    const grid = document.createElement("div");
-    viewport.append(grid);
-    document.body.append(viewport);
-    engine.adapter.attach(viewport);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.commit(view());
+    const { model, engine, view, viewport, grid, scroll, commit } = mountEngine(
+        { columns, rowCount: 1_000 },
+        { overscan: { rows: 2, columns: 1 }, width: 300, clamp: true },
+    );
     const scrollLeft = (left: number) => {
         viewport.scrollLeft = left;
         viewport.dispatchEvent(new Event("scroll"));
-        engine.adapter.commit(view());
+        commit();
     };
     const key = (name: string) => {
-        const event = new KeyboardEvent("keydown", {
-            key: name,
-            cancelable: true,
-        });
-        Object.defineProperty(event, "target", { value: grid });
-        engine.adapter.keydown(event);
-        engine.adapter.commit(view());
+        keydown(engine, grid, name);
+        commit();
     };
     const headerKeys = () =>
         view().headerRows.map((row) => row.cells.map((cell) => cell.key));
     /** a header cell's element, as an adapter renders it: at its top row and first column */
-    const headerCell = (rowIndex: number, columnIndex: number) => {
-        const element = document.createElement("div");
-        element.dataset.rowIndex = String(rowIndex);
-        element.dataset.columnIndex = String(columnIndex);
-        element.tabIndex = -1;
-        grid.append(element);
-        return element;
-    };
+    const headerCell = (rowIndex: number, columnIndex: number) =>
+        cellElement(grid, rowIndex, columnIndex);
     return {
         model,
         engine,

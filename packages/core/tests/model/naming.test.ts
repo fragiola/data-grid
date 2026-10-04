@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { COMMANDS } from "../../src";
+import { COMMANDS } from "../../src/model/model";
 
 // The naming rule (AGENTS.md rule 3, Dockable's rule 13): keys are kebab-case; a command has a
 // dot, a read has none; a `get` key that takes a payload selecting one thing ends in `-by`, and its

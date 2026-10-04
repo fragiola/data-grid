@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { createRef, useState } from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
     DataGrid,
@@ -8,6 +8,7 @@ import {
     type RowKey,
     useDataGrid,
 } from "../src";
+import { stubViewportSize, tags } from "./helpers";
 
 // Row details (Epic #41, M1–M4): `Root` maps the expansion (controlled or not) and `detailHeight`
 // onto the model; `DataGrid.RowDetail` renders inside its row, after its cells, only while the
@@ -43,24 +44,7 @@ const DETAIL_STRUCTURAL = new Set([
     "box-sizing",
 ]);
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 400],
-        ["clientHeight", 235],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(400, 235);
 
 type GridProps = {
     table?: boolean;
@@ -92,6 +76,7 @@ function Grid({
     detail,
     ...props
 }: GridProps) {
+    const tag = tags(table);
     return (
         <DataGrid.Root
             columns={cells}
@@ -100,13 +85,13 @@ function Grid({
             rowHeight={20}
             {...props}
         >
-            <DataGrid.Grid render={table ? <table /> : undefined}>
-                <DataGrid.Body render={table ? <tbody /> : undefined}>
+            <DataGrid.Grid render={tag.grid}>
+                <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Row>>
                         {(row) => (
                             <DataGrid.Row
                                 row={row}
-                                render={table ? <tr /> : undefined}
+                                render={tag.row}
                                 className={(state) =>
                                     state.expanded ? "open" : undefined
                                 }
@@ -115,7 +100,7 @@ function Grid({
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            render={table ? <td /> : undefined}
+                                            render={tag.cell}
                                         >
                                             {cell.columnIndex === 0 ? (
                                                 <Toggle
@@ -127,7 +112,7 @@ function Grid({
                                 </DataGrid.Cells>
                                 {withDetail ? (
                                     <DataGrid.RowDetail
-                                        render={table ? <td /> : undefined}
+                                        render={tag.cell}
                                         {...detail}
                                     >
                                         <p

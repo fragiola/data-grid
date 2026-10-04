@@ -13,6 +13,11 @@ export interface DataGridRef<TRow = unknown> {
     subscribe(listener: () => void): () => void;
 }
 
+const noop = () => {};
+
+/** A subscription to nothing (no grid to follow yet): its unsubscription does nothing. */
+export const noSubscription = () => noop;
+
 /** What sets a ref's `current`: kept off the ref, so only a `Root` writes it. */
 const writers = new WeakMap<object, (value: object | null) => void>();
 
@@ -62,13 +67,13 @@ export function attachGridRef<TRow>(
         console.error(
             "<DataGrid.Root gridRef>: the ref must come from useDataGridRef() or createDataGridRef()",
         );
-        return () => {};
+        return noop;
     }
     if (gridRef.current && gridRef.current !== grid) {
         console.error(
             "<DataGrid.Root gridRef>: this ref is already held by another mounted root; give each root its own",
         );
-        return () => {};
+        return noop;
     }
     write(grid);
     return () => {
@@ -76,7 +81,6 @@ export function attachGridRef<TRow>(
     };
 }
 
-const noSubscription = () => () => {};
 const noGrid = () => null;
 
 /** The grid a ref holds, following it as `Root`s take and release it (`null` without a ref). */
