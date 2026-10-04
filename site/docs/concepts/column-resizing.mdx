@@ -23,7 +23,8 @@ const columns: Column<Person>[] = [
 ];
 ```
 
-`width` stays the width a column starts with, and the one a reset gives back. A `minWidth` above
+`width` stays the width a column starts with, and the one a reset gives back (or, for a column
+the grid sizes itself, its [automatic width](/docs/concepts/auto-widths)). A `minWidth` above
 `maxWidth`, or a negative one, is refused (`columnsError`); a `width` outside its own limits is
 clamped where it is used.
 
@@ -50,7 +51,7 @@ const [widths, setWidths] = useState<ColumnWidths>({});
 </DataGrid.Root>
 ```
 
-`{}` gives every column its own `width` back. A key that is not a column is kept, so a column
+`{}` gives every column its own `width` back (or its automatic one). A key that is not a column is kept, so a column
 that comes back has its width again. Saving the widths (to storage, to a server) is yours: they
 are a plain object.
 
@@ -123,8 +124,9 @@ growing, one resize per frame, within its limits. The press reaches the grid aft
 handle takes no focus and no text is selected. The release keeps the width (as does a pointer the
 handle loses), and Escape (or a cancelled pointer) resizes the column back to the width the drag
 started from, leaving every other column as it is. Escape reaches the grid after your handlers,
-wherever focus is: one you prevent keeps the drag going. A double click gives the column its own
-`width` back. A press, a click or a drag on a handle is never a
+wherever focus is: one you prevent keeps the drag going. A double click fits the column to its
+content ([Automatic widths](/docs/concepts/auto-widths#fitting-a-column-to-its-content)): the
+widest of its rendered cells, within its limits. A press, a click or a drag on a handle is never a
 [sort](/docs/concepts/sorting), even in a sortable column's header cell.
 
 While a drag lasts, the header cell and its handle carry `data-resizing`, and
@@ -142,19 +144,20 @@ controls ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)).
 | ←, → | 10 px narrower, wider |
 | Shift+←, Shift+→ | 50 px narrower, wider |
 | Home | the minimum |
+| Enter | fits the column to its content, as a double click does |
 | End | the maximum it reports (`aria-valuemax`): without a `maxWidth`, the view's width |
 | other page keys, Space | nothing: the grid's container never pages under it |
 | Escape | back to navigation, on the header cell; the width stays |
 
 They run after your handlers, so `preventDefault` cancels them, and each is one
-`column-widths.resize`, which a middleware can refuse.
+`column-widths.resize` (Enter, one `column-widths.set`), which a middleware can refuse.
 
 ## Groups
 
 A handle in a group's header cell resizes the group's resizable columns together. A change is
 shared in proportion to their widths, each within its limits, and what one cannot take goes to the
 others that still can, so the group reaches the minimum and the maximum its handle reports. Its values are the group's: `aria-valuenow` is the sum of its columns' widths. A double
-click resets every column of the group.
+click (or Enter) fits each resizable column of the group to its content.
 
 ## Pinned columns and scaling
 
@@ -169,11 +172,14 @@ keeps the view on the column it shows first, as far into it as before, scaled or
 | command | does |
 | --- | --- |
 | `column-widths.set { columnWidths }` | replaces the widths |
-| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together; a column back to its own `width` keeps no entry, and nothing changing commits nothing |
-| `column-widths.reset { columnKey? }` | gives a column (or a group's columns) its own `width` back, or every column without a key |
+| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together; a column back to the width it has without an override (its `width`, or its [automatic width or flex share](/docs/concepts/auto-widths)) keeps no entry, and nothing changing commits nothing |
+| `column-widths.reset { columnKey? }` | gives a column (or a group's columns) its own `width` back (or the grid's [automatic width](/docs/concepts/auto-widths)), or every column without a key |
 
-Reads: `get("column-widths")`, and `get("column-width-by", { columnKey })`, a column's width on
-screen (or a group's). Reach them with
+Reads: `get("column-widths")`, and `get("column-width-by", { columnKey })`, a column's width a
+person set, else its own `width` (a group's: its columns'). That is not always the width on
+screen: an [automatic width or a flex share](/docs/concepts/auto-widths) takes the place of
+`width` there. The width on screen is a handle's `aria-valuenow` and `useColumnResizer`'s
+`state.width`, and a header cell's box (`headerCellBox`, the view's column axis). Reach them with
 [`useDataGrid()` or a `gridRef`](/docs/concepts/model-and-engine#from-outside-the-root).
 
 ## What it shows
@@ -185,7 +191,7 @@ screen (or a group's). Reach them with
 | handle | `data-grid-part` | `column-resizer` |
 | handle | `data-resizing` | a drag on it is resizing its column |
 | handle | `role`, `aria-orientation` | `separator`, `vertical` |
-| handle | `aria-valuenow`, `aria-valuemin`, `aria-valuemax` | the width, the minimum, the maximum (the view's width, at least the width, when there is none), in pixels |
+| handle | `aria-valuenow`, `aria-valuemin`, `aria-valuemax` | the width on screen, the minimum, the maximum (the view's width, at least the width, when there is none), in pixels |
 
 `useHeaderCell` reports `resizable` and `resizing`, as does the state a header cell's `className`
 and `style` functions receive. `useColumnResizer` reports `columnKey`, `resizable`, `resizing`,

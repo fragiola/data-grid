@@ -5,9 +5,16 @@ import {
     type DataGridModelOptions,
     veto,
 } from "../../src";
+import { columnsError } from "../../src/header/header";
+import {
+    autoWidthsOf,
+    keptWidthsOf,
+    sharedWidths,
+} from "../../src/model/widths";
 
 // Column widths (Epic #70, W1, W2, W5, W7): the model keeps the resized columns' widths over their
-// `width`, clamped to their limits; a group's resize is shared by its resizable columns.
+// `width`, clamped to their limits; a group's resize is shared by its resizable columns. The
+// automatic widths' pure parts (Epic #80): the flex share, and a resize from the engine's widths.
 
 interface Row {
     id: number;
@@ -320,5 +327,146 @@ describe("column limits", () => {
                 ],
             }).ok,
         ).toBe(true);
+    });
+});
+
+describe("automatic widths (Epic #80)", () => {
+    it("are checked with the columns: flex a width, flex and autoSize on columns only", () => {
+        const bad = [
+            [
+                { key: "x", width: 100, flex: -1 },
+                /column "x" has an invalid flex/,
+            ],
+            [
+                { key: "x", width: 100, flex: Number.POSITIVE_INFINITY },
+                /invalid flex/,
+            ],
+            [{ key: "x", width: 100, autoSize: "yes" }, /invalid autoSize/],
+            [
+                { key: "g", flex: 1, children: [{ key: "x", width: 100 }] },
+                /group "g" flexes or fits itself/,
+            ],
+            [
+                {
+                    key: "g",
+                    autoSize: true,
+                    children: [{ key: "x", width: 100 }],
+                },
+                /group "g" flexes or fits itself/,
+            ],
+        ] as const;
+        for (const [entry, error] of bad) {
+            expect(columnsError([entry])).toMatch(error);
+        }
+        expect(
+            columnsError([{ key: "x", width: 100, flex: 0, autoSize: false }]),
+        ).toBeNull();
+    });
+
+    it("share a width in proportion, within limits, rounded in order (the group resize's share)", () => {
+        // 300 among weights 1, 1, 1: the first stops at 80, the last never goes below 120
+        expect(
+            sharedWidths(
+                [
+                    { weight: 1, start: 0, min: 40, max: 80 },
+                    { weight: 1, start: 0, min: 40, max: Infinity },
+                    { weight: 1, start: 0, min: 120, max: Infinity },
+                ],
+                300,
+            ),
+        ).toEqual([80, 100, 120]);
+        // one stopped at its minimum, another at its maximum: the maximum holds, the rest is shared
+        expect(
+            sharedWidths(
+                [
+                    { weight: 1, start: 0, min: 100, max: Infinity },
+                    { weight: 1, start: 0, min: 40, max: 50 },
+                ],
+                180,
+            ),
+        ).toEqual([130, 50]);
+        // nothing to share below the minimums: each at its own
+
+        expect(
+            sharedWidths(
+                [
+                    { weight: 1, start: 0, min: 50, max: Infinity },
+                    { weight: 2, start: 0, min: 60, max: Infinity },
+                ],
+                -100,
+            ),
+        ).toEqual([50, 60]);
+    });
+
+    it("lay out the flex columns in what the others leave, the overridden and automatic ones included", () => {
+        const columns = [
+            { key: "a", width: 100, resizable: true },
+            { key: "b", width: 50, flex: 1, resizable: true },
+            { key: "c", width: 50, flex: 3, autoSize: true },
+            { key: "d", width: 100, autoSize: true },
+        ];
+        // "d" measured 140: 400 - 100 - 140 = 160 left, 40 and 120, but "b" never goes below
+        // its 50: "c" takes the rest
+        expect(autoWidthsOf(columns, {}, { d: 140 }, 400)).toEqual({
+            b: 50,
+            c: 110,
+            d: 140,
+        });
+        // "b" at its base, then: "c" measured 200 is its base
+        expect(
+            autoWidthsOf(columns, { a: 150 }, { c: 200, d: 140 }, 400),
+        ).toEqual({ b: 50, c: 200, d: 140 });
+        // an override replaces the engine's width; an automatic one of a column no longer
+        // `autoSize` is not used
+        expect(
+            autoWidthsOf(columns, { b: 70 }, { a: 999, c: 80, d: 140 }, 400),
+        ).toEqual({ c: 90, d: 140 });
+        expect(
+            autoWidthsOf([{ key: "a", width: 100 }], {}, { a: 50 }, 400),
+        ).toEqual({});
+    });
+
+    it("are checked once per record given again", () => {
+        const record = { a: 10, b: -1 };
+        expect(keptWidthsOf(record)).toEqual({ a: 10 });
+        expect(keptWidthsOf(record)).toBe(keptWidthsOf(record));
+        expect(keptWidthsOf(null)).toEqual({});
+    });
+
+    it("are where a resize starts from, and a column back to one needs no width (A2)", () => {
+        const model = createDataGridModel<Row>({
+            columns: [
+                { key: "a", width: 50, flex: 1, resizable: true },
+                {
+                    key: "g",
+                    children: [
+                        { key: "c", width: 50, flex: 1, resizable: true },
+                        { key: "d", width: 100, resizable: true },
+                    ],
+                },
+            ],
+            rows: [],
+        });
+        const autoWidths = { a: 200, c: 300 };
+        // from 200 on screen, not its own 50
+        model.run("column-widths.resize", {
+            columnKey: "a",
+            width: 210,
+            autoWidths,
+        });
+        expect(model.get("column-widths")).toEqual({ a: 210 });
+        model.run("column-widths.resize", {
+            columnKey: "a",
+            width: 200,
+            autoWidths,
+        });
+        expect(model.get("column-widths")).toEqual({});
+        // a group shares from its columns on screen: 300 and 100, three parts and one
+        model.run("column-widths.resize", {
+            columnKey: "g",
+            width: 440,
+            autoWidths,
+        });
+        expect(model.get("column-widths")).toEqual({ c: 330, d: 110 });
     });
 });

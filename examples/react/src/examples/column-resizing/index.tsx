@@ -165,7 +165,7 @@ export default function ColumnResizingExample() {
                 </span>
                 <span>
                     <kbd className={styles.key}>Esc</kbd> while dragging
-                    cancels, a double click resets
+                    cancels, a double click fits the content
                 </span>
                 <WidthsReadout gridRef={gridRef} widths={widths} />
                 <Clickable.Button

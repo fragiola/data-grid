@@ -118,3 +118,49 @@ export async function dragBy(
         await settle(page);
     }
 }
+
+/**
+ * The width a column's content takes (Epic #80, A3), worked out apart from the grid's own
+ * measure: for each rendered cell of the column (its header cell, not a group's, and its loaded
+ * body cells), its text set on one line in a box of its own inside it (inheriting its font,
+ * spacing and transform), plus the cell's padding and border; the widest, rounded up.
+ * Plain-text cells only: a cell holding an element other than a column resizer (out of the flow)
+ * throws, its content's width being the element's.
+ */
+export function contentWidth(page: Page, columnIndex: number): Promise<number> {
+    return page
+        .locator(
+            [
+                `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]:not([data-group])`,
+                `[data-grid-part="cell"][data-column-index="${columnIndex}"]:not([data-loading])`,
+            ].join(", "),
+        )
+        .evaluateAll((cells) => {
+            let widest = 0;
+            for (const cell of cells) {
+                const elements = [...cell.children].filter(
+                    (child) => !child.hasAttribute("data-grid-column-resizer"),
+                );
+                if (elements.length > 0) {
+                    throw new Error(
+                        `contentWidth measures plain-text cells: this one holds <${elements[0]?.localName}>`,
+                    );
+                }
+                const text = cell.ownerDocument.createElement("span");
+                text.textContent = cell.textContent;
+                text.style.position = "absolute";
+                text.style.whiteSpace = "pre";
+                cell.append(text);
+                const style = getComputedStyle(cell);
+                const width =
+                    text.getBoundingClientRect().width +
+                    Number.parseFloat(style.paddingLeft) +
+                    Number.parseFloat(style.paddingRight) +
+                    Number.parseFloat(style.borderLeftWidth) +
+                    Number.parseFloat(style.borderRightWidth);
+                text.remove();
+                widest = Math.max(widest, width);
+            }
+            return Math.ceil(widest);
+        });
+}

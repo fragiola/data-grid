@@ -40,7 +40,12 @@ A column's `width` is in pixels. The grid's width is the sum of its columns: wid
 root, it scrolls sideways, and columns are virtualized like rows. A `resizable` column starts at
 its `width`, and a person can [resize it](/docs/concepts/column-resizing) within its limits.
 
-<Callout type="warn" title="Measured sizes come later">
-Heights measured from the rendered content and automatic widths are not built yet. See
+The grid can size columns itself ([Automatic widths](/docs/concepts/auto-widths)): a `flex`
+column takes its part of the width the others leave in the root, following the root as it
+changes, and an `autoSize` column fits its content once it renders. A column's width on screen is
+the width a person set, else its automatic width, else its flex share, else its `width`.
+
+<Callout type="warn" title="Measured heights come later">
+Row heights measured from the rendered content are not built yet. See
 [Limitations and roadmap](/docs/limitations).
 </Callout>

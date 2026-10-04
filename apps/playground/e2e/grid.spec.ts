@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
     boxOf,
     cell,
+    contentWidth,
     dragBy,
     settle,
 } from "../../../examples/react/e2e/examples/helpers.ts";
@@ -1579,6 +1580,14 @@ for (const kind of KINDS) {
             const lastWidths = (page: Page) =>
                 page.evaluate(() => window.widthChanges.at(-1));
 
+            /** C1's content: wider than its minimum, narrower than its 100px. */
+            async function fittedC1(page: Page) {
+                const width = await contentWidth(page, 1);
+                expect(width).toBeGreaterThan(40);
+                expect(width).toBeLessThan(100);
+                return width;
+            }
+
             test("resizes a column live as its resizer is dragged", async ({
                 page,
             }) => {
@@ -1641,7 +1650,7 @@ for (const kind of KINDS) {
                 expect(await widths(page, 0)).toEqual([40, 40]);
             });
 
-            test("restores the width on Escape during a drag, and resets it on a double click", async ({
+            test("restores the width on Escape during a drag, and fits it to its content on a double click", async ({
                 page,
             }) => {
                 await open(page, kind, RESIZE);
@@ -1662,8 +1671,10 @@ for (const kind of KINDS) {
                 expect(await widths(page, 1)).toEqual([170, 170]);
                 await resizer(page, "c1").dblclick();
                 await settle(page);
-                expect(await widths(page, 1)).toEqual([100, 100]);
-                expect(await lastWidths(page)).toEqual({});
+                // it fits its content (Epic #80, A4)
+                const fitted = await fittedC1(page);
+                expect(await widths(page, 1)).toEqual([fitted, fitted]);
+                expect(await lastWidths(page)).toEqual({ c1: fitted });
             });
 
             test("resizes with the keys from inside its header cell, aria-valuenow following", async ({
@@ -1769,7 +1780,7 @@ for (const kind of KINDS) {
                 );
             });
 
-            test("resizes controlled widths live, restores them on Escape and resets them on a double click", async ({
+            test("resizes controlled widths live, restores them on Escape and fits them on a double click", async ({
                 page,
             }) => {
                 await open(page, kind, { ...RESIZE, resize: "controlled" });
@@ -1793,8 +1804,10 @@ for (const kind of KINDS) {
                 expect(await lastWidths(page)).toEqual({ c1: 170 });
                 await resizer(page, "c1").dblclick();
                 await settle(page);
-                expect(await widths(page, 1)).toEqual([100, 100]);
-                expect(await lastWidths(page)).toEqual({});
+                // it fits its content (Epic #80, A4)
+                const fitted = await fittedC1(page);
+                expect(await widths(page, 1)).toEqual([fitted, fitted]);
+                expect(await lastWidths(page)).toEqual({ c1: fitted });
             });
 
             test("does not sort on a press, a drag or a double click on a sortable header's resizer", async ({
@@ -1810,6 +1823,248 @@ for (const kind of KINDS) {
                     await page.evaluate(() => window.sortChanges.length),
                 ).toBe(0);
                 expect(await page.locator("[aria-sort]").count()).toBe(0);
+            });
+
+            test.describe("automatic widths", () => {
+                // Epic #80: in an 800px view, C1 flexes one part and C2 two (60–300px); C0, C3
+                // and C4 are 100px. C3 fits itself with `autosize`
+                const FLEX = {
+                    rows: 1_000,
+                    columns: 5,
+                    width: 800,
+                    flex: 1,
+                    resize: 1,
+                };
+
+                const viewWidth = (viewport: Locator) =>
+                    viewport.evaluate((element) => element.clientWidth);
+
+                /** The viewport's width, set as an app's layout would (its style). */
+                async function setWidth(
+                    page: Page,
+                    viewport: Locator,
+                    width: number,
+                ) {
+                    await viewport.evaluate((element, value) => {
+                        element.style.width = `${value}px`;
+                    }, width);
+                    await settle(page);
+                    return viewWidth(viewport);
+                }
+
+                /** The header cells' widths of the first `count` columns, in order. */
+                function columnWidths(page: Page, count: number) {
+                    return page
+                        .locator(
+                            '[data-grid-part="header-cell"]:not([data-group])',
+                        )
+                        .evaluateAll((cells, length) => {
+                            const all = Array.from({ length }, () => 0);
+                            for (const element of cells) {
+                                const index = Number(
+                                    element.getAttribute("data-column-index"),
+                                );
+                                if (index < length) {
+                                    all[index] =
+                                        element.getBoundingClientRect().width;
+                                }
+                            }
+                            return all;
+                        }, count);
+                }
+
+                const total = (all: number[]) =>
+                    all.reduce((sum, width) => sum + width, 0);
+
+                /**
+                 * C1's and C2's widths on screen: their body cells as wide as their header
+                 * cells, their handles' `aria-valuenow` the same.
+                 */
+                async function flexWidths(page: Page) {
+                    const shown: number[] = [];
+                    for (const columnIndex of [1, 2]) {
+                        const [width = 0, body] = await widths(
+                            page,
+                            columnIndex,
+                        );
+                        expect(body).toBe(width);
+                        await expect(
+                            resizer(page, `c${columnIndex}`),
+                        ).toHaveAttribute("aria-valuenow", String(width));
+                        shown.push(width);
+                    }
+                    return shown;
+                }
+
+                test("flex columns fill the view and follow its width, never reported", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, FLEX);
+                    let view = await viewWidth(viewport);
+                    // C2 stops at its 300px, C1 takes the rest
+                    expect(await flexWidths(page)).toEqual([view - 600, 300]);
+                    expect(total(await columnWidths(page, 5))).toBe(view);
+                    view = await setWidth(page, viewport, 1_000);
+                    expect(await flexWidths(page)).toEqual([view - 600, 300]);
+                    expect(total(await columnWidths(page, 5))).toBe(view);
+                    // narrower, still filled: a part and two, C2 under its maximum
+                    view = await setWidth(page, viewport, 700);
+                    const [c1 = 0, c2 = 0] = await flexWidths(page);
+                    expect(c1 + c2).toBe(view - 300);
+                    expect(Math.abs(c2 - 2 * c1)).toBeLessThanOrEqual(1);
+                    expect(c2).toBeLessThan(300);
+                    expect(total(await columnWidths(page, 5))).toBe(view);
+                    // nothing left: each one its own width, and the grid scrolls
+                    view = await setWidth(page, viewport, 400);
+                    expect(await flexWidths(page)).toEqual([100, 100]);
+                    expect(await columnWidths(page, 5)).toEqual([
+                        100, 100, 100, 100, 100,
+                    ]);
+                    expect(
+                        await viewport.evaluate(
+                            (element) => element.scrollWidth,
+                        ),
+                    ).toBeGreaterThan(view);
+                    expect(
+                        await page.evaluate(() => window.widthChanges),
+                    ).toEqual([]);
+                });
+
+                test("resizing a flex column makes it fixed, and a reset makes it flex again", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, FLEX);
+                    let view = await viewWidth(viewport);
+                    expect(await flexWidths(page)).toEqual([view - 600, 300]);
+                    await drag(page, "c1", -50);
+                    expect(await flexWidths(page)).toEqual([view - 650, 300]);
+                    expect(await lastWidths(page)).toEqual({ c1: view - 650 });
+                    // fixed: a wider view leaves it as it is (C2 is at its maximum)
+                    await setWidth(page, viewport, 1_000);
+                    expect(await flexWidths(page)).toEqual([view - 650, 300]);
+                    await page.evaluate(() =>
+                        window.grid?.model.run("column-widths.reset", {}),
+                    );
+                    await settle(page);
+                    view = await viewWidth(viewport);
+                    expect(await flexWidths(page)).toEqual([view - 600, 300]);
+                    expect(total(await columnWidths(page, 5))).toBe(view);
+                    expect(await lastWidths(page)).toEqual({});
+                });
+
+                test("fits a column to its content with Enter on its focused resizer", async ({
+                    page,
+                }) => {
+                    await open(page, kind, RESIZE);
+                    await headerCell(page, 1).click({
+                        position: { x: 5, y: 5 },
+                    });
+                    await page.keyboard.press("F2");
+                    await expect(resizer(page, "c1")).toBeFocused();
+                    await page.keyboard.press("Enter");
+                    await settle(page);
+                    const fitted = await fittedC1(page);
+                    expect(await widths(page, 1)).toEqual([fitted, fitted]);
+                    await expect(resizer(page, "c1")).toHaveAttribute(
+                        "aria-valuenow",
+                        String(fitted),
+                    );
+                    await expect(resizer(page, "c1")).toBeFocused();
+                    expect(
+                        await page.evaluate(() => window.widthChanges),
+                    ).toEqual([{ c1: fitted }]);
+                });
+
+                test("fits the columns an action names, and every rendered resizable one from the app's button, each in one change", async ({
+                    page,
+                }) => {
+                    await open(page, kind, RESIZE);
+                    const fitted = await fittedC1(page);
+                    // the premise: C0's and C3's content is narrower than their 40px, C2's
+                    // than its 60px
+                    expect(await contentWidth(page, 0)).toBeLessThan(40);
+                    expect(await contentWidth(page, 2)).toBeLessThan(60);
+                    expect(await contentWidth(page, 3)).toBeLessThan(40);
+                    await page.evaluate(() =>
+                        window.grid?.engine.run("fit-columns", {
+                            columnKeys: ["c1"],
+                        }),
+                    );
+                    await settle(page);
+                    expect(await columnWidths(page, 5)).toEqual([
+                        100,
+                        fitted,
+                        100,
+                        100,
+                        100,
+                    ]);
+                    expect(
+                        await page.evaluate(() => window.widthChanges),
+                    ).toEqual([{ c1: fitted }]);
+                    await page.getByTestId("fit-all").click();
+                    await settle(page);
+                    // C4 does not resize
+                    expect(await columnWidths(page, 5)).toEqual([
+                        40,
+                        fitted,
+                        60,
+                        40,
+                        100,
+                    ]);
+                    expect(
+                        await page.evaluate(() => window.widthChanges),
+                    ).toEqual([
+                        { c1: fitted },
+                        { c0: 40, c1: fitted, c2: 60, c3: 40 },
+                    ]);
+                });
+
+                test("an autoSize column fits its content at the start, and a reset gives that width back", async ({
+                    page,
+                }) => {
+                    await open(page, kind, {
+                        rows: 1_000,
+                        columns: 20,
+                        autosize: 1,
+                        resize: 1,
+                    });
+                    const fitted = await contentWidth(page, 3);
+                    expect(fitted).toBeGreaterThan(100);
+                    expect(await widths(page, 3)).toEqual([fitted, fitted]);
+                    await expect(resizer(page, "c3")).toHaveAttribute(
+                        "aria-valuenow",
+                        String(fitted),
+                    );
+                    // the grid's own width: never reported
+                    expect(
+                        await page.evaluate(() => window.widthChanges),
+                    ).toEqual([]);
+                    expect(
+                        await page.evaluate(() =>
+                            window.grid?.engine.get("column-auto-widths"),
+                        ),
+                    ).toEqual({ c3: fitted });
+                    await drag(page, "c3", 40);
+                    expect(await widths(page, 3)).toEqual([
+                        fitted + 40,
+                        fitted + 40,
+                    ]);
+                    await expect(resizer(page, "c3")).toHaveAttribute(
+                        "aria-valuenow",
+                        String(fitted + 40),
+                    );
+                    expect(await lastWidths(page)).toEqual({ c3: fitted + 40 });
+                    await page.evaluate(() =>
+                        window.grid?.model.run("column-widths.reset", {}),
+                    );
+                    await settle(page);
+                    expect(await widths(page, 3)).toEqual([fitted, fitted]);
+                    await expect(resizer(page, "c3")).toHaveAttribute(
+                        "aria-valuenow",
+                        String(fitted),
+                    );
+                    expect(await lastWidths(page)).toEqual({});
+                });
             });
         });
 

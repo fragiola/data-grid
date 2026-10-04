@@ -84,6 +84,7 @@ import {
     type ColumnSpan,
     columnWidth,
     keptWidths,
+    keptWidthsOf,
     resizedWidths,
     sameWidths,
     spanResizable,
@@ -692,7 +693,7 @@ function createHandlers<TRow, TNode>(
                     : kept,
             );
         },
-        "column-widths.resize": (state, { columnKey, width }) => {
+        "column-widths.resize": (state, { columnKey, width, autoWidths }) => {
             if (!Number.isFinite(width)) {
                 return invalid("width must be a finite number");
             }
@@ -709,6 +710,7 @@ function createHandlers<TRow, TNode>(
                     columnsOf(state, span),
                     state.columnWidths,
                     width,
+                    autoWidths && keptWidthsOf(autoWidths),
                 ),
             );
         },

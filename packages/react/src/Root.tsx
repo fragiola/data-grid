@@ -148,14 +148,16 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
             | undefined;
         /**
          * the resized columns' widths in pixels, by column key, controlled; pair it with
-         * `onColumnWidthsChange`. A resizable column is its width here, else its own `width`
+         * `onColumnWidthsChange`. On screen a column is the first of: its width here (when it is
+         * resizable, within its limits), its automatic width (`autoSize`), its flex share
+         * (`flex`), its own `width`
          */
         columnWidths?: ColumnWidths | undefined;
         /** the resized columns' widths to start with, uncontrolled */
         defaultColumnWidths?: ColumnWidths | undefined;
         /**
          * the widths changed (or, controlled, ask to): a resizer was dragged (once per frame),
-         * moved with the keys or double clicked, or a command ran
+         * moved with the keys, fitted (a double click, Enter, `fit-columns`), or a command ran
          */
         onColumnWidthsChange?:
             | ((columnWidths: ColumnWidths) => void)

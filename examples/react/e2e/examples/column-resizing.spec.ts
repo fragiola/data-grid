@@ -1,11 +1,28 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
-import { boxOf, cell, dragBy, header, scrollTo, settle } from "./helpers";
+import {
+    boxOf,
+    cell,
+    contentWidth,
+    dragBy,
+    header,
+    scrollTo,
+    settle,
+} from "./helpers";
 
 // Handles the app renders (useColumnResizer), widths it keeps (controlled): a drag, the keys,
-// Escape during a drag, a double click, a group, a pinned column and the app's reset.
+// Escape during a drag, a double click (a fit to the content, Epic #80), a group, a pinned
+// column and the app's reset.
 
-const COLUMN = { "#": 0, Name: 1, Email: 2, City: 3, Team: 4, Joined: 5 };
+const COLUMN = {
+    "#": 0,
+    Name: 1,
+    Email: 2,
+    City: 3,
+    Team: 4,
+    Joined: 5,
+    Salary: 6,
+};
 
 /** A header cell's resize handle, by the name the app gives it. */
 const handle = (page: Page, name: string) =>
@@ -79,7 +96,7 @@ test("F2 on a header reaches its handle, the arrows resize, Escape gives the key
     await expect(readout(page)).toHaveText("Email 170px");
 });
 
-test("Escape during a drag restores the width, and a double click resets it", async ({
+test("Escape during a drag restores the width, and a double click fits it to its content", async ({
     page,
 }) => {
     await openExample(page, "column-resizing");
@@ -97,8 +114,12 @@ test("Escape during a drag restores the width, and a double click resets it", as
     expect(await widths(page, "City")).toEqual([210, 210]);
     await handle(page, "City").dblclick();
     await settle(page);
-    expect(await widths(page, "City")).toEqual([140, 140]);
-    await expect(readout(page)).toHaveText("Every column at its own width");
+    // exactly its content's width, above its 40px minimum
+    const fitted = await contentWidth(page, COLUMN.City);
+    expect(fitted).toBeGreaterThan(40);
+    expect(fitted).toBeLessThan(210);
+    expect(await widths(page, "City")).toEqual([fitted, fitted]);
+    await expect(readout(page)).toHaveText(`City ${fitted}px`);
 });
 
 test("a group's handle resizes its columns together", async ({ page }) => {
@@ -117,8 +138,22 @@ test("a group's handle resizes its columns together", async ({ page }) => {
     );
     await work.dblclick();
     await settle(page);
-    expect(await widths(page, "Team")).toEqual([120, 120]);
-    await expect(work).toHaveAttribute("aria-valuenow", "360");
+    // each column fits its content, within its limits: Team's is narrower than its 80px,
+    // Joined's above its 40px, Salary's held between 90 and 180px
+    expect(await contentWidth(page, COLUMN.Team)).toBeLessThan(80);
+    expect(await widths(page, "Team")).toEqual([80, 80]);
+    const joined = await contentWidth(page, COLUMN.Joined);
+    expect(joined).toBeGreaterThan(40);
+    expect(await widths(page, "Joined")).toEqual([joined, joined]);
+    const salary = Math.min(
+        Math.max(await contentWidth(page, COLUMN.Salary), 90),
+        180,
+    );
+    expect(await widths(page, "Salary")).toEqual([salary, salary]);
+    await expect(work).toHaveAttribute(
+        "aria-valuenow",
+        String((await boxOf(header(page, "Work"))).width),
+    );
 });
 
 test("a pinned column resizes and stays pinned", async ({ page }) => {

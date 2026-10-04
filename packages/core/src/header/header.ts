@@ -42,8 +42,9 @@ export interface ColumnLayout<TRow, TNode> {
 
 /**
  * Why the entries are not a valid `columns`, or `null`: every key unique across groups and
- * columns (so no group inside itself), every width finite and not negative (limits too, the
- * minimum not above the maximum), and at least one column under every group.
+ * columns (so no group inside itself), every width finite and not negative (limits and `flex`
+ * too, the minimum not above the maximum), `flex` and `autoSize` on columns only, and at least
+ * one column under every group.
  */
 export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
@@ -70,6 +71,14 @@ export function columnsError(entries: unknown): string | null {
                 }
                 const limits = limitsError(entry);
                 if (limits) return `column "${key}" ${limits}`;
+                const flex: unknown = Reflect.get(entry, "flex");
+                if (flex !== undefined && !isWidth(flex)) {
+                    return `column "${key}" has an invalid flex`;
+                }
+                const autoSize: unknown = Reflect.get(entry, "autoSize");
+                if (autoSize !== undefined && typeof autoSize !== "boolean") {
+                    return `column "${key}" has an invalid autoSize`;
+                }
                 const pinned: unknown = Reflect.get(entry, "pinned");
                 if (pinned !== undefined && pinned !== "start") {
                     return `column "${key}" has an invalid pin`;
@@ -86,6 +95,12 @@ export function columnsError(entries: unknown): string | null {
             }
             if (Reflect.get(entry, "pinned") !== undefined) {
                 return `group "${key}" is pinned: a group is pinned by its columns`;
+            }
+            if (
+                Reflect.get(entry, "flex") !== undefined ||
+                Reflect.get(entry, "autoSize") !== undefined
+            ) {
+                return `group "${key}" flexes or fits itself: a group is sized by its columns`;
             }
             const before = unpinnedSeen;
             const below = visit(children);

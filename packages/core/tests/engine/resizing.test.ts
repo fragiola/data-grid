@@ -14,6 +14,7 @@ import { columnAxisOf } from "../../src/engine/view";
 import {
     cellElement,
     click,
+    fakeContentWidth,
     keydown,
     keyEvent,
     mountEngine,
@@ -23,7 +24,8 @@ import { stateOf, viewOf } from "./views";
 
 // Column resizing on screen (Epic #70, W1, W3–W8): the column axis reads the widths; a resizer's
 // drag resizes once a frame, Escape and `pointercancel` restore, its click never sorts and a
-// double click resets; its keys resize in interaction; the parts tell its state and ARIA.
+// double click fits (Epic #80, A4); its keys resize in interaction; the parts tell its state and
+// ARIA.
 
 // "a" (pinned, sortable, 50–200), "b" (resizable, no maximum), "g" groups "c" and "d"; "e" is fixed
 const COLUMNS: ColumnOrGroup<Row>[] = [
@@ -456,9 +458,18 @@ describe("a drag on a resizer", () => {
 });
 
 describe("a double click on a resizer", () => {
-    it("gives the column its own width back, and a group its columns'", () => {
-        const { a, resizable, clickOn, widthOf, model, commit } = setup();
+    it("fits the column to its content, and a group's columns to theirs (Epic #80, A4)", () => {
+        const { a, resizable, clickOn, widthOf, model, commit, grid } = setup();
         const g = resizable(2, "g");
+        // "a"'s header cell holds 90 pixels, its cell 170; "c"'s cell 60, "d"'s 400
+        fakeContentWidth(a.cell, 90);
+        for (const [columnIndex, content] of [
+            [0, 170],
+            [2, 60],
+            [3, 400],
+        ] as const) {
+            fakeContentWidth(cellElement(grid, 0, columnIndex), content);
+        }
         commit();
         model.run("column-widths.set", {
             columnWidths: { a: 180, c: 60, d: 60 },
@@ -467,9 +478,10 @@ describe("a double click on a resizer", () => {
         expect(clickOn(a.resizer)).toBe(true);
         expect(widthOf("a")).toBe(180);
         expect(clickOn(a.resizer, 2)).toBe(true);
-        expect(widthOf("a")).toBe(100);
+        expect(widthOf("a")).toBe(170);
+        // each column within its limits: "d" stops at 250
         clickOn(g.resizer, 2);
-        expect(model.get("column-widths")).toEqual({});
+        expect(model.get("column-widths")).toEqual({ a: 170, c: 60, d: 250 });
         expect(model.state.sortColumns).toEqual([]);
     });
 });
