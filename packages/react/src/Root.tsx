@@ -307,7 +307,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
         };
         const selection: ControlledState<TRow, readonly RowKey[]> = {
             prefix: "selected-rows.",
-            // the keys follow the prop while rows are selectable: off, the grid holds none
+            // the keys follow the prop while rows are selectable; off, the model keeps the keys it
+            // had (no row shows them) and the prop waits until it is on again
             prop: () =>
                 latest.current.rowSelection
                     ? latest.current.selectedRowKeys

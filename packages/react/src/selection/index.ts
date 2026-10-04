@@ -60,11 +60,11 @@ export function useSelectAll<TRow>(
                 : noSubscription,
         [model],
     );
-    // the keys and the mode: a new state object only when a command changed something
-    const read = () => model?.state;
-    const state = useSyncExternalStore(subscribe, read, read);
-    const mode = state?.rowSelection;
-    const selected = state?.selectedRowKeys;
+    // the keys and the mode alone: a move or a sort renders nothing here
+    const readKeys = () => model?.state.selectedRowKeys;
+    const readMode = () => model?.state.rowSelection;
+    const selected = useSyncExternalStore(subscribe, readKeys, readKeys);
+    const mode = useSyncExternalStore(subscribe, readMode, readMode);
     const { status, count } = useMemo(
         () => (mode && selected ? selectionStatus(rowKeys, selected) : NONE),
         [mode, selected, rowKeys],

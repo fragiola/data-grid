@@ -184,6 +184,20 @@ describe("Shift+Up and Shift+Down", () => {
         expect(commands).toEqual(["selected-rows.toggle"]);
     });
 
+    it("extend to the row asked for when a controlled parent answers the move", () => {
+        const { model, key, activate, keys } = setup();
+        const target = activate(2);
+        // a controlled active position: the move is asked for, then applied by the parent
+        model.use((ctx, next) => {
+            if (ctx.command !== "active-position.move" || ctx.dryRun) {
+                return next();
+            }
+            return veto("controlled");
+        });
+        key(target, "ArrowDown", { shiftKey: true });
+        expect(keys()).toEqual(["r2", "r3"]);
+    });
+
     it("move into the header as plain arrows, selecting nothing", () => {
         const { model, key, activate, keys } = setup();
         key(activate(0), "ArrowUp", { shiftKey: true });

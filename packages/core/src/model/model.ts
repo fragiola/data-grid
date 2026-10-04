@@ -22,6 +22,7 @@ import {
     isRowSelectable,
     isRowSelected,
     isRowSelectionMode,
+    keptAnchor,
     keptRowKeys,
     keySet,
     notLoaded,
@@ -565,7 +566,11 @@ function createHandlers<TRow, TNode>(
                 );
             }
             const keys = keptRowKeys(unique, state.rowSelection);
-            return selected(state, keys, state.selectionAnchor);
+            return selected(
+                state,
+                keys,
+                keptAnchor(state.selectionAnchor, keys),
+            );
         },
         "selected-rows.toggle": (state, payload) => {
             if (!state.rowSelection) return selectionOff();
@@ -664,7 +669,11 @@ function createHandlers<TRow, TNode>(
             }
             const all = allKeys(state);
             if (!all.ok) return all;
-            return selected(state, all.keys, state.selectionAnchor);
+            return selected(
+                state,
+                all.keys,
+                keptAnchor(state.selectionAnchor, all.keys),
+            );
         },
         "row-selection.set": (state, { rowSelection, isRowSelectable }) => {
             if (
@@ -706,8 +715,10 @@ function createHandlers<TRow, TNode>(
                           rowSelection: mode,
                           isRowSelectable: filter,
                           selectedRowKeys: keys,
-                          // no range survives selection turned off
-                          selectionAnchor: mode ? state.selectionAnchor : null,
+                          // no range survives selection turned off, nor its row trimmed
+                          selectionAnchor: mode
+                              ? keptAnchor(state.selectionAnchor, keys)
+                              : null,
                       };
             return { ok: true, value: { state: next, value: undefined } };
         },

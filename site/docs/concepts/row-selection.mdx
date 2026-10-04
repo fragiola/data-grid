@@ -16,12 +16,15 @@ never selects never ships it.
 keys, and the selection commands refuse.
 
 ```tsx title="tasks.tsx"
+// a stable function: a new one each render would make the grid render its rows again
+const isOpen = (task: Task) => task.status !== "Completed";
+
 <DataGrid.Root
     columns={columns}
     rows={tasks}
     rowKey={(task) => task.id}
     rowSelection="multiple"
-    isRowSelectable={(task) => task.status !== "Completed"}
+    isRowSelectable={isOpen}
 >
     {/* … */}
 </DataGrid.Root>

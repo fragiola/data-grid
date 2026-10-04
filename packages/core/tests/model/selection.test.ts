@@ -166,6 +166,18 @@ describe("selected rows", () => {
         expect(keys(model)).toEqual(["p4"]);
     });
 
+    it("drops an anchor whose row the keys changed by other means", () => {
+        const model = grid();
+        model.run("selected-rows.toggle", { rowIndex: 2 });
+        // the header's "select all" cleared everything: no range starts from row 2
+        model.run("selected-rows.set", { rowKeys: [] });
+        expect(model.get("selection-anchor")).toBeNull();
+        model.run("selected-rows.toggle", { rowIndex: 4 });
+        // a set keeping the anchor's row as it was keeps the anchor
+        model.run("selected-rows.set", { rowKeys: ["p4", "p9"] });
+        expect(model.get("selection-anchor")?.rowKey).toBe("p4");
+    });
+
     it("drops an anchor whose key moved: the rows were sorted", () => {
         const model = grid({ activePosition: null });
         model.run("selected-rows.toggle", { rowIndex: 1 });

@@ -147,7 +147,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    selected. The extras are opt-in entry points, never imported by the main ones:
    `@fragiola/data-grid/selection` (`selectionStatus`, `withRowKeys`, `withoutRowKeys`,
    `toggledRowKeys`) and `@fragiola/data-grid-react/selection` (`useSelectAll(rowKeys,
-   gridRef?)` → `{ status, count, toggle }`); `useLocalRows` returns `filteredRows`. The
+   gridRef?)` → `{ status, count, toggle, canToggle }`); `useLocalRows` returns `filteredRows`. The
    checkbox is always the app's.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the

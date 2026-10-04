@@ -1746,7 +1746,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             visibleColumns: columnWindow.visible,
         } as const;
         // a move refused selects nothing
-        if (!model.can("active-position.move", move)) return true;
+        const asked = model.check("active-position.move", move);
+        if (!asked.ok) return true;
         // Shift+arrows select: without an anchor that selects, the range starts from this row
         // (it included). One selection command a key: a controlled parent answers each
         if (!model.get("selection-anchor")?.selected) {
@@ -1754,9 +1755,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         pendingFocus = true;
         model.run("active-position.move", move);
-        // extended to the row the move reached (a middleware may have redirected it)
-        const reached = state.activePosition?.rowIndex;
-        if (reached !== undefined && reached >= 0 && reached !== rowIndex) {
+        // extended to the row the move reached (a middleware may have redirected it), or, when a
+        // controlled parent answers the move later, to the row it was asked for
+        const moved = state.activePosition?.rowIndex;
+        const reached =
+            moved !== undefined && moved !== rowIndex
+                ? moved
+                : asked.value.rowIndex;
+        if (reached >= 0 && reached !== rowIndex) {
             model.run("selected-rows.toggle", {
                 rowIndex: reached,
                 extend: true,

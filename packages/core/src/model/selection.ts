@@ -115,6 +115,18 @@ export function validAnchor<TRow>(
         : null;
 }
 
+/**
+ * The anchor once the keys are `keys`: kept while its row's state is the one it gives a range;
+ * the keys changed it by other means (cleared it, selected it), no range starts there.
+ */
+export function keptAnchor(
+    anchor: SelectionAnchor | null,
+    keys: readonly RowKey[],
+): SelectionAnchor | null {
+    if (!anchor) return null;
+    return keySet(keys).has(anchor.rowKey) === anchor.selected ? anchor : null;
+}
+
 /** One row toggled, by its key (single mode: alone). */
 export function toggledKeys<TRow>(
     state: Selecting<TRow>,
