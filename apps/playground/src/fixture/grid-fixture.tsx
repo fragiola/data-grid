@@ -13,7 +13,7 @@ import {
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
-import { Profiler, StrictMode, useMemo } from "react";
+import { Profiler, StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
@@ -42,7 +42,9 @@ import { createRoot } from "react-dom/client";
 //                        selectable
 //   &resize=1            C0–C3 resizable (C2 between 60 and 200px), the widths uncontrolled: a
 //                        resizable header cell (a group's too) holds a resizer (`resizer-<key>`)
-//                        at its right edge, placed by the fixture's own CSS
+//                        at its right edge, placed by the fixture's own CSS; `controlled`
+//                        holds the widths in the fixture's state (`columnWidths` and
+//                        `onColumnWidthsChange`)
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
@@ -355,7 +357,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const pinnedCount = numberParam(params, "pinned", 0);
     const details = params.get("details") === "1";
     const controls = params.get("controls") === "1";
-    const resize = params.get("resize") === "1";
+    const resizeParam = params.get("resize");
+    const resize = resizeParam === "1" || resizeParam === "controlled";
+    const controlledWidths = resizeParam === "controlled";
+    const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
     const selectionParam = params.get("selection");
     const rowSelection =
         selectionParam === "single" || selectionParam === "multiple"
@@ -450,9 +455,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     onSelectedRowKeysChange={(keys) =>
                         window.selectionChanges.push(keys)
                     }
-                    onColumnWidthsChange={(widths) =>
-                        window.widthChanges.push(widths)
-                    }
+                    columnWidths={controlledWidths ? columnWidths : undefined}
+                    onColumnWidthsChange={(widths) => {
+                        window.widthChanges.push(widths);
+                        if (controlledWidths) setColumnWidths(widths);
+                    }}
                     data-testid="viewport"
                     style={{ width, height }}
                 >

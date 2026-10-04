@@ -3,7 +3,12 @@ import type {
     HeaderCellLayout,
     SortDirection,
 } from "../model/types";
-import { spanResizable, spanWidths } from "../model/widths";
+import {
+    resizeMaximum,
+    type SpanWidths,
+    spanResizable,
+    spanWidths,
+} from "../model/widths";
 import { sameCell } from "../navigation/navigation";
 import { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
 import {
@@ -245,11 +250,7 @@ export function headerCellPart<TRow, TNode>(
         view.active !== null && sameCell(view.active, cell, view.header.cellAt);
     return {
         state: {
-            resizable: spanResizable(
-                view.columnDefs,
-                cell.columnIndex,
-                cell.columnIndex + cell.columnSpan,
-            ),
+            resizable: spanResizable(view.columnDefs, cell),
             resizing: view.columnResize?.columnKey === cell.key,
             rowIndex: cell.rowIndex,
             columnIndex: cell.columnIndex,
@@ -269,19 +270,6 @@ export function headerCellPart<TRow, TNode>(
     };
 }
 
-/** The width and limits of a header cell's columns, as the view lays them out. */
-function spanOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-) {
-    return spanWidths(
-        view.columnDefs,
-        view.columnAxis,
-        cell.columnIndex,
-        cell.columnIndex + cell.columnSpan,
-    );
-}
-
 /**
  * The state and attributes of the resizer in a header cell (W3): its column's, or for a group's
  * cell its columns' together (W5).
@@ -290,7 +278,16 @@ export function columnResizerPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     cell: HeaderCellLayout<TRow, TNode>,
 ): ColumnResizerPart {
-    const { resizable, width, minWidth, maxWidth } = spanOf(view, cell);
+    const resizable = spanResizable(view.columnDefs, cell);
+    const axis = view.columnAxis;
+    // a cell whose columns do not resize is its width, with nothing to move within
+    const fixed =
+        axis.offsetOf(cell.columnIndex + cell.columnSpan) -
+        axis.offsetOf(cell.columnIndex);
+    const span: SpanWidths = resizable
+        ? spanWidths(view.columnDefs, axis, cell)
+        : { width: fixed, minWidth: fixed, maxWidth: fixed };
+    const { width, minWidth, maxWidth } = span;
     return {
         state: {
             columnKey: cell.key,
@@ -306,7 +303,7 @@ export function columnResizerPart<TRow, TNode>(
             "aria-orientation": "vertical",
             "aria-valuenow": width,
             "aria-valuemin": minWidth,
-            "aria-valuemax": maxWidth ?? Math.max(width, view.viewportWidth),
+            "aria-valuemax": resizeMaximum(span, view.viewportWidth),
             [COLUMN_RESIZER_ATTRIBUTE]: cell.key,
         },
     };

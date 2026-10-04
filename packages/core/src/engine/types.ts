@@ -222,6 +222,12 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
      * after the consumer's own handlers, so `preventDefault` cancels it.
      */
     click(event: MouseEvent): boolean;
+    /**
+     * Handles a press in the grid: a primary press on one of its column resizers starts a drag
+     * (and is prevented: no focus, no text selection). Returns whether it did. Like `click`, an
+     * adapter calls it after the consumer's own handlers, so `preventDefault` cancels it.
+     */
+    pointerdown(event: PointerEvent): boolean;
     /** changes the options */
     setOptions(options: DataGridEngineOptions): void;
 }

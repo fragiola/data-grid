@@ -1,6 +1,6 @@
 import type { Axis } from "../axis/axis";
 import { clamp, isWidth } from "../utils";
-import type { Column, ColumnWidths } from "./types";
+import type { Column, ColumnWidths, HeaderCellLayout } from "./types";
 
 // Column widths (Epic #70, W1–W5): a resizable column's width is its resized one, else its
 // `width`, always within its limits; a column that is not resizable is its `width`, as before.
@@ -30,20 +30,6 @@ export function hasResizable(columns: readonly SizedColumn[]): boolean {
         resizableLists.set(columns, has);
     }
     return has;
-}
-
-/** Whether a column from `start` to `end` (a header cell's span) is resizable. */
-export function spanResizable(
-    columns: readonly SizedColumn[],
-    start: number,
-    end: number,
-): boolean {
-    if (!hasResizable(columns)) return false;
-    for (let index = start; index < end; index++) {
-        const column = columns[index];
-        if (column && isResizable(column)) return true;
-    }
-    return false;
 }
 
 /** A resizable column's limits: `max` is infinite without one, and `min` never passes it. */
@@ -95,7 +81,8 @@ const EPSILON = 1e-6;
  * resizable ones share the change in proportion to their widths, each within its limits; what one
  * could not take goes to the ones that still can, until none is left or every one is at a limit.
  * The widths are then rounded to whole pixels in order, each passing its rounding on to the next.
- * Only a column whose width changes gets one; nothing changing, the same record.
+ * Only a column whose width changes gets one, and none when it is back to its own; nothing
+ * changing, the same record.
  */
 export function resizedWidths(
     columns: readonly SizedColumn[],
@@ -111,6 +98,8 @@ export function resizedWidths(
         return {
             key: column.key,
             current,
+            // its own width: resized back to it, it needs no width of the record's
+            own: columnWidth(column, {}),
             next: current,
             ...widthLimits(column),
         };
@@ -136,17 +125,22 @@ export function resizedWidths(
         // every one took its whole share: nothing is left
         if (open.length === count) break;
     }
+    const changed = new Set<string>();
     const entries: [string, number][] = [];
     let carry = 0;
     for (const share of shares) {
         const exact = share.next + carry;
         const rounded = clamp(Math.round(exact), share.min, share.max);
         carry = exact - rounded;
-        if (rounded !== share.current) entries.push([share.key, rounded]);
+        if (rounded === share.current) continue;
+        changed.add(share.key);
+        if (rounded !== share.own) entries.push([share.key, rounded]);
     }
-    return entries.length > 0
-        ? { ...columnWidths, ...Object.fromEntries(entries) }
-        : columnWidths;
+    if (changed.size === 0) return columnWidths;
+    return Object.fromEntries([
+        ...Object.entries(columnWidths).filter(([key]) => !changed.has(key)),
+        ...entries,
+    ]);
 }
 
 /** The widths without the overrides of `keys`. */
@@ -160,56 +154,68 @@ export function withoutWidths(
     return sameWidths(next, columnWidths) ? columnWidths : next;
 }
 
+/** A run of columns: a header cell's (a column's, or a group's). */
+export type ColumnSpan = Pick<
+    HeaderCellLayout<unknown>,
+    "columnIndex" | "columnSpan"
+>;
+
+/** Whether a column of a span (a header cell's) is resizable. */
+export function spanResizable(
+    columns: readonly SizedColumn[],
+    { columnIndex, columnSpan }: ColumnSpan,
+): boolean {
+    if (!hasResizable(columns)) return false;
+    for (let index = columnIndex; index < columnIndex + columnSpan; index++) {
+        const column = columns[index];
+        if (column && isResizable(column)) return true;
+    }
+    return false;
+}
+
 /** What a resize handle reports of its columns: their width, and the limits it moves within. */
 export interface SpanWidths {
-    /** whether one of them is resizable */
-    readonly resizable: boolean;
     /** their width on screen */
     readonly width: number;
     /** the narrowest they get: each resizable one at its minimum, the others as they are */
     readonly minWidth: number;
     /** the widest they get, or `undefined` when a resizable one has no maximum */
     readonly maxWidth: number | undefined;
-    /** their width with no column resized (what a reset gives) */
-    readonly ownWidth: number;
 }
 
-/**
- * The width and limits of columns `start` to `end` (a column, a group's span), their widths on
- * screen read from `axis`.
- */
+/** The width and limits of a span's columns, their widths on screen read from `axis`. */
 export function spanWidths(
     columns: readonly SizedColumn[],
     axis: Axis,
-    start: number,
-    end: number,
+    { columnIndex, columnSpan }: ColumnSpan,
 ): SpanWidths {
-    let resizable = false;
     let width = 0;
     let min = 0;
     let max = 0;
-    let own = 0;
-    for (let index = start; index < end; index++) {
+    for (let index = columnIndex; index < columnIndex + columnSpan; index++) {
         const column = columns[index];
         const current = axis.sizeOf(index);
         width += current;
         if (column && isResizable(column)) {
             const limits = widthLimits(column);
-            resizable = true;
             min += limits.min;
             max += limits.max;
-            own += columnWidth(column, {});
         } else {
             min += current;
             max += current;
-            own += current;
         }
     }
     return {
-        resizable,
         width,
         minWidth: min,
         maxWidth: Number.isFinite(max) ? max : undefined,
-        ownWidth: own,
     };
+}
+
+/**
+ * The widest a resizer goes (its `aria-valuemax`, where End takes it): its columns' maximum, or
+ * without one the wider of their width and the view's (a separator's value has a maximum).
+ */
+export function resizeMaximum(span: SpanWidths, viewportWidth: number): number {
+    return span.maxWidth ?? Math.max(span.width, viewportWidth);
 }

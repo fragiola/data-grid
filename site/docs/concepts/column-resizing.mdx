@@ -118,10 +118,14 @@ The props make the element a vertical `separator` whose values are widths in pix
 ## Dragging
 
 A press with the primary button on a handle captures the pointer; the column follows it, right
-growing, one resize per frame, within its limits. The release keeps the width, and Escape (or a
-cancelled pointer) puts back the width the drag started from. A double click gives the column its
-own `width` back. A press, a click or a drag on a handle is never a [sort](/docs/concepts/sorting),
-even in a sortable column's header cell.
+growing, one resize per frame, within its limits. The press reaches the grid after your own
+`onPointerDown` (so `preventDefault` there keeps it from dragging), and the grid prevents it: the
+handle takes no focus and no text is selected. The release keeps the width (as does a pointer the
+handle loses), and Escape (or a cancelled pointer) resizes the column back to the width the drag
+started from, leaving every other column as it is. Escape reaches the grid after your handlers,
+wherever focus is: one you prevent keeps the drag going. A double click gives the column its own
+`width` back. A press, a click or a drag on a handle is never a
+[sort](/docs/concepts/sorting), even in a sortable column's header cell.
 
 While a drag lasts, the header cell and its handle carry `data-resizing`, and
 `engine.get("column-resize")` is `{ columnKey, width }` (else `null`); the engine's
@@ -138,7 +142,8 @@ controls ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)).
 | ←, → | 10 px narrower, wider |
 | Shift+←, Shift+→ | 50 px narrower, wider |
 | Home | the minimum |
-| End | the maximum, or the column's own `width` when it has none |
+| End | the maximum it reports (`aria-valuemax`): without a `maxWidth`, the view's width |
+| other page keys, Space | nothing: the grid's container never pages under it |
 | Escape | back to navigation, on the header cell; the width stays |
 
 They run after your handlers, so `preventDefault` cancels them, and each is one
@@ -148,7 +153,7 @@ They run after your handlers, so `preventDefault` cancels them, and each is one
 
 A handle in a group's header cell resizes the group's resizable columns together. A change is
 shared in proportion to their widths, each within its limits, and what one cannot take goes to the
-next. Its values are the group's: `aria-valuenow` is the sum of its columns' widths. A double
+others that still can, so the group reaches the minimum and the maximum its handle reports. Its values are the group's: `aria-valuenow` is the sum of its columns' widths. A double
 click resets every column of the group.
 
 ## Pinned columns and scaling
@@ -156,14 +161,15 @@ click resets every column of the group.
 A [pinned column](/docs/concepts/pinned-columns) resizes like any other and stays pinned, the
 columns after it moving along. Windows, the header's spans and
 [scroll scaling](/docs/concepts/scroll-scaling) follow the widths on their own: a resize is a new
-layout, not a scroll.
+layout, not a scroll. A column resized left of the view (a pinned one, or one scrolled past)
+keeps the view on the column it shows first, as far into it as before, scaled or not.
 
 ## The commands
 
 | command | does |
 | --- | --- |
 | `column-widths.set { columnWidths }` | replaces the widths |
-| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together |
+| `column-widths.resize { columnKey, width }` | resizes a column within its limits, or a group's columns together; a column back to its own `width` keeps no entry, and nothing changing commits nothing |
 | `column-widths.reset { columnKey? }` | gives a column (or a group's columns) its own `width` back, or every column without a key |
 
 Reads: `get("column-widths")`, and `get("column-width-by", { columnKey })`, a column's width on

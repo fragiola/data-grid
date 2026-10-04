@@ -8,6 +8,7 @@ import {
     createDataGridEngine,
     createDataGridModel,
     headerCellPart,
+    veto,
 } from "../../src";
 import { columnAxisOf } from "../../src/engine/view";
 import {
@@ -98,7 +99,10 @@ function setup(columns: ColumnOrGroup<Row>[] = COLUMNS) {
         { grid, width: 600 },
     );
     const { model, engine } = mounted;
-    /** a pointer event on `target`, the primary button held until the release; returns it */
+    /**
+     * a pointer event on `target`, the primary button held until the release; returns it. A
+     * press goes to the engine after the page's own handlers, as the root hands it over
+     */
     const pointer = (
         target: Element,
         type: string,
@@ -117,6 +121,7 @@ function setup(columns: ColumnOrGroup<Row>[] = COLUMNS) {
             ...init,
         });
         target.dispatchEvent(event);
+        if (type === "pointerdown") engine.adapter.pointerdown(event);
         return event;
     };
     /** Escape pressed wherever focus is (here the page), as a browser dispatches it */
@@ -259,18 +264,66 @@ describe("a drag on a resizer", () => {
         expect(engine.get("column-resize")).toBeNull();
     });
 
-    it("takes Escape once: the grid's keys skip it (interaction stays)", () => {
-        const { a, pointer, pressEscape, engine, model } = setup();
+    it("restores only its own columns, through a resize: what changed meanwhile stays", () => {
+        const { a, pointer, pressEscape, widthOf, model } = setup();
+        // a middleware that lets the widths be resized, never replaced
+        model.use((ctx, next) =>
+            ctx.command === "column-widths.set" ? veto() : next(),
+        );
+        pointer(a.resizer, "pointerdown", 300);
+        pointer(a.resizer, "pointermove", 350);
+        frame();
+        model.run("column-widths.resize", { columnKey: "b", width: 160 });
+        pressEscape();
+        expect(widthOf("a")).toBe(100);
+        expect(widthOf("b")).toBe(160);
+        expect(model.get("column-widths")).toEqual({ b: 160 });
+    });
+
+    it("takes Escape once, in the grid's keys first: interaction stays", () => {
+        const { a, pointer, engine, widthOf } = setup();
         keydown(engine, a.cell, "F2");
         expect(engine.get("interaction")).not.toBeNull();
         pointer(a.resizer, "pointerdown", 300);
         pointer(a.resizer, "pointermove", 350);
         frame();
-        const event = pressEscape(a.resizer);
-        // the root hands the same event to the engine after the document heard it
-        expect(engine.adapter.keydown(event)).toBe(false);
+        // the root hands the key to the engine before the document hears it
+        const event = keyEvent(a.resizer, "Escape");
+        expect(engine.adapter.keydown(event)).toBe(true);
+        expect(event.defaultPrevented).toBe(true);
         expect(engine.get("interaction")).not.toBeNull();
-        expect(model.get("column-widths")).toEqual({});
+        expect(engine.get("column-resize")).toBeNull();
+        expect(widthOf("a")).toBe(100);
+    });
+
+    it("leaves Escape to the page's handlers first: one they prevent keeps the drag", () => {
+        const { a, pointer, pressEscape, engine, widthOf } = setup();
+        pointer(a.resizer, "pointerdown", 300);
+        pointer(a.resizer, "pointermove", 350);
+        frame();
+        const cancel = (event: Event) => event.preventDefault();
+        document.body.addEventListener("keydown", cancel);
+        pressEscape();
+        document.body.removeEventListener("keydown", cancel);
+        expect(engine.get("column-resize")).not.toBeNull();
+        expect(widthOf("a")).toBe(150);
+        pointer(a.resizer, "pointerup", 350);
+    });
+
+    it("is the page's to cancel: a press it prevents starts no drag", () => {
+        const { a, engine } = setup();
+        const event = new PointerEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            buttons: 1,
+            pointerId: 1,
+            clientX: 300,
+        });
+        a.resizer.dispatchEvent(event);
+        event.preventDefault();
+        expect(engine.adapter.pointerdown(event)).toBe(false);
+        expect(engine.get("column-resize")).toBeNull();
     });
 
     it("never gets stuck: a lost capture, a move with no button, a capture refused", () => {
@@ -334,6 +387,9 @@ describe("a drag on a resizer", () => {
         expect(model.state.sortColumns).toEqual([]);
         // a press with no move
         expect(clickOn(a.resizer)).toBe(true);
+        expect(model.state.sortColumns).toEqual([]);
+        // a press the engine was never handed (no drag) on a resizer is still no sort
+        expect(click(engine, a.resizer).handled).toBe(false);
         expect(model.state.sortColumns).toEqual([]);
         // the header cell itself still sorts
         expect(click(engine, a.cell).handled).toBe(true);
@@ -453,6 +509,8 @@ describe("the keys on a resizer", () => {
             ["ArrowUp", {}],
             ["ArrowDown", {}],
             ["PageDown", {}],
+            [" ", {}],
+            [" ", { shiftKey: true }],
             ["End", { ctrlKey: true }],
         ] as const) {
             const { handled, event } = key(name, init);
@@ -462,13 +520,18 @@ describe("the keys on a resizer", () => {
         expect(widthOf("a")).toBe(100);
     });
 
-    it("go to the column's own width with End when it has no maximum", () => {
-        const { engine, resizable, widthOf, model } = setup();
+    it("go with End to the maximum they report: without one, the view's width", () => {
+        const { engine, resizable, widthOf, model, view } = setup();
         const b = resizable(1, "b");
         keydown(engine, b.cell, "F2");
         model.run("column-widths.set", { columnWidths: { b: 300 } });
         keydown(engine, b.resizer, "End");
-        expect(widthOf("b")).toBe(100);
+        expect(widthOf("b")).toBe(600);
+        const cell = model.state.header.cellByKey("b");
+        if (!cell) throw new Error("no cell b");
+        expect(
+            columnResizerPart(view(), cell).attributes["aria-valuemax"],
+        ).toBe(600);
     });
 
     it("leave the consumer's cancelled keys alone, and Escape leaves interaction, the width kept", () => {
@@ -485,7 +548,7 @@ describe("the keys on a resizer", () => {
 });
 
 describe("a resize under scroll scaling", () => {
-    it("keeps the view where it is when a column left of it changes", () => {
+    it("keeps the view on its first column when a column left of it changes", () => {
         const columns = Array.from({ length: 2_000 }, (_, i) => ({
             key: `c${i}`,
             width: 100,
@@ -502,13 +565,17 @@ describe("a resize under scroll scaling", () => {
         expect(before.start).toBe(1_000);
         model.run("column-widths.resize", { columnKey: "c0", width: 160 });
         commit();
-        // the same virtual offset: the content moved by the 60 pixels added, no further
-        expect(engine.get("scroll-position").left).toBe(100_000);
-        expect(engine.get("column-window").visible.start).toBe(999);
+        // the same column first, the view moved by the 60 pixels added
+        expect(engine.get("scroll-position").left).toBe(100_060);
+        expect(engine.get("column-window").visible.start).toBe(1_000);
         model.run("column-widths.resize", { columnKey: "c1", width: 40 });
         commit();
         expect(engine.get("scroll-position").left).toBe(100_000);
         expect(engine.get("column-window").visible.start).toBe(1_000);
+        // a resize right of the view's first column moves nothing
+        model.run("column-widths.resize", { columnKey: "c1500", width: 300 });
+        commit();
+        expect(engine.get("scroll-position").left).toBe(100_000);
     });
 });
 

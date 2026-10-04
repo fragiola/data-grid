@@ -242,7 +242,8 @@ function sourceMatches<TRow>(
 /**
  * The grid's root: the scroll container (a `div`, overflow auto; give it a size). It holds the
  * model and the engine, maps its props onto the model's commands (controlled or not), and runs
- * the grid's keys after the consumer's own `onKeyDown`, so `preventDefault` cancels one.
+ * the grid's keys, clicks and presses after the consumer's own handlers, so `preventDefault`
+ * cancels one.
  */
 export function Root<TRow>(props: RootProps<TRow>) {
     const {
@@ -437,13 +438,16 @@ export function Root<TRow>(props: RootProps<TRow>) {
             latest.current.onRowsEndReached?.(info),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
-        // the grid's keys and header clicks (sorting) run after the consumer's onKeyDown and
-        // onClick, on the root or on its render element, so preventDefault cancels them
+        // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
+        // consumer's onKeyDown, onClick and onPointerDown, on the root or on its render element,
+        // so preventDefault cancels them
         const after = {
             onKeyDown: (event: React.KeyboardEvent) =>
                 engine.adapter.keydown(event.nativeEvent),
             onClick: (event: React.MouseEvent) =>
                 engine.adapter.click(event.nativeEvent),
+            onPointerDown: (event: React.PointerEvent) =>
+                engine.adapter.pointerdown(event.nativeEvent),
         };
         return {
             context,

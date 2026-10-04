@@ -158,13 +158,23 @@ function flatHeader<TRow, TNode>(
     };
 }
 
-/** The lookup of the header's cells by their key (a column's or a group's): one map per layout. */
+/**
+ * The lookup of the header's cells by their key (a column's or a group's): its map built on the
+ * first lookup, so a grid that never looks one up never builds it.
+ */
 function cellsByKey<TRow, TNode>(
     rows: readonly (readonly HeaderCellLayout<TRow, TNode>[])[],
 ): HeaderLayout<TRow, TNode>["cellByKey"] {
-    const byKey = new Map<string, HeaderCellLayout<TRow, TNode>>();
-    for (const row of rows) for (const cell of row) byKey.set(cell.key, cell);
-    return (key) => byKey.get(key);
+    let byKey: Map<string, HeaderCellLayout<TRow, TNode>> | null = null;
+    return (key) => {
+        if (!byKey) {
+            byKey = new Map();
+            for (const row of rows) {
+                for (const cell of row) byKey.set(cell.key, cell);
+            }
+        }
+        return byKey.get(key);
+    };
 }
 
 /**

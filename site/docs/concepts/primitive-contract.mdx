@@ -24,11 +24,12 @@ into it; or a function, which receives the props and the part's state.
 
 - Any prop a part does not use is forwarded to its element (`id`, `aria-*`, `data-*`, handlers).
 - `ref` is a plain prop, merged with the part's own.
-- A handler you pass runs after the part's own, with two exceptions: `Root` runs the grid's keys
-  **after** your `onKeyDown`, and its header clicks (sorting) **after** your `onClick`, on `Root`
-  or on its `render` element; a cell's handlers run before both, so `preventDefault` cancels a
-  key or a sort. See [Keyboard and accessibility](/docs/concepts/keyboard) and
-  [Sorting](/docs/concepts/sorting).
+- A handler you pass runs after the part's own, with three exceptions: `Root` runs the grid's keys
+  **after** your `onKeyDown`, its header clicks (sorting) **after** your `onClick`, and a press
+  on a column resizer (a drag) **after** your `onPointerDown`, on `Root` or on its `render`
+  element; a cell's handlers run before them, so `preventDefault` cancels a key, a sort or a
+  drag. See [Keyboard and accessibility](/docs/concepts/keyboard), [Sorting](/docs/concepts/sorting)
+  and [Column resizing](/docs/concepts/column-resizing).
 - `Body` and `HeaderRow` drop a `transform` from your style: the grid moves them with it. A
   pinned column's cells drop a `transform` and the insets (`top`, `left`, `right`, `bottom`,
   `inset`): they are sticky, the grid writes their `left`. A row's detail drops them too, for the

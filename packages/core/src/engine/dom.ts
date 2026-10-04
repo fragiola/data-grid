@@ -66,8 +66,6 @@ const CONTROL_ROLES = new Set([
     "spinbutton",
     "tab",
     "textbox",
-    // a column resizer: a press on it is a drag, its keys resize
-    "separator",
 ]);
 
 /** Whether an element is a control of its own (a button, a link, a field, a menu trigger). */
@@ -123,6 +121,11 @@ export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
  */
 export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
 
+/** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
+export function isResizer(element: Element): boolean {
+    return element.hasAttribute(COLUMN_RESIZER_ATTRIBUTE);
+}
+
 /** Whether a control moves through its group with the arrows (a radio, a menu item, a tab). */
 export function movesWithArrows(element: Element): boolean {
     const role = element.getAttribute("role");
@@ -137,8 +140,6 @@ export function movesWithArrows(element: Element): boolean {
 
 /** Roles of controls with no use for the page keys (a button, a link, a box to check). */
 const PAGELESS_ROLES = new Set([
-    // a column resizer: its arrows, Home and End resize it, the rest never page
-    "separator",
     "button",
     "link",
     "checkbox",

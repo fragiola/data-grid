@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react";
+import type * as React from "react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -69,6 +70,7 @@ type GridProps = Pick<
     | "onColumnWidthsChange"
     | "activePosition"
     | "onActivePositionChange"
+    | "onPointerDown"
     | "gridRef"
 > & {
     cells?: readonly ColumnOrGroup<Person>[];
@@ -307,6 +309,18 @@ describe("useColumnResizer", () => {
         expect(age).not.toHaveAttribute("data-resizing");
         expect(headerAt(container, 1)).not.toHaveAttribute("data-resizing");
     });
+
+    it("starts a drag after the consumer's onPointerDown: preventDefault cancels it", () => {
+        const onPointerDown = vi.fn((event: React.PointerEvent) =>
+            event.preventDefault(),
+        );
+        const { container } = render(<Grid onPointerDown={onPointerDown} />);
+        const age = resizerOf(container, "age");
+        fireEvent.pointerDown(age, { button: 0, pointerId: 1, clientX: 300 });
+        expect(onPointerDown).toHaveBeenCalledTimes(1);
+        expect(age).not.toHaveAttribute("data-resizing");
+        expect(states.get("age")?.resizing).toBe(false);
+    });
 });
 
 describe("structure", () => {
@@ -492,7 +506,7 @@ describe("a controlled drag", () => {
     const move = (target: HTMLElement, clientX: number) =>
         fireEvent.pointerMove(target, { pointerId: 1, buttons: 1, clientX });
 
-    it("asks the parent once a frame, and Escape asks for the widths it started from", () => {
+    it("asks the parent once a frame, and Escape asks for the width it started from", () => {
         const flush = fakeFrames();
         const onChange = vi.fn();
         const { container } = render(<Parent onChange={onChange} />);
@@ -513,6 +527,7 @@ describe("a controlled drag", () => {
         expect(widthsOf(container, 1)).toEqual(["115px", "115px"]);
         fireEvent.keyDown(document, { key: "Escape" });
         expect(onChange).toHaveBeenCalledTimes(3);
+        // a resize back to its start, its own width: no width of the record's
         expect(onChange).toHaveBeenLastCalledWith({});
         expect(widthsOf(container, 1)).toEqual(["80px", "80px"]);
         expect(age).not.toHaveAttribute("data-resizing");

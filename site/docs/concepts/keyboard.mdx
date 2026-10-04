@@ -69,9 +69,10 @@ other controls. Then, on the focused handle:
 | --- | --- |
 | ←, → | 10 px narrower, wider |
 | Shift+←, Shift+→ | 50 px narrower, wider |
-| Home, End | the column's minimum, its maximum (or its own `width`, without one) |
+| Home, End | the column's minimum, its maximum (its `aria-valuemax`: the view's width, without a `maxWidth`) |
 | Escape | back to navigation; the width stays |
 
+The other page keys and Space do nothing on a handle: the grid's container never pages under it.
 Escape also cancels a drag, putting back the width it started from.
 
 ## Whose key it is

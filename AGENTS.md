@@ -162,17 +162,23 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    clamped where used; `columnsError` refuses a negative minimum or one above the maximum. The
    column axis reads the effective width, so pinned widths, header spans, windows and scroll
    scaling follow. A group's resize is shared by its resizable columns in proportion to their
-   widths, each clamped, the rest going to the next; a group is resizable when one of its
-   columns is. The handle is the app's element with `useColumnResizer(cell)`'s props
+   widths, each clamped, what one cannot take going to every other one that can; a resize writes
+   a width only for a column whose width changes, none for one back to its own `width`, and
+   commits nothing when no width changes; a group is resizable when one of its columns is. A
+   width changing left of the view keeps the view on its first column (as a row expanding above
+   it, M2), scaled or not. The handle is the app's element with `useColumnResizer(cell)`'s props
    (`role="separator"`, `aria-orientation="vertical"`, `aria-valuenow`/`-min`/`-max` in px, the
    maximum without one the view's width, `data-grid-column-resizer` = the key,
    `data-grid-part="column-resizer"`); its name, place, look and `touch-action: none` are the
-   app's. The engine drags it: a primary-button press captures the pointer, one
-   `column-widths.resize` per animation frame (the view's `requestAnimationFrame`), right grows,
-   the release keeps the width, Escape or `pointercancel` restores the one it started from
+   app's. The engine drags it: a primary-button press (handed over by `Root` after the
+   consumer's `onPointerDown`, and prevented: no focus, no text selection) captures the pointer,
+   one `column-widths.resize` per animation frame (the view's `requestAnimationFrame`), right
+   grows, the release (a lost capture, a move with no button) keeps the width, Escape or
+   `pointercancel` resizes its column back to the width it started from (the others keep theirs)
    (`engine.get("column-resize")` → `{ columnKey, width } | null`, the `column-resize` event); a
-   double click runs `column-widths.reset`; a press, click or drag on it is never a sort
-   (`separator` is a control role). `data-resizable` on a resizable header cell (a group's when
+   double click runs `column-widths.reset`; a press, click or drag on it is never a sort (an
+   element with `data-grid-column-resizer` is a control of its header cell; no ARIA role changes
+   for grids without resizing). `data-resizable` on a resizable header cell (a group's when
    one of its columns is), `data-resizing` on the header cell and the handle during a drag. Auto
    widths, reordering, RTL and persisting the widths are not the grid's (yet, or ever).
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
@@ -192,8 +198,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `interact-cell`/`leave-cell`); `data-interacting` on it. A column's resize handle is a control
     of its header cell: in interaction (F2, Enter on a header that does not sort, Tab among its
     controls), on the focused handle ←/→ resize by 10 px (Shift: 50), Home/End go to the minimum
-    and the maximum (the column's own `width` without one), each one `column-widths.resize` after
-    the consumer's handlers; Escape leaves interaction and keeps the width. A consumer can
+    and the maximum (its `aria-valuemax`: without a `maxWidth`, the view's width), each one
+    `column-widths.resize` after the consumer's handlers; the other page keys and Space do
+    nothing there (no paging); Escape leaves interaction and keeps the width. A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. ARIA: `role="grid"`,
     `aria-rowcount`/`aria-colcount` are totals, `aria-rowindex`/`aria-colindex` 1-based.
 12. **Versions (D12).** Exact versions published at least 7 days ago, checked against the registry
@@ -341,7 +348,11 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and
   Escape of interactive cells included. **Clicks too (Epic
   #27):** `Root` calls the engine's `click` (a header cell's sort) after the consumer's
-  `onClick`, the same way. Keys from outside the
+  `onClick`, the same way. **Presses on a resizer too (Epic #70):** `Root` calls the engine's
+  `pointerdown` (a resizer's drag) after the consumer's `onPointerDown`; during a drag, Escape
+  goes to the engine's `keydown` the same way, and from outside the grid to a listener on the
+  document's bubble phase, after the app's own handlers (a prevented Escape keeps the drag).
+  Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
 - **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's. The

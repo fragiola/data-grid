@@ -1669,7 +1669,7 @@ for (const kind of KINDS) {
             test("resizes with the keys from inside its header cell, aria-valuenow following", async ({
                 page,
             }) => {
-                await open(page, kind, RESIZE);
+                const viewport = await open(page, kind, RESIZE);
                 await headerCell(page, 0).click({ position: { x: 5, y: 5 } });
                 await page.keyboard.press("F2");
                 await expect(resizer(page, "c0")).toBeFocused();
@@ -1681,16 +1681,30 @@ for (const kind of KINDS) {
                 await page.keyboard.press("ArrowLeft");
                 await expect(valueNow).toHaveAttribute("aria-valuenow", "150");
                 expect(await widths(page, 0)).toEqual([150, 150]);
+                // no maximum: End goes to the one it reports, the view's width
+                await page.keyboard.press("End");
+                const valueMax = await valueNow.getAttribute("aria-valuemax");
+                expect(Number(valueMax)).toBeGreaterThan(600);
+                await expect(valueNow).toHaveAttribute(
+                    "aria-valuenow",
+                    String(valueMax),
+                );
+                // Space and PageDown page nothing on it
+                await page.keyboard.press(" ");
+                await page.keyboard.press("PageDown");
+                await settle(page);
+                expect(await viewport.evaluate((el) => el.scrollTop)).toBe(0);
+                await expect(valueNow).toHaveAttribute(
+                    "aria-valuenow",
+                    String(valueMax),
+                );
                 await page.keyboard.press("Home");
                 await expect(valueNow).toHaveAttribute("aria-valuenow", "40");
-                // no maximum: its own width
-                await page.keyboard.press("End");
-                await expect(valueNow).toHaveAttribute("aria-valuenow", "100");
                 // Escape gives the keys back; the width stays
                 await page.keyboard.press("ArrowRight");
                 await page.keyboard.press("Escape");
                 await expect(headerCell(page, 0)).toBeFocused();
-                expect(await widths(page, 0)).toEqual([110, 110]);
+                expect(await widths(page, 0)).toEqual([50, 50]);
                 // Enter on a header cell that does not sort reaches it too
                 await page.keyboard.press("ArrowRight");
                 await page.keyboard.press("ArrowRight");
@@ -1753,6 +1767,34 @@ for (const kind of KINDS) {
                     "data-pinned-edge",
                     "",
                 );
+            });
+
+            test("resizes controlled widths live, restores them on Escape and resets them on a double click", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...RESIZE, resize: "controlled" });
+                // each frame asks the fixture, which follows: the column follows the pointer
+                await drag(page, "c1", 50, { hold: true });
+                expect(await widths(page, 1)).toEqual([150, 150]);
+                await expect(resizer(page, "c1")).toHaveAttribute(
+                    "aria-valuenow",
+                    "150",
+                );
+                expect(await lastWidths(page)).toEqual({ c1: 150 });
+                await page.keyboard.press("Escape");
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                expect(await lastWidths(page)).toEqual({});
+                await page.mouse.up();
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                await drag(page, "c1", 70);
+                expect(await widths(page, 1)).toEqual([170, 170]);
+                expect(await lastWidths(page)).toEqual({ c1: 170 });
+                await resizer(page, "c1").dblclick();
+                await settle(page);
+                expect(await widths(page, 1)).toEqual([100, 100]);
+                expect(await lastWidths(page)).toEqual({});
             });
 
             test("does not sort on a press, a drag or a double click on a sortable header's resizer", async ({

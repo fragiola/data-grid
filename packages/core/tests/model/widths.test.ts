@@ -200,6 +200,10 @@ describe("column-widths.resize", () => {
         model.run("column-widths.resize", { columnKey: "a", width: 100.4 });
         expect(events).toBe(0);
         expect(model.get("column-widths")).toEqual({});
+        // back to its own width, a column needs no width of the record's
+        model.run("column-widths.resize", { columnKey: "a", width: 150 });
+        model.run("column-widths.resize", { columnKey: "a", width: 100 });
+        expect(model.get("column-widths")).toEqual({});
         // "m" is at its maximum already: only "n" grows, and only it gets a width
         const group = createDataGridModel<Row>({
             columns: [

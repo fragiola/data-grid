@@ -66,16 +66,17 @@ test("F2 on a header reaches its handle, the arrows resize, Escape gives the key
     await page.keyboard.press("ArrowLeft");
     await expect(email).toHaveAttribute("aria-valuenow", "290");
     expect(await widths(page, "Email")).toEqual([290, 290]);
-    // its minimum, then (no maximum) its own width
+    // no maximum: End goes to the one it reports (the view's width), then Home to its minimum
+    await page.keyboard.press("End");
+    const valueMax = await email.getAttribute("aria-valuemax");
+    await expect(email).toHaveAttribute("aria-valuenow", String(valueMax));
     await page.keyboard.press("Home");
     await expect(email).toHaveAttribute("aria-valuenow", "160");
-    await page.keyboard.press("End");
-    await expect(email).toHaveAttribute("aria-valuenow", "240");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Escape");
     await expect(header(page, "Email")).toBeFocused();
-    expect(await widths(page, "Email")).toEqual([250, 250]);
-    await expect(readout(page)).toHaveText("Email 250px");
+    expect(await widths(page, "Email")).toEqual([170, 170]);
+    await expect(readout(page)).toHaveText("Email 170px");
 });
 
 test("Escape during a drag restores the width, and a double click resets it", async ({
