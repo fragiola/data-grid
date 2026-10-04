@@ -1,13 +1,14 @@
 "use client";
 
-import { useGridView } from "@fragiola/data-grid-react";
+import { useDataGrid, useGridView } from "@fragiola/data-grid-react";
+import { useSelectAll } from "@fragiola/data-grid-react/selection";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import * as styles from "./styles";
 
-// The app's own table state, shared through a context: the columns stay the same objects (the
-// grid keeps its layout), and only the cells that read the state re-render when it changes.
+// The cells that read the grid's state: the selection is the grid's (the app keeps the keys it
+// answers), the sort too. The columns stay the same objects: only these cells re-render.
 
 export type SortKey = "name" | "domain" | "employees" | "arr" | "country";
 
@@ -24,55 +25,47 @@ export function isSortKey(value: unknown): value is SortKey {
     return SORT_KEYS.some((key) => key === value);
 }
 
-export interface TableState {
-    selected: ReadonlySet<number>;
-    visibleIds: readonly number[];
-    toggle: (id: number) => void;
-    toggleAll: () => void;
-}
+/** The ids of the companies the grid holds: what the header's checkbox selects. */
+export const CompanyIds = createContext<readonly number[]>([]);
 
-const TableContext = createContext<TableState | null>(null);
-
-export function TableProvider({
-    value,
-    children,
+/** A row's checkbox: the grid toggles it, a Shift+click selects the rows since the last one. */
+export function SelectCell({
+    rowIndex,
+    name,
 }: {
-    value: TableState;
-    children: ReactNode;
+    rowIndex: number;
+    name: string;
 }) {
-    return <TableContext value={value}>{children}</TableContext>;
-}
-
-function useTable(): TableState {
-    const value = useContext(TableContext);
-    if (!value) throw new Error("the table state is missing");
-    return value;
-}
-
-/** A row's checkbox. */
-export function SelectCell({ id, name }: { id: number; name: string }) {
-    const { selected, toggle } = useTable();
+    const { model } = useDataGrid();
+    // the view moves with the selection: the box follows
+    useGridView();
     return (
         <Checkbox.Root
             aria-label={`Select ${name}`}
-            checked={selected.has(id)}
-            onCheckedChange={() => toggle(id)}
+            checked={model.is("row-selected", { rowIndex })}
+            onCheckedChange={(_, details) =>
+                model.run("selected-rows.toggle", {
+                    rowIndex,
+                    extend:
+                        "shiftKey" in details.event &&
+                        details.event.shiftKey === true,
+                })
+            }
         >
             <Checkbox.Indicator />
         </Checkbox.Root>
     );
 }
 
-/** The header's checkbox: every row, some (indeterminate) or none. */
+/** The header's checkbox over every company: every row, some (indeterminate) or none. */
 export function SelectAllHeader() {
-    const { selected, visibleIds, toggleAll } = useTable();
-    const count = visibleIds.filter((id) => selected.has(id)).length;
+    const all = useSelectAll(useContext(CompanyIds));
     return (
         <Checkbox.Root
             aria-label="Select all"
-            checked={count > 0 && count === visibleIds.length}
-            indeterminate={count > 0 && count < visibleIds.length}
-            onCheckedChange={toggleAll}
+            checked={all.status === "all"}
+            indeterminate={all.status === "some"}
+            onCheckedChange={all.toggle}
         >
             <Checkbox.Indicator />
         </Checkbox.Root>

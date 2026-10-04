@@ -39,13 +39,15 @@ function reachable(entry: string): {
 }
 
 describe("the primitives' entry", () => {
-    it("never reaches useLocalRows nor the core's local pipeline", () => {
+    it("never reaches the opt-in extras: rows in memory, the selection's", () => {
         const { files, packages } = reachable(join(src, "index.ts"));
         const names = [...files].map((file) => relative(src, file));
         expect(names.length).toBeGreaterThan(5);
-        expect(names.filter((file) => file.startsWith("local"))).toEqual([]);
-        expect([...packages].filter((name) => name.endsWith("/local"))).toEqual(
-            [],
-        );
+        for (const extra of ["local", "selection"]) {
+            expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
+            expect(
+                [...packages].filter((name) => name.endsWith(`/${extra}`)),
+            ).toEqual([]);
+        }
     });
 });

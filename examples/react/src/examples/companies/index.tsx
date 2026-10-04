@@ -1,6 +1,6 @@
 "use client";
 
-import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { type Column, DataGrid, type RowKey } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import {
     AtSign,
@@ -13,7 +13,7 @@ import {
     Trash2,
     Users,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { Avatar } from "#/components/ui/avatar";
 import { Select } from "#/components/ui/select";
@@ -27,12 +27,12 @@ import {
 import { hash } from "../_kit/data";
 import {
     CellLink,
+    CompanyIds,
     isSortKey,
     SelectAllHeader,
     SelectCell,
     type SortKey,
     SortLabel,
-    TableProvider,
 } from "./state";
 import * as styles from "./styles";
 
@@ -57,7 +57,9 @@ const columns: Column<Company>[] = [
         key: "select",
         width: 48,
         renderHeaderCell: () => <SelectAllHeader />,
-        renderCell: ({ row }) => <SelectCell id={row.id} name={row.name} />,
+        renderCell: ({ row, rowIndex }) => (
+            <SelectCell rowIndex={rowIndex} name={row.name} />
+        ),
     },
     {
         key: "name",
@@ -220,43 +222,24 @@ const columns: Column<Company>[] = [
 
 export default function Companies() {
     const [all, setAll] = useState(() => companies(500));
-    const [selected, setSelected] = useState<ReadonlySet<number>>(
-        () => new Set(),
-    );
+    // the grid selects (checkboxes, Shift+Space, Ctrl+A); the app keeps the keys to act on them
+    const [selected, setSelected] = useState<readonly RowKey[]>([]);
     // the rows in memory sorted by one hook: the header and the toolbar's select both set its
     // sort (the first column first, the next ones breaking ties)
     const local = useLocalRows(all, columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });
     const { rows } = local;
-    const visibleIds = useMemo(() => rows.map((row) => row.id), [rows]);
+    const ids = useMemo(() => rows.map((row) => row.id), [rows]);
 
-    const toggle = useCallback((id: number) => {
-        setSelected((current) => {
-            const next = new Set(current);
-            if (!next.delete(id)) next.add(id);
-            return next;
-        });
-    }, []);
-    const toggleAll = useCallback(() => {
-        setSelected((current) =>
-            visibleIds.every((id) => current.has(id))
-                ? new Set()
-                : new Set(visibleIds),
-        );
-    }, [visibleIds]);
     const deleteSelected = () => {
-        setAll((current) => current.filter((row) => !selected.has(row.id)));
-        setSelected(new Set());
+        const gone = new Set(selected);
+        setAll((current) => current.filter((row) => !gone.has(row.id)));
+        setSelected([]);
     };
 
-    const table = useMemo(
-        () => ({ selected, visibleIds, toggle, toggleAll }),
-        [selected, visibleIds, toggle, toggleAll],
-    );
-
     return (
-        <TableProvider value={table}>
+        <CompanyIds value={ids}>
             <div className={styles.frame}>
                 <div className={styles.toolbar}>
                     <Select.Root
@@ -288,14 +271,14 @@ export default function Companies() {
                     <Clickable.Button
                         size="sm"
                         variant="outline"
-                        disabled={selected.size === 0}
+                        disabled={selected.length === 0}
                         onClick={deleteSelected}
                     >
                         <Trash2 aria-hidden />
                         Delete selected
                     </Clickable.Button>
                     <span className={styles.count} data-testid="selected-count">
-                        {selected.size} selected · {rows.length} companies
+                        {selected.length} selected · {rows.length} companies
                     </span>
                 </div>
                 <DataGrid.Root
@@ -303,6 +286,9 @@ export default function Companies() {
                     rowKey={(row) => row.id}
                     rowHeight={44}
                     headerRowHeight={40}
+                    rowSelection="multiple"
+                    selectedRowKeys={selected}
+                    onSelectedRowKeysChange={setSelected}
                     className={styles.root}
                     {...local.props}
                 >
@@ -327,10 +313,9 @@ export default function Companies() {
                                 {(row) => (
                                     <DataGrid.Row
                                         row={row}
-                                        className={styles.row(
-                                            row.row !== undefined &&
-                                                selected.has(row.row.id),
-                                        )}
+                                        className={(state) =>
+                                            styles.row(state.selected)
+                                        }
                                     >
                                         <DataGrid.Cells<Company>>
                                             {(cell) => (
@@ -347,6 +332,6 @@ export default function Companies() {
                     </DataGrid.Grid>
                 </DataGrid.Root>
             </div>
-        </TableProvider>
+        </CompanyIds>
     );
 }

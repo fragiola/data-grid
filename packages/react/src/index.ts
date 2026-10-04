@@ -9,6 +9,8 @@ export type {
     Range,
     RowKey,
     RowKeyGetter,
+    RowSelectable,
+    RowSelection,
     Size,
     SortColumn,
     SortDirection,

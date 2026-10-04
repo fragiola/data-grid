@@ -17,6 +17,8 @@ import {
     rowDisplay,
     rowExpanded,
     rowLeft,
+    rowSelectable,
+    rowSelected,
     rowTop,
     rowWidth,
     type SortDirection,
@@ -124,6 +126,8 @@ export interface RowState {
     readonly active: boolean;
     /** it shows its detail (`DataGrid.RowDetail`): loaded, and its key expanded */
     readonly expanded: boolean;
+    /** it is selected: rows are selectable, it is loaded and its key selected */
+    readonly selected: boolean;
 }
 
 /**
@@ -160,18 +164,25 @@ export function useRow<TRow>(row: RowInfo<TRow>): {
         loaded: row.loaded,
         active: view.active?.rowIndex === row.rowIndex,
         expanded: rowExpanded(view, row.rowIndex),
+        selected: rowSelected(view, row.rowIndex),
     };
     return {
         state,
         props: {
             role: "row",
             "aria-rowindex": ariaRowIndex(view, row.rowIndex),
+            // ARIA's own vocabulary (R7): "false" is "selectable, not selected"; a row that
+            // cannot be selected (or is not loaded) carries none
+            ...(rowSelectable(view, row.rowIndex) || state.selected
+                ? { "aria-selected": state.selected }
+                : {}),
             ...dataAttributes({
                 "grid-part": "row",
                 "row-index": row.rowIndex,
                 loading: !row.loaded,
                 active: state.active,
                 expanded: state.expanded,
+                selected: state.selected,
             }),
             // an expanded row's box holds its detail, below its cells
             style: rowStyle(

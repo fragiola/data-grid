@@ -2,6 +2,7 @@ import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import { headerCellsIn, pinnedColumnCount } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
+import { isRowSelectable, isRowSelected } from "../model/selection";
 import { rowAt } from "../model/source";
 import type {
     CellPosition,
@@ -9,6 +10,10 @@ import type {
     DataGridState,
     HeaderCellLayout,
     HeaderLayout,
+    RowKey,
+    RowKeyGetter,
+    RowSelectable,
+    RowSelection,
     RowSource,
     SortColumn,
     SortDirection,
@@ -125,6 +130,14 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly pinnedWidth: number;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
+    /** a row's key: `rowKey`, else its index */
+    readonly rowKey: RowKeyGetter<TRow> | undefined;
+    /** how rows are selected; `undefined` when they are not */
+    readonly rowSelection: RowSelection | undefined;
+    /** the selected rows' keys (`rowSelected` tells a row's state) */
+    readonly selectedRowKeys: readonly RowKey[];
+    /** whether a loaded row can be selected; `undefined`: every row can */
+    readonly isRowSelectable: RowSelectable<TRow> | undefined;
     /**
      * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
      * leaves), at its element's position (a header cell's top row and first column); `null` in
@@ -698,6 +711,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pinnedColumnCount: pinnedCount,
             pinnedWidth,
             expandedRows: state.expandedRows,
+            rowKey: state.rowKey,
+            rowSelection: state.rowSelection,
+            selectedRowKeys: state.selectedRowKeys,
+            isRowSelectable: state.isRowSelectable,
             interaction,
         };
     }
@@ -746,6 +763,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             current.sortColumns !== next.sortColumns ||
             current.pinnedColumnCount !== next.pinnedColumnCount ||
             current.expandedRows !== next.expandedRows ||
+            current.rowKey !== next.rowKey ||
+            current.rowSelection !== next.rowSelection ||
+            current.selectedRowKeys !== next.selectedRowKeys ||
+            current.isRowSelectable !== next.isRowSelectable ||
             current.interaction !== next.interaction
         );
     }
@@ -1682,6 +1703,75 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
     }
 
+    /**
+     * The selection's keys on a body cell (R6), rows being selectable: Shift+Space toggles its
+     * row, Shift+Up/Down (many rows) move and extend the selection to the row reached, Ctrl/⌘+A
+     * selects every row. Each goes through a command, so a middleware can refuse it.
+     */
+    function selectionKey(event: KeyboardEvent): boolean {
+        const mode = state.rowSelection;
+        const target = event.target;
+        if (!mode || !isElement(target) || !isCellElement(target)) return false;
+        const position = cellOf(target);
+        if (!position || position.rowIndex < 0) return false;
+        const rowIndex = position.rowIndex;
+        const ctrl = event.ctrlKey || event.metaKey;
+        if (event.key === " " && event.shiftKey && !ctrl) {
+            event.preventDefault();
+            // a held key repeats: it would toggle the row on and off
+            if (!event.repeat) model.run("selected-rows.toggle", { rowIndex });
+            return true;
+        }
+        if (mode !== "multiple") return false;
+        if (ctrl && !event.shiftKey && event.key.toLowerCase() === "a") {
+            // handled even when refused: the page's text is never selected instead
+            event.preventDefault();
+            if (!event.repeat) model.run("selected-rows.select-all", {});
+            return true;
+        }
+        if (
+            !event.shiftKey ||
+            ctrl ||
+            (event.key !== "ArrowDown" && event.key !== "ArrowUp")
+        ) {
+            return false;
+        }
+        const down = event.key === "ArrowDown";
+        // up into the header: a plain move
+        if (!down && rowIndex === 0) return false;
+        event.preventDefault();
+        if (down && rowIndex === state.rowCount - 1) return true;
+        const move = {
+            direction: down ? "down" : "up",
+            visibleColumns: columnWindow.visible,
+        } as const;
+        // a move refused selects nothing
+        const asked = model.check("active-position.move", move);
+        if (!asked.ok) return true;
+        // Shift+arrows select: without an anchor that selects, the range starts from this row
+        // (it included). One selection command a key: a controlled parent answers each
+        if (!model.get("selection-anchor")?.selected) {
+            model.run("selection-anchor.set", { rowIndex });
+        }
+        pendingFocus = true;
+        model.run("active-position.move", move);
+        // extended to the row the move reached (a middleware may have redirected it), or, when a
+        // controlled parent answers the move later, to the row it was asked for
+        const moved = state.activePosition?.rowIndex;
+        const reached =
+            moved !== undefined && moved !== rowIndex
+                ? moved
+                : asked.value.rowIndex;
+        if (reached >= 0 && reached !== rowIndex) {
+            model.run("selected-rows.toggle", {
+                rowIndex: reached,
+                extend: true,
+            });
+        }
+        flushFocus();
+        return true;
+    }
+
     function keydown(event: KeyboardEvent): boolean {
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
         // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
@@ -1764,6 +1854,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return true;
             }
         }
+        if (selectionKey(event)) return true;
         if (
             event.key === " " &&
             !event.ctrlKey &&
@@ -2325,6 +2416,22 @@ export function rowExpanded<TRow, TNode>(
     rowIndex: number,
 ): boolean {
     return holdsRow(view.expandedRows, rowIndex);
+}
+
+/** Whether a row is selected (R7): rows are selectable, it is loaded and its key selected. */
+export function rowSelected<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): boolean {
+    return isRowSelected(view, rowIndex);
+}
+
+/** Whether a row can be selected (R7): rows are selectable, it is loaded and not refused. */
+export function rowSelectable<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): boolean {
+    return isRowSelectable(view, rowIndex);
 }
 
 /** A row's own height: its cells', without its detail. */

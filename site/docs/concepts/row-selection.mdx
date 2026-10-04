@@ -1,0 +1,173 @@
+---
+title: Row selection
+description: One row or many, selected with your own controls and the grid's keys, kept by key in the grid, with helpers for a select-all checkbox.
+---
+
+The grid keeps which rows are selected, as their keys, and shows it in ARIA and `data-*`. The
+controls are yours: the grid renders no checkbox, no text and no count. What answers questions
+about a list of rows ("are they all selected?") comes from an opt-in entry point, so a grid that
+never selects never ships it.
+
+<Example id="row-selection" />
+
+## Turning it on
+
+`rowSelection` is `"multiple"` or `"single"`. Without it, rows are not selectable: no ARIA, no
+keys, and the selection commands refuse.
+
+```tsx title="tasks.tsx"
+// a stable function: a new one each render would make the grid render its rows again
+const isOpen = (task: Task) => task.status !== "Completed";
+
+<DataGrid.Root
+    columns={columns}
+    rows={tasks}
+    rowKey={(task) => task.id}
+    rowSelection="multiple"
+    isRowSelectable={isOpen}
+>
+    {/* … */}
+</DataGrid.Root>
+```
+
+Give the grid a `rowKey`. The selection is a list of keys, so it survives sorting, filtering,
+paging and reloading. Without a `rowKey`, keys are indexes, and a sort moves the selection to
+other rows.
+
+`isRowSelectable` keeps rows out: a toggle by index never adds them, and a range or "select every
+row" skips them. Keys you give (`selected-rows.set`, a toggle by `rowKey`) are yours, as given:
+such a row they select carries `aria-selected="true"`, and otherwise none.
+
+## The selection
+
+The selected keys are controlled or not, like the [sort](/docs/concepts/sorting):
+
+- `selectedRowKeys` with `onSelectedRowKeysChange`: a change is asked for, and only the prop
+  applies it;
+- `defaultSelectedRowKeys`: the grid starts from it, applies changes and tells
+  `onSelectedRowKeysChange`.
+
+```tsx title="companies.tsx"
+const [selected, setSelected] = useState<readonly RowKey[]>([]);
+
+<DataGrid.Root
+    columns={columns}
+    rows={companies}
+    rowKey={(company) => company.id}
+    rowSelection="multiple"
+    selectedRowKeys={selected}
+    onSelectedRowKeysChange={setSelected}
+>
+    {/* … */}
+</DataGrid.Root>
+<button disabled={selected.length === 0} onClick={() => remove(selected)}>
+    Delete selected
+</button>
+```
+
+In `"single"` mode, selecting a row clears the other, a list of keys keeps its last one, and a
+Shift+click is a plain toggle.
+
+## A checkbox column
+
+The checkbox is a cell of yours. It asks the grid, and the grid answers through the row's state.
+A Shift+click passes `extend`, which selects (or clears) every selectable row from the last row
+toggled, the **anchor**, to this one:
+
+```tsx title="select-row.tsx"
+function SelectRow({ rowIndex }: { rowIndex: number }) {
+    const { model } = useDataGrid<Task>();
+    useGridView(); // re-renders when the selection changes
+    return (
+        <input
+            type="checkbox"
+            aria-label="Select"
+            checked={model.is("row-selected", { rowIndex })}
+            disabled={!model.is("row-selectable", { rowIndex })}
+            readOnly // the grid's answer checks it
+            onClick={(event) =>
+                model.run("selected-rows.toggle", { rowIndex, extend: event.shiftKey })
+            }
+        />
+    );
+}
+```
+
+A cell's controls are [no tab stops of their own](/docs/concepts/keyboard#controls-in-cells):
+Enter reaches the checkbox, and Space checks it.
+
+## Selecting all
+
+`useSelectAll(rowKeys)` from `@fragiola/data-grid-react/selection` drives a "select all" control
+over the rows you name: the rows on screen, a page, or every filtered row
+([`useLocalRows`](/docs/concepts/rows-in-memory) returns them as `filteredRows`). Leave out the
+rows that cannot be selected: the keys you give are the ones it sets.
+
+```tsx title="select-all.tsx"
+import { useSelectAll } from "@fragiola/data-grid-react/selection";
+
+function SelectAll({ ids }: { ids: readonly RowKey[] }) {
+    const all = useSelectAll(ids);
+    return (
+        <Checkbox
+            aria-label="Select all"
+            checked={all.status === "all"}
+            indeterminate={all.status === "some"}
+            onCheckedChange={all.toggle}
+        />
+    );
+}
+```
+
+It reports `status` (`"all"`, `"some"` or `"none"`) and `count`; `toggle` selects every one of
+them, or clears them when every one is selected. In single mode, it only clears, and `canToggle`
+tells when it does something (to disable the control otherwise). The same
+answers, without React, are in `@fragiola/data-grid/selection`: `selectionStatus`,
+`withRowKeys`, `withoutRowKeys`, `toggledRowKeys`.
+
+## Keys
+
+| key | does |
+| --- | --- |
+| Shift+Space | selects the active row, or clears it; it becomes the anchor |
+| Shift+↓, Shift+↑ | moves to the next row and selects from the anchor (the row you started on, when there is none or it cleared) |
+| Ctrl+A, ⌘+A | selects every selectable row |
+
+They act on body cells, in navigation (in a cell's controls, they are the control's), and only
+with `rowSelection`: Shift+arrows and Ctrl+A only in `"multiple"` mode. Shift+arrows only select:
+going back up selects nothing less. They run after your handlers, so `preventDefault` cancels
+them, and through commands a middleware can refuse. Each runs at most one `selected-rows.*`
+command (a Shift+arrow also moves the active cell, and may set the anchor first), so a controlled
+parent answers each key once.
+
+## Rows not loaded yet
+
+With `getRow`, a row not loaded has no key yet. A range or "select every row" that reaches one
+refuses as a whole (`not_loaded`) and changes nothing: the grid never selects half of what you
+asked. Selecting every row of a server's data is your policy: a middleware can answer
+`selected-rows.select-all` with your own request.
+
+## The commands
+
+| command | does |
+| --- | --- |
+| `selected-rows.set { rowKeys }` | replaces the selected keys, as given |
+| `selected-rows.toggle { rowIndex, extend? }` or `{ rowKey }` | toggles a row, or extends from the anchor |
+| `selected-rows.select-all` | selects every selectable row |
+| `selection-anchor.set { rowIndex, selected? }` | makes a row the anchor without selecting it |
+| `selection-anchor.clear` | leaves no anchor: the next Shift+click is a toggle |
+| `row-selection.set { rowSelection, isRowSelectable }` | changes the mode and the filter |
+
+Reads: `get("selected-row-keys")`, `get("row-selection")`, `get("selection-anchor")`,
+`is("row-selected", { rowIndex })`, `is("row-selectable", { rowIndex })`.
+
+## What it shows
+
+| on | attribute | when |
+| --- | --- | --- |
+| grid | `aria-multiselectable` | in `"multiple"` mode |
+| row | `aria-selected` | `true` or `false` on a loaded row that can be selected, or is |
+| row | `data-selected` | it is selected |
+
+`useRow` reports `selected`, as does the state a row's `className` and `style` functions
+receive.

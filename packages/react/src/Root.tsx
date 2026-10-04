@@ -9,8 +9,11 @@ import {
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
     type GridView,
+    type ResultOf,
     type RowKey,
     type RowKeyGetter,
+    type RowSelectable,
+    type RowSelection,
     type Size,
     type SortColumn,
     sameRowKeys,
@@ -59,6 +62,9 @@ interface HandlerProps {
 
 /** The root's state: what its `className`/`style` functions and `render` receive. */
 export type RootState = Record<string, never>;
+
+/** What `selected-rows.toggle` returns: the keys, and the anchor it leaves. */
+type ToggleResult = ResultOf<"selected-rows.toggle">;
 
 /** Where the rows come from: all of them, or a count and a getter (D6). */
 type RowsProps<TRow> =
@@ -125,6 +131,24 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
          * adds to the row's own height
          */
         detailHeight?: DetailHeight<TRow> | undefined;
+        /**
+         * how rows are selected: one at a time or many (default: not at all). Selected rows carry
+         * `data-selected` and `aria-selected`; Shift+Space, Shift+Up/Down and Ctrl/⌘+A select
+         */
+        rowSelection?: RowSelection | undefined;
+        /** whether a loaded row can be selected (default: every row can) */
+        isRowSelectable?: RowSelectable<TRow> | undefined;
+        /**
+         * the selected rows' keys (a row's `rowKey`, else its index), controlled; pair it with
+         * `onSelectedRowKeysChange`
+         */
+        selectedRowKeys?: readonly RowKey[] | undefined;
+        /** the selected rows' keys to start with, uncontrolled */
+        defaultSelectedRowKeys?: readonly RowKey[] | undefined;
+        /** the selection changed (or, controlled, asks to): a row was toggled, or a command ran */
+        onSelectedRowKeysChange?:
+            | ((selectedRowKeys: readonly RowKey[]) => void)
+            | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -196,6 +220,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
         defaultExpandedRowKeys,
         onExpandedRowKeysChange,
         detailHeight,
+        rowSelection,
+        isRowSelectable,
+        selectedRowKeys,
+        defaultSelectedRowKeys,
+        onSelectedRowKeysChange,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -231,6 +260,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
             sortColumns: sortColumns ?? defaultSortColumns,
             expandedRowKeys: expandedRowKeys ?? defaultExpandedRowKeys,
             detailHeight,
+            rowSelection,
+            isRowSelectable,
+            selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
         });
         const position: ControlledState<TRow, CellPosition | null> = {
             prefix: "active-position.",
@@ -273,9 +305,43 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 model.run("expanded-rows.set", { rowKeys: value });
             },
         };
+        const selection: ControlledState<TRow, readonly RowKey[]> = {
+            prefix: "selected-rows.",
+            // the keys follow the prop while rows are selectable; off, the model keeps the keys it
+            // had (no row shows them) and the prop waits until it is on again
+            prop: () =>
+                latest.current.rowSelection
+                    ? latest.current.selectedRowKeys
+                    : undefined,
+            read: (state) => state.selectedRowKeys,
+            same: sameRowKeys,
+            valueOf: (command, value) =>
+                command === "selected-rows.toggle"
+                    ? (value as ToggleResult).rowKeys
+                    : (value as readonly RowKey[]),
+            report: (value) => latest.current.onSelectedRowKeysChange?.(value),
+            apply: (value) => {
+                model.run("selected-rows.set", { rowKeys: value });
+            },
+            // the parent answers the keys; where a range starts is the grid's: a toggle's anchor
+            // is kept as the model would have left it
+            vetoed: (command, value) => {
+                if (command !== "selected-rows.toggle") return;
+                const { anchor } = value as ToggleResult;
+                if (anchor) {
+                    model.run("selection-anchor.set", {
+                        rowIndex: anchor.rowIndex,
+                        selected: anchor.selected,
+                    });
+                } else {
+                    model.run("selection-anchor.clear", {});
+                }
+            },
+        };
         bindControlled(model, flags, position);
         bindControlled(model, flags, sort);
         bindControlled(model, flags, expanded);
+        bindControlled(model, flags, selection);
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -292,7 +358,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             latest.current.onRowsEndReached?.(info),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
-        return { context, position, sort, expanded };
+        return { context, position, sort, expanded, selection };
     });
     const { context } = grid;
     const { model, engine } = context;
@@ -365,6 +431,20 @@ export function Root<TRow>(props: RootProps<TRow>) {
         }
     }, [model, rowHeight, headerRowHeight, detailHeight]);
 
+    useLayoutEffect(() => {
+        const { state } = model;
+        if (
+            rowSelection !== state.rowSelection ||
+            isRowSelectable !== state.isRowSelectable
+        ) {
+            // a prop removed turns it off
+            model.run("row-selection.set", {
+                rowSelection: rowSelection ?? null,
+                isRowSelectable: isRowSelectable ?? null,
+            });
+        }
+    }, [model, rowSelection, isRowSelectable]);
+
     // and last: a controlled position valid only after the data changed (rows grown) follows now;
     // one the data made impossible was clamped by the model, and the parent is told where. A
     // controlled sort follows the columns, and one they cannot take is told as it settled
@@ -373,7 +453,24 @@ export function Root<TRow>(props: RootProps<TRow>) {
         settleControlled(model, flags, grid.position);
         settleControlled(model, flags, grid.sort);
         settleControlled(model, flags, grid.expanded);
+        settleControlled(model, flags, grid.selection);
     });
+
+    // an uncontrolled selection to start with that single mode trimmed (its last key kept): the
+    // app is told the keys the grid holds
+    useLayoutEffect(() => {
+        const start = latest.current.defaultSelectedRowKeys;
+        if (
+            latest.current.selectedRowKeys === undefined &&
+            latest.current.rowSelection !== undefined &&
+            start !== undefined &&
+            !sameRowKeys(start, model.state.selectedRowKeys)
+        ) {
+            latest.current.onSelectedRowKeysChange?.(
+                model.state.selectedRowKeys,
+            );
+        }
+    }, [model]);
 
     // an uncontrolled sort to start with that the columns could not take all of (a column not
     // sortable) started without it: the app is told the sort the grid holds

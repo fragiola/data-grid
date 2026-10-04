@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
 
-// The app's own selection and deleting over the rows it gives the grid, and the grid's sort (the
+// The grid's selection (the app keeps the keys and deletes those rows), and the grid's sort (the
 // app orders the rows by it).
 
 const header = (page: Page, name: string) =>

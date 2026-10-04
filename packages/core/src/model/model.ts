@@ -14,7 +14,22 @@ import {
     type RowKeyHints,
     type SearchRange,
     sameRowKeys,
+    uniqueRowKeys,
 } from "./expansion";
+import {
+    allKeys,
+    extendedKeys,
+    isRowSelectable,
+    isRowSelected,
+    isRowSelectionMode,
+    keptAnchor,
+    keptRowKeys,
+    keySet,
+    notLoaded,
+    ROW_SELECTIONS,
+    toggledKeys,
+    validAnchor,
+} from "./selection";
 import {
     SORT_DIRECTIONS,
     sameSortColumns,
@@ -46,6 +61,7 @@ import type {
     ResultOf,
     RowKey,
     RowSource,
+    SelectionAnchor,
     SortColumn,
 } from "./types";
 
@@ -234,16 +250,57 @@ function withExpandedRows<TRow, TNode>(
         : { ...state, expandedRows };
 }
 
-/** The expanded keys, once each: `undefined` when one is not a key. */
-function uniqueRowKeys(
-    keys: readonly unknown[],
-): readonly RowKey[] | undefined {
-    const unique = new Set<RowKey>();
-    for (const key of keys) {
-        if (!isRowKey(key)) return undefined;
-        unique.add(key);
+/** Every selection command's refusal while rows are not selectable. */
+function selectionOff(): { readonly ok: false; readonly error: CommandError } {
+    return fail("refused", "rows are not selectable (no rowSelection)");
+}
+
+/** A toggle's value: the keys, and the anchor it leaves (a controlled root keeps that part). */
+function toggled<TRow, TNode>(
+    applied: Applied<TRow, TNode, readonly RowKey[]>,
+): Applied<
+    TRow,
+    TNode,
+    {
+        readonly rowKeys: readonly RowKey[];
+        readonly anchor: SelectionAnchor | null;
     }
-    return [...unique];
+> {
+    if (!applied.ok) return applied;
+    const { state } = applied.value;
+    return {
+        ok: true,
+        value: {
+            state,
+            value: {
+                rowKeys: state.selectedRowKeys,
+                anchor: state.selectionAnchor,
+            },
+        },
+    };
+}
+
+/** The state with the selected keys and the anchor, the same object when neither changed. */
+function selected<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    keys: readonly RowKey[],
+    anchor: SelectionAnchor | null,
+): Applied<TRow, TNode, readonly RowKey[]> {
+    const same =
+        sameRowKeys(keys, state.selectedRowKeys) &&
+        anchor?.rowKey === state.selectionAnchor?.rowKey &&
+        anchor?.rowIndex === state.selectionAnchor?.rowIndex &&
+        anchor?.selected === state.selectionAnchor?.selected;
+    const next = same
+        ? state
+        : {
+              ...state,
+              selectedRowKeys: sameRowKeys(keys, state.selectedRowKeys)
+                  ? state.selectedRowKeys
+                  : keys,
+              selectionAnchor: anchor,
+          };
+    return { ok: true, value: { state: next, value: next.selectedRowKeys } };
 }
 
 function validSize(size: unknown): boolean {
@@ -496,6 +553,175 @@ function createHandlers<TRow, TNode>(
                 value: { state: next, value: keys },
             };
         },
+        "selected-rows.set": (state, { rowKeys }) => {
+            if (!state.rowSelection) return selectionOff();
+            if (!Array.isArray(rowKeys)) {
+                return fail("invalid_payload", "rowKeys must be an array");
+            }
+            const unique = uniqueRowKeys(rowKeys);
+            if (!unique) {
+                return fail(
+                    "invalid_payload",
+                    "a row key must be a string or a finite number",
+                );
+            }
+            const keys = keptRowKeys(unique, state.rowSelection);
+            return selected(
+                state,
+                keys,
+                keptAnchor(state.selectionAnchor, keys),
+            );
+        },
+        "selected-rows.toggle": (state, payload) => {
+            if (!state.rowSelection) return selectionOff();
+            if (payload.rowIndex === undefined) {
+                if (!isRowKey(payload.rowKey)) {
+                    return fail(
+                        "invalid_payload",
+                        "toggle a rowIndex, or a rowKey (a string or a finite number)",
+                    );
+                }
+                // no index to start a range from: the anchor goes
+                return toggled(
+                    selected(state, toggledKeys(state, payload.rowKey), null),
+                );
+            }
+            const rowIndex = payload.rowIndex;
+            if (
+                !Number.isInteger(rowIndex) ||
+                rowIndex < 0 ||
+                rowIndex >= state.rowCount
+            ) {
+                return fail("not_found", `no row ${rowIndex}`);
+            }
+            const key = loadedRowKey(state, rowIndex);
+            if (key === undefined) return notLoaded(rowIndex);
+            // one row at a time has no range: a Shift+click is a toggle there
+            if (payload.extend === true && state.rowSelection === "multiple") {
+                const extended = extendedKeys(state, rowIndex);
+                // the range starts where it did: the anchor stays
+                if (extended) {
+                    return extended.ok
+                        ? toggled(
+                              selected(
+                                  state,
+                                  extended.keys,
+                                  state.selectionAnchor,
+                              ),
+                          )
+                        : extended;
+                }
+                // nothing to extend from: a toggle
+            }
+            // a row that cannot be selected is never added; one selected already can be cleared
+            if (
+                !isRowSelectable(state, rowIndex) &&
+                !keySet(state.selectedRowKeys).has(key)
+            ) {
+                return fail("refused", `row ${rowIndex} cannot be selected`);
+            }
+            const was = keySet(state.selectedRowKeys).has(key);
+            return toggled(
+                selected(state, toggledKeys(state, key), {
+                    rowKey: key,
+                    rowIndex,
+                    selected: !was,
+                }),
+            );
+        },
+        "selection-anchor.clear": (state) => ({
+            ok: true,
+            value: {
+                state: state.selectionAnchor
+                    ? { ...state, selectionAnchor: null }
+                    : state,
+                value: undefined,
+            },
+        }),
+        "selection-anchor.set": (state, { rowIndex, selected: selects }) => {
+            if (!state.rowSelection) return selectionOff();
+            if (
+                !Number.isInteger(rowIndex) ||
+                rowIndex < 0 ||
+                rowIndex >= state.rowCount
+            ) {
+                return fail("not_found", `no row ${rowIndex}`);
+            }
+            const rowKey = loadedRowKey(state, rowIndex);
+            if (rowKey === undefined) return notLoaded(rowIndex);
+            const anchor = { rowKey, rowIndex, selected: selects !== false };
+            const current = state.selectionAnchor;
+            const next =
+                current?.rowKey === rowKey &&
+                current.rowIndex === rowIndex &&
+                current.selected === anchor.selected
+                    ? state
+                    : { ...state, selectionAnchor: anchor };
+            return {
+                ok: true,
+                value: { state: next, value: next.selectionAnchor ?? anchor },
+            };
+        },
+        "selected-rows.select-all": (state) => {
+            if (!state.rowSelection) return selectionOff();
+            if (state.rowSelection === "single") {
+                return fail("refused", "a single selection selects one row");
+            }
+            const all = allKeys(state);
+            if (!all.ok) return all;
+            return selected(
+                state,
+                all.keys,
+                keptAnchor(state.selectionAnchor, all.keys),
+            );
+        },
+        "row-selection.set": (state, { rowSelection, isRowSelectable }) => {
+            if (
+                rowSelection !== undefined &&
+                rowSelection !== null &&
+                !isRowSelectionMode(rowSelection)
+            ) {
+                return fail(
+                    "invalid_payload",
+                    `rowSelection must be one of ${ROW_SELECTIONS.join(", ")}`,
+                );
+            }
+            if (
+                isRowSelectable !== undefined &&
+                isRowSelectable !== null &&
+                typeof isRowSelectable !== "function"
+            ) {
+                return fail(
+                    "invalid_payload",
+                    "isRowSelectable must be a function",
+                );
+            }
+            const mode =
+                rowSelection === undefined
+                    ? state.rowSelection
+                    : (rowSelection ?? undefined);
+            const filter =
+                isRowSelectable === undefined
+                    ? state.isRowSelectable
+                    : (isRowSelectable ?? undefined);
+            const keys = keptRowKeys(state.selectedRowKeys, mode);
+            const next =
+                mode === state.rowSelection &&
+                filter === state.isRowSelectable &&
+                keys === state.selectedRowKeys
+                    ? state
+                    : {
+                          ...state,
+                          rowSelection: mode,
+                          isRowSelectable: filter,
+                          selectedRowKeys: keys,
+                          // no range survives selection turned off, nor its row trimmed
+                          selectionAnchor: mode
+                              ? keptAnchor(state.selectionAnchor, keys)
+                              : null,
+                      };
+            return { ok: true, value: { state: next, value: undefined } };
+        },
         "sizes.set": (state, { rowHeight, headerRowHeight, detailHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return fail(
@@ -624,6 +850,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
     const error = columnsError(entries);
     if (error) throw new TypeError(`invalid columns: ${error}`);
     const { columns, header } = layoutColumns(entries);
+    const selectionMode = isRowSelectionMode(options.rowSelection)
+        ? options.rowSelection
+        : undefined;
     let state: DataGridState<TRow, TNode> = reconcile({
         columns,
         columnEntries: entries,
@@ -641,6 +870,13 @@ export function createDataGridModel<TRow, TNode = unknown>(
         expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
         expandedRows: [],
         detailHeight: options.detailHeight ?? DEFAULT_DETAIL_HEIGHT,
+        rowSelection: selectionMode,
+        selectedRowKeys: keptRowKeys(
+            uniqueRowKeys(options.selectedRowKeys ?? []) ?? [],
+            selectionMode,
+        ),
+        isRowSelectable: options.isRowSelectable,
+        selectionAnchor: null,
     });
     state = withExpandedRows(state, hints);
     const middlewares: Middleware<TRow, TNode>[] = [];
@@ -812,6 +1048,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "expanded-row-keys": () => state.expandedRowKeys,
         "expanded-rows": () => state.expandedRows,
         "detail-height": () => state.detailHeight,
+        "row-selection": () => state.rowSelection,
+        "selected-row-keys": () => state.selectedRowKeys,
+        "selection-anchor": () => validAnchor(state),
     };
 
     const questions: {
@@ -828,6 +1067,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
             "column" in sortableColumn(state.columns, columnKey),
         "row-expanded": ({ rowIndex }) =>
             holdsRow(state.expandedRows, rowIndex),
+        "row-selected": ({ rowIndex }) => isRowSelected(state, rowIndex),
+        "row-selectable": ({ rowIndex }) => isRowSelectable(state, rowIndex),
     };
 
     const model: DataGridModel<TRow, TNode> = {
@@ -883,6 +1124,12 @@ export const COMMANDS: readonly CommandName[] = [
     "sort-columns.toggle",
     "expanded-rows.set",
     "expanded-rows.toggle",
+    "selected-rows.set",
+    "selected-rows.toggle",
+    "selected-rows.select-all",
+    "selection-anchor.set",
+    "selection-anchor.clear",
+    "row-selection.set",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

@@ -59,6 +59,10 @@
                     "path": "concepts/rows-in-memory"
                 },
                 {
+                    "label": "Row selection",
+                    "path": "concepts/row-selection"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

@@ -39,6 +39,8 @@ export interface LocalRowsResult<TRow> {
     readonly total: number;
     /** the rows passing the filters and the search */
     readonly filteredCount: number;
+    /** every page's rows, filtered, searched and sorted: "select all" across pages */
+    readonly filteredRows: readonly TRow[];
     readonly sort: {
         /** the sorted columns, the first one first (the header toggles them too) */
         readonly columns: readonly SortColumn[];
@@ -123,6 +125,10 @@ export function useLocalRows<TRow>(
         rows: view.rows,
         total: view.total,
         filteredCount: view.filteredCount,
+        // built when first read: an app that never reads it never pays for it
+        get filteredRows() {
+            return view.filteredRows;
+        },
         sort: {
             columns: state.sortColumns,
             set: local.setSortColumns,

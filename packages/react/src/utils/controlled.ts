@@ -24,6 +24,11 @@ export interface ControlledState<TRow, V> {
     readonly report: (value: V) => void;
     /** makes the model hold the prop's value (the root's own sync: never reported back) */
     readonly apply: (value: V) => void;
+    /**
+     * a command the parent was asked about, vetoed meanwhile, with the value it would have
+     * returned: what of it is the grid's own (a toggle's anchor) still happens
+     */
+    readonly vetoed?: (command: CommandName, value: unknown) => void;
 }
 
 /** What the root's guards share: whether it is syncing a prop, or applying the data props. */
@@ -56,6 +61,7 @@ export function bindControlled<TRow, V>(
         }
         const value = spec.valueOf(ctx.command, result.value);
         if (!spec.same(value, spec.read(model.state))) spec.report(value);
+        spec.vetoed?.(ctx.command, result.value);
         return veto(`${spec.prefix}* is controlled`);
     });
     model.subscribe(({ before, after }) => {

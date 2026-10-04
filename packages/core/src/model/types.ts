@@ -188,6 +188,26 @@ export type DetailHeight<TRow> =
     | ((row: TRow, rowIndex: number) => number);
 
 /**
+ * How rows are selected (R2): one at a time, or many. A grid without it selects nothing.
+ */
+export type RowSelection = "single" | "multiple";
+
+/** Whether a loaded row can be selected (R5): a row it refuses is never added. */
+export type RowSelectable<TRow> = (row: TRow, rowIndex: number) => boolean;
+
+/**
+ * Where a range starts (R3): the row a toggle without `extend` last toggled, kept as its key and
+ * the index it was at, and the state a range from it gives its rows (the one the toggle gave
+ * it). It is checked when it is used: a key no longer at its index is no anchor.
+ */
+export interface SelectionAnchor {
+    readonly rowKey: RowKey;
+    readonly rowIndex: number;
+    /** whether a range from it selects its rows (`false`: clears them) */
+    readonly selected: boolean;
+}
+
+/**
  * Where the rows come from (D6): every row at once (fixed, or growing for infinite loading), or a
  * count and a getter answering `undefined` for a row not loaded yet. A row not loaded keeps its
  * place and its size.
@@ -237,6 +257,17 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** an expanded row's detail height */
     readonly detailHeight: DetailHeight<TRow>;
+    /** how rows are selected; `undefined`: they are not (R2) */
+    readonly rowSelection: RowSelection | undefined;
+    /**
+     * the keys of the selected rows, in the order they were selected (R1). A key whose row is
+     * not loaded, or not in the data, stays
+     */
+    readonly selectedRowKeys: readonly RowKey[];
+    /** whether a loaded row can be selected; `undefined`: every row can (R5) */
+    readonly isRowSelectable: RowSelectable<TRow> | undefined;
+    /** where a range starts: the row last toggled without `extend` (R3) */
+    readonly selectionAnchor: SelectionAnchor | null;
 }
 
 /** What `createDataGridModel` starts from. */
@@ -258,6 +289,12 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     expandedRowKeys?: readonly RowKey[];
     /** an expanded row's detail height in pixels, or a function of the row (default 300) */
     detailHeight?: DetailHeight<TRow>;
+    /** how rows are selected: one at a time, or many (default: not at all) */
+    rowSelection?: RowSelection | undefined;
+    /** the keys of the rows selected to start with (a key given twice counts once) */
+    selectedRowKeys?: readonly RowKey[];
+    /** whether a loaded row can be selected (default: every row can) */
+    isRowSelectable?: RowSelectable<TRow> | undefined;
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -335,6 +372,77 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: readonly RowKey[];
     };
     /**
+     * replaces the selected rows' keys (each once; in single mode, the last one only): the app's
+     * keys, as given (`isRowSelectable` is not asked: a key's row may not be loaded). Returns them
+     */
+    "selected-rows.set": {
+        payload: { readonly rowKeys: readonly RowKey[] };
+        result: readonly RowKey[];
+    };
+    /**
+     * selects a row, or clears it when it is selected: by its index (a loaded row) or by its key.
+     * By index, the row becomes the anchor; a row that cannot be selected is never added (it can
+     * be cleared). By key, the row is not looked for: the key is the app's, as with `set`. With
+     * `extend` (multiple mode; single mode toggles), every selectable row from the anchor to it
+     * takes the anchor's state instead, and the anchor stays (without one, a toggle); a row not
+     * loaded on the way
+     * refuses it all (`not_loaded`). In single mode, selecting a row clears the others. Returns
+     * the selected rows' keys and the anchor it leaves (what a controlled root keeps of a toggle
+     * its parent answers)
+     */
+    "selected-rows.toggle": {
+        payload:
+            | {
+                  readonly rowIndex: number;
+                  readonly extend?: boolean | undefined;
+                  readonly rowKey?: undefined;
+              }
+            | {
+                  readonly rowKey: RowKey;
+                  readonly rowIndex?: undefined;
+                  readonly extend?: undefined;
+              };
+        result: {
+            readonly rowKeys: readonly RowKey[];
+            readonly anchor: SelectionAnchor | null;
+        };
+    };
+    /**
+     * makes a loaded row the anchor, where the next range starts, changing no selection: a range
+     * from it selects its rows, or clears them with `selected: false`. Returns the anchor
+     */
+    "selection-anchor.set": {
+        payload: {
+            readonly rowIndex: number;
+            readonly selected?: boolean | undefined;
+        };
+        result: SelectionAnchor;
+    };
+    /** leaves no anchor: the next range is a toggle */
+    "selection-anchor.clear": {
+        payload: Record<string, never>;
+        result: undefined;
+    };
+    /**
+     * selects every selectable row (multiple mode), keeping the keys already selected; a row not
+     * loaded refuses it all (`not_loaded`): its key is unknown. Returns the selected rows' keys
+     */
+    "selected-rows.select-all": {
+        payload: Record<string, never>;
+        result: readonly RowKey[];
+    };
+    /**
+     * changes how rows are selected: the mode (`null`: not at all) and which rows can be. Single
+     * mode keeps the last selected key only
+     */
+    "row-selection.set": {
+        payload: {
+            readonly rowSelection?: RowSelection | null | undefined;
+            readonly isRowSelectable?: RowSelectable<TRow> | null | undefined;
+        };
+        result: undefined;
+    };
+    /**
      * changes the row height (a number or a function of the index), the header row's, or an
      * expanded row's detail height
      */
@@ -399,6 +507,8 @@ export type CommandErrorCode =
     | "not_found"
     /** a rule of the grid forbids it (nothing to move from, nothing to move to) */
     | "refused"
+    /** it needs a row that is not loaded yet: its key is unknown */
+    | "not_loaded"
     /** a middleware vetoed it */
     | "vetoed"
     /** it was issued while another command ran, and will run after it */
@@ -519,6 +629,12 @@ export interface QueryMap<TRow, TNode = unknown> {
     "expanded-rows": { payload: undefined; result: readonly number[] };
     /** an expanded row's detail height: a number, or a function of the row */
     "detail-height": { payload: undefined; result: DetailHeight<TRow> };
+    /** how rows are selected; `undefined` when they are not */
+    "row-selection": { payload: undefined; result: RowSelection | undefined };
+    /** the selected rows' keys, in the order they were selected */
+    "selected-row-keys": { payload: undefined; result: readonly RowKey[] };
+    /** where the next range starts: the anchor, while its key is still at its index */
+    "selection-anchor": { payload: undefined; result: SelectionAnchor | null };
 }
 
 export type QueryKey = keyof QueryMap<unknown>;
@@ -538,6 +654,10 @@ export interface QuestionMap {
     "column-sortable": { readonly columnKey: string };
     /** whether the row shows its detail: loaded, and its key expanded */
     "row-expanded": { readonly rowIndex: number };
+    /** whether the row is selected: rows are selectable, it is loaded and its key selected */
+    "row-selected": { readonly rowIndex: number };
+    /** whether the row can be selected: rows are selectable, it is loaded and not refused */
+    "row-selectable": { readonly rowIndex: number };
 }
 
 export type QuestionKey = keyof QuestionMap;

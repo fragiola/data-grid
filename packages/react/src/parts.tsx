@@ -150,6 +150,10 @@ export function Grid(props: GridProps) {
             role: "grid",
             "aria-rowcount": ariaRowCount(view),
             "aria-colcount": view.columnCount,
+            // many rows selectable (R7)
+            ...(view.rowSelection === "multiple"
+                ? { "aria-multiselectable": true }
+                : {}),
             tabIndex: view.active ? -1 : 0,
             ...dataAttributes({ "grid-part": "grid", empty }),
             children,
