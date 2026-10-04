@@ -3,14 +3,15 @@ import type { ExampleMeta } from "../meta-types";
 export default {
     title: "Companies CRM",
     description:
-        "A CRM table: logos, chips, badges and links in the cells, with selection, sorting and deleting written in the app over its rows.",
+        "A CRM table: logos, chips, badges and links in the cells, rows the grid selects and the app deletes, and sorting in memory.",
     category: "real-world",
     order: 1,
     features: [
         "renderCell",
         "renderHeaderCell",
         "aria-sort",
-        "selection",
+        "rowSelection",
+        "useSelectAll",
         "external sort",
     ],
     docs: "/docs/concepts/data-loading",

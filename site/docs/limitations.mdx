@@ -12,7 +12,8 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 | --- | --- |
 | Columns pin only at the **start**: none at the end yet. | Pinned columns first ([Pinned columns](/docs/concepts/pinned-columns)). |
 | The header needs a **background and a `z-index`** to cover the rows that scroll under it. | `z-10` and an opaque background on `Header`. |
-| No built-in **selection**: the grid shows the rows it is given. | The app keeps that state: [`companies`](/examples/companies) selects with its own checkboxes. |
+| **Selecting every row** of a server's data: with `getRow`, a row not loaded has no key, and "select every row" refuses. | A middleware answers `selected-rows.select-all` with the server's own ([Row selection](/docs/concepts/row-selection)). |
+| **Cells and ranges of cells** cannot be selected yet, only rows. | Nothing yet: a later step of Selection and editing. |
 | Sorting, filtering and pages **in memory need every row**: `useLocalRows` takes an array, not `getRow`. | Past what the browser should hold, a server does it ([`server-side`](/examples/server-side)). |
 | Every **nested grid** is a tab stop by default. | The inner grid's tab stops only while the outer cell or row holding it is active ([Nested grids](/docs/guides/nested-grids), [`master-detail`](/examples/master-detail)). |
 | A **row's detail** is as tall as the `detailHeight` you give: heights measured from its content are not there yet. | A height per row from its data (`detailHeight` as a function of the row: [Master-detail](/docs/guides/master-detail)). |
@@ -52,7 +53,8 @@ keyboard, resizing with minimum and maximum widths, automatic widths.
 
 ## Selection and editing
 
-Row and cell-range selection, a selection column, editing, copy and paste, fill, summary rows.
+Started: [row selection](/docs/concepts/row-selection), one row or many, by your checkboxes and the
+grid's keys. Next: cell-range selection, editing, copy and paste, fill, summary rows.
 
 </Step>
 

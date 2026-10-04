@@ -130,9 +130,31 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
     `Column.filter` override; a text filter contains (case and accents aside), a list holds,
     anything else equals. A filter, the search or the sort changing goes to the first page.
+   **Row selection (Epic #57, R1–R9):** headless first: the core keeps only what ARIA, `data-*`
+   and the keys need. The model keeps `selectedRowKeys` (keys, `rowKey` else index, in the order
+   selected; `selected-rows.set { rowKeys }`, `selected-rows.toggle { rowIndex, extend? } |
+   { rowKey }`, `selected-rows.select-all`), `rowSelection: "single" | "multiple"` (absent: no
+   selection, the commands refuse; single keeps one key, `extend` toggles, no select-all),
+   `isRowSelectable(row, rowIndex)` (never added by a toggle by index, skipped by a range and
+   select-all; keys the app gives are kept as given) and the anchor (`selection-anchor.set { rowIndex, selected? }`, `.clear`; a toggle
+   by index sets it with the state it gave, and returns `{ rowKeys, anchor }`: a controlled
+   `Root` keeps the anchor of a toggle its parent answers). A range gives every row from the
+   anchor the anchor's state; a range or select-all reaching a row not loaded refuses whole
+   (`not_loaded`). `is("row-selected")` is a key in a `Set`: no scan. Controlled or not on
+   `Root` like the sort (`selectedRowKeys`/`defaultSelectedRowKeys`/`onSelectedRowKeysChange`).
+   `aria-multiselectable` in multiple mode; a row that can be selected (or is) carries
+   `aria-selected` `true`/`false` (ARIA's vocabulary: the one `"false"`), `data-selected` when
+   selected. The extras are opt-in entry points, never imported by the main ones:
+   `@fragiola/data-grid/selection` (`selectionStatus`, `withRowKeys`, `withoutRowKeys`,
+   `toggledRowKeys`) and `@fragiola/data-grid-react/selection` (`useSelectAll(rowKeys,
+   gridRef?)` → `{ status, count, toggle }`); `useLocalRows` returns `filteredRows`. The
+   checkbox is always the app's.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
-    target into view and moves focus with a roving tabindex. Tab leaves the grid. **Interactive
+    target into view and moves focus with a roving tabindex. Tab leaves the grid. With
+    `rowSelection`, on a body cell in navigation: Shift+Space toggles its row, Shift+Up/Down
+    (multiple) move and select from the anchor (the starting row when there is none or it
+    clears; additive), Ctrl/⌘+A selects every row; at most one `selected-rows.*` command a key. **Interactive
     cells (Epic #52, I1–I5):** two modes, the engine's. Outside interaction the engine keeps the
     controls inside its own cells at `tabindex` -1 (a MutationObserver from the viewport's window,
     cells rendered later included; their own value kept; `data-grid-tab-stop` opts a control
@@ -234,7 +256,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
   row of pinned cells, `margin-left` and `flex-shrink: 0` (its box from the row's start, never
   shrunk). Nothing cosmetic.
-- **State only through `data-*` and ARIA**, present or absent (never `"false"`): `data-active`,
+- **State only through `data-*` and ARIA**, present or absent (never `"false"`; a selectable
+  row's `aria-selected="false"` is ARIA's own "selectable, not selected"): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and

@@ -24,6 +24,7 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
 | `data-expanded` | row | it shows its detail ([Master-detail](/docs/guides/master-detail)) |
+| `data-selected` | row | it is selected ([Row selection](/docs/concepts/row-selection)) |
 | `data-pinned` | cell, header cell | `start`: its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `data-pinned-edge` | cell, header cell | it ends at the last pinned column |
 | `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
@@ -42,6 +43,8 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `aria-colspan` | header cell, row detail | the columns a group spans, when more than one; a detail spans every column |
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |
 | `aria-sort` | header cell | the first sorted column's direction |
+| `aria-multiselectable` | grid | `true` when many rows can be selected |
+| `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected") |
 
 ## Styling a state
 
