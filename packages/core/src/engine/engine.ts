@@ -1,5 +1,9 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
-import { headerCellsIn, pinnedColumnCount } from "../header/header";
+import {
+    headerCellsIn,
+    headerRowCount,
+    pinnedColumnCount,
+} from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import { isRowSelectable, isRowSelected } from "../model/selection";
@@ -526,9 +530,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let height = 0;
 
     const maxScroll = () => options.maxScrollSize ?? DEFAULT_MAX_SCROLL_SIZE;
-    const headerRowCount = () =>
-        state.headerRowHeight > 0 ? state.header.depth : 0;
-    const headerHeight = () => headerRowCount() * state.headerRowHeight;
+    const headerHeight = () => headerRowCount(state) * state.headerRowHeight;
     const bodyHeight = () => Math.max(0, height - headerHeight());
     const rowsY = new ScrollAxisState(createScrollMapping(0, 0));
     const columnsX = new ScrollAxisState(createScrollMapping(0, 0));
@@ -670,7 +672,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const activeRow =
             active && active.rowIndex >= 0 ? active.rowIndex : null;
         const extraColumn = activeColumn();
-        const rowsOfHeader = headerRowCount();
+        const rowsOfHeader = headerRowCount(state);
         return {
             rows: indexes(
                 rowWindow.rendered.start,

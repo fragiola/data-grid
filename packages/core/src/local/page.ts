@@ -1,3 +1,5 @@
+import { clamp } from "../utils";
+
 /** How many pages `count` items make: one at least; one in all without a page size. */
 export function pageCount(count: number, pageSize: number | undefined): number {
     if (pageSize === undefined || pageSize <= 0) return 1;
@@ -11,7 +13,7 @@ export function clampPageIndex(
     pageSize: number | undefined,
 ): number {
     const last = pageCount(count, pageSize) - 1;
-    return Math.min(Math.max(Math.floor(pageIndex), 0), last);
+    return clamp(Math.floor(pageIndex), 0, last);
 }
 
 /** The items of a page (all of them without a page size). */

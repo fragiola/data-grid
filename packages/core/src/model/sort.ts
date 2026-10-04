@@ -4,7 +4,9 @@
 // (src/HeaderCell.tsx), Original work Copyright (c) 2014 Prometheus Research, Modified work
 // Copyright 2015 Comcast, under the MIT licence (see the root LICENSE).
 
-import type { Column, CommandError, SortColumn, SortDirection } from "./types";
+import { sameList } from "../utils";
+import { fail } from "./result";
+import type { Column, CommandResult, SortColumn, SortDirection } from "./types";
 
 export const SORT_DIRECTIONS: readonly SortDirection[] = [
     "ascending",
@@ -15,25 +17,13 @@ export const SORT_DIRECTIONS: readonly SortDirection[] = [
 export function sortableColumn<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
     columnKey: unknown,
-): { column: Column<TRow, TNode> } | { error: CommandError } {
+): CommandResult<Column<TRow, TNode>> {
     const column = columns.find((candidate) => candidate.key === columnKey);
-    if (!column) {
-        return {
-            error: {
-                code: "not_found",
-                message: `no column "${String(columnKey)}"`,
-            },
-        };
-    }
+    if (!column) return fail("not_found", `no column "${String(columnKey)}"`);
     if (column.sortable !== true) {
-        return {
-            error: {
-                code: "refused",
-                message: `column "${column.key}" is not sortable`,
-            },
-        };
+        return fail("refused", `column "${column.key}" is not sortable`);
     }
-    return { column };
+    return { ok: true, value: column };
 }
 
 /**
@@ -49,7 +39,7 @@ export function validSortColumns<TRow, TNode>(
         const keep =
             !seen.has(entry.columnKey) &&
             SORT_DIRECTIONS.includes(entry.direction) &&
-            "column" in sortableColumn(columns, entry.columnKey);
+            sortableColumn(columns, entry.columnKey).ok;
         seen.add(entry.columnKey);
         return keep;
     });
@@ -83,13 +73,9 @@ export function sameSortColumns(
     a: readonly SortColumn[],
     b: readonly SortColumn[],
 ): boolean {
-    return (
-        a === b ||
-        (a.length === b.length &&
-            a.every(
-                (entry, i) =>
-                    entry.columnKey === b[i]?.columnKey &&
-                    entry.direction === b[i]?.direction,
-            ))
+    return sameList(
+        a,
+        b,
+        (x, y) => x.columnKey === y?.columnKey && x.direction === y?.direction,
     );
 }

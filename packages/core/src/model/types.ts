@@ -1,5 +1,6 @@
 import type { Size } from "../axis/axis";
 import type { Direction } from "../navigation/navigation";
+import type { Range } from "../viewport/window";
 
 // The grid's model: its data and its rules (D3). One generic is the row type; the second is what a
 // column's renderers return (`unknown` in the core, `ReactNode` in the React adapter, which
@@ -240,11 +241,7 @@ export interface DataGridState<TRow, TNode = unknown> {
      * the last `rows.changed`: which rows' data changed (end excluded), and how many times it
      * was said (`revision`, 0 before the first)
      */
-    readonly rowsChanged: {
-        readonly revision: number;
-        readonly start: number;
-        readonly end: number;
-    };
+    readonly rowsChanged: Range & { readonly revision: number };
     /**
      * the keys of the expanded rows, in the order they were expanded (M1). A key whose row is not
      * loaded, or not in the data, stays: its row expands once it is there
@@ -298,13 +295,12 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
-export type DataSetPayload<TRow> = (
-    | { readonly rows: readonly TRow[] }
-    | {
-          readonly rowCount: number;
-          readonly getRow: (index: number) => TRow | undefined;
-      }
-) & { readonly rowKey?: RowKeyGetter<TRow> | undefined };
+export type DataSetPayload<TRow> = RowSource<TRow> & {
+    readonly rowKey?: RowKeyGetter<TRow> | undefined;
+};
+
+/** The payload of a command that takes none. */
+export type NoPayload = Record<string, never>;
 
 /** Every command: its payload and the value it returns. */
 export interface CommandMap<TRow, TNode = unknown> {
@@ -332,7 +328,7 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly start?: number | undefined;
             readonly end?: number | undefined;
         };
-        result: { readonly start: number; readonly end: number };
+        result: Range;
     };
     /**
      * replaces the sorted columns, the first one first: each a sortable column, once. Returns them
@@ -420,7 +416,7 @@ export interface CommandMap<TRow, TNode = unknown> {
     };
     /** leaves no anchor: the next range is a toggle */
     "selection-anchor.clear": {
-        payload: Record<string, never>;
+        payload: NoPayload;
         result: undefined;
     };
     /**
@@ -428,7 +424,7 @@ export interface CommandMap<TRow, TNode = unknown> {
      * loaded refuses it all (`not_loaded`): its key is unknown. Returns the selected rows' keys
      */
     "selected-rows.select-all": {
-        payload: Record<string, never>;
+        payload: NoPayload;
         result: readonly RowKey[];
     };
     /**
@@ -464,7 +460,7 @@ export interface CommandMap<TRow, TNode = unknown> {
     };
     /** leaves no cell active */
     "active-position.clear": {
-        payload: Record<string, never>;
+        payload: NoPayload;
         result: undefined;
     };
     /**
@@ -475,9 +471,7 @@ export interface CommandMap<TRow, TNode = unknown> {
         payload: {
             readonly direction: Direction;
             readonly pageSize?: number | undefined;
-            readonly visibleColumns?:
-                | { readonly start: number; readonly end: number }
-                | undefined;
+            readonly visibleColumns?: Range | undefined;
         };
         result: CellPosition;
     };
@@ -521,28 +515,30 @@ export interface CommandError {
     readonly message: string;
 }
 
+/** Why a command did not apply. */
+export interface CommandFailure {
+    readonly ok: false;
+    readonly error: CommandError;
+}
+
 /** What a command returns: its value, or why it did not apply. It never throws on bad input. */
 export type CommandResult<R> =
     | { readonly ok: true; readonly value: R }
-    | { readonly ok: false; readonly error: CommandError };
-
-/** What a middleware sees of any command. */
-export interface CommandContextBase<TRow, TNode = unknown> {
-    /** `model.can`/`model.check`: nothing will be committed; do not cause side effects */
-    readonly dryRun: boolean;
-    /** the committed state the command applies to */
-    readonly state: DataGridState<TRow, TNode>;
-}
+    | CommandFailure;
 
 /**
  * What a middleware sees: a union discriminated by `command`, so checking the command narrows the
  * payload (`if (ctx.command === "active-position.move") ctx.payload.direction`).
  */
 export type CommandContext<TRow, TNode = unknown> = {
-    [C in CommandName]: CommandContextBase<TRow, TNode> & {
+    [C in CommandName]: {
         readonly command: C;
         /** the payload; assign a new object to rewrite it before calling `next` */
         payload: PayloadOf<C, TRow, TNode>;
+        /** `model.can`/`model.check`: nothing will be committed; do not cause side effects */
+        readonly dryRun: boolean;
+        /** the committed state the command applies to */
+        readonly state: DataGridState<TRow, TNode>;
     };
 }[CommandName];
 
@@ -665,7 +661,7 @@ export type QuestionKey = keyof QuestionMap;
 /** The arguments after a key: the payload, optional when the key takes none. */
 export type PayloadArgs<P> = [P] extends [undefined]
     ? []
-    : Record<string, never> extends P
+    : NoPayload extends P
       ? [payload?: P]
       : [payload: P];
 

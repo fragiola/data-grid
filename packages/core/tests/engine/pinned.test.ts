@@ -4,15 +4,15 @@ import {
     type Column,
     type ColumnOrGroup,
     columnLeft,
-    columnsError,
     createDataGridEngine,
     createDataGridModel,
     headerCellBox,
-    pinnedInset,
     renderedWidth,
     rowDisplay,
     rowLeft,
 } from "../../src";
+import { pinnedInset } from "../../src/engine/engine";
+import { columnsError } from "../../src/header/header";
 
 // Pinned columns at the start (Epic #31, P1–P7; Epic #38): the leading `pinned: "start"` columns
 // are always rendered, the column window covers the view right of them, their cells are sticky in

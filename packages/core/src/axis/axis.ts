@@ -226,35 +226,51 @@ export function withExtraSizes(base: Axis, extras: readonly AxisExtra[]): Axis {
                 extra.index < base.count &&
                 clean(extra.size) > 0,
         )
-        .sort((a, b) => a.index - b.index)
-        .filter(
-            (extra, i, all) => i === 0 || all[i - 1]?.index !== extra.index,
-        );
+        .sort((a, b) => a.index - b.index);
     if (kept.length === 0) return base;
     const indexes = new Float64Array(kept.length);
     const sizes = new Float64Array(kept.length);
-    // before[j]: the extras of the items before indexes[j]
-    const before = new Float64Array(kept.length + 1);
-    kept.forEach((extra, j) => {
-        indexes[j] = extra.index;
-        sizes[j] = clean(extra.size);
-        before[j + 1] = (before[j] ?? 0) + clean(extra.size);
-    });
-    return new ExtendedAxis(base, indexes, sizes, before);
+    let count = 0;
+    for (const extra of kept) {
+        // repeated: the first one counts
+        if (count > 0 && indexes[count - 1] === extra.index) continue;
+        indexes[count] = extra.index;
+        sizes[count] = clean(extra.size);
+        count += 1;
+    }
+    // a repeated extra left out: the arrays' first `count` (a view, no copy)
+    return count === kept.length
+        ? new ExtendedAxis(base, indexes, sizes)
+        : new ExtendedAxis(
+              base,
+              indexes.subarray(0, count),
+              sizes.subarray(0, count),
+          );
 }
 
 class ExtendedAxis implements Axis {
     readonly fixed = false;
     readonly totalSize: number;
+    /** before[j]: the extras of the items before indexes[j] */
+    private readonly before: Float64Array;
+    /** starts[j]: where the item with extra `j` starts */
+    private readonly starts: Float64Array;
 
     constructor(
         private readonly base: Axis,
-        /** the items with an extra size, ascending, all inside the axis */
+        /** the items with an extra size, ascending, all inside the axis (never changed) */
         private readonly indexes: Float64Array,
         private readonly sizes: Float64Array,
-        private readonly before: Float64Array,
     ) {
-        this.totalSize = base.totalSize + (before[indexes.length] ?? 0);
+        this.before = new Float64Array(indexes.length + 1);
+        this.starts = new Float64Array(indexes.length);
+        let before = 0;
+        for (let j = 0; j < indexes.length; j++) {
+            this.starts[j] = base.offsetOf(indexes[j] ?? 0) + before;
+            before += sizes[j] ?? 0;
+            this.before[j + 1] = before;
+        }
+        this.totalSize = base.totalSize + before;
     }
 
     get count(): number {
@@ -271,11 +287,6 @@ class ExtendedAxis implements Axis {
             else high = middle;
         }
         return low;
-    }
-
-    /** where the item with extra `j` starts */
-    private startOfExtra(j: number): number {
-        return this.base.offsetOf(this.indexes[j] ?? 0) + (this.before[j] ?? 0);
     }
 
     offsetOf(index: number): number {
@@ -302,10 +313,10 @@ class ExtendedAxis implements Axis {
         if (this.count === 0) return -1;
         // the last item with an extra that starts at or before the offset
         let low = 0;
-        let high = this.indexes.length;
+        let high = this.starts.length;
         while (low < high) {
             const middle = (low + high) >>> 1;
-            if (this.startOfExtra(middle) <= offset) low = middle + 1;
+            if ((this.starts[middle] ?? 0) <= offset) low = middle + 1;
             else high = middle;
         }
         const j = low - 1;
@@ -315,7 +326,7 @@ class ExtendedAxis implements Axis {
         }
         const item = this.indexes[j] ?? 0;
         const end =
-            this.startOfExtra(j) +
+            (this.starts[j] ?? 0) +
             this.base.sizeOf(item) +
             (this.sizes[j] ?? 0);
         if (offset < end || item === this.count - 1) return item;
@@ -328,17 +339,23 @@ class ExtendedAxis implements Axis {
     withCount(count: number): Axis {
         const base = this.base.withCount(count);
         if (base.count === this.count) return this;
-        return withExtraSizes(base, this.extras());
+        // the same extras, but the ones past a shrunk axis
+        const kept = this.extrasBefore(base.count);
+        if (kept === 0) return base;
+        return kept === this.indexes.length
+            ? new ExtendedAxis(base, this.indexes, this.sizes)
+            : new ExtendedAxis(
+                  base,
+                  this.indexes.subarray(0, kept),
+                  this.sizes.subarray(0, kept),
+              );
     }
 
     resized(index: number): Axis {
-        return withExtraSizes(this.base.resized(index), this.extras());
-    }
-
-    private extras(): AxisExtra[] {
-        return Array.from(this.indexes, (index, j) => ({
-            index,
-            size: this.sizes[j] ?? 0,
-        }));
+        return new ExtendedAxis(
+            this.base.resized(index),
+            this.indexes,
+            this.sizes,
+        );
     }
 }

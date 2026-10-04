@@ -1,4 +1,4 @@
-import { cellValue } from "../model/model";
+import { cellValue } from "../model/source";
 import type { Column } from "../model/types";
 import { foldText, isEmptyValue, textOf } from "./values";
 
@@ -56,11 +56,6 @@ export function matcherOf(filterValue: unknown): (value: unknown) => boolean {
     return (value) => same(value, filterValue);
 }
 
-/** Whether a cell's value passes a filter value (see `matcherOf`). */
-export function matchesFilter(value: unknown, filterValue: unknown): boolean {
-    return matcherOf(filterValue)(value);
-}
-
 /**
  * The entries that pass every column's filter (AND), in order. A filter on a key no column has,
  * or an empty one, filters nothing. `columns` are the grid's columns (the leaves).
@@ -77,12 +72,9 @@ export function filterEntries<TRow, TNode>(
             : undefined;
         if (isEmptyFilter(filterValue)) return [];
         const { filter } = column;
-        const passes = filter
-            ? (value: unknown, row: TRow) => filter(value, filterValue, row)
-            : (
-                  (matches) => (value: unknown) =>
-                      matches(value)
-              )(matcherOf(filterValue));
+        const passes: (value: unknown, row: TRow) => boolean = filter
+            ? (value, row) => filter(value, filterValue, row)
+            : matcherOf(filterValue);
         return [{ column, passes }];
     });
     if (active.length === 0) return entries;
@@ -103,12 +95,15 @@ function searchText<TRow, TNode>(
         .join("\u0000");
 }
 
-/** Every entry's text for the search, worked out once (see `searchEntries`). */
+/**
+ * Every entry's text for the search, worked out once (see `searchEntries`): by `entry.index`, so
+ * `entries` are every row given, in order.
+ */
 export function searchTextsOf<TRow, TNode>(
     entries: readonly RowEntry<TRow>[],
     columns: readonly Column<TRow, TNode>[],
-): ReadonlyMap<RowEntry<TRow>, string> {
-    return new Map(entries.map((entry) => [entry, searchText(entry, columns)]));
+): readonly string[] {
+    return entries.map((entry) => searchText(entry, columns));
 }
 
 /**
@@ -120,11 +115,11 @@ export function searchEntries<TRow, TNode>(
     entries: readonly RowEntry<TRow>[],
     text: string,
     columns: readonly Column<TRow, TNode>[],
-    texts?: ReadonlyMap<RowEntry<TRow>, string>,
+    texts?: readonly string[],
 ): readonly RowEntry<TRow>[] {
     const wanted = foldText(text.trim());
     if (wanted === "") return entries;
     return entries.filter((entry) =>
-        (texts?.get(entry) ?? searchText(entry, columns)).includes(wanted),
+        (texts?.[entry.index] ?? searchText(entry, columns)).includes(wanted),
     );
 }

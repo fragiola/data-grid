@@ -1,12 +1,6 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
-export {
-    type Axis,
-    type AxisExtra,
-    createAxis,
-    type Size,
-    withExtraSizes,
-} from "./axis/axis";
+export type { Axis, Size } from "./axis/axis";
 export {
     ariaHeaderCellSpans,
     ariaRowCount,
@@ -30,7 +24,6 @@ export {
     type HeaderRowView,
     headerCellBox,
     headerCellSort,
-    pinnedInset,
     renderedWidth,
     rowCellsHeight,
     rowDetailBox,
@@ -43,25 +36,16 @@ export {
     rowWidth,
     TAB_STOP_ATTRIBUTE,
 } from "./engine/engine";
-export {
-    type ColumnLayout,
-    columnsError,
-    headerCellsIn,
-    isColumnGroup,
-    layoutColumns,
-} from "./header/header";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
-    COMMANDS,
-    cellValue,
     createDataGridModel,
     type DataGridModel,
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
-    veto,
 } from "./model/model";
+export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
-export { rowAt } from "./model/source";
+export { cellValue, rowAt } from "./model/source";
 export type {
     CellPosition,
     CellRenderProps,
@@ -70,10 +54,10 @@ export type {
     ColumnOrGroup,
     CommandArgs,
     CommandContext,
-    CommandContextBase,
     CommandError,
     CommandErrorCode,
     CommandEvent,
+    CommandFailure,
     CommandListener,
     CommandMap,
     CommandName,
@@ -87,6 +71,7 @@ export type {
     HeaderCellRenderProps,
     HeaderLayout,
     Middleware,
+    NoPayload,
     PayloadArgs,
     PayloadOf,
     QueryKey,
@@ -104,33 +89,14 @@ export type {
     SortDirection,
 } from "./model/types";
 export {
-    DIRECTIONS,
     type Direction,
-    type GridBounds,
     type HeaderCellSpan,
-    nextPosition,
     sameCell,
 } from "./navigation/navigation";
-export {
-    createScrollMapping,
-    DEFAULT_MAX_SCROLL_SIZE,
-    ScrollAxisState,
-    type ScrollMapping,
-} from "./viewport/scaling";
-export {
-    type ScrollAlign,
-    scrollTargetFor,
-    scrollTargetForSpan,
-} from "./viewport/scroll-target";
+export { DEFAULT_MAX_SCROLL_SIZE } from "./viewport/scaling";
+export type { ScrollAlign } from "./viewport/scroll-target";
 export {
     type AxisWindow,
-    contains,
-    EMPTY_RANGE,
     EMPTY_WINDOW,
     type Range,
-    sameRange,
-    sameWindow,
-    visibleRange,
-    windowFor,
-    withOverscan,
 } from "./viewport/window";

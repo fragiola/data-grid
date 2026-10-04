@@ -3,16 +3,19 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Column, ColumnOrGroup } from "../../src";
 import {
-    compareValues,
     createLocalRows,
     filterRows,
-    isEmptyValue,
-    matchesFilter,
     pageCount,
     pageRows,
     searchRows,
     sortRows,
 } from "../../src/local";
+import { matcherOf } from "../../src/local/filter";
+import { compareValues, isEmptyValue } from "../../src/local/values";
+
+/** Whether a cell's value passes a filter value. */
+const matchesFilter = (value: unknown, filterValue: unknown) =>
+    matcherOf(filterValue)(value);
 
 // The local pipeline (Epic #47, L4–L7): rows in memory, filtered, searched, sorted and paged, each
 // stage computed again only when its own inputs change.

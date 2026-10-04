@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type CellPosition, layoutColumns } from "../../src";
+import type { CellPosition } from "../../src";
+import { layoutColumns } from "../../src/header/header";
 import {
     DIRECTIONS,
     type Direction,
