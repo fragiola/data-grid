@@ -86,6 +86,9 @@ function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
 /** Physical scroll moves, on either axis or both. */
 type ScrollMoves = { top?: number | undefined; left?: number | undefined };
 
+/** No overscan option: the defaults (one object, not one per update). */
+const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
+
 /** Creates the engine of one grid on screen. */
 export function createDataGridEngine<TRow, TNode = unknown>(
     model: DataGridModel<TRow, TNode>,
@@ -251,7 +254,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * the view listeners what changed; writes the layers' offsets.
      */
     function update(fresh = false) {
-        const overscan = options.overscan ?? {};
+        const overscan = options.overscan ?? NO_OVERSCAN;
         const nextRows = windowFor(
             rowAxis,
             rowsY.virtual,

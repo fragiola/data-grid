@@ -158,7 +158,8 @@ export function useRenderElement<State>(
             : undefined;
 
     let props = mergeProps(options.props, external);
-    props.children = options.children;
+    // a part's children are its own (the option); without it, its props' stay
+    if (options.children !== undefined) props.children = options.children;
     if (resolvedClassName !== undefined) {
         props.className = resolvedClassName;
     }

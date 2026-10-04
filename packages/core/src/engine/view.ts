@@ -69,14 +69,17 @@ export function scrollingWindow(
 ): AxisWindow {
     const { visible, rendered } = columns;
     if (rendered.start >= pinnedCount) return columns;
-    const clamp = (range: Range): Range =>
-        range.start >= pinnedCount
-            ? range
-            : {
-                  start: pinnedCount,
-                  end: Math.max(range.end, pinnedCount),
-              };
-    return { visible: clamp(visible), rendered: clamp(rendered) };
+    return {
+        visible: rightOf(visible, pinnedCount),
+        rendered: rightOf(rendered, pinnedCount),
+    };
+}
+
+/** A range kept right of the pinned columns. */
+function rightOf(range: Range, pinnedCount: number): Range {
+    return range.start >= pinnedCount
+        ? range
+        : { start: pinnedCount, end: Math.max(range.end, pinnedCount) };
 }
 
 /**

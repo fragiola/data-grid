@@ -55,7 +55,12 @@ async function main() {
             .filter((file) => file.endsWith(".js"))
             .sort()) {
             const source = readFileSync(join(dist, name), "utf8");
-            const minified = minify ? minify(name, source) : undefined;
+            let minified: string | undefined;
+            try {
+                minified = minify?.(name, source);
+            } catch {
+                // a report: a file the minifier cannot take shows n/a
+            }
             lines.push(
                 `| ${pkg}/${name} | ${kb(Buffer.byteLength(source))} | ${kb(gzipSync(source).length)} | ${minified === undefined ? "n/a" : kb(gzipSync(minified).length)} | ${chunksOf(source).join(", ")} |`,
             );
@@ -76,4 +81,7 @@ async function main() {
     if (summary) appendFileSync(summary, report);
 }
 
-await main();
+// a report, never a gate: whatever fails, the build goes on
+await main().catch((error: unknown) => {
+    console.error("size report failed:", error);
+});

@@ -260,8 +260,13 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
   on a fake viewport), `packages/react/tests/helpers.tsx` and `examples/react/e2e/helpers.ts`,
   `examples/react/e2e/examples/helpers.ts` (the playground's spec imports it too).
 
-A review asks: is anything duplicated? Is an existing function reused? Does the core grow, and
-must it? What does it cost on a hot path? What does it add to the size report?
+A review checks:
+
+1. Nothing is duplicated: logic needed twice is one function.
+2. An existing helper is reused where one fits.
+3. The core grows only for the grid's own job.
+4. A hot path allocates and computes nothing it does not need.
+5. The size report: what it adds, and why, in the PR.
 
 ## The primitive contract (`@fragiola/data-grid-react`)
 
