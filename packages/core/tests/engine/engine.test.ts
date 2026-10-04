@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
     createDataGridEngine,
@@ -8,13 +8,18 @@ import {
     type DataGridModel,
     type EngineEventMap,
 } from "../../src";
+import {
+    cellElement,
+    fakeResizeObserver,
+    fakeViewport,
+    keydown,
+    keyEvent as keyEventFrom,
+    mountEngine,
+    type Row,
+} from "./harness";
 
 // The engine against a viewport jsdom cannot lay out: its client size, its scroll offsets
 // (clamped to the scrollable range of the view the engine reports) and ResizeObserver are faked.
-
-interface Row {
-    id: number;
-}
 
 const COLUMNS: Column<Row>[] = Array.from({ length: 50 }, (_, i) => ({
     key: `c${i}`,
@@ -22,21 +27,6 @@ const COLUMNS: Column<Row>[] = Array.from({ length: 50 }, (_, i) => ({
 }));
 
 let resize: (() => void) | null = null;
-
-class FakeResizeObserver {
-    constructor(callback: () => void) {
-        resize = callback;
-    }
-    observe() {}
-    disconnect() {
-        resize = null;
-    }
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-    resize = null;
-});
 
 function setup(
     options: {
@@ -48,52 +38,24 @@ function setup(
         maxScrollSize?: number;
     } = {},
 ) {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
-        columns: options.columns ?? COLUMNS,
-        rowCount: options.rows ?? 1_000,
-        getRow: (index) => ({ id: index }),
-        rowHeight: options.rowHeight ?? 20,
-        headerRowHeight: 30,
-    });
-    const engine = createDataGridEngine(model, {
-        overscan: { rows: 3, columns: 1 },
-        maxScrollSize: options.maxScrollSize,
-    });
-    const size = { width: options.width ?? 500, height: options.height ?? 230 };
-    const scroll = { top: 0, left: 0 };
-    const element = document.createElement("div");
-    const view = () => engine.adapter.getView();
-    Object.defineProperties(element, {
-        clientWidth: { get: () => size.width },
-        clientHeight: { get: () => size.height },
-        scrollTop: {
-            get: () => scroll.top,
-            set: (value: number) => {
-                const max = view().headerHeight + view().height - size.height;
-                scroll.top = Math.min(Math.max(value, 0), Math.max(max, 0));
-            },
+    const mounted = mountEngine(
+        {
+            columns: options.columns ?? COLUMNS,
+            rowCount: options.rows ?? 1_000,
+            rowHeight: options.rowHeight ?? 20,
         },
-        scrollLeft: {
-            get: () => scroll.left,
-            set: (value: number) => {
-                const max = view().width - size.width;
-                scroll.left = Math.min(Math.max(value, 0), Math.max(max, 0));
-            },
+        {
+            overscan: { rows: 3, columns: 1 },
+            maxScrollSize: options.maxScrollSize,
+            width: options.width ?? 500,
+            height: options.height ?? 230,
+            clamp: true,
+            layers: ["header", "body"],
         },
-    });
-    document.body.append(element);
-    const grid = document.createElement("div");
-    const header = document.createElement("div");
-    const body = document.createElement("div");
-    body.dataset.layer = "body";
-    element.append(grid);
-    grid.append(header, body);
-    const detach = engine.adapter.attach(element);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.registerLayer("header", header);
-    engine.adapter.registerLayer("body", body);
-    engine.adapter.commit(view());
+    );
+    resize = mounted.resize;
+    const { model, engine, viewport: element, grid, header, body } = mounted;
+    const { size, scroll, view, detach } = mounted;
     /** a native scroll the engine did not make (the thumb, a fling) */
     const scrollTo = (top: number, left = scroll.left) => {
         element.scrollTop = top;
@@ -113,12 +75,7 @@ function setup(
                 const id = `${rowIndex}:${columnIndex}`;
                 wanted.add(id);
                 if (!cells.has(id)) {
-                    const cell = document.createElement("div");
-                    cell.dataset.rowIndex = String(rowIndex);
-                    cell.dataset.columnIndex = String(columnIndex);
-                    cell.tabIndex = -1;
-                    cells.set(id, cell);
-                    body.append(cell);
+                    cells.set(id, cellElement(body, rowIndex, columnIndex));
                 }
             }
         }
@@ -157,17 +114,11 @@ function events<K extends keyof EngineEventMap>(
 
 /** A keydown as the adapter gets it: from an element inside the grid (the body layer). */
 function keyEvent(name: string, init: KeyboardEventInit = {}): KeyboardEvent {
-    const event = new KeyboardEvent("keydown", {
-        key: name,
-        cancelable: true,
-        ...init,
-    });
-    const target = document.querySelector('[data-layer="body"]');
-    Object.defineProperty(event, "target", {
-        value: target,
-        configurable: true,
-    });
-    return event;
+    return keyEventFrom(
+        document.querySelector('[data-layer="body"]'),
+        name,
+        init,
+    );
 }
 
 function key(
@@ -563,14 +514,8 @@ describe("keys from the app's content", () => {
         const { engine, model, grid } = setup({ rows: 0 });
         const action = document.createElement("button");
         grid.append(action);
-        const from = (target: Element, name: string) => {
-            const event = new KeyboardEvent("keydown", {
-                key: name,
-                cancelable: true,
-            });
-            Object.defineProperty(event, "target", { value: target });
-            return { handled: engine.adapter.keydown(event), event };
-        };
+        const from = (target: Element, name: string) =>
+            keydown(engine, target, name);
         for (const name of ["ArrowRight", "End", "PageDown"]) {
             const { handled, event } = from(action, name);
             expect(handled, name).toBe(false);
@@ -724,7 +669,7 @@ describe("focus that should not activate", () => {
 
 describe("epic review regressions", () => {
     it("scrolls to the initial active cell, and to a cell asked for before attaching", () => {
-        vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+        fakeResizeObserver();
         const model = createDataGridModel<Row>({
             columns: COLUMNS,
             rowCount: 1_000,
@@ -734,19 +679,7 @@ describe("epic review regressions", () => {
             activePosition: { rowIndex: 500, columnIndex: 0 },
         });
         const engine = createDataGridEngine(model);
-        const element = document.createElement("div");
-        let top = 0;
-        Object.defineProperties(element, {
-            clientWidth: { get: () => 500 },
-            clientHeight: { get: () => 230 },
-            scrollTop: {
-                get: () => top,
-                set: (v: number) => {
-                    top = v;
-                },
-            },
-            scrollLeft: { get: () => 0, set: () => {} },
-        });
+        const { element, scroll } = fakeViewport({ width: 500, height: 230 });
         document.body.append(element);
         engine.adapter.attach(element);
         engine.adapter.commit(engine.adapter.getView());
@@ -763,7 +696,7 @@ describe("epic review regressions", () => {
             }),
         );
         other.run("scroll-to-cell", { rowIndex: 800 });
-        top = 0;
+        scroll.top = 0;
         other.adapter.attach(element);
         other.adapter.commit(other.adapter.getView());
         expect(other.get("row-window").visible.end).toBeGreaterThan(800);

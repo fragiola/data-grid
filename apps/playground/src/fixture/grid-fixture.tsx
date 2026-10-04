@@ -171,8 +171,26 @@ function Expander({ rowIndex }: { rowIndex: number }) {
     );
 }
 
+const TABLE = {
+    grid: <table />,
+    header: <thead />,
+    headerRow: <tr />,
+    headerCell: <th />,
+    body: <tbody />,
+    row: <tr />,
+    cell: <td />,
+    detail: <td />,
+    empty: <tbody />,
+};
+
+/** The `render` element of each part: a table's, or none (the parts' own divs). */
+function tags(table: boolean): Partial<typeof TABLE> {
+    return table ? TABLE : {};
+}
+
 /** A grid of its own inside a detail (E4): its keys and its active cell are its own. */
 function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
+    const tag = tags(table);
     return (
         <DataGrid.Root<FixtureRow>
             columns={INNER_COLUMNS}
@@ -183,28 +201,22 @@ function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
             data-testid={`inner-${rowIndex}`}
             style={{ width: 500, height: 150 }}
         >
-            <DataGrid.Grid
-                aria-label="Items"
-                render={table ? <table /> : undefined}
-            >
+            <DataGrid.Grid aria-label="Items" render={tag.grid}>
                 <DataGrid.Header
-                    render={table ? <thead /> : undefined}
+                    render={tag.header}
                     style={{ background: "white", zIndex: 1 }}
                 >
                     <HeaderRow table={table} />
                 </DataGrid.Header>
-                <DataGrid.Body render={table ? <tbody /> : undefined}>
+                <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<FixtureRow>>
                         {(row) => (
-                            <DataGrid.Row
-                                row={row}
-                                render={table ? <tr /> : undefined}
-                            >
+                            <DataGrid.Row row={row} render={tag.row}>
                                 <DataGrid.Cells<FixtureRow>>
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            render={table ? <td /> : undefined}
+                                            render={tag.cell}
                                         />
                                     )}
                                 </DataGrid.Cells>
@@ -257,13 +269,14 @@ function HeaderRow({
     table: boolean;
     row?: HeaderRowInfo<FixtureRow>;
 }) {
+    const tag = tags(table);
     return (
-        <DataGrid.HeaderRow row={row} render={table ? <tr /> : undefined}>
+        <DataGrid.HeaderRow row={row} render={tag.headerRow}>
             <DataGrid.HeaderCells<FixtureRow>>
                 {(cell) => (
                     <DataGrid.HeaderCell
                         cell={cell}
-                        render={table ? <th /> : undefined}
+                        render={tag.headerCell}
                         style={pinnedStyle}
                     />
                 )}
@@ -343,6 +356,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         [variable, fixedHeight],
     );
     const table = kind === "table";
+    const tag = tags(table);
 
     return (
         <>
@@ -374,12 +388,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     style={{ width, height }}
                 >
                     <Expose />
-                    <DataGrid.Grid
-                        aria-label="Fixture"
-                        render={table ? <table /> : undefined}
-                    >
+                    <DataGrid.Grid aria-label="Fixture" render={tag.grid}>
                         <DataGrid.Header
-                            render={table ? <thead /> : undefined}
+                            render={tag.header}
                             style={{ background: "white", zIndex: 1 }}
                         >
                             {groups ? (
@@ -394,22 +405,15 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 <HeaderRow table={table} />
                             )}
                         </DataGrid.Header>
-                        <DataGrid.Body render={table ? <tbody /> : undefined}>
+                        <DataGrid.Body render={tag.body}>
                             <DataGrid.Rows<FixtureRow>>
                                 {(row) => (
-                                    <DataGrid.Row
-                                        row={row}
-                                        render={table ? <tr /> : undefined}
-                                    >
+                                    <DataGrid.Row row={row} render={tag.row}>
                                         <DataGrid.Cells<FixtureRow>>
                                             {(cell) => (
                                                 <DataGrid.Cell
                                                     cell={cell}
-                                                    render={
-                                                        table ? (
-                                                            <td />
-                                                        ) : undefined
-                                                    }
+                                                    render={tag.cell}
                                                     style={pinnedStyle}
                                                 >
                                                     {details &&
@@ -428,9 +432,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                         </DataGrid.Cells>
                                         {details ? (
                                             <DataGrid.RowDetail
-                                                render={
-                                                    table ? <td /> : undefined
-                                                }
+                                                render={tag.detail}
                                                 style={{ background: "white" }}
                                             >
                                                 <InnerGrid
@@ -449,7 +451,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 )}
                             </DataGrid.Rows>
                         </DataGrid.Body>
-                        <DataGrid.Empty render={table ? <tbody /> : undefined}>
+                        <DataGrid.Empty render={tag.empty}>
                             {table ? (
                                 <tr style={EMPTY_ROW}>
                                     <td style={EMPTY_CONTENT}>No rows</td>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
     type Column,
@@ -7,23 +7,18 @@ import {
     createDataGridModel,
     TAB_STOP_ATTRIBUTE,
 } from "../../src";
+import {
+    cellElement,
+    keydown,
+    keyEvent,
+    mountEngine,
+    type Row,
+    settled,
+} from "./harness";
 
 // Interactive cells (Epic #52, I1–I5): the grid keeps the controls inside its cells out of the
 // tab order; Enter or F2 hand a cell's keys to its controls, Tab cycles them, Escape gives the
 // keys back; a click on a control does the same as Enter.
-
-interface Row {
-    id: number;
-}
-
-class FakeResizeObserver {
-    observe() {}
-    disconnect() {}
-}
-
-afterEach(() => {
-    document.body.innerHTML = "";
-});
 
 const COLUMNS: Column<Row>[] = [
     { key: "a", width: 100, sortable: true },
@@ -31,38 +26,11 @@ const COLUMNS: Column<Row>[] = [
     { key: "c", width: 100 },
 ];
 
-/** DOM changes reach the engine's observer as a microtask: let it run. */
-const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
 function setup() {
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    const model = createDataGridModel<Row>({
-        columns: COLUMNS,
-        rowCount: 100,
-        getRow: (id) => ({ id }),
-        rowHeight: 20,
-        headerRowHeight: 30,
-    });
-    const engine = createDataGridEngine(model);
-    const view = () => engine.adapter.getView();
-    const viewport = document.createElement("div");
-    Object.defineProperties(viewport, {
-        clientWidth: { get: () => 400 },
-        clientHeight: { get: () => 260 },
-    });
     const grid = document.createElement("div");
-    viewport.append(grid);
-    document.body.append(viewport);
     /** a cell as an adapter renders it, holding `html` */
-    const cell = (rowIndex: number, columnIndex: number, html = "") => {
-        const element = document.createElement("div");
-        element.dataset.rowIndex = String(rowIndex);
-        element.dataset.columnIndex = String(columnIndex);
-        element.tabIndex = -1;
-        element.innerHTML = html;
-        grid.append(element);
-        return element;
-    };
+    const cell = (rowIndex: number, columnIndex: number, html = "") =>
+        cellElement(grid, rowIndex, columnIndex, html);
     // cells before the grid attaches, as React renders them first
     const actions = cell(
         0,
@@ -71,23 +39,12 @@ function setup() {
     );
     const field = cell(1, 1, '<input id="name" />');
     const plain = cell(2, 1);
-    engine.adapter.attach(viewport);
-    engine.adapter.registerLayer("grid", grid);
-    engine.adapter.commit(view());
-    const key = (
-        target: Element,
-        name: string,
-        init: KeyboardEventInit = {},
-    ) => {
-        const event = new KeyboardEvent("keydown", {
-            key: name,
-            cancelable: true,
-            bubbles: true,
-            ...init,
-        });
-        Object.defineProperty(event, "target", { value: target });
-        return { handled: engine.adapter.keydown(event), event };
-    };
+    const { model, engine, viewport } = mountEngine(
+        { columns: COLUMNS, rowCount: 100 },
+        { grid },
+    );
+    const key = (target: Element, name: string, init: KeyboardEventInit = {}) =>
+        keydown(engine, target, name, init);
     const byId = (id: string) => {
         const element = document.getElementById(id);
         if (!element) throw new Error(`no #${id}`);
@@ -249,12 +206,8 @@ describe("entering and leaving", () => {
     it("lets the consumer cancel Enter, F2, Tab and Escape", () => {
         const { engine, actions, key, byId } = setup();
         const prevented = (target: Element, name: string) => {
-            const event = new KeyboardEvent("keydown", {
-                key: name,
-                cancelable: true,
-            });
+            const event = keyEvent(target, name);
             event.preventDefault();
-            Object.defineProperty(event, "target", { value: target });
             return engine.adapter.keydown(event);
         };
         expect(prevented(actions, "Enter")).toBe(false);

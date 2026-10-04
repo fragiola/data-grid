@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactNode, StrictMode, useState } from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
     createDataGridRef,
@@ -11,6 +11,7 @@ import {
     useDataGridRef,
     useRowWindow,
 } from "../src";
+import { root, stubViewportSize } from "./helpers";
 
 // A grid reached from outside its root (Epic #23, R2): `gridRef` holds the root's model and
 // engine, and the hooks that take it follow the grid from anywhere. jsdom lays nothing out: the
@@ -31,24 +32,7 @@ const columns: Column<Person>[] = [
     { key: "id", name: "Id", width: 100 },
 ];
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 400],
-        ["clientHeight", 235],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(400, 235);
 
 function Grid({
     gridRef,
@@ -101,12 +85,6 @@ function StatusBar({
             {rows.visible.start}–{rows.visible.end} × {columnWindow.visible.end}
         </output>
     );
-}
-
-function root(container: HTMLElement): HTMLElement {
-    const element = container.querySelector('[data-grid-part="root"]');
-    if (!(element instanceof HTMLElement)) throw new Error("no root");
-    return element;
 }
 
 function scroll(element: HTMLElement, top: number) {

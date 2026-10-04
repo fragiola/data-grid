@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { cell, settle } from "../../../examples/react/e2e/examples/helpers.ts";
 
 // One spec, two structures (D5): every test runs against the same unstyled grid rendered as real
 // table elements (fixtures/table-grid) and as divs (fixtures/div-grid), in Chromium and Firefox.
@@ -20,18 +21,6 @@ async function open(
     return page.getByTestId("viewport");
 }
 
-/** Two frames: the scroll event, the render it caused and the engine's commit are done. */
-async function settle(page: Page) {
-    await page.evaluate(
-        () =>
-            new Promise<void>((resolve) =>
-                requestAnimationFrame(() =>
-                    requestAnimationFrame(() => resolve()),
-                ),
-            ),
-    );
-}
-
 /** A native scroll (the thumb dragged): the engine did not cause it. */
 async function scroll(
     page: Page,
@@ -51,12 +40,6 @@ async function scroll(
         [top, left ?? null] as const,
     );
     await settle(page);
-}
-
-function cell(page: Page, rowIndex: number, columnIndex: number) {
-    return page.locator(
-        `[data-grid-part="cell"][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
-    );
 }
 
 function windows(page: Page) {

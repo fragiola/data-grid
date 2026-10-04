@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { type Column, DataGrid, type SortColumn } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { headerAt, stubViewportSize, tags } from "./helpers";
 
 // One hook for rows in memory (Epic #47, L1): its props spread onto Root make the header sort the
 // rows, and its controls filter, search and page what the grid shows.
@@ -28,24 +29,7 @@ const columns: Column<Person>[] = [
     { key: "team", name: "Team", width: 120 },
 ];
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 400],
-        ["clientHeight", 400],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(400, 400);
 
 let latest: LocalRowsResult<Person> | undefined;
 
@@ -60,33 +44,31 @@ function People({
 }) {
     const local = useLocalRows(rows, columns, { pageSize });
     latest = local;
+    const tag = tags(table);
     return (
         <DataGrid.Root columns={columns} rowHeight={20} {...local.props}>
-            <DataGrid.Grid render={table ? <table /> : undefined}>
-                <DataGrid.Header render={table ? <thead /> : undefined}>
-                    <DataGrid.HeaderRow render={table ? <tr /> : undefined}>
+            <DataGrid.Grid render={tag.grid}>
+                <DataGrid.Header render={tag.header}>
+                    <DataGrid.HeaderRow render={tag.headerRow}>
                         <DataGrid.HeaderCells<Person>>
                             {(cell) => (
                                 <DataGrid.HeaderCell
                                     cell={cell}
-                                    render={table ? <th /> : undefined}
+                                    render={tag.headerCell}
                                 />
                             )}
                         </DataGrid.HeaderCells>
                     </DataGrid.HeaderRow>
                 </DataGrid.Header>
-                <DataGrid.Body render={table ? <tbody /> : undefined}>
+                <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Person>>
                         {(row) => (
-                            <DataGrid.Row
-                                row={row}
-                                render={table ? <tr /> : undefined}
-                            >
+                            <DataGrid.Row row={row} render={tag.row}>
                                 <DataGrid.Cells<Person>>
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            render={table ? <td /> : undefined}
+                                            render={tag.cell}
                                         />
                                     )}
                                 </DataGrid.Cells>
@@ -108,20 +90,12 @@ function names(container: HTMLElement): string[] {
     ].map((cell) => cell.textContent ?? "");
 }
 
-function header(container: HTMLElement, columnIndex: number): HTMLElement {
-    const cell = container.querySelector(
-        `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]`,
-    );
-    if (!(cell instanceof HTMLElement)) throw new Error("no header cell");
-    return cell;
-}
-
 for (const table of [false, true]) {
     describe(`useLocalRows, as ${table ? "a table" : "divs"}`, () => {
         it("sorts the rows when the header is clicked, through the spread props", () => {
             const { container } = render(<People table={table} />);
             expect(names(container)).toEqual(people.map((row) => row.name));
-            fireEvent.click(header(container, 0));
+            fireEvent.click(headerAt(container, 0));
             expect(names(container)).toEqual([
                 "Ana",
                 "Bruno",
@@ -129,11 +103,11 @@ for (const table of [false, true]) {
                 "Davi",
                 "Élodie",
             ]);
-            expect(header(container, 0)).toHaveAttribute(
+            expect(headerAt(container, 0)).toHaveAttribute(
                 "aria-sort",
                 "ascending",
             );
-            fireEvent.click(header(container, 1));
+            fireEvent.click(headerAt(container, 1));
             expect(names(container)).toEqual([
                 "Davi",
                 "Ana",
@@ -141,7 +115,7 @@ for (const table of [false, true]) {
                 "Élodie",
                 "Carla",
             ]);
-            fireEvent.click(header(container, 1));
+            fireEvent.click(headerAt(container, 1));
             expect(names(container)[0]).toBe("Carla");
             expect(latest?.sort.columns).toEqual([
                 { columnKey: "age", direction: "descending" },
@@ -245,8 +219,8 @@ describe("useLocalRows across renders", () => {
             );
         }
         const { container } = render(<Watch />);
-        fireEvent.click(header(container, 0));
-        fireEvent.click(header(container, 1));
+        fireEvent.click(headerAt(container, 0));
+        fireEvent.click(headerAt(container, 1));
         expect(seen.size).toBe(1);
     });
 });

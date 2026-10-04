@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
+import { rows } from "./helpers";
 
 // The app's own faceted filters over the rows it gives the grid: AND across facets, OR within.
 
@@ -14,10 +15,7 @@ const option = (page: Page, facet: string, value: string) =>
 
 /** Every rendered row's value in a column (0 Name, 2 Priority, 4 Assigned to). */
 const column = (page: Page, index: number) =>
-    page
-        .locator('[data-grid-part="row"]')
-        .locator(`[data-column-index="${index}"]`)
-        .allTextContents();
+    rows(page).locator(`[data-column-index="${index}"]`).allTextContents();
 
 test("filters by two facets at once, and clears", async ({ page }) => {
     await openExample(page, "tasks");

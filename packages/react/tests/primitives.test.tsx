@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createRef, Profiler, StrictMode, useState } from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
     type Column,
@@ -11,6 +11,7 @@ import {
     type RootProps,
     useDataGrid,
 } from "../src";
+import { stubViewportSize, tags } from "./helpers";
 
 // The primitive contract (AGENTS.md): render, never asChild; refs merged; props forwarded and
 // handlers composed; className/style as functions; structural inline style only; state through
@@ -42,24 +43,7 @@ const columns: Column<Person>[] = [
 
 const VIEWPORT = { width: 400, height: 235 };
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", VIEWPORT.width],
-        ["clientHeight", VIEWPORT.height],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(VIEWPORT.width, VIEWPORT.height);
 
 /** The allowed structural inline style keys (AGENTS.md, the primitive contract). */
 const STRUCTURAL = new Set([
@@ -686,22 +670,20 @@ describe("column groups", () => {
     ];
 
     function GroupedGrid({ table = false }: { table?: boolean }) {
+        const tag = tags(table);
         return (
             <DataGrid.Root
                 columns={groupedColumns}
                 rows={people}
                 rowHeight={20}
             >
-                <DataGrid.Grid
-                    aria-label="People"
-                    render={table ? <table /> : undefined}
-                >
-                    <DataGrid.Header render={table ? <thead /> : undefined}>
+                <DataGrid.Grid aria-label="People" render={tag.grid}>
+                    <DataGrid.Header render={tag.header}>
                         <DataGrid.HeaderRows<Person>>
                             {(row) => (
                                 <DataGrid.HeaderRow
                                     row={row}
-                                    render={table ? <tr /> : undefined}
+                                    render={tag.headerRow}
                                     className={(state) =>
                                         `level${state.rowIndex}`
                                     }
@@ -710,9 +692,7 @@ describe("column groups", () => {
                                         {(cell) => (
                                             <DataGrid.HeaderCell
                                                 cell={cell}
-                                                render={
-                                                    table ? <th /> : undefined
-                                                }
+                                                render={tag.headerCell}
                                                 className={(state) =>
                                                     state.group
                                                         ? "group"
@@ -725,7 +705,7 @@ describe("column groups", () => {
                             )}
                         </DataGrid.HeaderRows>
                     </DataGrid.Header>
-                    <DataGrid.Body render={table ? <tbody /> : undefined} />
+                    <DataGrid.Body render={tag.body} />
                 </DataGrid.Grid>
             </DataGrid.Root>
         );

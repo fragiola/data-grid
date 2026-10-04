@@ -1,7 +1,8 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { Activity } from "react";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { type Column, type ColumnOrGroup, DataGrid } from "../src";
+import { cellAt, stubViewportSize, tags } from "./helpers";
 
 // Pinned columns (Epic #31, P3 and P5; Epic #38): pinned cells and header cells carry
 // `data-pinned` and `data-pinned-edge`, sit sticky in their row's flow (rows are flex containers
@@ -26,24 +27,7 @@ const columns: Column<Row>[] = [
     ...Array.from({ length: 30 }, (_, i) => plain(`c${i}`)),
 ];
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 500],
-        ["clientHeight", 235],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(500, 235);
 
 /** What a consumer might give a cell: a transform and insets (dropped on pinned cells), a colour. */
 const CONSUMER_STYLE = {
@@ -61,21 +45,22 @@ function Grid({
     cells?: ColumnOrGroup<Row>[];
     table?: boolean;
 }) {
+    const tag = tags(table);
     return (
         <DataGrid.Root columns={cells} rows={rows} rowHeight={20}>
-            <DataGrid.Grid render={table ? <table /> : undefined}>
-                <DataGrid.Header render={table ? <thead /> : undefined}>
+            <DataGrid.Grid render={tag.grid}>
+                <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRows<Row>>
                         {(row) => (
                             <DataGrid.HeaderRow
                                 row={row}
-                                render={table ? <tr /> : undefined}
+                                render={tag.headerRow}
                             >
                                 <DataGrid.HeaderCells<Row>>
                                     {(cell) => (
                                         <DataGrid.HeaderCell
                                             cell={cell}
-                                            render={table ? <th /> : undefined}
+                                            render={tag.headerCell}
                                             style={CONSUMER_STYLE}
                                             className={(state) =>
                                                 state.pinned
@@ -91,18 +76,15 @@ function Grid({
                         )}
                     </DataGrid.HeaderRows>
                 </DataGrid.Header>
-                <DataGrid.Body render={table ? <tbody /> : undefined}>
+                <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Row>>
                         {(row) => (
-                            <DataGrid.Row
-                                row={row}
-                                render={table ? <tr /> : undefined}
-                            >
+                            <DataGrid.Row row={row} render={tag.row}>
                                 <DataGrid.Cells<Row>>
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            render={table ? <td /> : undefined}
+                                            render={tag.cell}
                                             style={CONSUMER_STYLE}
                                             className={(state) =>
                                                 state.pinned
@@ -122,20 +104,6 @@ function Grid({
         </DataGrid.Root>
     );
 }
-
-const cellAt = (
-    container: HTMLElement,
-    rowIndex: number,
-    columnIndex: number,
-) => {
-    const element = container.querySelector(
-        `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
-    );
-    if (!(element instanceof HTMLElement)) {
-        throw new Error(`no cell ${rowIndex}:${columnIndex}`);
-    }
-    return element;
-};
 
 describe("pinned cells", () => {
     it("mark pinned cells and header cells, and the last pinned column's edge", () => {

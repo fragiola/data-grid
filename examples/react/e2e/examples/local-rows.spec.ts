@@ -1,16 +1,8 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { openExample } from "../helpers";
+import { header, values } from "./helpers";
 
 // Rows in memory (Epic #47): one hook searches, filters, sorts and pages a thousand people.
-
-const header = (page: Page, name: string) =>
-    page.getByRole("columnheader").filter({ hasText: name });
-
-/** A column's rendered body values, in order. */
-const values = (page: Page, columnIndex: number) =>
-    page
-        .locator(`[data-grid-part="cell"][data-column-index="${columnIndex}"]`)
-        .allTextContents();
 
 test("pages the people, and a page size changes the pages", async ({
     page,

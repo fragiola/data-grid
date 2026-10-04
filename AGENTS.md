@@ -256,7 +256,9 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
   `commit`, and the per-cell hooks. Nothing runs per frame that can run per window change (D9).
 - **Size is watched.** `pnpm size` (after `pnpm build`; CI prints it too) reports each entry point;
   a PR says when one grows noticeably, and why.
-- **Tests share their setup**: the engine harness and the React and e2e helpers, never a copy.
+- **Tests share their setup**, never a copy: `packages/core/tests/engine/harness.ts` (the engine
+  on a fake viewport), `packages/react/tests/helpers.tsx` and `examples/react/e2e/helpers.ts`,
+  `examples/react/e2e/examples/helpers.ts` (the playground's spec imports it too).
 
 A review asks: is anything duplicated? Is an existing function reused? Does the core grow, and
 must it? What does it cost on a hot path? What does it add to the size report?

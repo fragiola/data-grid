@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
     DataGrid,
@@ -11,6 +11,7 @@ import {
 } from "../src";
 import { useLocalRows } from "../src/local";
 import { useSelectAll } from "../src/selection";
+import { cellAt, rowAt, stubViewportSize, tags } from "./helpers";
 
 // Row selection (Epic #57, R1–R8): `Root` maps the selection (controlled or not), its mode and
 // `isRowSelectable` onto the model; rows carry `data-selected` and `aria-selected`, the grid
@@ -28,24 +29,7 @@ const people: Person[] = Array.from({ length: 20 }, (_, i) => ({
 
 const columns: Column<Person>[] = [{ key: "id", name: "Id", width: 120 }];
 
-beforeAll(() => {
-    for (const [property, size] of [
-        ["clientWidth", 400],
-        ["clientHeight", 300],
-    ] as const) {
-        Object.defineProperty(HTMLElement.prototype, property, {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.dataset.gridPart === "root" ? size : 0;
-            },
-        });
-    }
-});
-
-afterAll(() => {
-    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
-});
+stubViewportSize(400, 300);
 
 const KEYS = people.map((person) => person.id);
 
@@ -83,6 +67,7 @@ function Grid({
     rowStates,
     ...props
 }: GridProps) {
+    const tag = tags(table);
     return (
         <DataGrid.Root
             columns={columns}
@@ -92,14 +77,14 @@ function Grid({
             rowSelection={rowSelection ?? undefined}
             {...props}
         >
-            <DataGrid.Grid render={table ? <table /> : undefined}>
-                <DataGrid.Header render={table ? <thead /> : undefined}>
-                    <DataGrid.HeaderRow render={table ? <tr /> : undefined}>
+            <DataGrid.Grid render={tag.grid}>
+                <DataGrid.Header render={tag.header}>
+                    <DataGrid.HeaderRow render={tag.headerRow}>
                         <DataGrid.HeaderCells<Person>>
                             {(cell) => (
                                 <DataGrid.HeaderCell
                                     cell={cell}
-                                    render={table ? <th /> : undefined}
+                                    render={tag.headerCell}
                                 >
                                     <SelectAll />
                                 </DataGrid.HeaderCell>
@@ -107,12 +92,12 @@ function Grid({
                         </DataGrid.HeaderCells>
                     </DataGrid.HeaderRow>
                 </DataGrid.Header>
-                <DataGrid.Body render={table ? <tbody /> : undefined}>
+                <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Person>>
                         {(row) => (
                             <DataGrid.Row
                                 row={row}
-                                render={table ? <tr /> : undefined}
+                                render={tag.row}
                                 className={(state) => {
                                     if (row.rowIndex === 1) {
                                         rowStates?.push(state.selected);
@@ -124,7 +109,7 @@ function Grid({
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            render={table ? <td /> : undefined}
+                                            render={tag.cell}
                                         />
                                     )}
                                 </DataGrid.Cells>
@@ -135,22 +120,6 @@ function Grid({
             </DataGrid.Grid>
         </DataGrid.Root>
     );
-}
-
-function rowAt(container: HTMLElement, rowIndex: number) {
-    const element = container.querySelector(
-        `[data-grid-part="row"][data-row-index="${rowIndex}"]`,
-    );
-    if (!(element instanceof HTMLElement)) throw new Error("no row");
-    return element;
-}
-
-function cellAt(container: HTMLElement, rowIndex: number) {
-    const element = container.querySelector(
-        `[data-grid-part="cell"][data-row-index="${rowIndex}"][data-column-index="0"]`,
-    );
-    if (!(element instanceof HTMLElement)) throw new Error("no cell");
-    return element;
 }
 
 const shiftSpace = (target: HTMLElement) =>

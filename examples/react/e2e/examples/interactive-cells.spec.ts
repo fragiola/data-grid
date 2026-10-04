@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openExample } from "../helpers";
+import { openExample, part } from "../helpers";
 import { cell } from "./helpers";
 
 // Interactive cells (Epic #52): controls in every cell, and the grid still one tab stop.
@@ -8,11 +8,11 @@ test("Enter reaches a cell's field, Escape comes back, Tab leaves the grid", asy
     page,
 }) => {
     await openExample(page, "interactive-cells");
-    const root = page.locator('[data-grid-part="root"]');
+    const root = part(page, "root");
     const focusInGrid = () =>
         root.evaluate((element) => element.contains(document.activeElement));
     // the grid takes focus on its first cell in view, never on a control inside one
-    await page.locator('[data-grid-part="grid"]').focus();
+    await part(page, "grid").focus();
     await expect(cell(page, 0, 0)).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(cell(page, 0, 1)).toBeFocused();
@@ -36,7 +36,7 @@ test("a box to check and the actions work from the keyboard and the mouse", asyn
     page,
 }) => {
     await openExample(page, "interactive-cells");
-    await page.locator('[data-grid-part="grid"]').focus();
+    await part(page, "grid").focus();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("F2");
     const done = cell(page, 1, 0).getByRole("checkbox");
