@@ -59,6 +59,10 @@
                     "path": "concepts/column-reordering"
                 },
                 {
+                    "label": "Automatic widths",
+                    "path": "concepts/auto-widths"
+                },
+                {
                     "label": "Sorting",
                     "path": "concepts/sorting"
                 },

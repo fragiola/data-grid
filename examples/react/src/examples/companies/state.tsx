@@ -109,7 +109,8 @@ export function SortLabel({
 
 /**
  * A resizable column's handle, at its header cell's right edge: the grid drags it, moves it with
- * the arrows (F2 on the header reaches it) and resets it on a double click. None elsewhere.
+ * the arrows (F2 on the header reaches it) and fits it to its content on a double click. None
+ * elsewhere.
  */
 export function Resizer({ cell }: { cell: HeaderCellInfo<Company> }) {
     const { state, props } = useColumnResizer(cell);

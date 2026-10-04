@@ -62,7 +62,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    (`_kit/`), never in a package.
 7. **Sizes (D7).** `rowHeight: number | (index) => number`; columns `width: number` (px), the
    width a column starts with and a reset gives back: the model keeps a resized column's width
-   over it (`columnWidths`, Epic #70).
+   over it (`columnWidths`, Epic #70). The effective width, within the column's limits, is the
+   override (`columnWidths`), else the engine's automatic width (`autoSize`), else its flex share
+   (`flex`), else `width` (Epic #80).
 8. **Scroll scaling (D8).** When an axis is larger than a physical cap (configurable, safe in
    Chromium, Firefox and WebKit by default), the engine maps physical scroll to virtual offset.
    Small moves stay pixel-exact relative to the content, the scrollbar reaches the whole dataset,
@@ -71,7 +73,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
-    reorderable?, compare?, filter?, meta? }`. Without children, a header cell renders
+    flex?, autoSize?, reorderable?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -176,11 +178,45 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    grows, the release (a lost capture, a move with no button) keeps the width, Escape or
    `pointercancel` resizes its column back to the width it started from (the others keep theirs)
    (`engine.get("column-resize")` → `{ columnKey, width } | null`, the `column-resize` event); a
-   double click runs `column-widths.reset`; a press, click or drag on it is never a sort (an
+   double click fits its column (or group) to its content (Epic #80, A4; it replaced #70's
+   reset); a press, click or drag on it is never a sort (an
    element with `data-grid-column-resizer` is a control of its header cell; no ARIA role changes
    for grids without resizing). `data-resizable` on a resizable header cell (a group's when
-   one of its columns is), `data-resizing` on the header cell and the handle during a drag. Auto
-   widths, RTL and persisting the widths are not the grid's (yet, or ever).
+   one of its columns is), `data-resizing` on the header cell and the handle during a drag. RTL and
+   persisting the widths are not the grid's (yet, or ever).
+   **Automatic widths (Epic #80, A1–A6):** headless first: the grid lays widths out against the
+   view and measures its own rendered cells; which columns flex or fit, the buttons that fit and
+   what a reset means are the app's. `flex?: number` on a column (refused on a group, like
+   `autoSize`; `columnsError`): flex columns share the view's width minus every other column's
+   effective width, in proportion to `flex`, each within `[max(width, minWidth), maxWidth]`, what
+   one cannot take going to the others (`sharedWidths` in `model/widths.ts`, shared with a group's
+   resize); nothing left, each is its `width` and the grid scrolls. The shares are the engine's
+   (they depend on the view, D3), worked out again when the view's width, the columns, the order
+   or the overrides change, and only while a column flexes (no measure, no recompute otherwise);
+   the view keeps its first column across one (as a resize). Resizing a flex column (a drag, a
+   key, a fit) writes an override: it stops flexing; `column-widths.reset` makes it flex again. A
+   fit measures this grid's own rendered header cell of the column and its body cells of loaded
+   rows (`ownerViewport`): each one's inline `width` set to `max-content` (important; a pinned
+   cell's `flex-shrink` 0), every box read, every `style` attribute put back, in one task; the
+   widest, rounded up, within the limits (a group: each resizable column). Only rendered rows are
+   measured (virtualization; a full-data width is the app's `column-widths.set`). Triggers: a
+   double click on a resizer, Enter on a focused resizer (in interaction), the engine action
+   `fit-columns { columnKeys? }` (no dot; without keys every rendered resizable column), each one
+   `column-widths.set` with the other overrides as they are; a column fitted to the width it has
+   without an override keeps none, a flex one always gets one. `autoSize?: boolean`: after the
+   first commit rendering the column with loaded rows while the grid has a size, the engine
+   measures it once per key per attach and keeps that width as engine state (`automatic`), never
+   an override: not reported, not in `columnWidths`, a reset gives it back, with `flex` it is the
+   base, a new `columns` keeps it for the same keys. `engine.get("column-auto-widths")` (and its
+   event) is the automatic widths and flex shares in effect, by key; `column-width-by` stays the
+   model's override-or-width; `column-widths.resize` takes an optional `autoWidths` the engine
+   fills itself (a model middleware), so a resize starts from the width on screen. The parts read
+   the width on screen from the view's column axis: `useColumnResizer`'s `state.width` and
+   `aria-valuenow`, the header cells' and cells' boxes; the limits and `aria-valuemax` are the
+   column's. Known: a flex column that does not resize, in a resizable group, cannot be moved by
+   the group's handle (the group ends off the pointer): make it resizable or keep it out of the
+   group. Fitting rows not rendered, canvas text measuring, `flex` on groups and RTL are not the
+   grid's.
    **Column reordering (Epic #75, O1–O6):** the model keeps `columnOrder` (keys of columns and
    groups, the order siblings take: in each sibling list, a group's children or the top level,
    the listed entries take the listed ones' places in its order, the others keep theirs; pinned
@@ -246,7 +282,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     of its header cell: in interaction (F2, Enter on a header that does not sort, Tab among its
     controls), on the focused handle ←/→ resize by 10 px (Shift: 50), Home/End go to the minimum
     and the maximum (its `aria-valuemax`: without a `maxWidth`, the view's width), each one
-    `column-widths.resize` after the consumer's handlers; the other page keys and Space do
+    `column-widths.resize` after the consumer's handlers, and Enter fits its column to its
+    content (one `column-widths.set`, Epic #80); the other page keys and Space do
     nothing there (no paging); Escape leaves interaction and keeps the width. On a reorderable
     header cell in navigation, Ctrl/⌘+Shift+←/→ run one `column-order.move` before the previous
     sibling or after the next (handled at an end or at the pinned edge too, moving nothing),
@@ -382,8 +419,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
 - **A column resizer is the app's element (Epic #70, W3).** `useColumnResizer(cell)` returns
-  `{ state, props }` (`state`: `columnKey`, `resizable`, `resizing`, `width`, `minWidth`,
-  `maxWidth`; `props`: the separator's ARIA, `tabIndex`, `data-grid-column-resizer`,
+  `{ state, props }` (`state`: `columnKey`, `resizable`, `resizing`, `width` (on screen: a flex
+  share or an automatic width included), `minWidth`, `maxWidth`; `props`: the separator's ARIA, `tabIndex`, `data-grid-column-resizer`,
   `data-grid-part="column-resizer"`, `data-resizing`, an empty `style`), and no props under a
   cell that does not resize (`state.resizable` false: render none). The app gives it a name
   (`aria-label`), a place (a header cell is positioned), a look and `touch-action: none`. A header

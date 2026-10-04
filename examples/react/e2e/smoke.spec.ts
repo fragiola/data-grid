@@ -16,6 +16,7 @@ const REPRESENTATIVE: string[] = [
     "grouped-headers", // two header rows: group cells, a column spanning both
     "column-resizing", // the resize handles, drawn with the theme's tokens
     "column-reordering", // the drop indicator and the dragged cell, drawn with the theme's tokens
+    "auto-widths", // a native range input and a grid narrower than its frame
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

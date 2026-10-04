@@ -1,0 +1,137 @@
+---
+title: Automatic widths
+description: Flex columns that share the width the grid has left and follow it, and columns fitted to their content at the start, on a double click or from a button.
+---
+
+Besides the widths you give, the grid sizes columns two ways. A **flex** column takes its part of
+the width the other columns leave in the view, and follows the view as it grows and shrinks. A
+column **fitted to its content** gets the width of what its rendered cells show, measured by the
+grid. Which columns flex or fit, the buttons that fit them and what a reset means in your UI are
+yours.
+
+<Example id="auto-widths" />
+
+## The width on screen
+
+A column's width on screen is the first of these, always within its `minWidth` and `maxWidth`:
+
+1. the width a person set (`columnWidths`: a drag, a key, a fit, or your own
+   `column-widths.set`, see [Column resizing](/docs/concepts/column-resizing));
+2. its automatic width, when it has `autoSize`;
+3. its share of the view, when it has `flex`;
+4. its `width`.
+
+A grid without `flex` or `autoSize` lays its columns out as before: nothing is measured, and a
+change of the view's width changes no column.
+
+## Flex columns
+
+`flex` is a column's part of the width left in the view: what the root's width leaves once every
+other column has its own. Flex columns share it in proportion to their `flex` (`flex: 2` takes two
+parts where `flex: 1` takes one), each never below its `width` (its base) nor past its `maxWidth`.
+What one cannot take goes to the others. When nothing is left (the other columns already fill the
+view), a flex column is its base width, and the grid scrolls sideways as usual.
+
+```tsx title="columns.tsx"
+const columns: Column<Person>[] = [
+    { key: "id", name: "#", width: 64 },
+    { key: "email", name: "Email", width: 220, flex: 2, resizable: true, minWidth: 160 },
+    { key: "city", name: "City", width: 120, flex: 1, resizable: true, maxWidth: 240 },
+];
+```
+
+The shares follow the root's size (the engine measures it, see
+[Sizing the grid](/docs/getting-started/sizing)), the columns, their order and the widths a person
+set. When a share changes left of the view, the view stays on the column it shows first, as for a
+resize. `flex` belongs to columns: a group has none (`columnsError` refuses it), and its columns
+flex on their own.
+
+A person resizing a flex column (a drag, a key, a fit) gives it a width of its own: it no longer
+flexes, and the other flex columns share what is left. A reset makes it flex again.
+
+## Fitting a column to its content
+
+A fit measures this grid's own rendered cells of a column: its header cell and its body cells of
+loaded rows. Each one is laid out once at its content's width (its inline `width` set to
+`max-content`, read, and put back in the same task, so nothing paints in between); the column gets
+the widest, rounded up and held within its limits. A group's fit fits each of its resizable
+columns. Content placed out of the flow, such as an absolutely positioned
+[resize handle](/docs/concepts/column-resizing#the-handle), adds nothing.
+
+<Callout type="info" title="Only rendered rows are measured">
+The grid renders the rows in view (and a few more), not the dataset: a fit measures those. A row
+scrolled into view later may be wider. To fit a column to all your data, work its width out
+yourself and set it with `column-widths.set`.
+</Callout>
+
+Three things fit a column, each with one `column-widths.set` holding the widths as they are plus
+the fitted ones, so a controlled parent answers once:
+
+- a **double click** on a column's handle (a group's handle fits each of its columns);
+- **Enter** on a focused handle, its keyboard equivalent
+  ([Keyboard and accessibility](/docs/concepts/keyboard#resize-handles));
+- the engine's **`fit-columns`** action, for a button of yours: `columnKeys` names the columns (a
+  group's key, its columns), and without it every rendered resizable column fits.
+
+```tsx title="fit-all.tsx"
+const gridRef = useDataGridRef<Person>();
+
+<button onClick={() => gridRef.current?.engine.run("fit-columns", {})}>Fit all</button>
+<button onClick={() => gridRef.current?.engine.run("fit-columns", { columnKeys: ["email"] })}>
+    Fit Email
+</button>
+<DataGrid.Root gridRef={gridRef} columns={columns} rows={people}>
+    {/* … */}
+</DataGrid.Root>
+```
+
+A fit resizes: it reaches only resizable columns, a column not rendered is not measured, and its
+width is one a person set, kept in `columnWidths` and told to `onColumnWidthsChange`. A column
+fitted to the width it has without one (its automatic width, else its `width`) keeps no entry; a
+flex column's fit always gives it one, so it stops flexing.
+
+## Fitting once at the start
+
+`autoSize: true` fits a column by itself once, after the first render that shows it with loaded
+rows, while the grid has a size (a grid in a hidden tab fits when it is laid out). That width is
+the grid's, not a person's: it is not in `columnWidths`, it is never reported, and a reset gives
+it back. With `flex` too, it is the column's base. It runs once per column key while the grid is
+on screen, and a new `columns` keeps it for the keys that stay; `fit-columns` (or a double click)
+measures again, as a width a person set.
+
+```tsx title="columns.tsx"
+{ key: "name", name: "Name", width: 140, autoSize: true, resizable: true, minWidth: 120 }
+```
+
+## Reset
+
+`column-widths.reset` (or `{}` given to a controlled `columnWidths`) removes the widths a person
+set: a flex column flexes again and an `autoSize` column has its automatic width back. Your own
+"Reset widths" button is that command, or `setWidths({})` when you keep the widths.
+
+## Reading the widths
+
+`engine.get("column-auto-widths")` is the widths the grid gives columns itself, by key: the
+automatic widths and the flex shares in effect, never a width a person set. The engine's
+`column-auto-widths` event tells each change, for a readout of your own.
+`get("column-width-by", { columnKey })` stays the model's width (a person's, else the column's
+own); the width on screen is the engine's one for the key when it has one. A handle's
+`aria-valuenow`, `useColumnResizer`'s `state.width` and the header cells read the width on screen;
+`aria-valuemin` and `aria-valuemax` stay the column's limits.
+
+## A group with a column that flexes and does not resize
+
+A group's handle shares a resize among the group's resizable columns. When the group also holds a
+flex column that does not resize, the handle cannot move that column, and its share changes as the
+others' widths change: the group ends off the pointer, and when that column alone takes what the
+view leaves, the group stays as wide as it was. Make such a column `resizable` too, or keep it out
+of a resizable group.
+
+## The options and the action
+
+| on | name | does |
+| --- | --- | --- |
+| column | `flex` | its part of the width left in the view, never below its `width` nor past its `maxWidth` |
+| column | `autoSize` | fits its content once, when it first renders with loaded rows; the grid's width, never reported |
+| engine | `run("fit-columns", { columnKeys? })` | fits the named columns (a group's, its columns), or every rendered resizable one, in one `column-widths.set` |
+| engine | `get("column-auto-widths")`, `column-auto-widths` event | the automatic widths and flex shares in effect, by key |
