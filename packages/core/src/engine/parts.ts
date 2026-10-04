@@ -147,8 +147,11 @@ export interface ColumnResizerPart {
         readonly "aria-orientation": "vertical";
         readonly "aria-valuenow": number;
         readonly "aria-valuemin": number;
-        /** none without a maximum */
-        readonly "aria-valuemax"?: number;
+        /**
+         * its maximum; without one, the wider of its width and the view's (a separator's value
+         * always has a maximum: ARIA's default is 100)
+         */
+        readonly "aria-valuemax": number;
         readonly [COLUMN_RESIZER_ATTRIBUTE]: string;
     };
 }
@@ -303,7 +306,7 @@ export function columnResizerPart<TRow, TNode>(
             "aria-orientation": "vertical",
             "aria-valuenow": width,
             "aria-valuemin": minWidth,
-            ...(maxWidth === undefined ? {} : { "aria-valuemax": maxWidth }),
+            "aria-valuemax": maxWidth ?? Math.max(width, view.viewportWidth),
             [COLUMN_RESIZER_ATTRIBUTE]: cell.key,
         },
     };

@@ -5,9 +5,11 @@ import {
     ariaRowIndex,
     type CellPart,
     type CellState,
+    type ColumnResizerState,
     cellBox,
     cellPart,
     cellValue,
+    columnResizerPart,
     EMPTY_WINDOW,
     type GridView,
     type HeaderCellPart,
@@ -47,6 +49,7 @@ import { dataAttributes } from "./utils/useRender";
 
 export type {
     CellState,
+    ColumnResizerState,
     HeaderCellState,
     RowDetailState,
     RowState,
@@ -233,6 +236,8 @@ function cellProps(
             pinned: pinned ? "start" : undefined,
             "pinned-edge": state.pinnedEdge,
             interacting: state.interacting,
+            resizable: header?.resizable,
+            resizing: header?.resizing,
         }),
         style: pinned
             ? { position: "sticky", width, height, boxSizing: "border-box" }
@@ -325,6 +330,29 @@ export function useHeaderCells<TRow = unknown>(
     return useHeaderRowOf(row)?.cells ?? [];
 }
 
+/**
+ * What a header cell shows by default (`DataGrid.HeaderCell` without children): its group's or
+ * its column's `renderHeaderCell`, else its `name`. An app that adds its own content to a header
+ * cell (a resizer) writes it first: `{headerCellContent(cell)}<Resizer cell={cell} />`.
+ */
+export function headerCellContent<TRow>(cell: HeaderCellInfo<TRow>): ReactNode {
+    if (cell.group) {
+        return cell.group.renderHeaderCell
+            ? cell.group.renderHeaderCell({
+                  group: cell.group,
+                  columnIndex: cell.columnIndex,
+                  columnSpan: cell.columnSpan,
+              })
+            : cell.group.name;
+    }
+    return cell.column.renderHeaderCell
+        ? cell.column.renderHeaderCell({
+              column: cell.column,
+              columnIndex: cell.columnIndex,
+          })
+        : cell.column.name;
+}
+
 /** A header cell's state, and the props for its element. */
 export function useHeaderCell<TRow>(
     cell: HeaderCellInfo<TRow>,
@@ -335,5 +363,33 @@ export function useHeaderCell<TRow>(
         state: part.state,
         // at its row's top: a cell spanning rows reaches down past it
         props: cellProps(part, headerCellBox(view, cell)),
+    };
+}
+
+/**
+ * A column resizer (Epic #70, W3): the state and props of a handle the app renders inside a
+ * header cell (a column's, or a group's, which resizes its columns together). The props make it
+ * a vertical separator whose values are widths in pixels, marked for the engine, which drags it,
+ * resizes with its arrows and resets on a double click. Its place, look and name (`aria-label`)
+ * are the app's: it has no style of its own. Under a cell whose columns do not resize
+ * (`state.resizable` false) it has no props: render none there.
+ */
+export function useColumnResizer<TRow>(
+    cell: HeaderCellInfo<TRow>,
+): PartHookResult<ColumnResizerState> {
+    const view = useGridView<TRow>();
+    const { state, tabIndex, attributes } = columnResizerPart(view, cell);
+    if (!state.resizable) return { state, props: { style: {} } };
+    return {
+        state,
+        props: {
+            ...attributes,
+            tabIndex,
+            ...dataAttributes({
+                "grid-part": "column-resizer",
+                resizing: state.resizing,
+            }),
+            style: {},
+        },
     };
 }

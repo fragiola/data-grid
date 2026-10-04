@@ -24,6 +24,7 @@ import {
 import {
     type CellState,
     type HeaderCellState,
+    headerCellContent,
     type RowDetailState,
     type RowState,
     rowStyle,
@@ -340,25 +341,6 @@ export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
         ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
         drop: own.state.pinned ? PINNED_KEYS : undefined,
     });
-}
-
-/** What a header cell shows without children: its renderer's output, else its name. */
-function headerCellContent<TRow>(cell: HeaderCellInfo<TRow>): ReactNode {
-    if (cell.group) {
-        return cell.group.renderHeaderCell
-            ? cell.group.renderHeaderCell({
-                  group: cell.group,
-                  columnIndex: cell.columnIndex,
-                  columnSpan: cell.columnSpan,
-              })
-            : cell.group.name;
-    }
-    return cell.column.renderHeaderCell
-        ? cell.column.renderHeaderCell({
-              column: cell.column,
-              columnIndex: cell.columnIndex,
-          })
-        : cell.column.name;
 }
 
 // ── the empty state ──────────────────────────────────────────────────────────

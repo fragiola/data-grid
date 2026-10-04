@@ -110,7 +110,7 @@ export type {
     SortColumn,
     SortDirection,
 } from "./model/types";
-export { DEFAULT_MIN_WIDTH } from "./model/widths";
+export { DEFAULT_MIN_WIDTH, keptWidths, sameWidths } from "./model/widths";
 export {
     type Direction,
     type HeaderCellSpan,

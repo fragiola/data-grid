@@ -544,10 +544,14 @@ describe("the parts", () => {
                 [COLUMN_RESIZER_ATTRIBUTE]: "a",
             },
         });
-        // no maximum: no aria-valuemax
+        // no maximum: the wider of its width and the view's (300) for ARIA, none in its state
         const b = columnResizerPart(view, cellOf("b"));
-        expect(b.attributes).not.toHaveProperty("aria-valuemax");
+        expect(b.attributes["aria-valuemax"]).toBe(300);
         expect(b.state).toMatchObject({ resizing: false, maxWidth: undefined });
+        const wide = viewOf(state, { viewportWidth: 50 });
+        expect(
+            columnResizerPart(wide, cellOf("b")).attributes["aria-valuemax"],
+        ).toBe(columnResizerPart(wide, cellOf("b")).state.width);
         // a group: its columns together
         expect(columnResizerPart(view, cellOf("g")).attributes).toMatchObject({
             "aria-valuenow": 200,
