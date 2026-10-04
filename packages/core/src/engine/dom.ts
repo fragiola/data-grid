@@ -66,6 +66,8 @@ const CONTROL_ROLES = new Set([
     "spinbutton",
     "tab",
     "textbox",
+    // a column resizer: a press on it is a drag, its keys resize
+    "separator",
 ]);
 
 /** Whether an element is a control of its own (a button, a link, a field, a menu trigger). */
@@ -115,6 +117,12 @@ export const TAB_STOP_ATTRIBUTE = "data-grid-tab-stop";
 /** The keys a scroll container pages itself by: every navigation key (`KEYS`) is one of them. */
 export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
 
+/**
+ * A column resizer (Epic #70, W3): an element the app renders in a resizable header cell, its
+ * value the column's or the group's key. The engine drags it and gives it the arrows.
+ */
+export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
+
 /** Whether a control moves through its group with the arrows (a radio, a menu item, a tab). */
 export function movesWithArrows(element: Element): boolean {
     const role = element.getAttribute("role");
@@ -129,6 +137,8 @@ export function movesWithArrows(element: Element): boolean {
 
 /** Roles of controls with no use for the page keys (a button, a link, a box to check). */
 const PAGELESS_ROLES = new Set([
+    // a column resizer: its arrows, Home and End resize it, the rest never page
+    "separator",
     "button",
     "link",
     "checkbox",

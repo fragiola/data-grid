@@ -111,6 +111,15 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * navigation
      */
     readonly interaction: CellPosition | null;
+    /** the column a drag is resizing (W4), or `null` */
+    readonly columnResize: ColumnResize | null;
+}
+
+/** A column (or a group) a person is resizing with the pointer, and its width on screen. */
+export interface ColumnResize {
+    /** the column's or the group's key: its resizer's `data-grid-column-resizer` */
+    readonly columnKey: string;
+    readonly width: number;
 }
 
 /** What `engine.get` reads. */
@@ -129,6 +138,8 @@ export interface EngineQueryMap {
     "scroll-scaled": { readonly rows: boolean; readonly columns: boolean };
     /** the cell whose controls have the keys, or `null` (see `GridView.interaction`) */
     interaction: CellPosition | null;
+    /** the column a drag is resizing, or `null` (see `GridView.columnResize`) */
+    "column-resize": ColumnResize | null;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
@@ -167,6 +178,8 @@ export interface EngineEventMap {
     "rows-end-reached": { readonly rowCount: number };
     /** a cell's controls got the keys (the cell), or gave them back (`null`) */
     interaction: CellPosition | null;
+    /** a drag started resizing a column, resized it (its width on screen), or ended (`null`) */
+    "column-resize": ColumnResize | null;
 }
 
 export type EngineEventKey = keyof EngineEventMap;
@@ -203,8 +216,9 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
     keydown(event: KeyboardEvent): boolean;
     /**
      * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
-     * (Ctrl/⌘ adds the column). Returns whether the click was the grid's: a toggle ran, even
-     * when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
+     * (Ctrl/⌘ adds the column); the click ending a press on a column resizer is the resizer's,
+     * and a double click there resets the column's width. Returns whether the click was the
+     * grid's: a toggle ran, even when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
      * after the consumer's own handlers, so `preventDefault` cancels it.
      */
     click(event: MouseEvent): boolean;

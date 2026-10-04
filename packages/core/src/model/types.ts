@@ -66,6 +66,15 @@ export interface Column<TRow, TNode = unknown> {
      */
     readonly pinned?: "start" | undefined;
     /**
+     * whether a person can resize it (a handle the app renders in its header cell, dragged or
+     * moved with the arrows). The grid keeps the widths; without it, the column is its `width`
+     */
+    readonly resizable?: boolean | undefined;
+    /** a resizable column's narrowest width in pixels (default 40, or `maxWidth` when smaller) */
+    readonly minWidth?: number | undefined;
+    /** a resizable column's widest width in pixels (default: none) */
+    readonly maxWidth?: number | undefined;
+    /**
      * how two rows compare by this column, for sorting rows in memory (`@fragiola/data-grid/local`):
      * negative when `a` comes first. Without one, their values compare by type
      */
@@ -109,6 +118,10 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly sortable?: never;
     /** a group is pinned by its columns */
     readonly pinned?: never;
+    /** a group is resized by its columns: resizable when one of them is */
+    readonly resizable?: never;
+    readonly minWidth?: never;
+    readonly maxWidth?: never;
     /** a group neither sorts nor filters: its columns do */
     readonly compare?: never;
     readonly filter?: never;
@@ -122,6 +135,12 @@ export interface SortColumn {
     readonly columnKey: string;
     readonly direction: SortDirection;
 }
+
+/**
+ * The widths of the columns a person resized, by column key, over each column's `width` (W1). A
+ * key that is not a column is kept: the column may come back.
+ */
+export type ColumnWidths = Readonly<Record<string, number>>;
 
 /** An entry of `columns`: a column, or a group of them. */
 export type ColumnOrGroup<TRow, TNode = unknown> =
@@ -163,6 +182,8 @@ export interface HeaderLayout<TRow, TNode = unknown> {
         rowIndex: number,
         columnIndex: number,
     ): HeaderCellLayout<TRow, TNode> | undefined;
+    /** a column's or a group's cell, by its key (every column has one) */
+    cellByKey(key: string): HeaderCellLayout<TRow, TNode> | undefined;
 }
 
 /**
@@ -265,6 +286,8 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly isRowSelectable: RowSelectable<TRow> | undefined;
     /** where a range starts: the row last toggled without `extend` (R3) */
     readonly selectionAnchor: SelectionAnchor | null;
+    /** the resized columns' widths, over their `width` (a resizable column's only count) */
+    readonly columnWidths: ColumnWidths;
 }
 
 /** What `createDataGridModel` starts from. */
@@ -292,6 +315,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     selectedRowKeys?: readonly RowKey[];
     /** whether a loaded row can be selected (default: every row can) */
     isRowSelectable?: RowSelectable<TRow> | undefined;
+    /** the resized columns' widths to start with (an entry that is not a size is dropped) */
+    columnWidths?: ColumnWidths;
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -437,6 +462,31 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly isRowSelectable?: RowSelectable<TRow> | null | undefined;
         };
         result: undefined;
+    };
+    /**
+     * replaces the resized columns' widths (each a size in pixels). A key that is not a column is
+     * kept: the column may come back. Returns them
+     */
+    "column-widths.set": {
+        payload: { readonly columnWidths: ColumnWidths };
+        result: ColumnWidths;
+    };
+    /**
+     * resizes a resizable column to `width`, within its limits; or a group, whose resizable
+     * columns share the change in proportion to their widths, each within its limits, the rest
+     * going to the next ones. Widths are whole pixels. Returns the columns' widths
+     */
+    "column-widths.resize": {
+        payload: { readonly columnKey: string; readonly width: number };
+        result: ColumnWidths;
+    };
+    /**
+     * gives a column its own `width` back, a group its columns, or, without a key, every column.
+     * Returns the columns' widths
+     */
+    "column-widths.reset": {
+        payload: { readonly columnKey?: string | undefined };
+        result: ColumnWidths;
     };
     /**
      * changes the row height (a number or a function of the index), the header row's, or an
@@ -616,6 +666,16 @@ export interface QueryMap<TRow, TNode = unknown> {
     "sort-column-by": {
         payload: { readonly columnKey: string };
         result: SortColumn | undefined;
+    };
+    /** the resized columns' widths, by column key */
+    "column-widths": { payload: undefined; result: ColumnWidths };
+    /**
+     * a column's width on screen (its resized width, else its `width`, within its limits), or a
+     * group's (its columns'); `undefined` for a key that is neither
+     */
+    "column-width-by": {
+        payload: { readonly columnKey: string };
+        result: number | undefined;
     };
     "row-height": { payload: undefined; result: Size };
     "header-row-height": { payload: undefined; result: number };

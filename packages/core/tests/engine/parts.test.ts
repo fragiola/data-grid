@@ -205,6 +205,8 @@ describe("headerCellPart", () => {
                 pinned: false,
                 pinnedEdge: false,
                 interacting: false,
+                resizable: false,
+                resizing: false,
             },
             tabIndex: -1,
             ariaSort: "descending",

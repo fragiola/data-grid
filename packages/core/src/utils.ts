@@ -8,6 +8,11 @@ export function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
 }
 
+/** Whether a value is a size in pixels: a number, finite and not negative. */
+export function isWidth(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 /** Whether `value` is an index: a whole number, 0 or more, and below `count` when given. */
 export function isIndex(
     value: number,

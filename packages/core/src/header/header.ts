@@ -5,7 +5,7 @@ import type {
     HeaderCellLayout,
     HeaderLayout,
 } from "../model/types";
-import { lowerBound } from "../utils";
+import { isWidth, lowerBound } from "../utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,
@@ -42,8 +42,8 @@ export interface ColumnLayout<TRow, TNode> {
 
 /**
  * Why the entries are not a valid `columns`, or `null`: every key unique across groups and
- * columns (so no group inside itself), every width finite and not negative, and at least one
- * column under every group.
+ * columns (so no group inside itself), every width finite and not negative (limits too, the
+ * minimum not above the maximum), and at least one column under every group.
  */
 export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
@@ -65,14 +65,11 @@ export function columnsError(entries: unknown): string | null {
             keys.add(key);
             const children: unknown = Reflect.get(entry, "children");
             if (children === undefined) {
-                const width: unknown = Reflect.get(entry, "width");
-                if (
-                    typeof width !== "number" ||
-                    !Number.isFinite(width) ||
-                    width < 0
-                ) {
+                if (!isWidth(Reflect.get(entry, "width"))) {
                     return `column "${key}" has an invalid width`;
                 }
+                const limits = limitsError(entry);
+                if (limits) return `column "${key}" ${limits}`;
                 const pinned: unknown = Reflect.get(entry, "pinned");
                 if (pinned !== undefined && pinned !== "start") {
                     return `column "${key}" has an invalid pin`;
@@ -104,6 +101,18 @@ export function columnsError(entries: unknown): string | null {
     };
     const result = visit(entries);
     return typeof result === "string" ? result : null;
+}
+
+/** Why a column's limits are invalid (W2), or `null`: each a width, the minimum not above the maximum. */
+function limitsError(column: object): string | null {
+    const min: unknown = Reflect.get(column, "minWidth");
+    const max: unknown = Reflect.get(column, "maxWidth");
+    if (min !== undefined && !isWidth(min)) return "has an invalid minWidth";
+    if (max !== undefined && !isWidth(max)) return "has an invalid maxWidth";
+    if (isWidth(min) && isWidth(max) && min > max) {
+        return "has a minWidth above its maxWidth";
+    }
+    return null;
 }
 
 /** Whether a column below `list` is pinned. */
@@ -145,7 +154,17 @@ function flatHeader<TRow, TNode>(
         rows: [cells],
         cellAt: (rowIndex, columnIndex) =>
             rowIndex === -1 ? cells[columnIndex] : undefined,
+        cellByKey: cellsByKey([cells]),
     };
+}
+
+/** The lookup of the header's cells by their key (a column's or a group's): one map per layout. */
+function cellsByKey<TRow, TNode>(
+    rows: readonly (readonly HeaderCellLayout<TRow, TNode>[])[],
+): HeaderLayout<TRow, TNode>["cellByKey"] {
+    const byKey = new Map<string, HeaderCellLayout<TRow, TNode>>();
+    for (const row of rows) for (const cell of row) byKey.set(cell.key, cell);
+    return (key) => byKey.get(key);
 }
 
 /**
@@ -247,6 +266,7 @@ export function layoutColumns<TRow, TNode>(
             rows,
             cellAt: (rowIndex, columnIndex) =>
                 cover[rowIndex + depth]?.[columnIndex],
+            cellByKey: cellsByKey(rows),
         },
     };
 }

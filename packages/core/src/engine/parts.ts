@@ -3,7 +3,9 @@ import type {
     HeaderCellLayout,
     SortDirection,
 } from "../model/types";
+import { spanResizable, spanWidths } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
+import { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
 import {
     columnLeft,
     columnPinning,
@@ -71,6 +73,26 @@ export interface HeaderCellState {
     readonly pinnedEdge: boolean;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
+    /** its column is resizable, or for a group one of its columns (a resizer can resize it) */
+    readonly resizable: boolean;
+    /** a drag is resizing it (its resizer's) */
+    readonly resizing: boolean;
+}
+
+/** The state of a column resizer: the handle the app renders in a resizable header cell. */
+export interface ColumnResizerState {
+    /** its header cell's column's or group's key */
+    readonly columnKey: string;
+    /** its column is resizable, or for a group one of its columns; else it does nothing */
+    readonly resizable: boolean;
+    /** a drag on it is resizing its column */
+    readonly resizing: boolean;
+    /** its column's width on screen, or its group's (its columns'), in pixels */
+    readonly width: number;
+    /** the narrowest it resizes to: each resizable column at its minimum, the others as they are */
+    readonly minWidth: number;
+    /** the widest it resizes to, or `undefined` when a resizable column has no maximum */
+    readonly maxWidth: number | undefined;
 }
 
 /** The state of a row's detail. */
@@ -106,6 +128,29 @@ export interface HeaderCellPart {
     readonly tabIndex: 0 | -1;
     /** on the first sorted column's header cell only (ARIA 1.2: one header at a time) */
     readonly ariaSort: SortDirection | undefined;
+}
+
+/**
+ * A column resizer's state, its `tabIndex` and its attributes: a vertical separator whose values
+ * are widths in pixels, marked with its key for the engine. It has no name: that is the app's
+ * (`aria-label`).
+ */
+export interface ColumnResizerPart {
+    readonly state: ColumnResizerState;
+    /**
+     * a control of its header cell: the grid keeps it at -1 outside interaction, and gives it
+     * back (Tab reaches it among the cell's controls)
+     */
+    readonly tabIndex: 0;
+    readonly attributes: {
+        readonly role: "separator";
+        readonly "aria-orientation": "vertical";
+        readonly "aria-valuenow": number;
+        readonly "aria-valuemin": number;
+        /** none without a maximum */
+        readonly "aria-valuemax"?: number;
+        readonly [COLUMN_RESIZER_ATTRIBUTE]: string;
+    };
 }
 
 /** A row's detail's state, and its box while its row is expanded (`rowDetailBox`). */
@@ -197,6 +242,12 @@ export function headerCellPart<TRow, TNode>(
         view.active !== null && sameCell(view.active, cell, view.header.cellAt);
     return {
         state: {
+            resizable: spanResizable(
+                view.columnDefs,
+                cell.columnIndex,
+                cell.columnIndex + cell.columnSpan,
+            ),
+            resizing: view.columnResize?.columnKey === cell.key,
             rowIndex: cell.rowIndex,
             columnIndex: cell.columnIndex,
             columnSpan: cell.columnSpan,
@@ -212,6 +263,49 @@ export function headerCellPart<TRow, TNode>(
         },
         tabIndex: active ? 0 : -1,
         ariaSort: sort.ariaSort,
+    };
+}
+
+/** The width and limits of a header cell's columns, as the view lays them out. */
+function spanOf<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: HeaderCellLayout<TRow, TNode>,
+) {
+    return spanWidths(
+        view.columnDefs,
+        view.columnAxis,
+        cell.columnIndex,
+        cell.columnIndex + cell.columnSpan,
+    );
+}
+
+/**
+ * The state and attributes of the resizer in a header cell (W3): its column's, or for a group's
+ * cell its columns' together (W5).
+ */
+export function columnResizerPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: HeaderCellLayout<TRow, TNode>,
+): ColumnResizerPart {
+    const { resizable, width, minWidth, maxWidth } = spanOf(view, cell);
+    return {
+        state: {
+            columnKey: cell.key,
+            resizable,
+            resizing: view.columnResize?.columnKey === cell.key,
+            width,
+            minWidth,
+            maxWidth,
+        },
+        tabIndex: 0,
+        attributes: {
+            role: "separator",
+            "aria-orientation": "vertical",
+            "aria-valuenow": width,
+            "aria-valuemin": minWidth,
+            ...(maxWidth === undefined ? {} : { "aria-valuemax": maxWidth }),
+            [COLUMN_RESIZER_ATTRIBUTE]: cell.key,
+        },
     };
 }
 

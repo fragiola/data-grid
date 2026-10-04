@@ -2,7 +2,8 @@ import type { Axis } from "../axis/axis";
 import { headerRowCount, pinnedColumnCount } from "../header/header";
 import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
-import type { CellPosition, Column } from "../model/types";
+import type { CellPosition, Column, ColumnWidths } from "../model/types";
+import { hasResizable, type SpanWidths, spanWidths } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
 import {
     createScrollMapping,
@@ -23,6 +24,7 @@ import {
 } from "../viewport/window";
 import {
     CLICK_SLOP,
+    COLUMN_RESIZER_ATTRIBUTE,
     CTRL_KEYS,
     cellSelector,
     isCellNode,
@@ -41,6 +43,7 @@ import {
 import { cellsSizeOf, pinnedInset } from "./geometry";
 import { createInteraction } from "./interaction";
 import type {
+    ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
     EngineActionKey,
@@ -85,6 +88,37 @@ function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
 
 /** Physical scroll moves, on either axis or both. */
 type ScrollMoves = { top?: number | undefined; left?: number | undefined };
+
+/** A drag on a column resizer (W4): where it started, and where the pointer is. */
+interface ResizeDrag {
+    readonly columnKey: string;
+    readonly pointerId: number;
+    readonly startX: number;
+    /** the column's (or the group's) width when it started */
+    readonly startWidth: number;
+    /** the widths when it started: what Escape and `pointercancel` restore */
+    readonly startWidths: ColumnWidths;
+    /** the resizer, holding the pointer */
+    readonly element: HTMLElement;
+    readonly doc: Document;
+    /** the pointer's last x, and the x the last resize was for */
+    x: number;
+    appliedX: number;
+    /** the animation frame the next resize waits for, if any */
+    frame: number | null;
+}
+
+/** The keys a focused resizer resizes with (W6). */
+const RESIZE_KEYS: ReadonlySet<string> = new Set([
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+]);
+
+/** The resizer keys' steps in pixels (W6): an arrow, and Shift with it. */
+const RESIZE_STEP = 10;
+const RESIZE_SHIFT_STEP = 50;
 
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
@@ -146,6 +180,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * interaction): the next update builds a view, which it skips otherwise (D9)
      */
     let viewStale = false;
+    /** the column a drag is resizing, and the drag (Epic #70) */
+    let columnResize: ColumnResize | null = null;
+    let drag: ResizeDrag | null = null;
+    /** the column whose resizer the last press was on: its click is the resizer's */
+    let resizerPress: string | null = null;
     /** the cell whose controls have the keys, and an entry waiting for its cell (Epic #52) */
     const interaction = createInteraction({
         getViewport: () => viewport,
@@ -183,6 +222,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "column-window": new Set(),
         "rows-end-reached": new Set(),
         interaction: new Set(),
+        "column-resize": new Set(),
     };
 
     function emit<K extends EngineEventKey>(
@@ -220,6 +260,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pinnedWidth,
             rowsRevision,
             interaction: interaction.cell,
+            columnResize,
             headerRowsFor,
         });
     }
@@ -725,6 +766,195 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function onPointerDown(event: PointerEvent) {
         pointerDown = true;
         pressedAt = { x: event.clientX, y: event.clientY };
+        resizerPress = null;
+        // a primary press on a resizer drags it; with no resizable column there is none to find
+        if (event.button === 0 && !drag && hasResizable(state.columns)) {
+            startResize(event);
+        }
+    }
+
+    // ── column resizing: the drag, the keys, the double click (Epic #70) ─────
+
+    /** This grid's column resizer an event happened in (a nested grid's is that grid's). */
+    function resizerOf(
+        target: EventTarget | null,
+    ): { element: HTMLElement; columnKey: string } | null {
+        if (!isElement(target)) return null;
+        const element = target.closest<HTMLElement>(
+            `[${COLUMN_RESIZER_ATTRIBUTE}]`,
+        );
+        const columnKey = element?.getAttribute(COLUMN_RESIZER_ATTRIBUTE);
+        return element && columnKey && ownerViewport(element) === viewport
+            ? { element, columnKey }
+            : null;
+    }
+
+    /** A column's or a group's width and limits, or `null` when none of its columns resizes. */
+    function resizeSpan(columnKey: string): SpanWidths | null {
+        const cell = state.header.cellByKey(columnKey);
+        if (!cell) return null;
+        const span = spanWidths(
+            state.columns,
+            columnAxis,
+            cell.columnIndex,
+            cell.columnIndex + cell.columnSpan,
+        );
+        return span.resizable ? span : null;
+    }
+
+    function setColumnResize(next: ColumnResize | null) {
+        columnResize = next;
+        viewStale = true;
+        update();
+        emit("column-resize", next);
+    }
+
+    function startResize(event: PointerEvent) {
+        const resizer = resizerOf(event.target);
+        const span = resizer && resizeSpan(resizer.columnKey);
+        if (!resizer || !span || !viewport) return;
+        const { columnKey, element } = resizer;
+        // a press on a resizer is a drag: no focus (which would activate its header cell and
+        // scroll it into view, away from the pointer), no text selection
+        event.preventDefault();
+        resizerPress = columnKey;
+        const doc = viewport.ownerDocument;
+        drag = {
+            columnKey,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startWidth: span.width,
+            startWidths: state.columnWidths,
+            element,
+            doc,
+            x: event.clientX,
+            appliedX: event.clientX,
+            frame: null,
+        };
+        doc.addEventListener("pointermove", onResizeMove, true);
+        // Escape restores wherever focus is (the page, outside the grid)
+        doc.addEventListener("keydown", onResizeKey, true);
+        element.addEventListener("lostpointercapture", onLostCapture);
+        try {
+            // the moves come to the resizer wherever the pointer goes
+            element.setPointerCapture(event.pointerId);
+        } catch {
+            // no pointer to capture (a press the page made up, a DOM without capture): the
+            // document still hears the moves and the release
+        }
+        setColumnResize({ columnKey, width: span.width });
+    }
+
+    /** A move of the dragging pointer: one resize a frame, however often it moves. */
+    function onResizeMove(event: PointerEvent) {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        // no button down any more (a release the page never heard): the drag ends where it is
+        if (event.buttons === 0) {
+            endResize(false);
+            return;
+        }
+        if (event.clientX === drag.x) return;
+        drag.x = event.clientX;
+        if (drag.frame !== null) return;
+        const win = drag.doc.defaultView;
+        if (win && "requestAnimationFrame" in win) {
+            drag.frame = win.requestAnimationFrame(onResizeFrame);
+        } else {
+            resizeTo(drag);
+        }
+    }
+
+    function onResizeFrame() {
+        if (!drag) return;
+        drag.frame = null;
+        resizeTo(drag);
+    }
+
+    /** The resizer lost the pointer (removed, or taken by the page): the drag ends where it is. */
+    function onLostCapture(event: PointerEvent) {
+        if (drag && event.pointerId === drag.pointerId) endResize(false);
+    }
+
+    /** Escape during a drag restores the widths it started from (W4), once: the grid skips it. */
+    function onResizeKey(event: KeyboardEvent) {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        event.preventDefault();
+        endResize(true);
+    }
+
+    /** Resizes a drag's column to its pointer: right grows (LTR). */
+    function resizeTo(resize: ResizeDrag) {
+        resize.appliedX = resize.x;
+        model.run("column-widths.resize", {
+            columnKey: resize.columnKey,
+            width: resize.startWidth + resize.x - resize.startX,
+        });
+    }
+
+    /** Stops listening to the drag, its frame cancelled; returns it. */
+    function stopDrag(): ResizeDrag | null {
+        const ended = drag;
+        if (!ended) return null;
+        if (ended.frame !== null) {
+            ended.doc.defaultView?.cancelAnimationFrame(ended.frame);
+        }
+        ended.doc.removeEventListener("pointermove", onResizeMove, true);
+        ended.doc.removeEventListener("keydown", onResizeKey, true);
+        ended.element.removeEventListener("lostpointercapture", onLostCapture);
+        drag = null;
+        return ended;
+    }
+
+    /**
+     * Ends the drag: at the pointer's last place (a move not resized yet resizes now), or
+     * (`restore`: Escape, `pointercancel`) with the widths it started from.
+     */
+    function endResize(restore: boolean) {
+        const ended = stopDrag();
+        if (!ended) return;
+        if (restore) {
+            model.run("column-widths.set", { columnWidths: ended.startWidths });
+        } else if (ended.x !== ended.appliedX) {
+            resizeTo(ended);
+        }
+        setColumnResize(null);
+    }
+
+    /**
+     * After the widths or the columns changed during a drag: the resize reports the width on
+     * screen; a column gone (or no longer resizable) ends the drag.
+     */
+    function followResize() {
+        const span = drag && resizeSpan(drag.columnKey);
+        if (!drag || !span) {
+            stopDrag();
+            columnResize = null;
+        } else if (columnResize?.width !== span.width) {
+            columnResize = { columnKey: drag.columnKey, width: span.width };
+        }
+    }
+
+    /** The width a key on a focused resizer resizes its column to (W6), or `null`. */
+    function keyedWidth(
+        event: KeyboardEvent,
+        target: Element,
+    ): { columnKey: string; width: number } | null {
+        if (event.ctrlKey || event.metaKey || !RESIZE_KEYS.has(event.key)) {
+            return null;
+        }
+        const resizer = resizerOf(target);
+        const span = resizer && resizeSpan(resizer.columnKey);
+        if (!resizer || !span) return null;
+        const step = event.shiftKey ? RESIZE_SHIFT_STEP : RESIZE_STEP;
+        const width =
+            event.key === "ArrowLeft"
+                ? span.width - step
+                : event.key === "ArrowRight"
+                  ? span.width + step
+                  : event.key === "Home"
+                    ? span.minWidth
+                    : (span.maxWidth ?? span.ownWidth);
+        return { columnKey: resizer.columnKey, width };
     }
 
     /**
@@ -764,6 +994,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // no press (`detail` 0: a screen reader, `element.click()`) has nothing to compare
         const press = pressedAt;
         pressedAt = null;
+        // the click ending a press on a resizer (a drag) is the resizer's; a double click gives
+        // the column its own width back (W7)
+        const resizer = resizerPress;
+        resizerPress = null;
+        if (resizer !== null && event.detail > 0) {
+            if (event.detail === 2) {
+                model.run("column-widths.reset", { columnKey: resizer });
+            }
+            return true;
+        }
         if (
             event.detail > 0 &&
             press &&
@@ -784,8 +1024,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** A release anywhere (or a pointer the browser took over for a scroll) ends the press. */
     function onPointerEnd(event: PointerEvent) {
         pointerDown = false;
+        const cancelled = event.type === "pointercancel";
         // a press the browser took over makes no click
-        if (event.type === "pointercancel") pressedAt = null;
+        if (cancelled) pressedAt = null;
+        if (drag && event.pointerId === drag.pointerId) {
+            // a release resizes to where it happened; a pointer taken over restores the start
+            if (!cancelled) drag.x = event.clientX;
+            endResize(cancelled);
+        }
     }
 
     function onFocusOut(event: FocusEvent) {
@@ -955,6 +1201,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     interaction.cycleControls(cell, target, event.shiftKey);
                     return true;
                 }
+                // a column resizer's keys resize its column (W6)
+                const resized = keyedWidth(event, target);
+                if (resized) {
+                    event.preventDefault();
+                    model.run("column-widths.resize", resized);
+                    return true;
+                }
                 // a button or a link has no use for the page keys: the container would page
                 // itself, a far jump under scaling. A field keeps them (its caret)
                 // a radio, a menu item or a tab keeps its arrows (its group's own moves)
@@ -1084,10 +1337,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 anchored = true;
             }
         }
-        const columnsChanged = after.columns !== before.columns;
+        // a resize changes the columns' widths: the same path as new columns (W1)
+        const columnsChanged =
+            after.columns !== before.columns ||
+            after.columnWidths !== before.columnWidths;
+        const resizing = columnResize;
         if (columnsChanged) {
             columnAxis = columnAxisOf(after);
             updatePinning();
+            if (drag) followResize();
         }
         relayout(
             rowsResized ||
@@ -1096,6 +1354,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 after.headerRowHeight !== before.headerRowHeight ||
                 after.header !== before.header,
         );
+        if (columnResize !== resizing) emit("column-resize", columnResize);
         if (anchored) {
             // the physical scroll follows even when the total did not change (no remap moved it)
             const top = rowsY.scrollTo(rowsY.virtual);
@@ -1195,6 +1454,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 doc.removeEventListener("pointerup", onPointerEnd, true);
                 doc.removeEventListener("pointercancel", onPointerEnd, true);
                 element.removeEventListener("focusout", onFocusOut);
+                // a drag ends where it is, its frame cancelled
+                endResize(false);
                 pointerDown = false;
                 pendingFocus = false;
                 if (viewport === element) {
@@ -1298,6 +1559,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columns: columnsX.mapping.scaled,
         }),
         interaction: () => interaction.cell,
+        "column-resize": () => columnResize,
     };
 
     const actions: {
