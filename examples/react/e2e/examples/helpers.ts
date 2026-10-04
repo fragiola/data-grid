@@ -97,17 +97,17 @@ export async function boxOf(target: Locator) {
 }
 
 /**
- * Presses the primary button on an element's centre (a column resizer), moves the pointer by `dx`
- * and, unless told to hold it, releases it.
+ * Presses the primary button on an element's centre (a column resizer, a header cell), or `at`
+ * pixels from its left, moves the pointer by `dx` and, unless told to hold it, releases it.
  */
 export async function dragBy(
     page: Page,
     target: Locator,
     dx: number,
-    { hold = false } = {},
+    { hold = false, at }: { hold?: boolean; at?: number } = {},
 ) {
     const box = await boxOf(target);
-    const x = box.x + box.width / 2;
+    const x = box.x + (at ?? box.width / 2);
     const y = box.y + box.height / 2;
     await page.mouse.move(x, y);
     await page.mouse.down();

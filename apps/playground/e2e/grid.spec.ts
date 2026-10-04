@@ -1812,5 +1812,272 @@ for (const kind of KINDS) {
                 expect(await page.locator("[aria-sort]").count()).toBe(0);
             });
         });
+
+        test.describe("column reordering", () => {
+            const REORDER = { rows: 1_000, columns: 20, reorder: 1 };
+
+            /** A column's header cell at a place (not a group's above it). */
+            function headerCell(page: Page, columnIndex: number) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]:not([data-group])`,
+                );
+            }
+
+            const group = (page: Page, name: string) =>
+                page.locator('[data-grid-part="header-cell"][data-group]', {
+                    hasText: name,
+                });
+
+            /**
+             * Which column (its declared index, from its name and its cells' values) is at each of
+             * the first `count` places, in the header and in the first row.
+             */
+            function placed(page: Page, count: number) {
+                return page.evaluate((count) => {
+                    const at = (part: string, columnIndex: number) =>
+                        document.querySelector(
+                            `[data-grid-part="${part}"][data-column-index="${columnIndex}"]:not([data-group])${part === "cell" ? '[data-row-index="0"]' : ""}`,
+                        )?.textContent ?? "";
+                    const places = Array.from({ length: count }, (_, i) => i);
+                    return {
+                        header: places.map((i) =>
+                            Number(/C(\d+)/.exec(at("header-cell", i))?.[1]),
+                        ),
+                        body: places.map((i) =>
+                            Number(at("cell", i).split(":")[1]),
+                        ),
+                    };
+                }, count);
+            }
+
+            /** Expects the columns at the first places, header and body alike. */
+            async function expectPlaced(page: Page, columns: number[]) {
+                expect(await placed(page, columns.length)).toEqual({
+                    header: columns,
+                    body: columns,
+                });
+            }
+
+            const orderChanges = (page: Page) =>
+                page.evaluate(() => window.orderChanges);
+
+            test("moves a column dragged over another on release, the drop target marked meanwhile", async ({
+                page,
+            }) => {
+                await open(page, kind, REORDER);
+                await expect(headerCell(page, 1)).toHaveAttribute(
+                    "data-reorderable",
+                    "",
+                );
+                for (const columnIndex of [0, 6]) {
+                    await expect(
+                        headerCell(page, columnIndex),
+                    ).not.toHaveAttribute("data-reorderable");
+                }
+                // C1's middle (150) to C3's second half (380): after C3
+                await dragBy(page, headerCell(page, 1), 230, { hold: true });
+                await expect(headerCell(page, 1)).toHaveAttribute(
+                    "data-dragging",
+                    "",
+                );
+                await expect(headerCell(page, 3)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                // the fixture's own CSS draws it
+                await expect(headerCell(page, 3)).toHaveCSS(
+                    "box-shadow",
+                    /inset/,
+                );
+                // nothing moves before the release
+                await expectPlaced(page, [0, 1, 2, 3, 4]);
+                await page.mouse.up();
+                await settle(page);
+                await expectPlaced(page, [0, 2, 3, 1, 4]);
+                expect(
+                    await page
+                        .locator("[data-dragging], [data-drop-target]")
+                        .count(),
+                ).toBe(0);
+                const changes = await orderChanges(page);
+                expect(changes).toHaveLength(1);
+                expect(changes[0]?.slice(0, 5)).toEqual([
+                    "c0",
+                    "c2",
+                    "c3",
+                    "c1",
+                    "c4",
+                ]);
+            });
+
+            test("still sorts on a click, and never on a drag", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...REORDER, sort: 1 });
+                await headerCell(page, 1).click({ position: { x: 5, y: 5 } });
+                await expect(headerCell(page, 1)).toHaveAttribute(
+                    "data-sort",
+                    "ascending",
+                );
+                // pressed beside its button (a control never drags): from 105 to 365, after C3
+                await dragBy(page, headerCell(page, 1), 260, { at: 5 });
+                await expectPlaced(page, [0, 2, 3, 1, 4]);
+                // the sort went with its column, and the drag's click sorted nothing
+                await expect(headerCell(page, 3)).toHaveAttribute(
+                    "data-sort",
+                    "ascending",
+                );
+                expect(
+                    await page.evaluate(() => window.sortChanges.length),
+                ).toBe(1);
+            });
+
+            test("cancels a drag on Escape: nothing moves", async ({
+                page,
+            }) => {
+                await open(page, kind, REORDER);
+                await dragBy(page, headerCell(page, 1), 230, { hold: true });
+                await expect(headerCell(page, 3)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                await page.keyboard.press("Escape");
+                await settle(page);
+                await expect(headerCell(page, 1)).not.toHaveAttribute(
+                    "data-dragging",
+                );
+                await expect(headerCell(page, 3)).not.toHaveAttribute(
+                    "data-drop-target",
+                );
+                // the release after Escape moves nothing
+                await page.mouse.up();
+                await settle(page);
+                await expectPlaced(page, [0, 1, 2, 3, 4]);
+                expect(await orderChanges(page)).toEqual([]);
+            });
+
+            test("moves a group as a whole, and a column only inside its group", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...REORDER, groups: 1 });
+                await expect(group(page, "G0")).toHaveAttribute(
+                    "data-reorderable",
+                    "",
+                );
+                // G0 (C1–C4) from its middle (300) to C0's first half (40): before C0
+                await dragBy(page, group(page, "G0"), -260);
+                await expectPlaced(page, [1, 2, 3, 4, 0, 5]);
+                await expect(group(page, "G0")).toHaveAttribute(
+                    "data-column-index",
+                    "0",
+                );
+                // C2 dragged far right, over G1: it stays in G0, after its last column
+                await dragBy(page, headerCell(page, 1), 500);
+                await expectPlaced(page, [1, 3, 4, 2, 0, 5]);
+                expect(await orderChanges(page)).toHaveLength(2);
+            });
+
+            test("moves a pinned column only among the pinned ones", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...REORDER, pinned: 2 });
+                await expect(headerCell(page, 0)).toHaveAttribute(
+                    "data-reorderable",
+                    "",
+                );
+                // C0 dragged far right: after C1, the last pinned one
+                await dragBy(page, headerCell(page, 0), 400);
+                await expectPlaced(page, [1, 0, 2, 3]);
+                await expect(headerCell(page, 1)).toHaveAttribute(
+                    "data-pinned-edge",
+                    "",
+                );
+                // C2 dragged over the pinned ones: it lands nowhere among them
+                await dragBy(page, headerCell(page, 2), -200);
+                await expectPlaced(page, [1, 0, 2, 3]);
+                expect(await orderChanges(page)).toHaveLength(1);
+            });
+
+            test("scrolls to a far column while held at the view's edge", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, REORDER);
+                await dragBy(page, headerCell(page, 1), 100, { hold: true });
+                const box = await boxOf(viewport);
+                const clientWidth = await viewport.evaluate(
+                    (element) => element.clientWidth,
+                );
+                const end = await viewport.evaluate(
+                    (element) => element.scrollWidth - element.clientWidth,
+                );
+                await page.mouse.move(box.x + clientWidth - 5, box.y + 10, {
+                    steps: 5,
+                });
+                await expect
+                    .poll(() =>
+                        viewport.evaluate((element) => element.scrollLeft),
+                    )
+                    .toBe(end);
+                await expect(headerCell(page, 19)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                await page.mouse.up();
+                await settle(page);
+                expect((await orderChanges(page)).at(-1)?.at(-1)).toBe("c1");
+                await expect(cell(page, 0, 19)).toHaveText("0:1");
+                await expect(headerCell(page, 19)).toHaveText("C1");
+            });
+
+            test("moves the active header cell's column with Ctrl/⌘+Shift+←/→, focus following", async ({
+                page,
+            }) => {
+                await open(page, kind, REORDER);
+                await headerCell(page, 2).focus();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowRight");
+                await settle(page);
+                await expectPlaced(page, [0, 1, 3, 2, 4]);
+                expect(await focused(page)).toMatchObject({
+                    row: "-1",
+                    column: "3",
+                });
+                expect(await active(page)).toEqual({
+                    rowIndex: -1,
+                    columnIndex: 3,
+                });
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowLeft");
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowLeft");
+                await settle(page);
+                await expectPlaced(page, [0, 2, 1, 3, 4]);
+                expect(await focused(page)).toMatchObject({
+                    row: "-1",
+                    column: "1",
+                });
+                expect(await orderChanges(page)).toHaveLength(3);
+            });
+
+            test("moves a controlled order, by a drag and by the keys", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...REORDER, reorder: "controlled" });
+                await dragBy(page, headerCell(page, 1), 230);
+                await expectPlaced(page, [0, 2, 3, 1, 4]);
+                // the pressed header cell is the active one: it followed its column
+                await expect(headerCell(page, 3)).toBeFocused();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowRight");
+                await settle(page);
+                await expectPlaced(page, [0, 2, 3, 4, 1]);
+                await expect(headerCell(page, 4)).toBeFocused();
+                const changes = await orderChanges(page);
+                expect(changes).toHaveLength(2);
+                expect(changes[1]?.slice(0, 5)).toEqual([
+                    "c0",
+                    "c2",
+                    "c3",
+                    "c4",
+                    "c1",
+                ]);
+            });
+        });
     });
 }
