@@ -138,6 +138,15 @@ describe("Shift+Up and Shift+Down", () => {
         expect(keys()).toEqual(["r5", "r4", "r3"]);
     });
 
+    it("select even after a row was cleared: they start a range of their own", () => {
+        const { model, key, activate, keys } = setup();
+        model.run("selected-rows.set", { rowKeys: ["r2", "r3", "r4"] });
+        // Shift+Space clears row 3: an anchor that clears
+        key(activate(3), " ", { shiftKey: true });
+        key(activate(3), "ArrowDown", { shiftKey: true });
+        expect(keys()).toEqual(["r2", "r4", "r3"]);
+    });
+
     it("start from a row already selected without an anchor, keeping it", () => {
         const { model, key, activate, keys } = setup();
         model.run("selected-rows.set", { rowKeys: ["r2"] });

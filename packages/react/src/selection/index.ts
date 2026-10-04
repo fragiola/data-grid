@@ -31,6 +31,11 @@ export interface SelectAll {
      * a time (single mode), it only clears
      */
     readonly toggle: () => void;
+    /**
+     * whether `toggle` does something: rows are selectable, and with one row at a time, one of
+     * them is selected (to clear). A control can be disabled meanwhile
+     */
+    readonly canToggle: boolean;
 }
 
 const NONE = { status: "none", count: 0 } as const;
@@ -79,5 +84,9 @@ export function useSelectAll<TRow>(
             rowKeys: withRowKeys(current, rowKeys),
         });
     }, [model, mode, status, count, rowKeys]);
-    return { status, count, toggle };
+    const canToggle =
+        mode === "multiple"
+            ? rowKeys.length > 0
+            : mode === "single" && count > 0;
+    return { status, count, toggle, canToggle };
 }

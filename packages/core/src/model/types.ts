@@ -383,8 +383,9 @@ export interface CommandMap<TRow, TNode = unknown> {
      * selects a row, or clears it when it is selected: by its index (a loaded row) or by its key.
      * By index, the row becomes the anchor; a row that cannot be selected is never added (it can
      * be cleared). By key, the row is not looked for: the key is the app's, as with `set`. With
-     * `extend` (multiple mode), every selectable row from the anchor to it takes the anchor's
-     * state instead, and the anchor stays (without one, a toggle); a row not loaded on the way
+     * `extend` (multiple mode; single mode toggles), every selectable row from the anchor to it
+     * takes the anchor's state instead, and the anchor stays (without one, a toggle); a row not
+     * loaded on the way
      * refuses it all (`not_loaded`). In single mode, selecting a row clears the others. Returns
      * the selected rows' keys and the anchor it leaves (what a controlled root keeps of a toggle
      * its parent answers)

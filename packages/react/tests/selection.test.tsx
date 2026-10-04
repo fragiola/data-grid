@@ -58,6 +58,7 @@ function SelectAll({ gridRef }: { gridRef?: DataGridRef<Person> }) {
             aria-label="Select all"
             data-status={all.status}
             data-count={all.count}
+            data-can-toggle={all.canToggle ? "" : undefined}
             checked={all.status === "all"}
             onChange={all.toggle}
         />
@@ -362,8 +363,10 @@ describe("useSelectAll", () => {
                 'input[aria-label="Select all"]',
             ) as HTMLInputElement;
         expect(box().dataset.status).toBe("some");
+        expect(box()).toHaveAttribute("data-can-toggle");
         fireEvent.click(box());
         expect(box().dataset.status).toBe("none");
+        expect(box()).not.toHaveAttribute("data-can-toggle");
         fireEvent.click(box());
         expect(box().dataset.status).toBe("none");
         rerender(<Grid rowSelection={null} defaultSelectedRowKeys={["p2"]} />);

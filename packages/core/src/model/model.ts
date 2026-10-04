@@ -591,10 +591,8 @@ function createHandlers<TRow, TNode>(
             }
             const key = loadedRowKey(state, rowIndex);
             if (key === undefined) return notLoaded(rowIndex);
-            if (payload.extend === true) {
-                if (state.rowSelection === "single") {
-                    return fail("refused", "a single selection has no range");
-                }
+            // one row at a time has no range: a Shift+click is a toggle there
+            if (payload.extend === true && state.rowSelection === "multiple") {
                 const extended = extendedKeys(state, rowIndex);
                 // the range starts where it did: the anchor stays
                 if (extended) {

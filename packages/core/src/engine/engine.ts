@@ -1747,9 +1747,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         } as const;
         // a move refused selects nothing
         if (!model.can("active-position.move", move)) return true;
-        // without an anchor, the range starts from this row and selects (it included). One
-        // selection command a key: a controlled parent answers each before the next
-        if (!model.get("selection-anchor")) {
+        // Shift+arrows select: without an anchor that selects, the range starts from this row
+        // (it included). One selection command a key: a controlled parent answers each
+        if (!model.get("selection-anchor")?.selected) {
             model.run("selection-anchor.set", { rowIndex });
         }
         pendingFocus = true;

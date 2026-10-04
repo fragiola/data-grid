@@ -252,13 +252,13 @@ describe("single selection", () => {
         expect(keys(model)).toEqual(["p3"]);
     });
 
-    it("has no range and no select-all", () => {
+    it("has no range, a Shift+click toggling, and no select-all", () => {
         const model = grid({ rowSelection: "single" });
-        expect(
-            model.run("selected-rows.toggle", { rowIndex: 3, extend: true }).ok,
-        ).toBe(false);
+        model.run("selected-rows.toggle", { rowIndex: 1 });
+        model.run("selected-rows.toggle", { rowIndex: 3, extend: true });
+        expect(keys(model)).toEqual(["p3"]);
         expect(model.run("selected-rows.select-all", {}).ok).toBe(false);
-        expect(keys(model)).toEqual([]);
+        expect(keys(model)).toEqual(["p3"]);
     });
 });
 
