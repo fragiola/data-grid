@@ -4,6 +4,7 @@ import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
     ScrollAxisState,
+    sameMapping,
 } from "../../src/viewport/scaling";
 import { windowFor } from "../../src/viewport/window";
 
@@ -135,5 +136,26 @@ describe("variable sizes under scaling", () => {
             const top = axis.offsetOf(i) - base;
             expect(top + axis.sizeOf(i)).toBe(axis.offsetOf(i + 1) - base);
         }
+    });
+});
+
+describe("two mappings", () => {
+    it("are the same when their sizes are, and differ when any size does", () => {
+        const mapping = createScrollMapping(ROWS * HEIGHT, VIEWPORT);
+        expect(
+            sameMapping(mapping, createScrollMapping(ROWS * HEIGHT, VIEWPORT)),
+        ).toBe(true);
+        expect(
+            sameMapping(mapping, createScrollMapping(ROWS * HEIGHT, 500)),
+        ).toBe(false);
+        expect(sameMapping(mapping, createScrollMapping(1_000, VIEWPORT))).toBe(
+            false,
+        );
+        expect(
+            sameMapping(
+                mapping,
+                createScrollMapping(ROWS * HEIGHT, VIEWPORT, 20_000_000),
+            ),
+        ).toBe(false);
     });
 });

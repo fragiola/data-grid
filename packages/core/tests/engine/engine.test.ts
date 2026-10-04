@@ -228,6 +228,22 @@ describe("windows", () => {
         expect(rows).toHaveLength(2);
     });
 
+    it("build no view for a scroll frame inside the overscan (D9)", () => {
+        const { engine, model, scrollTo, view } = setup();
+        // an active header cell: building a view looks its header cell up
+        model.run("active-position.set", { rowIndex: -1, columnIndex: 2 });
+        const first = view();
+        const renders = vi.fn();
+        engine.adapter.subscribe(renders);
+        const lookups = vi.spyOn(model.state.header, "cellAt");
+        scrollTo(20); // a row down: inside the overscan
+        scrollTo(40, 20);
+        expect(engine.get("row-window").visible).toEqual({ start: 2, end: 12 });
+        expect(view()).toBe(first);
+        expect(renders).not.toHaveBeenCalled();
+        expect(lookups).not.toHaveBeenCalled();
+    });
+
     it("follow a resize", () => {
         const { engine, size } = setup();
         size.height = 430;
@@ -377,6 +393,51 @@ describe("scroll scaling", () => {
         const event = new WheelEvent("wheel", { deltaY: 20, cancelable: true });
         element.dispatchEvent(event);
         expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("listens to the wheel, not passive, only while an axis is scaled", () => {
+        const add = vi.spyOn(EventTarget.prototype, "addEventListener");
+        const remove = vi.spyOn(EventTarget.prototype, "removeEventListener");
+        try {
+            const { model, element } = setup();
+            const onWheel = (spy: typeof add | typeof remove) =>
+                spy.mock.calls.filter(
+                    ([type], i) =>
+                        type === "wheel" && spy.mock.contexts[i] === element,
+                );
+            const wheel = () => {
+                const event = new WheelEvent("wheel", {
+                    deltaY: 20,
+                    cancelable: true,
+                });
+                element.dispatchEvent(event);
+                return event.defaultPrevented;
+            };
+            // nothing scaled: the browser never waits on the grid to scroll
+            expect(onWheel(add)).toHaveLength(0);
+            expect(wheel()).toBe(false);
+            model.run("data.set", {
+                rowCount: ROWS,
+                getRow: (index) => ({ id: index }),
+            });
+            expect(onWheel(add)).toEqual([
+                [
+                    "wheel",
+                    expect.any(Function),
+                    expect.objectContaining({ passive: false }),
+                ],
+            ]);
+            expect(wheel()).toBe(true);
+            model.run("data.set", {
+                rowCount: 1_000,
+                getRow: (index) => ({ id: index }),
+            });
+            expect(onWheel(remove)).toHaveLength(1);
+            expect(wheel()).toBe(false);
+        } finally {
+            add.mockRestore();
+            remove.mockRestore();
+        }
     });
 
     it("translates the layer by physical − virtual, so the virtual offset's rows are in view", () => {

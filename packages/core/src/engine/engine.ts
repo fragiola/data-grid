@@ -23,10 +23,13 @@ import type {
     SortDirection,
 } from "../model/types";
 import { type Direction, sameCell } from "../navigation/navigation";
+import { memo } from "../utils";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
     ScrollAxisState,
+    type ScrollMapping,
+    sameMapping,
 } from "../viewport/scaling";
 import {
     type ScrollAlign,
@@ -35,6 +38,7 @@ import {
 import {
     type AxisWindow,
     EMPTY_WINDOW,
+    overlaps,
     type Range,
     sameRange,
     sameWindow,
@@ -285,17 +289,13 @@ const CTRL_KEYS: Record<string, Direction> = {
 /** The pixels a wheel "line" or "page" stands for (`deltaMode` 1 and 2). */
 const LINE_HEIGHT = 40;
 
-function isEditable(target: EventTarget | null): boolean {
-    if (!target || typeof target !== "object" || !("tagName" in target)) {
-        return false;
-    }
-    const element = target as HTMLElement;
+function isEditable(element: Element): boolean {
     const tag = element.tagName;
     return (
         tag === "INPUT" ||
         tag === "TEXTAREA" ||
         tag === "SELECT" ||
-        element.isContentEditable === true
+        (element as HTMLElement).isContentEditable === true
     );
 }
 
@@ -410,6 +410,15 @@ const PAGELESS_ROLES = new Set([
     "tab",
 ]);
 
+/** Input types with no use for the page keys. */
+const PAGELESS_INPUTS = new Set([
+    "checkbox",
+    "radio",
+    "button",
+    "submit",
+    "reset",
+]);
+
 /**
  * Whether a control has no use for the page keys (they would page the grid's container): a
  * button, a link, a box to check. A field, a list, media or a scrolling element keeps them.
@@ -418,9 +427,8 @@ function isPagelessControl(element: Element): boolean {
     const tag = element.tagName.toUpperCase();
     if (tag === "BUTTON" || tag === "SUMMARY" || tag === "A") return true;
     if (tag === "INPUT") {
-        const type = (element.getAttribute("type") ?? "text").toLowerCase();
-        return ["checkbox", "radio", "button", "submit", "reset"].includes(
-            type,
+        return PAGELESS_INPUTS.has(
+            (element.getAttribute("type") ?? "text").toLowerCase(),
         );
     }
     const role = element.getAttribute("role");
@@ -440,21 +448,17 @@ function withDetails<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
 ): Axis {
     if (state.expandedRows.length === 0) return base;
-    const { detailHeight } = state;
+    const { detailHeight, source } = state;
+    const sizeOf =
+        typeof detailHeight === "number"
+            ? () => detailHeight
+            : (index: number) => {
+                  const row = rowAt(source, index);
+                  return row === undefined ? 0 : detailHeight(row, index);
+              };
     return withExtraSizes(
         base,
-        state.expandedRows.map((index) => {
-            const row = rowAt(state.source, index);
-            return {
-                index,
-                size:
-                    typeof detailHeight === "number"
-                        ? detailHeight
-                        : row === undefined
-                          ? 0
-                          : detailHeight(row, index),
-            };
-        }),
+        state.expandedRows.map((index) => ({ index, size: sizeOf(index) })),
     );
 }
 
@@ -463,9 +467,13 @@ function columnAxisOf<TRow, TNode>(state: DataGridState<TRow, TNode>): Axis {
     return createAxis(columns.length, (index) => columns[index]?.width ?? 0);
 }
 
-/** `range` as a list of indexes, with `extra` added in order when it is outside. */
-function indexes(start: number, end: number, extra: number | null): number[] {
-    const list: number[] = [];
+/** `list` with `start` … `end` appended, and `extra` added in order when it is outside. */
+function indexes(
+    start: number,
+    end: number,
+    extra: number | null,
+    list: number[] = [],
+): number[] {
     if (extra !== null && extra >= 0 && extra < start) list.push(extra);
     for (let i = start; i < end; i++) list.push(i);
     if (extra !== null && extra >= end) list.push(extra);
@@ -500,6 +508,55 @@ function cellSelector({ rowIndex, columnIndex }: CellPosition): string {
     return `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`;
 }
 
+/** Any cell element (a nested grid's too). */
+const CELL_SELECTOR = "[data-row-index][data-column-index]";
+
+/** Whether an element is a cell (a header cell, a nested grid's): it carries both indexes. */
+function isCellNode(element: Element): boolean {
+    return (
+        element.hasAttribute("data-row-index") &&
+        element.hasAttribute("data-column-index")
+    );
+}
+
+/** An item's own size, without its extra (a row's cells, without its detail). */
+function cellsSizeOf(axis: Axis, index: number): number {
+    return axis.sizeOf(index) - axis.extraSizeOf(index);
+}
+
+/** The layers whose elements get an inset of the engine's (`left`), not a transform. */
+function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
+    return layer === "pinned" || layer === "detail";
+}
+
+/** Physical scroll moves, on either axis or both. */
+type ScrollMoves = { top?: number | undefined; left?: number | undefined };
+
+/**
+ * The view's fields compared by identity to tell a new view; the rest follow from them and the
+ * rendered ranges (the rows and columns to render, the header's height).
+ */
+const VIEW_KEYS = [
+    "width",
+    "height",
+    "headerRowHeight",
+    "header",
+    "rowAxis",
+    "columnAxis",
+    "columnDefs",
+    "source",
+    "active",
+    "rowsRevision",
+    "sortColumns",
+    "pinnedColumnCount",
+    "expandedRows",
+    "rowKey",
+    "rowSelection",
+    "selectedRowKeys",
+    "isRowSelectable",
+    "interaction",
+] as const satisfies readonly (keyof GridView)[];
+
 /** Creates the engine of one grid on screen. */
 export function createDataGridEngine<TRow, TNode = unknown>(
     model: DataGridModel<TRow, TNode>,
@@ -515,6 +572,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         pinned: new Set(),
         detail: new Set(),
     };
+    /** the layers that hold rows: a key on one is the grid's (a detail's are its content's) */
+    const rowLayers: readonly ReadonlySet<Element>[] = [
+        layers.grid,
+        layers.header,
+        layers.body,
+    ];
     let detachViewport: (() => void) | null = null;
 
     let state = model.state;
@@ -532,19 +595,35 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     const maxScroll = () => options.maxScrollSize ?? DEFAULT_MAX_SCROLL_SIZE;
     const headerHeight = () => headerRowCount(state) * state.headerRowHeight;
     const bodyHeight = () => Math.max(0, height - headerHeight());
+    const rowMapping = () =>
+        createScrollMapping(rowAxis.totalSize, bodyHeight(), maxScroll());
+    const columnMapping = () =>
+        createScrollMapping(columnAxis.totalSize, width, maxScroll());
     const rowsY = new ScrollAxisState(createScrollMapping(0, 0));
     const columnsX = new ScrollAxisState(createScrollMapping(0, 0));
 
-    /** the header rows last laid out, and what they were laid out for */
-    let headerRowsMemo: {
-        header: HeaderLayout<TRow, TNode>;
-        count: number;
-        start: number;
-        end: number;
-        extra: number | null;
-        pinned: number;
-        rows: readonly HeaderRowView<TRow, TNode>[];
-    } | null = null;
+    /** The header rows for the rendered columns: laid out again only when they change. */
+    const headerRowsFor = memo(
+        (
+            header: HeaderLayout<TRow, TNode>,
+            count: number,
+            start: number,
+            end: number,
+            extra: number | null,
+            pinned: number,
+        ): readonly HeaderRowView<TRow, TNode>[] => {
+            if (count === 0) return [];
+            // the pinned columns' cells first: a pinned group holds only pinned columns
+            const pinnedCells =
+                pinned > 0 ? headerCellsIn(header, 0, pinned) : [];
+            return headerCellsIn(header, start, end, extra).map(
+                (cells, level) => ({
+                    rowIndex: level - count,
+                    cells: [...(pinnedCells[level] ?? []), ...cells],
+                }),
+            );
+        },
+    );
 
     let rowWindow: AxisWindow = EMPTY_WINDOW;
     let columnWindow: AxisWindow = EMPTY_WINDOW;
@@ -557,11 +636,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         null;
     /** the controls' own `tabindex` (`null`: none), kept while the grid holds them at -1 */
     const ownTabIndex = new WeakMap<Element, string | null>();
+    /**
+     * something the view shows besides the rendered ranges changed (the model, the sizes, the
+     * interaction): the next update builds a view, which it skips otherwise (D9)
+     */
+    let viewStale = false;
     let view: GridView<TRow, TNode> = makeView();
     let committed: GridView<TRow, TNode> | null = null;
     let endReachedAt = -1;
     /** physical scroll positions waiting for the sizer to have its new size (applied on commit) */
-    let pendingScroll: { top?: number; left?: number } = {};
+    let pendingScroll: ScrollMoves = {};
     let pendingFocus = false;
     /** focus was in the grid when a new view went out to render */
     let focusBeforeRender = false;
@@ -569,6 +653,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let pointerDown = false;
     /** where the last press started, to tell a click from a drag */
     let pressedAt: { x: number; y: number } | null = null;
+    /** whether the wheel listener is on: only while an axis is scaled */
+    let wheelOn = false;
     const viewListeners = new Set<() => void>();
     const eventListeners: {
         [K in EngineEventKey]: Set<(value: EngineEventMap[K]) => void>;
@@ -584,6 +670,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         value: EngineEventMap[K],
     ) {
         for (const listener of [...eventListeners[event]]) listener(value);
+    }
+
+    /** Whether `a` is the cell `b` (a header cell spanning rows is the same on each of them). */
+    function same(a: CellPosition | null, b: CellPosition): boolean {
+        return a !== null && sameCell(a, b, state.header.cellAt);
+    }
+
+    /** The header cell at a header position (a group, or a column's on its rows). */
+    function headerCellAt({ rowIndex, columnIndex }: CellPosition) {
+        return state.header.cellAt(rowIndex, columnIndex);
+    }
+
+    /** Makes a cell active, unless it is already. */
+    function activate(position: CellPosition) {
+        if (!same(state.activePosition, position)) {
+            model.run("active-position.set", position);
+        }
     }
 
     /** A column window without the pinned columns (the overscan may reach into them). */
@@ -608,16 +711,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const active = state.activePosition;
         // a pinned column is always rendered
         if (!active || active.columnIndex < pinnedCount) return null;
-        const { start, end } = columnWindow.rendered;
         if (active.rowIndex < 0) {
-            const cell = state.header.cellAt(
-                active.rowIndex,
-                active.columnIndex,
-            );
+            const cell = headerCellAt(active);
             if (
                 cell &&
-                cell.columnIndex < end &&
-                cell.columnIndex + cell.columnSpan > start
+                overlaps(
+                    columnWindow.rendered,
+                    cell.columnIndex,
+                    cell.columnIndex + cell.columnSpan,
+                )
             ) {
                 return null;
             }
@@ -625,73 +727,28 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return active.columnIndex;
     }
 
-    /** The header rows for the rendered columns: laid out again only when they change. */
-    function headerRowsFor(
-        count: number,
-        extra: number | null,
-    ): readonly HeaderRowView<TRow, TNode>[] {
-        const { start, end } = columnWindow.rendered;
-        const memo = headerRowsMemo;
-        if (
-            memo &&
-            memo.header === state.header &&
-            memo.count === count &&
-            memo.start === start &&
-            memo.end === end &&
-            memo.extra === extra &&
-            memo.pinned === pinnedCount
-        ) {
-            return memo.rows;
-        }
-        // the pinned columns' cells first: a pinned group holds only pinned columns
-        const pinned =
-            pinnedCount > 0 ? headerCellsIn(state.header, 0, pinnedCount) : [];
-        const rows =
-            count > 0
-                ? headerCellsIn(state.header, start, end, extra).map(
-                      (cells, level) => ({
-                          rowIndex: level - count,
-                          cells: [...(pinned[level] ?? []), ...cells],
-                      }),
-                  )
-                : [];
-        headerRowsMemo = {
-            header: state.header,
-            count,
-            start,
-            end,
-            extra,
-            pinned: pinnedCount,
-            rows,
-        };
-        return rows;
-    }
-
     function makeView(): GridView<TRow, TNode> {
         const active = state.activePosition;
-        const activeRow =
-            active && active.rowIndex >= 0 ? active.rowIndex : null;
         const extraColumn = activeColumn();
         const rowsOfHeader = headerRowCount(state);
+        const { start, end } = columnWindow.rendered;
         return {
             rows: indexes(
                 rowWindow.rendered.start,
                 rowWindow.rendered.end,
-                activeRow,
+                active && active.rowIndex >= 0 ? active.rowIndex : null,
             ),
             // the pinned columns first, always rendered
-            columns: [
-                ...indexes(0, pinnedCount, null),
-                ...indexes(
-                    columnWindow.rendered.start,
-                    columnWindow.rendered.end,
-                    extraColumn,
-                ),
-            ],
+            columns: indexes(
+                start,
+                end,
+                extraColumn,
+                indexes(0, pinnedCount, null),
+            ),
             renderedRows: rowWindow.rendered,
             renderedColumns: columnWindow.rendered,
             rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
-            columnBase: columnAxis.offsetOf(columnWindow.rendered.start),
+            columnBase: columnAxis.offsetOf(start),
             width: columnsX.mapping.physicalSize,
             height: rowsY.mapping.physicalSize,
             headerHeight: headerHeight(),
@@ -699,7 +756,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             viewportWidth: width,
             viewportBodyHeight: bodyHeight(),
             headerRowCount: rowsOfHeader,
-            headerRows: headerRowsFor(rowsOfHeader, extraColumn),
+            headerRows: headerRowsFor(
+                state.header,
+                rowsOfHeader,
+                start,
+                end,
+                extraColumn,
+                pinnedCount,
+            ),
             header: state.header,
             rowCount: state.rowCount,
             columnCount: state.columns.length,
@@ -733,79 +797,46 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     function viewChanged(next: GridView<TRow, TNode>): boolean {
         const current = view;
-        return (
+        if (
             !sameRange(current.renderedRows, next.renderedRows) ||
-            !sameRange(current.renderedColumns, next.renderedColumns) ||
-            current.rows.length !== next.rows.length ||
-            current.rows[0] !== next.rows[0] ||
-            current.rows[current.rows.length - 1] !==
-                next.rows[next.rows.length - 1] ||
-            current.columns.length !== next.columns.length ||
-            current.columns[0] !== next.columns[0] ||
-            current.columns[current.columns.length - 1] !==
-                next.columns[next.columns.length - 1] ||
-            current.width !== next.width ||
-            current.height !== next.height ||
-            current.headerHeight !== next.headerHeight ||
-            current.headerRowHeight !== next.headerRowHeight ||
-            current.header !== next.header ||
-            // the visible area matters only to an empty grid, and its width to the details on
-            // screen (as wide as the view): a resize alone renders nothing else
+            !sameRange(current.renderedColumns, next.renderedColumns)
+        ) {
+            return true;
+        }
+        if (VIEW_KEYS.some((key) => current[key] !== next[key])) return true;
+        // the visible area matters only to an empty grid, and its width to the details on
+        // screen (as wide as the view): a resize alone renders nothing else
+        return (
             ((current.rowCount === 0 || next.rowCount === 0) &&
                 (current.viewportWidth !== next.viewportWidth ||
                     current.viewportBodyHeight !== next.viewportBodyHeight)) ||
             (current.viewportWidth !== next.viewportWidth &&
-                rendersDetail(next)) ||
-            current.rowAxis !== next.rowAxis ||
-            current.columnAxis !== next.columnAxis ||
-            current.columnDefs !== next.columnDefs ||
-            current.source !== next.source ||
-            current.active !== next.active ||
-            current.rowsRevision !== next.rowsRevision ||
-            current.sortColumns !== next.sortColumns ||
-            current.pinnedColumnCount !== next.pinnedColumnCount ||
-            current.expandedRows !== next.expandedRows ||
-            current.rowKey !== next.rowKey ||
-            current.rowSelection !== next.rowSelection ||
-            current.selectedRowKeys !== next.selectedRowKeys ||
-            current.isRowSelectable !== next.isRowSelectable ||
-            current.interaction !== next.interaction
+                rendersDetail(next))
         );
     }
 
+    /** Takes a new mapping into an axis; returns the physical scroll it needs when that moves. */
+    function remapAxis(
+        axis: ScrollAxisState,
+        mapping: ScrollMapping,
+        physical: number,
+    ): number | undefined {
+        if (sameMapping(axis.mapping, mapping)) return undefined;
+        const moved = axis.remap(mapping);
+        return Math.abs(moved - physical) > 0.5 ? moved : undefined;
+    }
+
     /** Takes the current sizes into the scroll mappings; returns the physical moves needed. */
-    function remap(): { top?: number; left?: number } {
-        const moves: { top?: number; left?: number } = {};
-        const yMapping = createScrollMapping(
-            rowAxis.totalSize,
-            bodyHeight(),
-            maxScroll(),
-        );
-        const y = rowsY.mapping;
-        if (
-            y.virtualSize !== yMapping.virtualSize ||
-            y.viewportSize !== yMapping.viewportSize ||
-            y.physicalSize !== yMapping.physicalSize
-        ) {
-            const before = viewport?.scrollTop ?? 0;
-            const top = rowsY.remap(yMapping);
-            if (Math.abs(top - before) > 0.5) moves.top = top;
-        }
-        const xMapping = createScrollMapping(
-            columnAxis.totalSize,
-            width,
-            maxScroll(),
-        );
-        const x = columnsX.mapping;
-        if (
-            x.virtualSize !== xMapping.virtualSize ||
-            x.viewportSize !== xMapping.viewportSize ||
-            x.physicalSize !== xMapping.physicalSize
-        ) {
-            const before = viewport?.scrollLeft ?? 0;
-            const left = columnsX.remap(xMapping);
-            if (Math.abs(left - before) > 0.5) moves.left = left;
-        }
+    function remap(): ScrollMoves {
+        const moves = {
+            top: remapAxis(rowsY, rowMapping(), viewport?.scrollTop ?? 0),
+            left: remapAxis(
+                columnsX,
+                columnMapping(),
+                viewport?.scrollLeft ?? 0,
+            ),
+        };
+        listenToWheel();
         return moves;
     }
 
@@ -834,15 +865,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
         const rowsMoved = !sameWindow(rowWindow, nextRows);
         const columnsMoved = !sameWindow(columnWindow, nextColumns);
+        // the visible ranges moving inside the rendered ones keep the same view: none is built
+        const build =
+            viewStale ||
+            !sameRange(rowWindow.rendered, nextRows.rendered) ||
+            !sameRange(columnWindow.rendered, nextColumns.rendered);
         rowWindow = nextRows;
         columnWindow = nextColumns;
-        const next = makeView();
-        // the visible ranges moving inside the rendered ones keep the same view: nothing renders
-        if (viewChanged(next)) {
-            view = next;
-            // a render may remove the focused cell (a row remounting as it loads): commit restores it
-            focusBeforeRender ||= focusInside();
-            for (const listener of [...viewListeners]) listener();
+        if (build) {
+            viewStale = false;
+            const next = makeView();
+            if (viewChanged(next)) {
+                view = next;
+                // a render may remove the focused cell (a row remounting as it loads): commit restores it
+                focusBeforeRender ||= focusInside();
+                for (const listener of [...viewListeners]) listener();
+            }
         }
         writeLayers();
         if (rowsMoved) emit("row-window", rowWindow);
@@ -860,7 +898,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     const written = new WeakMap<HTMLElement, string>();
-    const gridLayers = (): ReadonlySet<Element> => layers.grid;
 
     function setTransform(layer: EngineLayer, transform: string) {
         for (const element of layers[layer]) write(element, transform);
@@ -873,17 +910,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * The layers' offsets for the view on screen, and its column axis (none before one is
-     * committed): what is in view is the virtual offset's content, wherever the physical scroll
-     * stands.
+     * The layers' offsets for a view on screen in `element` (the viewport): what is in view is the
+     * virtual offset's content, wherever the physical scroll stands.
      */
-    function layerOffsets(): { x: number; y: number; columnAxis: Axis } | null {
-        if (!viewport || !committed) return null;
-        return {
-            x: columnsX.layerOffset(committed.columnBase, viewport.scrollLeft),
-            y: rowsY.layerOffset(committed.rowBase, viewport.scrollTop),
-            columnAxis: committed.columnAxis,
-        };
+    function offsetX(shown: GridView<TRow, TNode>, element: HTMLElement) {
+        return columnsX.layerOffset(shown.columnBase, element.scrollLeft);
+    }
+
+    function offsetY(shown: GridView<TRow, TNode>, element: HTMLElement) {
+        return rowsY.layerOffset(shown.rowBase, element.scrollTop);
     }
 
     /** A layer's transform for offsets `x` and `y`: the header moves with the columns only. */
@@ -895,6 +930,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return `translate3d(${x}px, ${layer === "body" ? y : 0}px, 0px)`;
     }
 
+    /**
+     * the layers' offsets last written (NaN: the next write goes to every layer, where `written`
+     * skips the elements that hold it already)
+     */
+    let layerX = Number.NaN;
+    let layerY = Number.NaN;
     /** what the pinned cells' insets were last written for: the layers' `x` and the column axis */
     let pinnedFor: { x: number; columnAxis: Axis } | null = null;
 
@@ -935,31 +976,44 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
     }
 
+    /** Writes the layers' offsets for the view on screen (none before one), when they moved. */
     function writeLayers() {
-        const offsets = layerOffsets();
-        if (!offsets) return;
-        const { x, y, columnAxis } = offsets;
-        setTransform("body", layerTransform("body", x, y));
-        setTransform("header", layerTransform("header", x, y));
-        writeInsets(x, columnAxis);
+        if (!viewport || !committed) return;
+        const x = offsetX(committed, viewport);
+        const y = offsetY(committed, viewport);
+        if (x !== layerX || y !== layerY) {
+            layerX = x;
+            layerY = y;
+            setTransform("body", layerTransform("body", x, y));
+            setTransform("header", layerTransform("header", x, y));
+        }
+        writeInsets(x, committed.columnAxis);
     }
 
     /**
      * Sets the physical scroll, now or, while a view the adapter has not committed yet is waiting
      * (its sizer may not have its size), when it commits; a later move replaces an earlier one.
      */
-    function scrollWhenReady(moves: { top?: number; left?: number }) {
-        if (view !== committed) {
-            pendingScroll = { ...pendingScroll, ...moves };
-        } else {
-            applyScroll(moves);
+    function scrollWhenReady({ top, left }: ScrollMoves) {
+        if (view === committed) {
+            applyScroll({ top, left });
+            return;
         }
+        if (top !== undefined) pendingScroll.top = top;
+        if (left !== undefined) pendingScroll.left = left;
     }
 
-    function applyScroll(moves: { top?: number; left?: number }) {
+    function applyScroll(moves: ScrollMoves) {
         if (!viewport) return;
         if (moves.top !== undefined) viewport.scrollTop = moves.top;
         if (moves.left !== undefined) viewport.scrollLeft = moves.left;
+    }
+
+    /** Reads the physical scroll into both axes (both, always); returns whether either moved. */
+    function syncScroll(): boolean {
+        const rows = rowsY.sync(viewport?.scrollTop ?? 0);
+        const columns = columnsX.sync(viewport?.scrollLeft ?? 0);
+        return rows || columns;
     }
 
     function readSize() {
@@ -984,6 +1038,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** The sizes or the content changed: remap, then update; scroll once the sizer has its size. */
     function relayout(fresh: boolean) {
+        viewStale = true;
         const moves = remap();
         update(fresh);
         // the sizer gets its new size when the adapter commits this view
@@ -993,16 +1048,33 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     // ── scroll and wheel ─────────────────────────────────────────────────────
 
     function onScroll() {
-        if (!viewport) return;
-        rowsY.sync(viewport.scrollTop);
-        columnsX.sync(viewport.scrollLeft);
-        update();
+        // the scroll the engine made itself lands where it is: the layers only
+        if (syncScroll()) update();
+        else writeLayers();
+    }
+
+    /**
+     * Listens to the wheel while an axis is scaled, and only then: a listener that is not passive
+     * makes the browser wait for it before it scrolls.
+     */
+    function listenToWheel() {
+        const scaled = rowsY.mapping.scaled || columnsX.mapping.scaled;
+        if (!viewport || scaled === wheelOn) return;
+        wheelOn = scaled;
+        if (scaled) {
+            viewport.addEventListener("wheel", onWheel, { passive: false });
+        } else {
+            viewport.removeEventListener("wheel", onWheel);
+        }
     }
 
     /** Under scaling, the wheel moves the content by exactly its delta (the native scroll would not). */
     function onWheel(event: WheelEvent) {
+        const yScaled = rowsY.mapping.scaled;
+        const xScaled = columnsX.mapping.scaled;
         // a wheel over a grid nested in a cell is that grid's (or the browser's, which chains it)
         if (
+            (!yScaled && !xScaled) ||
             !viewport ||
             event.ctrlKey ||
             event.defaultPrevented ||
@@ -1010,9 +1082,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return;
         }
-        const yScaled = rowsY.mapping.scaled;
-        const xScaled = columnsX.mapping.scaled;
-        if (!yScaled && !xScaled) return;
         const unit =
             event.deltaMode === 1
                 ? LINE_HEIGHT
@@ -1035,8 +1104,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             else viewport.scrollLeft += dx;
         }
         // the scroll event follows (or not, for a sub-pixel move): update now either way
-        rowsY.sync(viewport.scrollTop);
-        columnsX.sync(viewport.scrollLeft);
+        syncScroll();
         update();
     }
 
@@ -1049,7 +1117,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return;
         }
         const { rowIndex, columnIndex, align } = payload;
-        const moves: { top?: number; left?: number } = {};
+        const moves: ScrollMoves = {};
         if (
             rowIndex !== undefined &&
             rowIndex >= 0 &&
@@ -1059,9 +1127,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const start = rowAxis.offsetOf(rowIndex);
             const target = scrollTargetForSpan(
                 start,
-                start +
-                    rowAxis.sizeOf(rowIndex) -
-                    rowAxis.extraSizeOf(rowIndex),
+                start + cellsSizeOf(rowAxis, rowIndex),
                 rowsY.virtual,
                 bodyHeight(),
                 rowAxis.totalSize,
@@ -1087,12 +1153,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             );
             // compared where it was computed: a column in view moves nothing, exactly
             if (target !== from) {
-                moves.left = columnsX.scrollTo(
-                    Math.min(
-                        Math.max(target - pinnedWidth, 0),
-                        Math.max(0, columnAxis.totalSize - width),
-                    ),
-                );
+                moves.left = columnsX.scrollTo(target - pinnedWidth);
             }
         }
         if (moves.top === undefined && moves.left === undefined) return;
@@ -1101,7 +1162,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     function scrollTo({ top, left }: EngineActionMap["scroll-to"]) {
-        const moves: { top?: number; left?: number } = {};
+        const moves: ScrollMoves = {};
         if (top !== undefined) moves.top = rowsY.scrollTo(top);
         if (left !== undefined) moves.left = columnsX.scrollTo(left);
         update();
@@ -1114,17 +1175,25 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function columnToScrollTo(position: CellPosition): number | undefined {
         if (position.rowIndex >= 0) return position.columnIndex;
-        const cell = state.header.cellAt(
-            position.rowIndex,
-            position.columnIndex,
-        );
+        const cell = headerCellAt(position);
         if (!cell || cell.columnSpan <= 1) return position.columnIndex;
         // a pinned group is always in view
         if (cell.columnIndex + cell.columnSpan <= pinnedCount) return undefined;
         const end = cell.columnIndex + cell.columnSpan;
-        const { start: from, end: to } = columnWindow.visible;
-        if (cell.columnIndex < to && end > from) return undefined;
-        return end <= from ? end - 1 : cell.columnIndex;
+        if (overlaps(columnWindow.visible, cell.columnIndex, end)) {
+            return undefined;
+        }
+        return end <= columnWindow.visible.start ? end - 1 : cell.columnIndex;
+    }
+
+    /** What scrolls a cell into view: its row (a body row), its column. */
+    function scrollPayloadFor(
+        position: CellPosition,
+    ): EngineActionMap["scroll-to-cell"] {
+        return {
+            rowIndex: position.rowIndex >= 0 ? position.rowIndex : undefined,
+            columnIndex: columnToScrollTo(position),
+        };
     }
 
     // ── focus ────────────────────────────────────────────────────────────────
@@ -1162,10 +1231,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** Where a cell's element is: a header cell's top row and first column. */
     function elementPosition(position: CellPosition): CellPosition {
         if (position.rowIndex >= 0) return position;
-        const cell = state.header.cellAt(
-            position.rowIndex,
-            position.columnIndex,
-        );
+        const cell = headerCellAt(position);
         return cell
             ? { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex }
             : position;
@@ -1187,16 +1253,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         };
     }
 
+    /** Makes the first cell in view active, to focus it; refused (or none), nothing to focus. */
+    function focusFirstVisibleCell() {
+        const first = firstVisibleCell();
+        // refused: a middleware, a controlled parent
+        if (!first || !model.run("active-position.set", first).ok) {
+            pendingFocus = false;
+        }
+    }
+
     /**
      * The first row in view whose cells are: one whose cells scrolled above the view while its
      * detail shows is passed over (when a row follows it).
      */
     function firstRowWithCellsInView(): number {
         const first = rowWindow.visible.start;
-        const cellsEnd =
-            rowAxis.offsetOf(first) +
-            rowAxis.sizeOf(first) -
-            rowAxis.extraSizeOf(first);
+        const cellsEnd = rowAxis.offsetOf(first) + cellsSizeOf(rowAxis, first);
         // the next row only when it is in view too (a detail may fill the view)
         return cellsEnd <= rowsY.virtual && first + 1 < rowWindow.visible.end
             ? first + 1
@@ -1205,23 +1277,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Whether an event comes from this grid itself, not from a grid nested in one of its cells. */
     function inViewport(target: EventTarget | null): boolean {
-        return Boolean(
-            viewport && isElement(target) && ownerViewport(target) === viewport,
+        return (
+            viewport !== null &&
+            isElement(target) &&
+            ownerViewport(target) === viewport
         );
     }
 
     /** Whether a key from `target` is the grid's: from one of its cells, its viewport or a layer. */
-    function ownsKeysOf(target: EventTarget | null): boolean {
-        if (target === viewport) return true;
-        if (!isElement(target)) return false;
-        // the layers that hold rows: a detail's keys are its content's (a pinned cell is a cell)
-        const owned: ReadonlySet<Element>[] = [
-            layers.grid,
-            layers.header,
-            layers.body,
-        ];
-        if (owned.some((elements) => elements.has(target))) return true;
-        return cellOf(target) !== null;
+    function ownsKeysOf(target: Element): boolean {
+        return (
+            target === viewport ||
+            rowLayers.some((elements) => elements.has(target)) ||
+            cellOf(target) !== null
+        );
     }
 
     /**
@@ -1235,20 +1304,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         for (; node && node !== viewport; node = node.parentElement) {
             // below another grid's viewport: whatever was found belongs to that grid
             if (VIEWPORTS.has(node)) cell = null;
-            else if (
-                !cell &&
-                node.hasAttribute("data-row-index") &&
-                node.hasAttribute("data-column-index")
-            ) {
-                cell = node;
-            }
+            else if (!cell && isCellNode(node)) cell = node;
         }
         if (node !== viewport || !cell) return null;
         const rowIndex = Number(cell.getAttribute("data-row-index"));
         const columnIndex = Number(cell.getAttribute("data-column-index"));
-        if (!Number.isInteger(rowIndex) || !Number.isInteger(columnIndex))
-            return null;
-        return { rowIndex, columnIndex };
+        return Number.isInteger(rowIndex) && Number.isInteger(columnIndex)
+            ? { rowIndex, columnIndex }
+            : null;
     }
 
     // ── interaction: a cell's controls have the keys (Epic #52) ──────────────
@@ -1256,34 +1319,29 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** This grid's own element of a cell (a nested grid may have one at the same indexes). */
     function cellElement(position: CellPosition): HTMLElement | null {
         if (!viewport) return null;
-        const owned = viewport;
-        return (
-            [
-                ...viewport.querySelectorAll<HTMLElement>(
-                    cellSelector(elementPosition(position)),
-                ),
-            ].find((element) => ownerViewport(element) === owned) ?? null
-        );
+        const selector = cellSelector(elementPosition(position));
+        for (const element of viewport.querySelectorAll<HTMLElement>(
+            selector,
+        )) {
+            if (ownerViewport(element) === viewport) return element;
+        }
+        return null;
     }
 
     /** Whether an element is one of this grid's cells (or header cells) itself. */
     function isCellElement(element: Element): boolean {
-        return (
-            element.hasAttribute("data-row-index") &&
-            element.hasAttribute("data-column-index") &&
-            ownerViewport(element) === viewport
-        );
+        return isCellNode(element) && ownerViewport(element) === viewport;
     }
 
     /**
      * A cell's controls, in order: what takes focus inside it, its own (a nested grid's are that
-     * grid's), and not disabled.
+     * grid's), and not disabled. `cell` is one of this grid's.
      */
     function controlsOf(cell: Element): HTMLElement[] {
-        const owned = viewport;
         return [...cell.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
             (element) =>
-                ownerViewport(element) === owned &&
+                // inside the cell with no grid between (a nested grid's viewport is no control)
+                !VIEWPORTS.has(element) &&
                 cellElementOf(element) === cell &&
                 // the app's own tab stop is no control of the grid's: never cycled, never entered
                 !element.hasAttribute(TAB_STOP_ATTRIBUTE) &&
@@ -1315,7 +1373,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return false;
     }
 
-    /** The nearest cell of this grid holding an element (itself excluded). */
+    /** The nearest cell holding an element (itself excluded), with no grid's viewport between. */
     function cellElementOf(element: Element): Element | null {
         for (
             let node = element.parentElement;
@@ -1323,12 +1381,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             node = node.parentElement
         ) {
             if (VIEWPORTS.has(node)) return null;
-            if (
-                node.hasAttribute("data-row-index") &&
-                node.hasAttribute("data-column-index")
-            ) {
-                return node;
-            }
+            if (isCellNode(node)) return node;
         }
         return null;
     }
@@ -1339,11 +1392,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * app's.
      */
     function manageTabOrder(cell: Element) {
-        const position = cellOf(cell);
         const interacting =
-            interaction !== null &&
-            position !== null &&
-            sameCell(interaction, position, state.header.cellAt);
+            interaction !== null && same(cellOf(cell), interaction);
         for (const control of controlsOf(cell)) {
             if (interacting) restoreTabIndex(control);
             else if (control.getAttribute("tabindex") !== "-1") {
@@ -1377,15 +1427,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** Every cell of this grid under a node (the node itself included). */
     function cellsUnder(node: Node): Element[] {
         if (!isElement(node)) return [];
-        const cells = [
-            ...node.querySelectorAll("[data-row-index][data-column-index]"),
-        ];
-        if (
-            node.hasAttribute("data-row-index") &&
-            node.hasAttribute("data-column-index")
-        ) {
-            cells.unshift(node);
-        }
+        const cells = [...node.querySelectorAll(CELL_SELECTOR)];
+        if (isCellNode(node)) cells.unshift(node);
         return cells.filter((cell) => ownerViewport(cell) === viewport);
     }
 
@@ -1397,10 +1440,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const target = record.target;
             if (isElement(target)) {
                 const name = record.attributeName;
+                const isCell = isCellElement(target);
                 // the grid's own write, and a cell's own roving tab index, change no control
                 if (
                     name === "tabindex" &&
-                    (isCellElement(target) ||
+                    (isCell ||
                         writtenTabIndex.get(target) ===
                             target.getAttribute("tabindex"))
                 ) {
@@ -1409,10 +1453,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 if (name === "data-row-index" || name === "data-column-index") {
                     moved = true;
                 }
-                const holder = isCellElement(target)
-                    ? target
-                    : cellElementOf(target);
-                if (holder) touched.add(holder);
+                const holder = isCell ? target : cellElementOf(target);
+                // a nested grid's cell is that grid's
+                if (holder && (isCell || ownerViewport(holder) === viewport)) {
+                    touched.add(holder);
+                }
             }
             for (const added of record.addedNodes) {
                 for (const cell of cellsUnder(added)) touched.add(cell);
@@ -1429,19 +1474,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const focused = viewport?.ownerDocument.activeElement;
         const holder = focused ? cellElementOf(focused) : null;
         const now = holder ? cellOf(holder) : null;
-        if (
-            now &&
-            interaction &&
-            sameCell(now, interaction, state.header.cellAt)
-        ) {
-            return;
-        }
+        if (now && same(interaction, now)) return;
         interaction = null;
-        if (now) enterCell(now, false);
-        else emitInteraction();
+        // an entry that does not happen (a controlled parent to follow) tells nothing itself
+        if (!now || !enterCell(now, false)) emitInteraction();
     }
 
     function emitInteraction() {
+        viewStale = true;
         update();
         emit("interaction", interaction);
     }
@@ -1453,21 +1493,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function enterCell(
         position: CellPosition,
         focus: boolean,
-        activate = true,
+        activating = true,
     ): boolean {
         const cell = cellElement(position);
         if (!cell) return false;
         const controls = controlsOf(cell);
         if (controls.length === 0) return false;
         const at = cellOf(cell) ?? position;
-        const active = state.activePosition;
-        if (!active || !sameCell(active, at, state.header.cellAt)) {
+        if (!same(state.activePosition, at)) {
             // asked once: a caller that asked already (a focus) waits for the answer instead
-            if (activate) model.run("active-position.set", at);
+            if (activating) model.run("active-position.set", at);
             // the cell in interaction is always the active one: a controlled parent that follows
             // later makes it so (the entry waits for it); a middleware that redirected it, never
-            const now = state.activePosition;
-            if (!now || !sameCell(now, at, state.header.cellAt)) {
+            if (!same(state.activePosition, at)) {
                 pendingInteraction = { position: at, focus };
                 return false;
             }
@@ -1524,24 +1562,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /** Tab and Shift+Tab in interaction: the cell's next or previous control, wrapping around. */
-    function cycleControls(
-        cell: Element,
-        from: EventTarget | null,
-        back: boolean,
-    ) {
+    function cycleControls(cell: Element, from: Element, back: boolean) {
         const controls = controlsOf(cell);
         if (controls.length === 0) return;
-        // the control itself, else the innermost one holding it (a wrapper holds its buttons)
-        let at = controls.findIndex((control) => control === from);
-        if (at < 0) {
-            controls.forEach((control, i) => {
-                if (isElement(from) && control.contains(from)) at = i;
-            });
-        }
-        const back1 = back ? -1 : 1;
-        const start = at < 0 ? (back ? controls.length - 1 : 0) : at + back1;
+        // the control itself, else the innermost one holding it (a wrapper holds its buttons):
+        // the last one, in document order, that contains it
+        let at = controls.length - 1;
+        while (at >= 0 && !controls[at]?.contains(from)) at--;
+        const step = back ? -1 : 1;
+        const start = at < 0 ? (back ? controls.length - 1 : 0) : at + step;
         // a control that cannot take focus (hidden by the app's CSS) is passed over
-        focusFrom(controls, start, back1);
+        focusFrom(controls, start, step);
     }
 
     function onPointerDown(event: PointerEvent) {
@@ -1560,24 +1591,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (!cell || cell.rowIndex >= 0 || !isElement(target)) return null;
         for (
             let node: Element | null = target;
-            node &&
-            !(
-                node.hasAttribute("data-row-index") &&
-                node.hasAttribute("data-column-index")
-            );
+            node && !isCellNode(node);
             node = node.parentElement
         ) {
             if (isControl(node)) return null;
         }
-        const column = state.header.cellAt(
-            cell.rowIndex,
-            cell.columnIndex,
-        )?.column;
+        const column = headerCellAt(cell)?.column;
         return column?.sortable === true ? column : null;
-    }
-
-    function toggleSort(column: Column<TRow, TNode>, multi: boolean) {
-        model.run("sort-columns.toggle", { columnKey: column.key, multi });
     }
 
     function click(event: MouseEvent): boolean {
@@ -1604,7 +1624,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         const column = sortableColumnOf(event.target);
         if (!column) return false;
-        toggleSort(column, event.ctrlKey || event.metaKey);
+        model.run("sort-columns.toggle", {
+            columnKey: column.key,
+            multi: event.ctrlKey || event.metaKey,
+        });
         return true;
     }
 
@@ -1617,11 +1640,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     function onFocusOut(event: FocusEvent) {
         const next = event.relatedTarget;
+        const inside = isElement(next) && viewport?.contains(next) === true;
         // focus leaving the cell in interaction (elsewhere in the page, a portal): navigation
         // focus gone from the grid: an entry waiting for its cell would pull it back, it is dropped
         if (
             pendingInteraction &&
-            !(isElement(next) && viewport?.contains(next)) &&
+            !inside &&
             viewport?.ownerDocument.hasFocus() !== false
         ) {
             pendingInteraction = null;
@@ -1635,47 +1659,28 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 leaveCell(false);
             }
         }
-        if (
-            viewport &&
-            next &&
-            typeof next === "object" &&
-            "nodeType" in next &&
-            !viewport.contains(next as unknown as Element)
-        ) {
-            pendingFocus = false;
-        }
+        if (viewport && next && !inside) pendingFocus = false;
     }
 
     function onFocusIn(event: FocusEvent) {
-        const cell = cellOf(event.target);
-        if (cell && (rowsY.mapping.scaled || columnsX.mapping.scaled)) {
-            // the browser scrolled the focused cell into view itself (a Tab): under scaling its
-            // scroll would map to a far jump, so the engine makes the move, exact, instead
-            scrollToCell({
-                rowIndex: cell.rowIndex >= 0 ? cell.rowIndex : undefined,
-                columnIndex: columnToScrollTo(cell),
-            });
-        }
+        const target = event.target;
+        const cell = cellOf(target);
         if (cell) {
-            const active = state.activePosition;
-            // a header cell spanning rows is already active on any of its rows
-            if (!active || !sameCell(active, cell, state.header.cellAt)) {
-                model.run("active-position.set", cell);
+            if (rowsY.mapping.scaled || columnsX.mapping.scaled) {
+                // the browser scrolled the focused cell into view itself (a Tab): under scaling its
+                // scroll would map to a far jump, so the engine makes the move, exact, instead
+                scrollToCell(scrollPayloadFor(cell));
             }
-            const target = event.target;
+            // a header cell spanning rows is already active on any of its rows
+            activate(cell);
             if (
                 isElement(target) &&
                 !isCellElement(target) &&
                 !target.hasAttribute(TAB_STOP_ATTRIBUTE)
             ) {
-                // a control took focus (a click, a Tab in the cell): its cell is in interaction
-                if (
-                    !interaction ||
-                    !sameCell(interaction, cell, state.header.cellAt)
-                ) {
-                    // the activation was asked above: not twice (a controlled parent reports it)
-                    enterCell(cell, false, false);
-                }
+                // a control took focus (a click, a Tab in the cell): its cell is in interaction;
+                // the activation was asked above: not twice (a controlled parent reports it)
+                if (!same(interaction, cell)) enterCell(cell, false, false);
             } else if (interaction) {
                 // the cell itself (or another one) took focus: back to navigation
                 leaveCell(false);
@@ -1684,25 +1689,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // the grid or the scroll container itself took focus (Tab into the grid; Firefox makes a
         // scroll container a tab stop): hand it to the active cell, or the first in view
-        const target = event.target;
         if (
             target !== viewport &&
-            !(isElement(target) && gridLayers().has(target))
+            !(
+                isElement(target) &&
+                (layers.grid as ReadonlySet<Element>).has(target)
+            )
         ) {
             return;
         }
         // a click on empty space focuses the container: that is no reason to activate a cell
         if (pointerDown) return;
         pendingFocus = true;
-        if (state.activePosition) {
-            flushFocus();
-            return;
-        }
-        const first = firstVisibleCell();
-        // refused (a middleware, a controlled parent): nothing to focus
-        if (!first || !model.run("active-position.set", first).ok) {
-            pendingFocus = false;
-        }
+        if (state.activePosition) flushFocus();
+        else focusFirstVisibleCell();
     }
 
     /**
@@ -1710,10 +1710,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * row, Shift+Up/Down (many rows) move and extend the selection to the row reached, Ctrl/⌘+A
      * selects every row. Each goes through a command, so a middleware can refuse it.
      */
-    function selectionKey(event: KeyboardEvent): boolean {
+    function selectionKey(event: KeyboardEvent, target: Element): boolean {
         const mode = state.rowSelection;
-        const target = event.target;
-        if (!mode || !isElement(target) || !isCellElement(target)) return false;
+        if (!mode || !isCellElement(target)) return false;
         const position = cellOf(target);
         if (!position || position.rowIndex < 0) return false;
         const rowIndex = position.rowIndex;
@@ -1775,22 +1774,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     function keydown(event: KeyboardEvent): boolean {
+        const target = event.target;
+        const ctrl = event.ctrlKey || event.metaKey;
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
         // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
         // and neither is one from the app's content beside the cells (an empty state's action)
         if (
             event.defaultPrevented ||
             event.altKey ||
-            !inViewport(event.target)
+            !isElement(target) ||
+            !inViewport(target)
         ) {
             return false;
         }
         // in interaction, the cell's controls have the keys: the grid takes Escape (back to the
         // cell) and Tab (the cell's next control, wrapping) only, from a field too
-        const target = event.target;
         if (
             interaction &&
-            isElement(target) &&
             !isCellElement(target) &&
             // the app's own tab stop and a composition in progress (an IME) keep their keys
             !target.hasAttribute(TAB_STOP_ATTRIBUTE) &&
@@ -1803,7 +1803,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     leaveCell(true);
                     return true;
                 }
-                if (event.key === "Tab" && !event.ctrlKey && !event.metaKey) {
+                if (event.key === "Tab" && !ctrl) {
                     event.preventDefault();
                     cycleControls(cell, target, event.shiftKey);
                     return true;
@@ -1825,14 +1825,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
         }
         if (isEditable(target) || !ownsKeysOf(target)) return false;
-        const ctrl = event.ctrlKey || event.metaKey;
         if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) {
             // Enter or Space on a sortable column's header cell toggles its sort, once per press:
             // a key held down repeats, and would cycle through the sort
-            const column = sortableColumnOf(event.target);
+            const column = sortableColumnOf(target);
             if (column) {
                 event.preventDefault();
-                if (!event.repeat) toggleSort(column, ctrl);
+                if (!event.repeat) {
+                    model.run("sort-columns.toggle", {
+                        columnKey: column.key,
+                        multi: ctrl,
+                    });
+                }
                 return true;
             }
         }
@@ -1842,7 +1846,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             (event.key === "Enter" || event.key === "F2") &&
             !ctrl &&
             !event.shiftKey &&
-            isElement(target) &&
             isCellElement(target)
         ) {
             const position = cellOf(target);
@@ -1856,13 +1859,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return true;
             }
         }
-        if (selectionKey(event)) return true;
-        if (
-            event.key === " " &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            rowsY.mapping.scaled
-        ) {
+        if (selectionKey(event, target)) return true;
+        if (event.key === " " && !ctrl && rowsY.mapping.scaled) {
             // the browser would page the container natively, a far jump under scaling
             event.preventDefault();
             scrollTo({
@@ -1876,10 +1874,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         event.preventDefault();
         pendingFocus = true;
         if (!state.activePosition) {
-            const first = firstVisibleCell();
-            if (!first || !model.run("active-position.set", first).ok) {
-                pendingFocus = false;
-            }
+            focusFirstVisibleCell();
             return true;
         }
         const visible = rowWindow.visible.end - rowWindow.visible.start;
@@ -1897,14 +1892,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Whether the view renders a row of the range: in the rendered rows, or the active row. */
     function rendersRows(range: Range): boolean {
-        const rendered = view.renderedRows;
-        if (range.start < rendered.end && rendered.start < range.end)
-            return true;
         const active = state.activePosition;
         return (
-            active !== null &&
-            active.rowIndex >= range.start &&
-            active.rowIndex < range.end
+            overlaps(view.renderedRows, range.start, range.end) ||
+            (active !== null &&
+                overlaps(range, active.rowIndex, active.rowIndex + 1))
         );
     }
 
@@ -1915,8 +1907,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return { rowIndex, within: rowsY.virtual - axis.offsetOf(rowIndex) };
     }
 
-    const unsubscribeModel = model.subscribe((event) => {
-        const { before, after } = event;
+    const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
         const detailsChanged =
             after.expandedRows !== before.expandedRows ||
@@ -1932,11 +1923,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                                     after.rowsChanged.end,
                                 ))))));
         if (after.rowsChanged !== before.rowsChanged) {
+            const rendered = rendersRows(after.rowsChanged);
             // rows' data changed, and nothing else did: off screen, there is nothing to do
-            if (!rendersRows(after.rowsChanged) && !detailsChanged) return;
-            if (rendersRows(after.rowsChanged)) rowsRevision += 1;
+            if (!rendered && !detailsChanged) return;
+            if (rendered) rowsRevision += 1;
         }
-        let fresh = false;
         const rowsResized =
             after.rowCount !== before.rowCount ||
             after.rowHeight !== before.rowHeight;
@@ -1945,13 +1936,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 after.rowHeight === before.rowHeight
                     ? baseRowAxis.withCount(after.rowCount)
                     : rowAxisOf(after);
-            fresh = true;
         }
         let anchored = false;
         if (rowsResized || detailsChanged) {
             const anchor = rowsResized ? null : anchorOf(rowAxis);
             rowAxis = withDetails(baseRowAxis, after);
-            fresh = true;
             // a row expanding or collapsing above the view keeps the view where it is (M2)
             if (anchor) {
                 rowsY.virtual =
@@ -1960,18 +1949,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 anchored = true;
             }
         }
-        if (after.columns !== before.columns) {
+        const columnsChanged = after.columns !== before.columns;
+        if (columnsChanged) {
             columnAxis = columnAxisOf(after);
             updatePinning();
-            fresh = true;
         }
-        if (
-            after.headerRowHeight !== before.headerRowHeight ||
-            after.header !== before.header
-        ) {
-            fresh = true;
-        }
-        relayout(fresh);
+        relayout(
+            rowsResized ||
+                detailsChanged ||
+                columnsChanged ||
+                after.headerRowHeight !== before.headerRowHeight ||
+                after.header !== before.header,
+        );
         if (anchored) {
             // the physical scroll follows even when the total did not change (no remap moved it)
             const top = rowsY.scrollTo(rowsY.virtual);
@@ -1981,32 +1970,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // another cell made active (the app, a middleware): the interaction ends, and an entry
         // waiting for another cell is dropped
-        if (
-            interaction &&
-            !(
-                after.activePosition &&
-                sameCell(after.activePosition, interaction, after.header.cellAt)
-            )
-        ) {
+        if (interaction && !same(after.activePosition, interaction)) {
             leaveCell(false);
         }
-        if (pendingInteraction) {
-            const waiting = pendingInteraction;
-            const now = after.activePosition;
-            if (!now || !sameCell(now, waiting.position, after.header.cellAt)) {
-                if (now !== before.activePosition) pendingInteraction = null;
-            } else if (cellElement(waiting.position)) {
-                // a controlled parent followed: the cell enters now
-                enterCell(waiting.position, waiting.focus);
-            }
+        const waiting = pendingInteraction;
+        if (waiting && same(after.activePosition, waiting.position)) {
+            // a controlled parent followed: the cell enters now (once rendered)
+            enterCell(waiting.position, waiting.focus);
+        } else if (waiting && after.activePosition !== before.activePosition) {
+            pendingInteraction = null;
         }
         const active = after.activePosition;
         if (active && active !== before.activePosition) {
             if (focusInside()) pendingFocus = true;
-            scrollToCell({
-                rowIndex: active.rowIndex >= 0 ? active.rowIndex : undefined,
-                columnIndex: columnToScrollTo(active),
-            });
+            scrollToCell(scrollPayloadFor(active));
         }
     });
 
@@ -2018,11 +1995,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             detachViewport?.();
             viewport = element;
             VIEWPORTS.add(element);
-            const view = element.ownerDocument.defaultView;
+            const doc = element.ownerDocument;
+            const defaultView = doc.defaultView;
             readSize();
             const observer =
-                view && "ResizeObserver" in view
-                    ? new view.ResizeObserver(() => {
+                defaultView && "ResizeObserver" in defaultView
+                    ? new defaultView.ResizeObserver(() => {
                           readSize();
                           relayout(false);
                       })
@@ -2031,8 +2009,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // the controls the cells render, now and later (a commit, the app's own re-render):
             // kept out of the tab order outside interaction (only cells that changed are read)
             const mutations =
-                view && "MutationObserver" in view
-                    ? new view.MutationObserver(onMutations)
+                defaultView && "MutationObserver" in defaultView
+                    ? new defaultView.MutationObserver(onMutations)
                     : null;
             mutations?.observe(element, {
                 subtree: true,
@@ -2051,45 +2029,27 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 ],
             });
             for (const cell of cellsUnder(element)) manageTabOrder(cell);
+            // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
-            element.addEventListener("wheel", onWheel, { passive: false });
             element.addEventListener("focusin", onFocusIn);
             element.addEventListener("pointerdown", onPointerDown, {
                 capture: true,
             });
-            const doc = element.ownerDocument;
             doc.addEventListener("pointerup", onPointerEnd, true);
             doc.addEventListener("pointercancel", onPointerEnd, true);
             element.addEventListener("focusout", onFocusOut);
             // the real mappings first, so a scroll already set (restored) is read, not reset
-            rowsY.mapping = createScrollMapping(
-                rowAxis.totalSize,
-                bodyHeight(),
-                maxScroll(),
-            );
-            columnsX.mapping = createScrollMapping(
-                columnAxis.totalSize,
-                width,
-                maxScroll(),
-            );
-            rowsY.sync(element.scrollTop);
-            columnsX.sync(element.scrollLeft);
+            rowsY.mapping = rowMapping();
+            columnsX.mapping = columnMapping();
+            syncScroll();
             // pinned cells may have registered while it was detached: write them all
             pinnedFor = null;
             relayout(true);
             writeLayers();
             // what was asked before the grid had a size: a scroll to a cell, or the active cell
+            const active = state.activePosition;
             const initial =
-                pendingCellScroll ??
-                (state.activePosition
-                    ? {
-                          rowIndex:
-                              state.activePosition.rowIndex >= 0
-                                  ? state.activePosition.rowIndex
-                                  : undefined,
-                          columnIndex: columnToScrollTo(state.activePosition),
-                      }
-                    : null);
+                pendingCellScroll ?? (active ? scrollPayloadFor(active) : null);
             pendingCellScroll = null;
             if (initial) scrollToCell(initial);
             let attached = true;
@@ -2114,6 +2074,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     VIEWPORTS.delete(element);
                     viewport = null;
                     detachViewport = null;
+                    wheelOn = false;
                 }
             };
             detachViewport = detach;
@@ -2123,23 +2084,36 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             layers[layer].add(element);
             written.delete(element);
             // only this element: a row of pinned cells mounting does not rewrite every other one
-            const offsets = layerOffsets();
-            if (!offsets) {
+            if (!isInsetLayer(layer)) {
+                // the next write is for every layer: this one may miss what the last one wrote
+                layerX = Number.NaN;
+                if (viewport && committed && layer !== "grid") {
+                    write(
+                        element,
+                        layerTransform(
+                            layer,
+                            offsetX(committed, viewport),
+                            offsetY(committed, viewport),
+                        ),
+                    );
+                }
+            } else if (viewport && committed) {
+                writeInset(
+                    layer,
+                    element,
+                    offsetX(committed, viewport),
+                    committed.columnAxis,
+                );
+            } else {
                 // nothing to write for yet (a detached viewport: a root re-mounting while its
                 // cells stay): the next write is for every pinned cell
-                if (layer === "pinned" || layer === "detail") pinnedFor = null;
-            } else if (layer === "pinned" || layer === "detail") {
-                writeInset(layer, element, offsets.x, offsets.columnAxis);
-            } else if (layer !== "grid") {
-                write(element, layerTransform(layer, offsets.x, offsets.y));
+                pinnedFor = null;
             }
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
                 // a cell no longer pinned keeps no inset of the engine's: its adapter places it
-                if (layer === "pinned" || layer === "detail") {
-                    element.style.left = "";
-                }
+                if (isInsetLayer(layer)) element.style.left = "";
             };
         },
         getView: () => view,
@@ -2163,8 +2137,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pendingScroll = {};
             if (moves.top !== undefined || moves.left !== undefined) {
                 applyScroll(moves);
-                rowsY.sync(viewport?.scrollTop ?? 0);
-                columnsX.sync(viewport?.scrollLeft ?? 0);
+                syncScroll();
                 update();
             }
             writeLayers();
@@ -2175,13 +2148,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
             // an entry waiting for its cell (out of view, a row loading): it enters once shown with
             // controls, and waits on otherwise
-            if (
-                pendingInteraction &&
-                cellElement(pendingInteraction.position)
-            ) {
-                const { position, focus } = pendingInteraction;
-                enterCell(position, focus);
-            }
+            const waiting = pendingInteraction;
+            if (waiting) enterCell(waiting.position, waiting.focus);
             flushFocus();
         },
         keydown,
@@ -2218,10 +2186,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "scroll-to-cell": scrollToCell,
         "scroll-to": scrollTo,
         "interact-cell": (position) => {
-            const active = state.activePosition;
-            if (!active || !sameCell(active, position, state.header.cellAt)) {
-                model.run("active-position.set", position);
-            }
+            activate(position);
             if (enterCell(position, true, false)) return;
             // not rendered (out of view), no controls yet (a row loading), or a controlled parent
             // to follow: entered once its cell is active and shows controls
@@ -2354,7 +2319,7 @@ export function renderedWidth<TRow, TNode>(
 ): number {
     const last = view.columns[view.columns.length - 1];
     if (last === undefined) return 0;
-    return view.columnAxis.offsetOf(last + 1) - view.columnBase - rowLeft(view);
+    return leftInRow(view, view.columnAxis.offsetOf(last + 1), false);
 }
 
 /**
@@ -2381,7 +2346,7 @@ export function headerCellBox<TRow, TNode>(
     if (axis.totalSize > view.width && !pinned) {
         // the rendered columns it reaches into, or the active column it is rendered for
         const rendered = view.renderedColumns;
-        const reaches = from < rendered.end && to > rendered.start;
+        const reaches = overlaps(rendered, from, to);
         const extra = view.columns.find(
             (c) =>
                 (c < rendered.start || c >= rendered.end) &&
@@ -2441,7 +2406,7 @@ export function rowCellsHeight<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
 ): number {
-    return view.rowAxis.sizeOf(rowIndex) - view.rowAxis.extraSizeOf(rowIndex);
+    return cellsSizeOf(view.rowAxis, rowIndex);
 }
 
 /**
@@ -2480,10 +2445,7 @@ export function rowWidth<TRow, TNode>(
 ): number {
     const width = renderedWidth(view);
     if (!rowExpanded(view, rowIndex)) return width;
-    return Math.max(
-        width,
-        view.viewportWidth - view.columnBase - rowLeft(view),
-    );
+    return Math.max(width, leftInRow(view, view.viewportWidth, false));
 }
 
 /**

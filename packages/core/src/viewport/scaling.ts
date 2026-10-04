@@ -81,6 +81,15 @@ export function createScrollMapping(
     };
 }
 
+/** Whether two mappings lay an axis out alike (the rest of a mapping follows from these). */
+export function sameMapping(a: ScrollMapping, b: ScrollMapping): boolean {
+    return (
+        a.virtualSize === b.virtualSize &&
+        a.viewportSize === b.viewportSize &&
+        a.physicalSize === b.physicalSize
+    );
+}
+
 /**
  * The scroll position of one axis: the virtual offset the grid shows, kept exact through the moves
  * the engine makes, and remapped from the physical scroll on the moves it did not make.

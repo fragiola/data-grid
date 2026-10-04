@@ -565,4 +565,26 @@ describe("epic review cases", () => {
         expect(engine.adapter.getView().interaction).toBeNull();
         expect(seen).toEqual([null]);
     });
+
+    it("tells the end of the interaction when the cell holding focus moves and it cannot follow", async () => {
+        const { engine, model, actions, key } = setup();
+        key(actions, "Enter");
+        const seen: (CellPosition | null)[] = [];
+        engine.subscribe("interaction", (value) => seen.push(value));
+        // a controlled parent that has not followed yet: the cell cannot be made active
+        model.use((ctx, next) =>
+            ctx.command === "active-position.set"
+                ? {
+                      ok: false,
+                      error: { code: "vetoed", message: "controlled" },
+                  }
+                : next(),
+        );
+        // a keyed row re-sorted: the same element, another index
+        actions.dataset.rowIndex = "12";
+        await settled();
+        expect(engine.get("interaction")).toBeNull();
+        expect(engine.adapter.getView().interaction).toBeNull();
+        expect(seen).toEqual([null]);
+    });
 });
