@@ -166,6 +166,7 @@ export interface ViewInputs<TRow, TNode>
         | "rowsRevision"
         | "interaction"
         | "columnResize"
+        | "columnReorder"
     > {
     readonly state: DataGridState<TRow, TNode>;
     readonly rowWindow: AxisWindow;
@@ -260,6 +261,7 @@ const VIEW_KEYS = [
     "isRowSelectable",
     "interaction",
     "columnResize",
+    "columnReorder",
 ] as const satisfies readonly (keyof GridView)[];
 
 /** Whether `next` renders anything `current` does not: a new view to publish. */

@@ -1,3 +1,4 @@
+import { isReorderable } from "../model/order";
 import type {
     CellPosition,
     HeaderCellLayout,
@@ -82,6 +83,12 @@ export interface HeaderCellState {
     readonly resizable: boolean;
     /** a drag is resizing it (its resizer's) */
     readonly resizing: boolean;
+    /** its column or group can be moved among its siblings (its drag, Ctrl/⌘+Shift+←/→) */
+    readonly reorderable: boolean;
+    /** a drag is moving it */
+    readonly dragging: boolean;
+    /** a drag would drop beside it, on this side (the app draws the indicator); else `null` */
+    readonly dropTarget: "before" | "after" | null;
 }
 
 /** The state of a column resizer: the handle the app renders in a resizable header cell. */
@@ -248,10 +255,14 @@ export function headerCellPart<TRow, TNode>(
     );
     const active =
         view.active !== null && sameCell(view.active, cell, view.header.cellAt);
+    const reorder = view.columnReorder;
     return {
         state: {
             resizable: spanResizable(view.columnDefs, cell),
             resizing: view.columnResize?.columnKey === cell.key,
+            reorderable: isReorderable(cell),
+            dragging: reorder?.columnKey === cell.key,
+            dropTarget: reorder?.targetKey === cell.key ? reorder.side : null,
             rowIndex: cell.rowIndex,
             columnIndex: cell.columnIndex,
             columnSpan: cell.columnSpan,

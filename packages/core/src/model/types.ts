@@ -75,6 +75,11 @@ export interface Column<TRow, TNode = unknown> {
     /** a resizable column's widest width in pixels (default: none) */
     readonly maxWidth?: number | undefined;
     /**
+     * whether a person can move it among its siblings (its header cell dragged, or Ctrl/⌘+Shift
+     * with the arrows), the pinned ones among the pinned. The grid keeps the order
+     */
+    readonly reorderable?: boolean | undefined;
+    /**
      * how two rows compare by this column, for sorting rows in memory (`@fragiola/data-grid/local`):
      * negative when `a` comes first. Without one, their values compare by type
      */
@@ -122,6 +127,11 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly resizable?: never;
     readonly minWidth?: never;
     readonly maxWidth?: never;
+    /**
+     * whether a person can move it, whole, among its siblings (see {@link Column.reorderable});
+     * its columns move inside it by their own
+     */
+    readonly reorderable?: boolean | undefined;
     /** a group neither sorts nor filters: its columns do */
     readonly compare?: never;
     readonly filter?: never;
@@ -141,6 +151,16 @@ export interface SortColumn {
  * key that is not a column is kept: the column may come back.
  */
 export type ColumnWidths = Readonly<Record<string, number>>;
+
+/**
+ * The order columns and groups take among their siblings, by key (O1): the listed ones take the
+ * places of the listed ones, in this order; the others keep theirs. A key that is no column or
+ * group is kept: it may come back.
+ */
+export type ColumnOrder = readonly string[];
+
+/** Which side of a sibling a moved column or group lands on. */
+export type ReorderSide = "before" | "after";
 
 /** An entry of `columns`: a column, or a group of them. */
 export type ColumnOrGroup<TRow, TNode = unknown> =
@@ -243,9 +263,12 @@ export type RowSource<TRow> =
 
 /** The model's state: immutable, replaced on every committed command. */
 export interface DataGridState<TRow, TNode = unknown> {
-    /** the grid's columns: the leaves of `columnEntries`, in order */
+    /** the grid's columns: the leaves of `columnEntries`, in the column order */
     readonly columns: readonly Column<TRow, TNode>[];
-    /** the columns and groups as declared (the same array as `columns` without groups) */
+    /**
+     * the columns and groups as declared (the same array as `columns` without groups and without
+     * an order)
+     */
     readonly columnEntries: readonly ColumnOrGroup<TRow, TNode>[];
     /** the header's rows and cells */
     readonly header: HeaderLayout<TRow, TNode>;
@@ -288,6 +311,8 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly selectionAnchor: SelectionAnchor | null;
     /** the resized columns' widths, over their `width` (a resizable column's only count) */
     readonly columnWidths: ColumnWidths;
+    /** the order columns and groups take among their siblings (empty: as declared) */
+    readonly columnOrder: ColumnOrder;
 }
 
 /** What `createDataGridModel` starts from. */
@@ -317,6 +342,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     isRowSelectable?: RowSelectable<TRow> | undefined;
     /** the resized columns' widths to start with (an entry that is not a size is dropped) */
     columnWidths?: ColumnWidths;
+    /** the column order to start with (an entry that is not a string is dropped) */
+    columnOrder?: ColumnOrder;
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -487,6 +514,33 @@ export interface CommandMap<TRow, TNode = unknown> {
     "column-widths.reset": {
         payload: { readonly columnKey?: string | undefined };
         result: ColumnWidths;
+    };
+    /**
+     * replaces the column order (keys of columns and groups, each once). A key that is no column
+     * or group is kept: it may come back. Returns it
+     */
+    "column-order.set": {
+        payload: { readonly columnOrder: ColumnOrder };
+        result: ColumnOrder;
+    };
+    /**
+     * moves a reorderable column or group before or after one of its siblings (its parent
+     * group's entries, or the top level; that one may be fixed): a pinned one beside a pinned
+     * one, another beside another. One landing where it is commits nothing. Returns the column
+     * order
+     */
+    "column-order.move": {
+        payload: {
+            readonly columnKey: string;
+            readonly targetKey: string;
+            readonly side: ReorderSide;
+        };
+        result: ColumnOrder;
+    };
+    /** gives the columns and groups their declared order back. Returns the column order */
+    "column-order.reset": {
+        payload: NoPayload;
+        result: ColumnOrder;
     };
     /**
      * changes the row height (a number or a function of the index), the header row's, or an
@@ -677,6 +731,8 @@ export interface QueryMap<TRow, TNode = unknown> {
         payload: { readonly columnKey: string };
         result: number | undefined;
     };
+    /** the order columns and groups take among their siblings */
+    "column-order": { payload: undefined; result: ColumnOrder };
     "row-height": { payload: undefined; result: Size };
     "header-row-height": { payload: undefined; result: number };
     /** the expanded rows' keys, in the order they were expanded */

@@ -2,7 +2,19 @@ import type { Axis } from "../axis/axis";
 import { headerRowCount, pinnedColumnCount } from "../header/header";
 import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
-import type { CellPosition, Column } from "../model/types";
+import {
+    hasReorderable,
+    isReorderable,
+    landingIndex,
+    type Siblings,
+    siblingsOf,
+} from "../model/order";
+import type {
+    CellPosition,
+    Column,
+    HeaderCellLayout,
+    HeaderLayout,
+} from "../model/types";
 import {
     hasResizable,
     resizeMaximum,
@@ -11,6 +23,7 @@ import {
     spanWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
+import { clamp, lowerBound } from "../utils";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
@@ -50,6 +63,7 @@ import {
 import { cellsSizeOf, pinnedInset } from "./geometry";
 import { createInteraction } from "./interaction";
 import type {
+    ColumnReorder,
     ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
@@ -96,22 +110,58 @@ function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
 /** Physical scroll moves, on either axis or both. */
 type ScrollMoves = { top?: number | undefined; left?: number | undefined };
 
-/** A drag on a column resizer (W4): where it started, and where the pointer is. */
-interface ResizeDrag {
+/** A drag the engine follows with the pointer: where it started, and where the pointer is. */
+interface PointerDrag {
+    /** the column's or the group's key */
     readonly columnKey: string;
+    /** it moved past a click's slop (a resizer's at once): Escape and its click are its */
+    dragged: boolean;
     readonly pointerId: number;
     readonly startX: number;
-    /** the column's (or the group's) width when it started */
-    readonly startWidth: number;
-    /** the resizer, holding the pointer */
-    readonly element: HTMLElement;
+    /** what holds the pointer: the resizer, or the dragged header cell */
+    readonly element: Element;
     readonly doc: Document;
-    /** the pointer's last x, and the x the last resize was for */
+    /** the pointer's last x */
     x: number;
-    appliedX: number;
-    /** the animation frame the next resize waits for, if any */
+    /** the animation frame the next step waits for, if any */
     frame: number | null;
 }
+
+/** A drag on a column resizer (W4). */
+interface ResizeDrag extends PointerDrag {
+    readonly kind: "resize";
+    /** the column's (or the group's) width when it started */
+    readonly startWidth: number;
+    /** the x the last resize was for */
+    appliedX: number;
+}
+
+/**
+ * A drag of a reorderable header cell (Epic #75, O3): a press that drags once it moves past a
+ * click's slop (until then, it may be a click), and its siblings, found again when the header
+ * changes.
+ */
+interface ReorderDrag<TRow, TNode> extends PointerDrag {
+    readonly kind: "reorder";
+    readonly startY: number;
+    /** the header its siblings were found in, and them */
+    header: HeaderLayout<TRow, TNode> | null;
+    siblings: Siblings<TRow, TNode> | null;
+}
+
+type Drag<TRow, TNode> = ResizeDrag | ReorderDrag<TRow, TNode>;
+
+/**
+ * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
+ * move with no button, the viewport detached). A resize keeps its width but on a cancel; a
+ * reorder moves only on a release.
+ */
+type DragEnd = "release" | "cancel" | "lost";
+
+/** How near the view's edges a header cell's drag scrolls the columns (O3), in pixels. */
+const EDGE_ZONE = 40;
+/** The edge scroll's pixels per frame at the edge or past it; fewer farther from it. */
+const EDGE_STEP = 20;
 
 /** The keys a focused resizer resizes with (W6). */
 const RESIZE_KEYS: ReadonlySet<string> = new Set([
@@ -185,11 +235,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * interaction): the next update builds a view, which it skips otherwise (D9)
      */
     let viewStale = false;
-    /** the column a drag is resizing, and the drag (Epic #70) */
+    /** the column a drag is resizing (Epic #70), the one a drag is moving (Epic #75), the drag */
     let columnResize: ColumnResize | null = null;
-    let drag: ResizeDrag | null = null;
-    /** the column whose resizer the last press was on: its click is the resizer's */
-    let resizerPress: string | null = null;
+    let columnReorder: ColumnReorder | null = null;
+    let drag: Drag<TRow, TNode> | null = null;
+    /** the last press the grid took (its drag, over or not): once it dragged, its click is its */
+    let lastPress: Drag<TRow, TNode> | null = null;
     /** the cell whose controls have the keys, and an entry waiting for its cell (Epic #52) */
     const interaction = createInteraction({
         getViewport: () => viewport,
@@ -228,6 +279,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "rows-end-reached": new Set(),
         interaction: new Set(),
         "column-resize": new Set(),
+        "column-reorder": new Set(),
     };
 
     function emit<K extends EngineEventKey>(
@@ -266,6 +318,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rowsRevision,
             interaction: interaction.cell,
             columnResize,
+            columnReorder,
             headerRowsFor,
         });
     }
@@ -733,6 +786,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * grid that holds the nested one: the nested grid's own cells are not this grid's.
      */
     function cellOf(target: EventTarget | null): CellPosition | null {
+        const cell = cellNodeOf(target);
+        return cell && positionOf(cell);
+    }
+
+    /** The element of the cell `cellOf` finds. */
+    function cellNodeOf(target: EventTarget | null): Element | null {
         if (!viewport || !isElement(target)) return null;
         let cell: Element | null = null;
         let node: Element | null = target;
@@ -741,7 +800,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (VIEWPORTS.has(node)) cell = null;
             else if (!cell && isCellNode(node)) cell = node;
         }
-        if (node !== viewport || !cell) return null;
+        return node === viewport ? cell : null;
+    }
+
+    /** A cell element's position, from its indexes. */
+    function positionOf(cell: Element): CellPosition | null {
         const rowIndex = Number(cell.getAttribute("data-row-index"));
         const columnIndex = Number(cell.getAttribute("data-column-index"));
         return Number.isInteger(rowIndex) && Number.isInteger(columnIndex)
@@ -771,10 +834,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function onPointerDown(event: PointerEvent) {
         pointerDown = true;
         pressedAt = { x: event.clientX, y: event.clientY };
-        resizerPress = null;
+        lastPress = null;
     }
 
-    // ── column resizing: the drag, the keys, the double click (Epic #70) ─────
+    // ── drags: a resizer's, a header cell's; resizing's keys (Epics #70, #75) ─
 
     /** This grid's column resizer an event happened in (a nested grid's is that grid's). */
     function resizerOf(
@@ -798,100 +861,208 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             : null;
     }
 
-    function setColumnResize(next: ColumnResize | null) {
-        columnResize = next;
+    /** A drag's state changed: a new view, and its event. */
+    function publish<K extends "column-resize" | "column-reorder">(
+        event: K,
+        value: EngineEventMap[K],
+    ) {
         viewStale = true;
         update();
-        emit("column-resize", next);
+        emit(event, value);
+    }
+
+    function setColumnResize(next: ColumnResize | null) {
+        columnResize = next;
+        publish("column-resize", next);
+    }
+
+    function setColumnReorder(next: ColumnReorder | null) {
+        columnReorder = next;
+        publish("column-reorder", next);
     }
 
     /**
      * A press in the grid, after the consumer's own handlers (`preventDefault` cancels it): a
-     * primary press on a resizer starts a drag (W4). With no resizable column there is none.
+     * primary press on a resizer starts a drag (W4), one on a reorderable header cell may become
+     * one (O3). With no resizable or reorderable column there is none.
      */
     function pointerdown(event: PointerEvent): boolean {
-        if (
-            event.defaultPrevented ||
-            event.button !== 0 ||
-            drag ||
-            !hasResizable(state.columns)
-        ) {
+        if (event.defaultPrevented || event.button !== 0 || drag || !viewport) {
             return false;
         }
-        const resizer = resizerOf(event.target);
-        const span = resizer && resizeSpan(resizer.columnKey);
-        if (!resizer || !span || !viewport) return false;
-        const { columnKey, element } = resizer;
-        // a press on a resizer is a drag: no focus (which would activate its header cell and
-        // scroll it into view, away from the pointer), no text selection
-        event.preventDefault();
-        resizerPress = columnKey;
         const doc = viewport.ownerDocument;
+        if (hasResizable(state.columns)) {
+            const resizer = resizerOf(event.target);
+            const span = resizer && resizeSpan(resizer.columnKey);
+            if (resizer && span) {
+                const { columnKey, element } = resizer;
+                // a press on a resizer is a drag: no focus (which would activate its header cell
+                // and scroll it into view, away from the pointer), no text selection
+                event.preventDefault();
+                drag = {
+                    kind: "resize",
+                    columnKey,
+                    dragged: true,
+                    pointerId: event.pointerId,
+                    startX: event.clientX,
+                    startWidth: span.width,
+                    element,
+                    doc,
+                    x: event.clientX,
+                    appliedX: event.clientX,
+                    frame: null,
+                };
+                lastPress = drag;
+                listen(drag);
+                capture(drag);
+                setColumnResize({ columnKey, width: span.width });
+                return true;
+            }
+        }
+        // a header cell's press is not prevented: under the slop it is a click (focus, a sort)
+        const header =
+            hasReorderable(state.columnEntries) && inViewport(event.target)
+                ? headerCellOf(event.target)
+                : null;
+        if (!header || !isReorderable(header.cell)) return false;
         drag = {
-            columnKey,
+            kind: "reorder",
+            columnKey: header.cell.key,
+            dragged: false,
             pointerId: event.pointerId,
             startX: event.clientX,
-            startWidth: span.width,
-            element,
+            startY: event.clientY,
+            element: header.element,
             doc,
             x: event.clientX,
-            appliedX: event.clientX,
             frame: null,
+            header: null,
+            siblings: null,
         };
-        doc.addEventListener("pointermove", onResizeMove, true);
-        // Escape restores wherever focus is (the page, outside the grid), after the app's own
+        lastPress = drag;
+        listen(drag);
+        return true;
+    }
+
+    /**
+     * Follows a press's pointer and keys wherever they go, and keeps the page's own drags (a text
+     * selection, a native drag of an image or a link) out of it.
+     */
+    function listen(current: Drag<TRow, TNode>) {
+        const { doc } = current;
+        doc.addEventListener("pointermove", onDragMove, true);
+        // a press the grid never heard released: the next one ends it
+        doc.addEventListener("pointerdown", onNextPress, true);
+        // Escape ends it wherever focus is (the page, outside the grid), after the app's own
         // handlers: the grid's `keydown` takes it first when focus is in the grid
-        doc.addEventListener("keydown", onResizeKey);
-        element.addEventListener("lostpointercapture", onLostCapture);
+        doc.addEventListener("keydown", onDragKey);
+        doc.addEventListener("selectstart", preventDefault, true);
+        doc.addEventListener("dragstart", preventDefault, true);
+        doc.defaultView?.addEventListener("blur", onWindowBlur);
+    }
+
+    /** The moves come to the drag's element wherever the pointer goes. */
+    function capture(current: Drag<TRow, TNode>) {
+        current.element.addEventListener("lostpointercapture", onLostCapture);
         try {
-            // the moves come to the resizer wherever the pointer goes
-            element.setPointerCapture(event.pointerId);
+            current.element.setPointerCapture(current.pointerId);
         } catch {
             // no pointer to capture (a press the page made up, a DOM without capture): the
             // document still hears the moves and the release
         }
-        setColumnResize({ columnKey, width: span.width });
-        return true;
     }
 
-    /** A move of the dragging pointer: one resize a frame, however often it moves. */
-    function onResizeMove(event: PointerEvent) {
+    /** Whether a drag is on: a resize, or a header cell's past the slop (Escape is its). */
+    function dragging(): boolean {
+        return drag?.dragged === true;
+    }
+
+    /** A move of the dragging pointer: one step a frame, however often it moves. */
+    function onDragMove(event: PointerEvent) {
         if (!drag || event.pointerId !== drag.pointerId) return;
         // no button down any more (a release the page never heard): the drag ends where it is
         if (event.buttons === 0) {
-            endResize(false);
+            endDrag("lost");
+            return;
+        }
+        if (drag.kind === "reorder" && !drag.dragged) {
+            // past a click's slop, the press drags its header cell
+            if (
+                Math.hypot(
+                    event.clientX - drag.startX,
+                    event.clientY - drag.startY,
+                ) > CLICK_SLOP
+            ) {
+                startReorder(drag, event.clientX);
+            }
             return;
         }
         if (event.clientX === drag.x) return;
         drag.x = event.clientX;
-        if (drag.frame !== null) return;
-        const win = drag.doc.defaultView;
-        if (win && "requestAnimationFrame" in win) {
-            drag.frame = win.requestAnimationFrame(onResizeFrame);
-        } else {
-            resizeTo(drag);
-        }
-    }
-
-    function onResizeFrame() {
-        if (!drag) return;
-        drag.frame = null;
-        resizeTo(drag);
-    }
-
-    /** The resizer lost the pointer (removed, or taken by the page): the drag ends where it is. */
-    function onLostCapture(event: PointerEvent) {
-        if (drag && event.pointerId === drag.pointerId) endResize(false);
+        if (!askFrame(drag)) dragTo(drag);
     }
 
     /**
-     * Escape during a drag (focus anywhere, the app's handlers first) restores the width it started
-     * from (W4), once: a handled Escape is prevented, and skipped from then on.
+     * Another press while one is on: a press still under the slop is over (its release was never
+     * heard), and so is a drag whose own pointer presses again.
      */
-    function onResizeKey(event: KeyboardEvent) {
-        if (!drag || event.key !== "Escape" || event.defaultPrevented) return;
+    function onNextPress(event: PointerEvent) {
+        if (drag && (!drag.dragged || event.pointerId === drag.pointerId)) {
+            endDrag("lost");
+        }
+    }
+
+    /** The window lost focus: a press still under the slop will not be released here. */
+    function onWindowBlur() {
+        if (drag && !drag.dragged) endDrag("lost");
+    }
+
+    /** Asks for the drag's next frame, once; `false` in a DOM without animation frames. */
+    function askFrame(current: Drag<TRow, TNode>): boolean {
+        if (current.frame !== null) return true;
+        const win = current.doc.defaultView;
+        if (!win || !("requestAnimationFrame" in win)) return false;
+        current.frame = win.requestAnimationFrame(onDragFrame);
+        return true;
+    }
+
+    function onDragFrame() {
+        if (!drag) return;
+        drag.frame = null;
+        dragTo(drag);
+    }
+
+    /** A drag's step to its pointer: a resize, or a reorder's target. */
+    function dragTo(current: Drag<TRow, TNode>) {
+        if (current.kind === "resize") resizeTo(current);
+        else reorderTo(current);
+    }
+
+    /** The drag's element lost the pointer (removed, or taken by the page). */
+    function onLostCapture(event: Event) {
+        if (
+            drag &&
+            "pointerId" in event &&
+            event.pointerId === drag.pointerId
+        ) {
+            endDrag("lost");
+        }
+    }
+
+    /**
+     * Escape during a drag (focus anywhere, the app's handlers first) cancels it (W4, O3), once:
+     * a handled Escape is prevented, and skipped from then on.
+     */
+    function onDragKey(event: KeyboardEvent) {
+        if (!dragging() || event.key !== "Escape" || event.defaultPrevented) {
+            return;
+        }
         event.preventDefault();
-        endResize(true);
+        endDrag("cancel");
+    }
+
+    function preventDefault(event: Event) {
+        event.preventDefault();
     }
 
     /** Resizes a drag's column to its pointer: right grows (LTR). */
@@ -904,31 +1075,51 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /** Stops listening to the drag, its frame cancelled; returns it. */
-    function stopDrag(): ResizeDrag | null {
+    function stopDrag(): Drag<TRow, TNode> | null {
         const ended = drag;
         if (!ended) return null;
+        const { doc } = ended;
         if (ended.frame !== null) {
-            ended.doc.defaultView?.cancelAnimationFrame(ended.frame);
+            doc.defaultView?.cancelAnimationFrame(ended.frame);
         }
-        ended.doc.removeEventListener("pointermove", onResizeMove, true);
-        ended.doc.removeEventListener("keydown", onResizeKey);
+        doc.removeEventListener("pointermove", onDragMove, true);
+        doc.removeEventListener("pointerdown", onNextPress, true);
+        doc.removeEventListener("keydown", onDragKey);
+        doc.removeEventListener("selectstart", preventDefault, true);
+        doc.removeEventListener("dragstart", preventDefault, true);
+        doc.defaultView?.removeEventListener("blur", onWindowBlur);
         ended.element.removeEventListener("lostpointercapture", onLostCapture);
         drag = null;
         return ended;
     }
 
     /**
-     * Ends the drag: at the pointer's last place (a move not resized yet resizes now), or
-     * (`restore`: Escape, `pointercancel`) back to the width it started from. A resize like the
-     * drag's own: only its columns change (the others' widths stay as they are now), and what
-     * lets the drag resize lets it restore.
+     * Ends the drag. A resize ends at the pointer's last place (a move not resized yet resizes
+     * now), or on a cancel back to the width it started from: a resize like the drag's own, only
+     * its columns change (the others' widths stay as they are now), and what lets the drag
+     * resize lets it restore. A header cell's drag moves its column or group on a release only,
+     * once, and not when it would land where it is.
      */
-    function endResize(restore: boolean) {
+    function endDrag(how: DragEnd) {
         const ended = stopDrag();
-        if (!ended) return;
-        if (restore) ended.x = ended.startX;
-        if (ended.x !== ended.appliedX) resizeTo(ended);
-        setColumnResize(null);
+        if (ended?.kind === "resize") {
+            if (how === "cancel") ended.x = ended.startX;
+            if (ended.x !== ended.appliedX) resizeTo(ended);
+            setColumnResize(null);
+        } else if (ended?.dragged) {
+            const target =
+                how === "release"
+                    ? reorderTarget(ended, viewXOf(ended.x))
+                    : null;
+            setColumnReorder(null);
+            if (target && target.targetKey !== null) {
+                model.run("column-order.move", {
+                    columnKey: ended.columnKey,
+                    targetKey: target.targetKey,
+                    side: target.side,
+                });
+            }
+        }
     }
 
     /**
@@ -979,15 +1170,195 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return true;
     }
 
+    // ── column reordering: the drag, the edge scroll, the keys (Epic #75) ────
+
+    /** A press moved past the slop: its header cell drags, holding the pointer. */
+    function startReorder(current: ReorderDrag<TRow, TNode>, x: number) {
+        current.dragged = true;
+        current.x = x;
+        capture(current);
+        const target = reorderTarget(current, viewXOf(x));
+        // the cell gone since the press (new columns): nothing to drag
+        if (target) setColumnReorder(target);
+        else stopDrag();
+    }
+
+    /** The drag's siblings, found again when the header changed. */
+    function siblingsFor(
+        current: ReorderDrag<TRow, TNode>,
+    ): Siblings<TRow, TNode> | null {
+        if (current.header !== state.header) {
+            current.header = state.header;
+            current.siblings = siblingsOf(
+                state.columns,
+                state.header,
+                current.columnKey,
+            );
+        }
+        return current.siblings;
+    }
+
+    /** Where a pointer's x is in the view: from its start, inside its border (a layout read). */
+    function viewXOf(clientX: number): number {
+        if (!viewport) return clientX;
+        return (
+            clientX -
+            viewport.getBoundingClientRect().left -
+            viewport.clientLeft
+        );
+    }
+
+    /** Whether a drag's cell is pinned with the pinned columns in effect: always in view. */
+    function inPinnedStrip(siblings: Siblings<TRow, TNode>): boolean {
+        return siblings.pinned && pinnedCount > 0;
+    }
+
     /**
-     * The sortable column whose header cell an event happened in, or `null`: not a header cell, a
-     * group, a column that is not sortable, or a control inside the cell (it acts on its own).
+     * Where a drop would move a drag's column or group (O3), its pointer at `x` in the view: beside
+     * the sibling under it, on the side of its middle, among the ones it may move among. The
+     * pointer is kept over the part of the view they show in (the pinned strip, or the columns
+     * that scroll), so the target is the nearest one in view: the edge scroll reaches further.
+     * From the column axis, not the DOM: a sibling scrolled out of the rendered columns counts,
+     * scaled or not. No target when it would land where it is; the current state while the same.
      */
-    function sortableColumnOf(
-        target: EventTarget | null,
-    ): Column<TRow, TNode> | null {
-        const cell = cellOf(target);
-        if (!cell || cell.rowIndex >= 0 || !isElement(target)) return null;
+    function reorderTarget(
+        current: ReorderDrag<TRow, TNode>,
+        x: number,
+    ): ColumnReorder | null {
+        const siblings = siblingsFor(current);
+        if (!siblings) return null;
+        const { cells, index, start, end } = siblings;
+        const offset = inPinnedStrip(siblings)
+            ? clamp(x, 0, pinnedWidth)
+            : columnsX.virtual + clamp(x, pinnedWidth, width);
+        const endOf = (cell: HeaderCellLayout<TRow, TNode>) =>
+            columnAxis.offsetOf(cell.columnIndex + cell.columnSpan);
+        // the first one ending past the pointer, else the last
+        const at = Math.min(
+            start +
+                lowerBound(end - start, (i) => {
+                    const cell = cells[start + i];
+                    return cell !== undefined && endOf(cell) <= offset;
+                }),
+            end - 1,
+        );
+        const target = cells[at];
+        if (!target) return null;
+        const side =
+            offset <
+            (columnAxis.offsetOf(target.columnIndex) + endOf(target)) / 2
+                ? "before"
+                : "after";
+        const moves = landingIndex(index, at, side) !== index;
+        const targetKey = moves ? target.key : null;
+        if (
+            columnReorder?.columnKey === current.columnKey &&
+            columnReorder.targetKey === targetKey &&
+            columnReorder.side === (moves ? side : null)
+        ) {
+            return columnReorder;
+        }
+        const { columnKey } = current;
+        return moves
+            ? { columnKey, targetKey: target.key, side }
+            : { columnKey, targetKey: null, side: null };
+    }
+
+    /** A frame of a header cell's drag: the edge scroll, then the target. */
+    function reorderTo(current: ReorderDrag<TRow, TNode>) {
+        // the view read once, before the scroll writes
+        const x = viewXOf(current.x);
+        const scrolled = edgeScroll(current, x);
+        const target = reorderTarget(current, x);
+        if (target && target !== columnReorder) setColumnReorder(target);
+        // the pointer held near an edge keeps scrolling, a frame at a time
+        if (scrolled) askFrame(current);
+    }
+
+    /**
+     * Near the left or right edge of the columns that scroll (or past it), scrolls them toward
+     * it, faster nearer, through the engine's own scroll (scaled or not): far siblings come into
+     * reach. The two zones never overlap: in a narrow view each is half of it. Returns whether
+     * the columns moved. A pinned cell in effect is always in view: none for it.
+     */
+    function edgeScroll(current: ReorderDrag<TRow, TNode>, x: number): boolean {
+        const siblings = siblingsFor(current);
+        const zone = Math.min(EDGE_ZONE, (width - pinnedWidth) / 2);
+        if (!siblings || inPinnedStrip(siblings) || zone <= 0) return false;
+        const left = pinnedWidth + zone;
+        const right = width - zone;
+        const depth = x < left ? x - left : x > right ? x - right : 0;
+        if (depth === 0) return false;
+        const step = Math.ceil(EDGE_STEP * Math.min(1, Math.abs(depth) / zone));
+        const before = columnsX.virtual;
+        scrollTo({ left: before + Math.sign(depth) * step });
+        return columnsX.virtual !== before;
+    }
+
+    /**
+     * After the columns changed during a header cell's drag: it follows its column or group, and
+     * ends when that is gone or no longer reorderable.
+     */
+    function followReorder(current: ReorderDrag<TRow, TNode>) {
+        const siblings = siblingsFor(current);
+        if (!siblings || !isReorderable(siblings.cell)) {
+            stopDrag();
+            columnReorder = null;
+            return;
+        }
+        columnReorder = reorderTarget(current, viewXOf(current.x));
+    }
+
+    /**
+     * Ctrl/⌘+Shift+←/→ on a reorderable header cell in navigation (O6): one move among its
+     * siblings, before the previous one or after the next, the active cell following its column.
+     * Handled even when nothing moves (at an end, past the pinned ones, refused): the page never
+     * gets them.
+     */
+    function reorderKey(event: KeyboardEvent, target: Element): boolean {
+        const left = event.key === "ArrowLeft";
+        if (
+            (!left && event.key !== "ArrowRight") ||
+            !event.shiftKey ||
+            !(event.ctrlKey || event.metaKey) ||
+            !isCellElement(target)
+        ) {
+            return false;
+        }
+        const cell = headerCellOf(target)?.cell;
+        const siblings =
+            cell && isReorderable(cell)
+                ? siblingsOf(state.columns, state.header, cell.key)
+                : null;
+        if (!siblings) return false;
+        event.preventDefault();
+        const neighbour = siblings.cells[siblings.index + (left ? -1 : 1)];
+        // focus follows once the cells render in their new order (the commit)
+        if (neighbour) {
+            model.run("column-order.move", {
+                columnKey: siblings.cell.key,
+                targetKey: neighbour.key,
+                side: left ? "before" : "after",
+            });
+        }
+        return true;
+    }
+
+    // ── clicks, presses and keys ─────────────────────────────────────────────
+
+    /**
+     * The header cell an event happened in, and its element, or `null`: not a header cell, or a
+     * control inside the cell (it acts on its own; a resizer is one).
+     */
+    function headerCellOf(target: EventTarget | null): {
+        readonly cell: HeaderCellLayout<TRow, TNode>;
+        readonly element: Element;
+    } | null {
+        const element = cellNodeOf(target);
+        const position = element && positionOf(element);
+        if (!position || position.rowIndex >= 0 || !isElement(target)) {
+            return null;
+        }
         for (
             let node: Element | null = target;
             node && !isCellNode(node);
@@ -995,10 +1366,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             if (isControl(node) || isResizer(node)) return null;
         }
-        const column = state.header.cellAt(
-            cell.rowIndex,
-            cell.columnIndex,
-        )?.column;
+        const cell = state.header.cellAt(
+            position.rowIndex,
+            position.columnIndex,
+        );
+        return cell ? { cell, element } : null;
+    }
+
+    /**
+     * The sortable column whose header cell an event happened in, or `null`: not a header cell
+     * (`headerCellOf`), a group, or a column that is not sortable.
+     */
+    function sortableColumnOf(
+        target: EventTarget | null,
+    ): Column<TRow, TNode> | null {
+        const column = headerCellOf(target)?.cell.column;
         return column?.sortable === true ? column : null;
     }
 
@@ -1016,13 +1398,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // no press (`detail` 0: a screen reader, `element.click()`) has nothing to compare
         const press = pressedAt;
         pressedAt = null;
-        // the click ending a press on a resizer (a drag) is the resizer's; a double click gives
-        // the column its own width back (W7)
-        const resizer = resizerPress;
-        resizerPress = null;
-        if (resizer !== null && event.detail > 0) {
-            if (event.detail === 2) {
-                model.run("column-widths.reset", { columnKey: resizer });
+        // the click ending a drag is the drag's, never a sort: a resizer's (a double click gives
+        // the column its own width back, W7) or a header cell's (O3)
+        const last = lastPress;
+        lastPress = null;
+        if (last?.dragged && event.detail > 0) {
+            if (last.kind === "resize" && event.detail === 2) {
+                model.run("column-widths.reset", { columnKey: last.columnKey });
             }
             return true;
         }
@@ -1050,9 +1432,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // a press the browser took over makes no click
         if (cancelled) pressedAt = null;
         if (drag && event.pointerId === drag.pointerId) {
-            // a release resizes to where it happened; a pointer taken over restores the start
+            // a release ends the drag where it happened; a pointer taken over cancels it
             if (!cancelled) drag.x = event.clientX;
-            endResize(cancelled);
+            endDrag(cancelled ? "cancel" : "release");
         }
     }
 
@@ -1202,11 +1584,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return false;
         }
-        // Escape during a drag restores the width it started from (W4), before it leaves
-        // interaction; prevented, the document's listener skips it
-        if (drag && event.key === "Escape") {
+        // Escape during a drag cancels it (a resize back to the width it started from, W4),
+        // before it leaves interaction; prevented, the document's listener skips it
+        if (dragging() && event.key === "Escape") {
             event.preventDefault();
-            endResize(true);
+            endDrag("cancel");
             return true;
         }
         // in interaction, the cell's controls have the keys: the grid takes Escape (back to the
@@ -1283,6 +1665,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return true;
             }
         }
+        if (reorderKey(event, target)) return true;
         if (selectionKey(event, target)) return true;
         if (event.key === " " && !ctrl && rowsY.mapping.scaled) {
             // the browser would page the container natively, a far jump under scaling
@@ -1401,7 +1784,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     anchoredOffset(columnAxis, columnAnchor) - pinnedWidth,
                 );
             }
-            if (drag) followResize();
+            if (drag?.kind === "resize") followResize();
+        }
+        const reordering = columnReorder;
+        // a header cell's drag follows its column or group (O3)
+        if (
+            drag?.kind === "reorder" &&
+            drag.dragged &&
+            (columnsChanged || after.header !== before.header)
+        ) {
+            followReorder(drag);
         }
         relayout(
             rowsResized ||
@@ -1411,6 +1803,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 after.header !== before.header,
         );
         if (columnResize !== resizing) emit("column-resize", columnResize);
+        if (columnReorder !== reordering) {
+            emit("column-reorder", columnReorder);
+        }
         // the physical scroll follows even when the total did not change (no remap moved it)
         if (anchored) {
             const top = rowsY.scrollTo(rowsY.virtual);
@@ -1516,8 +1911,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 doc.removeEventListener("pointerup", onPointerEnd, true);
                 doc.removeEventListener("pointercancel", onPointerEnd, true);
                 element.removeEventListener("focusout", onFocusOut);
-                // a drag ends where it is, its frame cancelled
-                endResize(false);
+                // a drag ends where it is (a reorder moves nothing), its frame cancelled
+                endDrag("lost");
                 pointerDown = false;
                 pendingFocus = false;
                 if (viewport === element) {
@@ -1623,6 +2018,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }),
         interaction: () => interaction.cell,
         "column-resize": () => columnResize,
+        "column-reorder": () => columnReorder,
     };
 
     const actions: {

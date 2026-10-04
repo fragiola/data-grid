@@ -200,6 +200,32 @@ const expandedKeys: readonly (string | number)[] =
     grid.get("expanded-row-keys");
 void expandedKeys;
 
+// a column or a group moves before or after a sibling; the order is keys; a reset takes none
+grid.run("column-order.move", {
+    columnKey: "name",
+    targetKey: "id",
+    side: "before",
+});
+// @ts-expect-error
+grid.run("column-order.move", { columnKey: "name", targetKey: "id" });
+grid.run("column-order.move", {
+    columnKey: "name",
+    targetKey: "id",
+    // @ts-expect-error
+    side: "beside",
+});
+// @ts-expect-error
+grid.run("column-order.set", { columnOrder: [1] });
+grid.run("column-order.reset");
+const columnOrder: readonly string[] = grid.get("column-order");
+void columnOrder;
+const reorderableGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    reorderable: true,
+    children: [{ key: "name", width: 80, reorderable: true }],
+};
+void reorderableGroup;
+
 void groupWithCells;
 void groupWithWidth;
 void columnWithChildren;

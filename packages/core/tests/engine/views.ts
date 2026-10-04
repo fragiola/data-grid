@@ -67,6 +67,7 @@ export function inputsOf(
         rowsRevision: 0,
         interaction: null,
         columnResize: null,
+        columnReorder: null,
         headerRowsFor: createHeaderRows<Row, unknown>(),
         ...overrides,
     };

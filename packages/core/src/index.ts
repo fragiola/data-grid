@@ -43,6 +43,7 @@ export {
     rowPart,
 } from "./engine/parts";
 export type {
+    ColumnReorder,
     ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
@@ -64,6 +65,7 @@ export {
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
 } from "./model/model";
+export { keptOrder, sameOrder } from "./model/order";
 export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
 export { cellValue, rowAt } from "./model/source";
@@ -72,6 +74,7 @@ export type {
     CellRenderProps,
     Column,
     ColumnGroup,
+    ColumnOrder,
     ColumnOrGroup,
     ColumnWidths,
     CommandArgs,
@@ -100,6 +103,7 @@ export type {
     QueryMap,
     QuestionKey,
     QuestionMap,
+    ReorderSide,
     ResultOf,
     RowKey,
     RowKeyGetter,

@@ -238,3 +238,51 @@ export function click(
 /** DOM changes reach the engine's observer as a microtask: let it run. */
 export const settled = () =>
     new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * Animation frames the engine asks for, kept until `frame()` runs the ones asked for so far
+ * (stubbed globals: the page's `defaultView`). Call it in a `beforeEach`, and unstub after.
+ */
+export function stubAnimationFrames() {
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+        next += 1;
+        frames.set(next, callback);
+        return next;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    const frame = () => {
+        const waiting = [...frames.values()];
+        frames.clear();
+        for (const callback of waiting) callback(0);
+    };
+    return { frames, frame };
+}
+
+/**
+ * A pointer event on `target` (the primary button held until the release), dispatched; a press
+ * then goes to the engine after the page's own handlers, as the root hands it over.
+ */
+export function pointer(
+    engine: DataGridEngine<Row>,
+    target: Element,
+    type: string,
+    clientX: number,
+    init: PointerEventInit = {},
+): PointerEvent {
+    const released = type === "pointerup" || type === "pointercancel";
+    const event = new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: released ? 0 : 1,
+        pointerId: 1,
+        clientX,
+        clientY: 10,
+        ...init,
+    });
+    target.dispatchEvent(event);
+    if (type === "pointerdown") engine.adapter.pointerdown(event);
+    return event;
+}
