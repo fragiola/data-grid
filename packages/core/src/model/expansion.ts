@@ -37,6 +37,18 @@ export function isRowKey(key: unknown): key is RowKey {
     );
 }
 
+/** The keys, once each, in order: `undefined` when one is not a key. */
+export function uniqueRowKeys(
+    keys: readonly unknown[],
+): readonly RowKey[] | undefined {
+    const unique = new Set<RowKey>();
+    for (const key of keys) {
+        if (!isRowKey(key)) return undefined;
+        unique.add(key);
+    }
+    return [...unique];
+}
+
 /** Whether two key lists hold the same keys in the same order. */
 export function sameRowKeys(
     a: readonly RowKey[],

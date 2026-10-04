@@ -94,7 +94,10 @@ export type {
     ResultOf,
     RowKey,
     RowKeyGetter,
+    RowSelectable,
+    RowSelection,
     RowSource,
+    SelectionAnchor,
     SortColumn,
     SortDirection,
 } from "./model/types";

@@ -27,6 +27,11 @@
             "types": "./dist/local.d.ts",
             "import": "./dist/local.js"
         },
+        "./selection": {
+            "development": "./src/selection/index.ts",
+            "types": "./dist/selection.d.ts",
+            "import": "./dist/selection.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [

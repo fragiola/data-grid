@@ -1682,6 +1682,69 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
     }
 
+    /**
+     * The selection's keys on a body cell (R6), rows being selectable: Shift+Space toggles its
+     * row, Shift+Up/Down (many rows) move and extend the selection to the row reached, Ctrl/⌘+A
+     * selects every row. Each goes through a command, so a middleware can refuse it.
+     */
+    function selectionKey(event: KeyboardEvent): boolean {
+        const mode = state.rowSelection;
+        const target = event.target;
+        if (!mode || !isElement(target) || !isCellElement(target)) return false;
+        const position = cellOf(target);
+        if (!position || position.rowIndex < 0) return false;
+        const rowIndex = position.rowIndex;
+        const ctrl = event.ctrlKey || event.metaKey;
+        if (event.key === " " && event.shiftKey && !ctrl) {
+            event.preventDefault();
+            // a held key repeats: it would toggle the row on and off
+            if (!event.repeat) model.run("selected-rows.toggle", { rowIndex });
+            return true;
+        }
+        if (mode !== "multiple") return false;
+        if (ctrl && !event.shiftKey && event.key.toLowerCase() === "a") {
+            // handled even when refused: the page's text is never selected instead
+            event.preventDefault();
+            if (!event.repeat) model.run("selected-rows.select-all", {});
+            return true;
+        }
+        if (
+            !event.shiftKey ||
+            ctrl ||
+            (event.key !== "ArrowDown" && event.key !== "ArrowUp")
+        ) {
+            return false;
+        }
+        const down = event.key === "ArrowDown";
+        // up into the header: a plain move
+        if (!down && rowIndex === 0) return false;
+        event.preventDefault();
+        if (down && rowIndex === state.rowCount - 1) return true;
+        const move = {
+            direction: down ? "down" : "up",
+            visibleColumns: columnWindow.visible,
+        } as const;
+        // a move refused selects nothing
+        if (!model.can("active-position.move", move)) return true;
+        // without an anchor, the range starts from this row and selects (it included). One
+        // selection command a key: a controlled parent answers each before the next
+        if (!model.get("selection-anchor")) {
+            model.run("selection-anchor.set", { rowIndex });
+        }
+        pendingFocus = true;
+        model.run("active-position.move", move);
+        // extended to the row the move reached (a middleware may have redirected it)
+        const reached = state.activePosition?.rowIndex;
+        if (reached !== undefined && reached >= 0 && reached !== rowIndex) {
+            model.run("selected-rows.toggle", {
+                rowIndex: reached,
+                extend: true,
+            });
+        }
+        flushFocus();
+        return true;
+    }
+
     function keydown(event: KeyboardEvent): boolean {
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
         // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
@@ -1764,6 +1827,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return true;
             }
         }
+        if (selectionKey(event)) return true;
         if (
             event.key === " " &&
             !event.ctrlKey &&

@@ -31,11 +31,15 @@ function reachable(entry: string): Set<string> {
 }
 
 describe("the grid's own entry", () => {
-    it("never reaches the local pipeline", () => {
+    it("never reaches the local pipeline nor the selection's extras", () => {
         const files = [...reachable(join(src, "index.ts"))].map((file) =>
             relative(src, file),
         );
         expect(files.length).toBeGreaterThan(5);
         expect(files.filter((file) => file.startsWith("local"))).toEqual([]);
+        // the selection's extras (Epic #57, R8) are opt-in the same way
+        expect(files.filter((file) => file.startsWith("selection"))).toEqual(
+            [],
+        );
     });
 });
