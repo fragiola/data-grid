@@ -443,6 +443,28 @@ describe("useLocalRows' moveRow", () => {
         expect(shown.map((task) => task.id)).toEqual([1, 7, 3, 5]);
     });
 
+    it("tells equal rows apart by their place: a page's rows move where they are", () => {
+        const letters: readonly string[] = ["x", "y", "x", "y", "x"];
+        const letter: Column<string>[] = [
+            { key: "letter", width: 100, getValue: (row) => row },
+        ];
+        let result: readonly string[] = [];
+        let shown: readonly string[] = [];
+        function Paged() {
+            const local = useLocalRows(letters, letter, {
+                pageSize: 2,
+                defaultPageIndex: 1,
+            });
+            shown = local.rows;
+            result = local.moveRow({ fromIndex: 0, toIndex: 1 });
+            return null;
+        }
+        render(<Paged />);
+        expect(shown).toEqual(["x", "y"]);
+        // the "x" at 2 and the "y" at 3 swapped, not the first ones
+        expect(result).toEqual(["x", "y", "y", "x", "x"]);
+    });
+
     it("is stable, and moves told before a render apply one after the other", () => {
         const kept: ((move: {
             fromIndex: number;

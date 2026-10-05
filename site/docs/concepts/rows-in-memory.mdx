@@ -131,7 +131,8 @@ const local = useLocalRows(tasks, columns);
 The same pipeline is framework-free in `@fragiola/data-grid/local`: `createLocalRows(options)`
 keeps the state and `derive(rows, columns)` returns the page and the counts, and `sortRows`,
 `filterRows`, `searchRows` and `pageRows` work on any array, as `moveRow(rows, fromIndex,
-toIndex)` and `moveShownRow(rows, shown, fromIndex, toIndex)` do for a move.
+toIndex)` and `moveShownRow(rows, rowIndexes, fromIndex, toIndex)` do for a move (the rows
+shown by their places among your rows, a view's `rowIndexes`, so equal rows are told apart).
 
 ## On a server
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveRow, moveShownRow } from "../../src/local";
+import { moveRow, moveShownRow, shownRowMove } from "../../src/local";
 
 // Moving a row in memory (Epic #86, E2.3): a grid's `row-move` applied to the app's rows, its
 // `toIndex` the row's index once moved; a move of the rows a filter or a page shows placed beside
@@ -25,6 +25,8 @@ describe("moveRow", () => {
 });
 
 describe("moveShownRow", () => {
+    const ALL = [0, 1, 2, 3, 4];
+
     it("is moveRow when every row is shown", () => {
         for (const [from, to] of [
             [1, 3],
@@ -32,14 +34,15 @@ describe("moveShownRow", () => {
             [0, 4],
             [4, 0],
         ] as const) {
-            expect(moveShownRow(ROWS, ROWS, from, to)).toEqual(
+            expect(moveShownRow(ROWS, ALL, from, to)).toEqual(
                 moveRow(ROWS, from, to),
             );
         }
     });
 
     it("places a row of a filter's beside the row it lands next to on screen", () => {
-        const shown = ["b", "d", "e"];
+        // "b", "d" and "e" shown
+        const shown = [1, 3, 4];
         // "b" after "d": before "e"
         expect(moveShownRow(ROWS, shown, 0, 1)).toEqual([
             "a",
@@ -64,11 +67,28 @@ describe("moveShownRow", () => {
             "e",
             "b",
         ]);
+        expect(shownRowMove(shown, 0, 2)).toEqual({ fromIndex: 1, toIndex: 4 });
     });
 
-    it("gives the rows back when nothing moves or a row is not among them", () => {
-        expect(moveShownRow(ROWS, ["b", "d"], 1, 1)).toBe(ROWS);
-        expect(moveShownRow(ROWS, ["b", "d"], 0, 2)).toBe(ROWS);
-        expect(moveShownRow(ROWS, ["b", "x"], 0, 1)).toBe(ROWS);
+    it("tells equal rows apart by their positions", () => {
+        const rows = ["x", "y", "x", "y", "x"];
+        // the second page of two: the "x" at 2 and the "y" at 3, swapped
+        expect(moveShownRow(rows, [2, 3], 0, 1)).toEqual([
+            "x",
+            "y",
+            "y",
+            "x",
+            "x",
+        ]);
+        expect(shownRowMove([2, 3], 0, 1)).toEqual({
+            fromIndex: 2,
+            toIndex: 3,
+        });
+    });
+
+    it("gives the rows back when nothing moves", () => {
+        expect(moveShownRow(ROWS, [1, 3], 1, 1)).toBe(ROWS);
+        expect(moveShownRow(ROWS, [1, 3], 0, 2)).toBe(ROWS);
+        expect(shownRowMove([1, 3], 0, -1)).toBeNull();
     });
 });

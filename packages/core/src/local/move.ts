@@ -31,36 +31,43 @@ export function moveRow<TRow>(
 }
 
 /**
- * A move of the rows a grid shows (`shown`: some of `rows`, in their order, as a filter or a page
- * leaves them) applied to `rows`: the moved row goes before the row it lands before on screen, or
- * after the last one shown when it lands last. A new array; `rows` itself when nothing moves (a
- * row not found among them).
+ * The move among `rows` that a move of the rows a grid shows is: the shown rows are at
+ * `rowIndexes` among them (in their order: a filter's, a page's; `LocalRowsView.rowIndexes`), by
+ * position, so rows equal to each other are told apart. The moved row goes before the row it
+ * lands before on screen, or after the last one shown when it lands last. `null` when nothing
+ * moves.
  */
-export function moveShownRow<TRow>(
-    rows: readonly TRow[],
-    shown: readonly TRow[],
+export function shownRowMove(
+    rowIndexes: readonly number[],
     fromIndex: number,
     toIndex: number,
-): readonly TRow[] {
-    const count = shown.length;
+): { readonly fromIndex: number; readonly toIndex: number } | null {
+    const count = rowIndexes.length;
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= count) return null;
     // on screen it lands before the row now at `toIndex` (the next one, moving down), or last:
     // after the last one shown
     const last = toIndex === count - 1;
-    const row = shown[fromIndex];
+    const from = rowIndexes[fromIndex];
     const beside =
-        shown[last ? count - 1 : toIndex < fromIndex ? toIndex : toIndex + 1];
-    if (
-        fromIndex === toIndex ||
-        toIndex < 0 ||
-        row === undefined ||
-        beside === undefined
-    ) {
-        return rows;
-    }
-    const from = rows.indexOf(row);
-    const at = rows.indexOf(beside);
-    if (from < 0 || at < 0) return rows;
+        rowIndexes[
+            last ? count - 1 : toIndex < fromIndex ? toIndex : toIndex + 1
+        ];
+    if (from === undefined || beside === undefined) return null;
     // where it goes among the rows, as an index once moved
-    const to = last ? at + 1 : at;
-    return moveRow(rows, from, to > from ? to - 1 : to);
+    const to = last ? beside + 1 : beside;
+    return { fromIndex: from, toIndex: to > from ? to - 1 : to };
+}
+
+/**
+ * `rows` with a move of the rows a grid shows applied (`shownRowMove`: the shown rows at
+ * `rowIndexes` among them). A new array; `rows` itself when nothing moves.
+ */
+export function moveShownRow<TRow>(
+    rows: readonly TRow[],
+    rowIndexes: readonly number[],
+    fromIndex: number,
+    toIndex: number,
+): readonly TRow[] {
+    const move = shownRowMove(rowIndexes, fromIndex, toIndex);
+    return move ? moveRow(rows, move.fromIndex, move.toIndex) : rows;
 }

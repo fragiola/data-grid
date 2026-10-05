@@ -50,6 +50,7 @@ import {
 } from "react";
 import {
     type CellInfo,
+    type Column,
     type HeaderCellInfo,
     HeaderRowContext,
     type HeaderRowInfo,
@@ -244,22 +245,31 @@ export function useRowPart<TRow>(
  */
 export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
     const view = useGridView<TRow>();
-    return rowColumns(view, row.rowIndex).flatMap((columnIndex) => {
+    return cellsOf(view, row.rowIndex, (columnIndex, column) => ({
+        rowIndex: row.rowIndex,
+        columnIndex,
+        column,
+        row: row.row,
+        loaded: row.loaded,
+        value:
+            row.row === undefined
+                ? undefined
+                : cellValue(column, row.row, row.rowIndex),
+    }));
+}
+
+/**
+ * A row's cells (a body row's or a summary row's), each made from its column: one per rendered
+ * column, but a cell spanning columns (Epic #85) stands for the ones it covers (`rowColumns`).
+ */
+function cellsOf<TRow, Cell>(
+    view: GridView<TRow, ReactNode>,
+    rowIndex: number,
+    cell: (columnIndex: number, column: Column<TRow>) => Cell,
+): Cell[] {
+    return rowColumns(view, rowIndex).flatMap((columnIndex) => {
         const column = view.columnDefs[columnIndex];
-        if (!column) return [];
-        return [
-            {
-                rowIndex: row.rowIndex,
-                columnIndex,
-                column,
-                row: row.row,
-                loaded: row.loaded,
-                value:
-                    row.row === undefined
-                        ? undefined
-                        : cellValue(column, row.row, row.rowIndex),
-            },
-        ];
+        return column ? [cell(columnIndex, column)] : [];
     });
 }
 
@@ -685,19 +695,13 @@ export function useSummaryCells<TRow = unknown>(
             "useSummaryCells() must be given a row, or be used inside <DataGrid.SummaryRow>",
         );
     }
-    return rowColumns(view, at.rowIndex).flatMap((columnIndex) => {
-        const column = view.columnDefs[columnIndex];
-        if (!column) return [];
-        return [
-            {
-                rowIndex: at.rowIndex,
-                columnIndex,
-                column,
-                position: at.position,
-                summaryIndex: at.summaryIndex,
-            },
-        ];
-    });
+    return cellsOf(view, at.rowIndex, (columnIndex, column) => ({
+        rowIndex: at.rowIndex,
+        columnIndex,
+        column,
+        position: at.position,
+        summaryIndex: at.summaryIndex,
+    }));
 }
 
 /**

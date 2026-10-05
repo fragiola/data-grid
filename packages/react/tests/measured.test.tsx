@@ -319,3 +319,50 @@ describe("measured details", () => {
         expect(cellAt(container, 1, 2).style.marginLeft).toBe("");
     });
 });
+
+describe("the sizes a root sends", () => {
+    it("are the three sizes together for a grid of given heights, as before; the rest on their own", () => {
+        const gridRef = createDataGridRef<Row>();
+        const Plain = ({
+            rowHeight,
+            summaryRowHeight,
+            estimatedRowHeight,
+        }: {
+            rowHeight: number;
+            summaryRowHeight?: number;
+            estimatedRowHeight?: number;
+        }) => (
+            <DataGrid.Root
+                columns={columns}
+                rows={rows}
+                rowHeight={rowHeight}
+                summaryRowHeight={summaryRowHeight}
+                estimatedRowHeight={estimatedRowHeight}
+                gridRef={gridRef}
+            />
+        );
+        const { rerender } = render(<Plain rowHeight={20} />);
+        const sent: unknown[] = [];
+        gridRef.current?.model.use((ctx, next) => {
+            if (ctx.command === "sizes.set") sent.push(ctx.payload);
+            return next();
+        });
+        rerender(<Plain rowHeight={30} />);
+        expect(sent).toEqual([
+            { rowHeight: 30, headerRowHeight: 35, detailHeight: 300 },
+        ]);
+        rerender(<Plain rowHeight={30} />);
+        expect(sent).toHaveLength(1);
+        rerender(
+            <Plain
+                rowHeight={30}
+                summaryRowHeight={40}
+                estimatedRowHeight={50}
+            />,
+        );
+        expect(sent.slice(1)).toEqual([
+            { summaryRowHeight: 40 },
+            { estimatedRowHeight: 50 },
+        ]);
+    });
+});

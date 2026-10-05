@@ -58,8 +58,10 @@ The heights are kept by index, each with its row's key (`rowKey`, else the index
 away and back keeps its height. When the rows change (a new array, `rows.changed`), a height stays
 where its row is still at its index and is dropped where another row came. So a sort keeps the
 heights of the rows on screen (their elements are kept, and read where they now are), while a row
-off screen that moved counts at the estimate again until it renders and is measured. Without a
-`rowKey`, a row is its index: give one when rows move.
+off screen that moved counts at the estimate again until it renders and is measured. A
+[row move](/docs/concepts/row-reordering) is such a change: the rows between the two indexes
+shifted, so those off screen count at the estimate until they render again. Without a `rowKey`, a
+row is its index: give one when rows move.
 
 <Callout type="info" title="An estimate that is no size">
 `estimatedRowHeight` and `estimatedDetailHeight` must be sizes above 0. Another value is refused:

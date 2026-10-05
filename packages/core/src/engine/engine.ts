@@ -27,6 +27,7 @@ import type {
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
+    ReorderSide,
     RowKey,
 } from "../model/types";
 import {
@@ -47,7 +48,13 @@ import {
     withoutWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
-import { clamp, isIndex, keptIfSame, lowerBound } from "../utils";
+import {
+    clamp,
+    indexAfterMove,
+    isIndex,
+    keptIfSame,
+    lowerBound,
+} from "../utils";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
@@ -1480,8 +1487,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** A drag's step to its pointer: a resize, or a reorder's target (a column's, a row's). */
     function dragTo(current: Drag<TRow, TNode>) {
         if (current.kind === "resize") resizeTo(current);
-        else if (current.kind === "reorder") reorderTo(current);
-        else rowReorderTo(current);
+        else reorderStep(current);
     }
 
     /** The drag's element lost the pointer (removed, or taken by the page). */
@@ -1985,29 +1991,70 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
         const target = cells[at];
         if (!target) return null;
-        const side =
-            offset <
-            (columnAxis.offsetOf(target.columnIndex) + endOf(target)) / 2
-                ? "before"
-                : "after";
         const { columnKey } = current;
-        return keptIfSame<ColumnReorder>(
+        return dropTargetOf<ColumnReorder>(
             columnReorder,
-            landingIndex(index, at, side) !== index
-                ? { columnKey, targetKey: target.key, side }
-                : { columnKey, targetKey: null, side: null },
+            offset,
+            index,
+            at,
+            columnAxis.offsetOf(target.columnIndex),
+            endOf(target),
+            true,
+            (side) =>
+                side
+                    ? { columnKey, targetKey: target.key, side }
+                    : { columnKey, targetKey: null, side: null },
         );
     }
 
     /** A frame of a header cell's drag: the edge scroll, then the target. */
-    function reorderTo(current: ReorderDrag<TRow, TNode>) {
-        // the view read once, before the scroll writes
-        const x = viewXOf(current.x);
-        const scrolled = edgeScroll(current, x);
-        const target = reorderTarget(current, x);
-        if (target && target !== columnReorder) setColumnReorder(target);
-        // the pointer held near an edge keeps scrolling, a frame at a time
+    /**
+     * A frame of a header cell's or a row's drag, on its axis: the pointer's place in the view
+     * read once (before the scroll writes; a row's kept as `viewY`), the edge scroll, then the
+     * target; the pointer held near an edge keeps scrolling, a frame at a time.
+     */
+    function reorderStep(current: ReorderDrag<TRow, TNode> | RowDrag) {
+        const row = current.kind === "row";
+        const at = row ? viewYOf(current.y) : viewXOf(current.x);
+        if (row) current.viewY = at;
+        const step = row
+            ? edgeStep(at, bodyTop(), bodyHeight())
+            : columnEdgeStep(current, at);
+        const scrolled = step !== 0 && edgeScrollBy(row, step);
+        if (row) {
+            const target = rowReorderTarget(current, at);
+            if (target !== rowReorder) setRowReorder(target);
+        } else {
+            const target = reorderTarget(current, at);
+            if (target && target !== columnReorder) setColumnReorder(target);
+        }
         if (scrolled) askFrame(current);
+    }
+
+    /**
+     * Where a drag would drop (O3, E2.3): beside the item at `at` (from `start` to `end` on its
+     * axis), on the side of its middle `offset` is on, when that moves the dragged item at
+     * `index` and `allowed`; else nowhere (`make(null)`). The current state while the same.
+     */
+    function dropTargetOf<T extends object>(
+        current: T | null,
+        offset: number,
+        index: number,
+        at: number,
+        start: number,
+        end: number,
+        allowed: boolean,
+        make: (side: ReorderSide | null) => T,
+    ): T {
+        const side = offset < (start + end) / 2 ? "before" : "after";
+        return keptIfSame(
+            current,
+            make(
+                allowed && landingIndex(index, at, side) !== index
+                    ? side
+                    : null,
+            ),
+        );
     }
 
     /**
@@ -2039,19 +2086,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * Near the start or end edge of the columns that scroll (or past it), scrolls them toward
-     * it (`edgeStep`): far siblings come into reach. Returns whether the columns moved. A pinned
-     * cell in effect is always in view: none for it.
+     * A header cell's drag's edge step (`edgeStep`) near the start or end edge of the columns
+     * that scroll (or past it): far siblings come into reach. 0 for a pinned cell in effect
+     * (always in view) and toward an edge its siblings already end inside.
      */
-    function edgeScroll(current: ReorderDrag<TRow, TNode>, x: number): boolean {
+    function columnEdgeStep(
+        current: ReorderDrag<TRow, TNode>,
+        x: number,
+    ): number {
         const siblings = siblingsFor(current);
-        if (!siblings || inPinnedStrip(siblings)) return false;
+        if (!siblings || inPinnedStrip(siblings)) return 0;
         const step = edgeStep(
             x,
             pinnedWidth,
             width - pinnedWidth - pinnedEndWidth,
         );
-        if (step === 0) return false;
+        if (step === 0) return 0;
         // nothing more comes into reach that way: the siblings end inside the view on that side
         const { cells, start, end } = siblings;
         const edge = step > 0 ? cells[end - 1] : cells[start];
@@ -2063,9 +2113,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 : columnAxis.offsetOf(edge.columnIndex) >=
                   columnsX.virtual + pinnedWidth)
         ) {
-            return false;
+            return 0;
         }
-        return edgeScrollBy(false, step);
+        return step;
     }
 
     /**
@@ -2150,34 +2200,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function rowReorderTarget(current: RowDrag, y: number): RowReorder {
         const offset = rowsY.virtual + clamp(y - bodyTop(), 0, bodyHeight());
         const at = rowAxis.indexAt(offset);
-        const side =
-            offset < rowAxis.offsetOf(at) + cellsSizeOf(rowAxis, at) / 2
-                ? "before"
-                : "after";
+        const start = rowAxis.offsetOf(at);
         const { rowIndex, rowKey } = current;
-        return keptIfSame<RowReorder>(
+        return dropTargetOf<RowReorder>(
             rowReorder,
-            at >= 0 &&
-                loadedRowKey(state, at) !== undefined &&
-                landingIndex(rowIndex, at, side) !== rowIndex
-                ? { rowIndex, rowKey, targetIndex: at, side }
-                : { rowIndex, rowKey, targetIndex: null, side: null },
+            offset,
+            rowIndex,
+            at,
+            start,
+            start + cellsSizeOf(rowAxis, at),
+            at >= 0 && loadedRowKey(state, at) !== undefined,
+            (side) =>
+                side
+                    ? { rowIndex, rowKey, targetIndex: at, side }
+                    : { rowIndex, rowKey, targetIndex: null, side: null },
         );
-    }
-
-    /**
-     * A frame of a row's drag: the pointer's y read, the edge scroll (none past the first or last
-     * row: `edgeScrollBy` tells it moved nothing), then the target.
-     */
-    function rowReorderTo(current: RowDrag) {
-        // the view read once, before the scroll writes
-        current.viewY = viewYOf(current.y);
-        const step = edgeStep(current.viewY, bodyTop(), bodyHeight());
-        const scrolled = step !== 0 && edgeScrollBy(true, step);
-        const target = rowReorderTarget(current, current.viewY);
-        if (target !== rowReorder) setRowReorder(target);
-        // the pointer held near an edge keeps scrolling, a frame at a time
-        if (scrolled) askFrame(current);
     }
 
     /**
@@ -2201,53 +2238,73 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * the row the last move moved, until the app moved it: the active cell, in it, follows it to
-     * its new index once its key is there (`followMovedRow`); only with `rowKey` (a row keyed by
-     * its index cannot be told from another)
+     * the last move told, until the app moved its row: the active cell as it was then and its
+     * row's key, which it follows once the moved key is where the move put it
+     * (`followMovedRow`); only with `rowKey` (a row keyed by its index cannot be told from
+     * another) and an active body row
      */
-    let movedRow: RowMove | null = null;
+    let movedRow: {
+        readonly move: RowMove;
+        readonly active: CellPosition;
+        readonly activeKey: RowKey;
+    } | null = null;
 
-    /** A row moves (a drop, the keys): the app is told, and the active cell in it will follow. */
+    /** A row moves (a drop, the keys): the app is told, and the active cell will follow its row. */
     function moveRow(fromIndex: number, toIndex: number, rowKey: RowKey) {
         const move = { fromIndex, toIndex, rowKey };
+        const active = state.activePosition;
+        const activeKey =
+            state.rowKey && active
+                ? loadedRowKey(state, active.rowIndex)
+                : undefined;
         movedRow =
-            state.rowKey && state.activePosition?.rowIndex === fromIndex
-                ? move
+            active && activeKey !== undefined
+                ? { move, active, activeKey }
                 : null;
         emit("row-move", move);
     }
 
     /**
-     * After a change of the model: the active cell, still in the row the last move moved, goes to
-     * its new index once the rows changed (a new source, `rows.changed`) and its key is there (the
-     * app moved it), as a command after this change. Kept through rows that change otherwise (a
-     * server's answer coming in pieces); forgotten once followed, once the active cell is on
-     * another row (the person or the app moved it) or rows are no longer keyed, at the next move
-     * and when the viewport detaches.
+     * After a change of the model: once the rows changed (a new source, `rows.changed`) and the
+     * moved key is where the last move put it (the app moved it), the active cell goes where its
+     * row went: the moved row's to `toIndex`, a row between the two indexes one place toward
+     * `fromIndex`, when its key is there (else it stays), as a command after this change. Kept
+     * through rows that change otherwise (a server answering in pieces); forgotten once followed,
+     * once the active cell changed otherwise (the person or the app moved it) or rows are no
+     * longer keyed, at the next move and when the viewport detaches.
      */
     function followMovedRow(
         before: DataGridModel<TRow, TNode>["state"],
         after: DataGridModel<TRow, TNode>["state"],
     ) {
         if (!movedRow) return;
-        const { fromIndex, toIndex, rowKey } = movedRow;
-        const active = after.activePosition;
-        if (active?.rowIndex !== fromIndex || !after.rowKey) {
+        const { move, active, activeKey } = movedRow;
+        if (after.activePosition !== active || !after.rowKey) {
             movedRow = null;
             return;
         }
         if (
             (after.source === before.source &&
                 after.rowsChanged === before.rowsChanged) ||
-            loadedRowKey(after, toIndex) !== rowKey
+            loadedRowKey(after, move.toIndex) !== move.rowKey
         ) {
             return;
         }
         movedRow = null;
-        model.run("active-position.set", {
-            rowIndex: toIndex,
-            columnIndex: active.columnIndex,
-        });
+        const rowIndex = indexAfterMove(
+            active.rowIndex,
+            move.fromIndex,
+            move.toIndex,
+        );
+        if (
+            rowIndex !== active.rowIndex &&
+            loadedRowKey(after, rowIndex) === activeKey
+        ) {
+            model.run("active-position.set", {
+                rowIndex,
+                columnIndex: active.columnIndex,
+            });
+        }
     }
 
     /**
@@ -2875,13 +2932,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     // ── the model ────────────────────────────────────────────────────────────
 
-    /** Whether the view renders a row of the range: in the rendered rows, or the active row. */
+    /**
+     * Whether the view renders a row of the range: in the rendered rows, the active row, or the
+     * row a drag is moving (E2.3, kept rendered as the active one).
+     */
     function rendersRows(range: Range): boolean {
         const active = state.activePosition;
         return (
             overlaps(view.renderedRows, range.start, range.end) ||
             (active !== null &&
-                overlaps(range, active.rowIndex, active.rowIndex + 1))
+                overlaps(range, active.rowIndex, active.rowIndex + 1)) ||
+            (rowReorder !== null &&
+                overlaps(range, rowReorder.rowIndex, rowReorder.rowIndex + 1))
         );
     }
 
@@ -2916,8 +2978,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * The active cell's element positions before and after a change that only moved its column
-     * (a new order: the same row, the same column or header cell by key), else `null`.
+     * The active cell's element positions before and after a change that only moved it (the same
+     * cell at new indexes), else `null`: its column (a new order: the same row, the same column or
+     * header cell by key), or its summary row (E2.1: the same position and index, its row index
+     * following the header's depth and the rows', the same column by key).
      */
     function followedActive(
         before: DataGridModel<TRow, TNode>["state"],
@@ -2925,13 +2989,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     ): { from: CellPosition; to: CellPosition } | null {
         const from = before.activePosition;
         const to = after.activePosition;
-        if (
-            !from ||
-            !to ||
-            from === to ||
-            after.header === before.header ||
-            from.rowIndex !== to.rowIndex
-        ) {
+        if (!from || !to || from === to) return null;
+        if (from.rowIndex !== to.rowIndex) {
+            const was = summaryRowAt(before, from.rowIndex);
+            const is = summaryRowAt(after, to.rowIndex);
+            if (
+                !was ||
+                !is ||
+                was.position !== is.position ||
+                was.summaryIndex !== is.summaryIndex
+            ) {
+                return null;
+            }
+        } else if (after.header === before.header) {
             return null;
         }
         const key = cellKeyAt(before, from);

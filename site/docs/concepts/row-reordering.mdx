@@ -36,12 +36,17 @@ const [tasks, setTasks] = useState(initialTasks);
 ```
 
 Your rows, with the move applied, come back as a new `rows` (or a new `getRow`, or
-`rows.changed` for rows behind the same one). Give the rows a `rowKey`: the active cell follows
-a moved row by its key, once the key is where the move put it (a server answering in pieces
-included), and without one it stays at its index. The
-[expanded rows](/docs/guides/master-detail), the [selection](/docs/concepts/row-selection) and
-the [measured heights](/docs/concepts/measured-heights) are kept by key too, so they go with the
-row. Saving the order (to storage, to a server) is yours.
+`rows.changed` for rows behind the same one). Give the rows a `rowKey`: the active cell stays
+on its row by its key once the moved key is where the move put it (a server answering in pieces
+included): in the moved row it goes with it, in a row the move shifted it shifts one place too.
+Without one it stays at its index. The [expanded rows](/docs/guides/master-detail) and the
+[selection](/docs/concepts/row-selection) are kept by key too, so they go with the row. Saving the
+order (to storage, to a server) is yours.
+
+With [measured heights](/docs/concepts/measured-heights), a height is kept where its row still
+is: after a move, the rows between the two indexes (the ones that shifted) count at the estimate
+again until they render, and the ones on screen are measured again at once. The scrollbar may
+shift a little meanwhile.
 
 ## The handle
 

@@ -452,7 +452,7 @@ export function viewChanged<TRow, TNode>(
         return true;
     }
     if (VIEW_KEYS.some((key) => current[key] !== next[key])) return true;
-    const { expandedRows, renderedRows, active } = next;
+    const { expandedRows, renderedRows, active, rowReorder } = next;
     // the visible area matters only to an empty grid, and its width to the details on
     // screen (as wide as the view): a resize alone renders nothing else
     return (
@@ -460,9 +460,11 @@ export function viewChanged<TRow, TNode>(
             (current.viewportWidth !== next.viewportWidth ||
                 current.viewportBodyHeight !== next.viewportBodyHeight)) ||
         (current.viewportWidth !== next.viewportWidth &&
-            // an expanded row it renders (its rendered rows, or the active row)
+            // an expanded row it renders (its rendered rows, the active row, a dragged row)
             (holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
-                (active !== null && holdsRow(expandedRows, active.rowIndex))))
+                (active !== null && holdsRow(expandedRows, active.rowIndex)) ||
+                (rowReorder !== null &&
+                    holdsRow(expandedRows, rowReorder.rowIndex))))
     );
 }
 

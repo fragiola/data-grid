@@ -185,6 +185,47 @@ describe("the engine with summary rows", () => {
         expect(model.get("selected-row-keys")).toEqual([]);
     });
 
+    it("keeps a summary cell's interaction and focus when its row index follows the rows and the header", () => {
+        const { engine, model, grid, commit } = mountEngine({
+            rowCount: 1_000,
+            columns: COLUMNS,
+            ...SUMMARY,
+        });
+        const element = cellElement(
+            grid,
+            1_001,
+            1,
+            '<input aria-label="Figure" />',
+        );
+        engine.run("interact-cell", { rowIndex: 1_001, columnIndex: 1 });
+        const input = element.querySelector("input");
+        expect(document.activeElement).toBe(input);
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: 1_001,
+            columnIndex: 1,
+        });
+        const top = engine.get("scroll-position").top;
+        // rows added: the second bottom row is 1201 now, the same cell
+        model.run("data.set", { rowCount: 1_200, getRow: (id) => ({ id }) });
+        expect(model.get("active-position")).toEqual({
+            rowIndex: 1_201,
+            columnIndex: 1,
+        });
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: 1_201,
+            columnIndex: 1,
+        });
+        // rendered again at its new index: focus stays in its field, nothing scrolls
+        element.dataset.rowIndex = "1201";
+        commit();
+        expect(document.activeElement).toBe(input);
+        expect(engine.get("interaction")).toEqual({
+            rowIndex: 1_201,
+            columnIndex: 1,
+        });
+        expect(engine.get("scroll-position").top).toBe(top);
+    });
+
     it("fits a column to its summary rows' cells too", () => {
         const { engine, model, grid, commit } = mountEngine({
             rowCount: 3,

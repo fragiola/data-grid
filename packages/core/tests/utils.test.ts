@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     clamp,
+    indexAfterMove,
     isIndex,
+    keptIfSame,
     keySet,
     lowerBound,
     memo,
@@ -75,5 +77,29 @@ describe("shared helpers", () => {
         expect(toggledKey(["a", "b"], "c")).toEqual(["a", "b", "c"]);
         expect(toggledKey(["a", "b"], "c", true)).toEqual(["c"]);
         expect(toggledKey(["a", "b"], "b", true)).toEqual(["a"]);
+    });
+});
+
+describe("indexAfterMove", () => {
+    it("is where an item goes once another one moved", () => {
+        // 2 moved to 5: 3–5 up one
+        expect(
+            [0, 1, 2, 3, 4, 5, 6].map((i) => indexAfterMove(i, 2, 5)),
+        ).toEqual([0, 1, 5, 2, 3, 4, 6]);
+        // 5 moved to 2: 2–4 down one
+        expect(
+            [0, 1, 2, 3, 4, 5, 6].map((i) => indexAfterMove(i, 5, 2)),
+        ).toEqual([0, 1, 3, 4, 5, 2, 6]);
+        expect(indexAfterMove(3, 3, 3)).toBe(3);
+    });
+});
+
+describe("keptIfSame", () => {
+    it("keeps the current object while every field is the same", () => {
+        const current = { a: 1, b: null };
+        expect(keptIfSame(current, { a: 1, b: null })).toBe(current);
+        const next = { a: 2, b: null };
+        expect(keptIfSame(current, next)).toBe(next);
+        expect(keptIfSame(null, next)).toBe(next);
     });
 });

@@ -460,3 +460,62 @@ describe("summary rows", () => {
         expect(own()).toHaveTextContent("b total 2");
     });
 });
+
+describe("a summary cell's controls", () => {
+    function Editable({ count }: { count: number }) {
+        return (
+            <DataGrid.Root
+                columns={columns}
+                rows={rows.slice(0, count)}
+                rowHeight={20}
+                summaryRows={{ bottom: 1 }}
+                summaryRowHeight={30}
+            >
+                <Expose />
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                    <DataGrid.Summary position="bottom">
+                        <DataGrid.SummaryRows>
+                            {(row) => (
+                                <DataGrid.SummaryRow row={row}>
+                                    <DataGrid.SummaryCells<Row>>
+                                        {(cell) => (
+                                            <DataGrid.SummaryCell cell={cell}>
+                                                {cell.columnIndex === 2 ? (
+                                                    <input aria-label="Note" />
+                                                ) : null}
+                                            </DataGrid.SummaryCell>
+                                        )}
+                                    </DataGrid.SummaryCells>
+                                </DataGrid.SummaryRow>
+                            )}
+                        </DataGrid.SummaryRows>
+                    </DataGrid.Summary>
+                </DataGrid.Grid>
+            </DataGrid.Root>
+        );
+    }
+
+    it("keep the keys and focus while rows are added above them", () => {
+        const { container, rerender } = render(<Editable count={10} />);
+        const input = container.querySelector("input");
+        if (!input) throw new Error("no input");
+        act(() => input.focus());
+        expect(grid?.engine.get("interaction")).toEqual({
+            rowIndex: 10,
+            columnIndex: 2,
+        });
+        rerender(<Editable count={15} />);
+        expect(grid?.model.get("active-position")).toEqual({
+            rowIndex: 15,
+            columnIndex: 2,
+        });
+        expect(grid?.engine.get("interaction")).toEqual({
+            rowIndex: 15,
+            columnIndex: 2,
+        });
+        expect(document.activeElement).toBe(input);
+        expect(input.closest("[data-interacting]")).not.toBeNull();
+    });
+});

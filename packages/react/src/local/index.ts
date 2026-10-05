@@ -4,14 +4,16 @@
 import type { SortColumn } from "@fragiola/data-grid";
 import {
     createLocalRows,
+    indexAfterMove,
     type LocalFilters,
     type LocalRowsOptions,
     moveRow as moveRowIn,
-    moveShownRow,
+    shownRowMove,
 } from "@fragiola/data-grid/local";
 import {
     type ReactNode,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     useSyncExternalStore,
@@ -128,9 +130,15 @@ export function useLocalRows<TRow>(
         if (view.pageIndex !== state.pageIndex)
             local.setPageIndex(view.pageIndex);
     }, [local, view.pageIndex, state.pageIndex]);
-    // the rows and the rows shown as of this render, or as the last move left them
-    const moved = useRef({ rows, shown: view.rows });
-    moved.current = { rows, shown: view.rows };
+    // the rows and where the rows shown are among them, as of the last commit or as the last
+    // move left them: a next move before a render is one on screen after this one
+    const moved = useRef<{
+        rows: readonly TRow[];
+        view: { readonly rowIndexes: readonly number[] };
+    }>({ rows, view });
+    useLayoutEffect(() => {
+        moved.current = { rows, view };
+    });
     const [moveRow] = useState(
         () =>
             ({
@@ -140,15 +148,19 @@ export function useLocalRows<TRow>(
                 fromIndex: number;
                 toIndex: number;
             }) => {
-                const { rows: given, shown } = moved.current;
-                const next = moveShownRow(given, shown, fromIndex, toIndex);
-                // a next move before a render is one on screen after this one
-                if (next !== given) {
-                    moved.current = {
-                        rows: next,
-                        shown: moveRowIn(shown, fromIndex, toIndex),
-                    };
-                }
+                const { rows: given, view: shown } = moved.current;
+                const move = shownRowMove(shown.rowIndexes, fromIndex, toIndex);
+                if (!move) return given;
+                const next = moveRowIn(given, move.fromIndex, move.toIndex);
+                // where the rows shown are now: each one where the move put it, in their new order
+                const rowIndexes = moveRowIn(
+                    shown.rowIndexes.map((index) =>
+                        indexAfterMove(index, move.fromIndex, move.toIndex),
+                    ),
+                    fromIndex,
+                    toIndex,
+                );
+                moved.current = { rows: next, view: { rowIndexes } };
                 return next;
             },
     );

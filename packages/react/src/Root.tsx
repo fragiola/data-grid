@@ -665,19 +665,23 @@ export function Root<TRow>(props: RootProps<TRow>) {
         const header = headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT;
         const summary = summaryRowHeight ?? DEFAULT_ROW_HEIGHT;
         const detail = detailHeight ?? DEFAULT_DETAIL_HEIGHT;
-        // only the sizes that changed, the estimates on their own: one refused (an estimate
+        // the three sizes together when one changed, as always; the summary rows' height and the
+        // estimates (Epic #86) each on its own, only when it changed: one refused (an estimate
         // that is no size above 0) never holds the others back
-        const sizes = {
-            ...(rows !== state.rowHeight ? { rowHeight: rows } : {}),
-            ...(header !== state.headerRowHeight
-                ? { headerRowHeight: header }
-                : {}),
-            ...(summary !== state.summaryRowHeight
-                ? { summaryRowHeight: summary }
-                : {}),
-            ...(detail !== state.detailHeight ? { detailHeight: detail } : {}),
-        };
-        if (Object.keys(sizes).length > 0) model.run("sizes.set", sizes);
+        if (
+            rows !== state.rowHeight ||
+            header !== state.headerRowHeight ||
+            detail !== state.detailHeight
+        ) {
+            model.run("sizes.set", {
+                rowHeight: rows,
+                headerRowHeight: header,
+                detailHeight: detail,
+            });
+        }
+        if (summary !== model.state.summaryRowHeight) {
+            model.run("sizes.set", { summaryRowHeight: summary });
+        }
         const rowEstimate = estimatedRowHeight ?? DEFAULT_ROW_HEIGHT;
         const detailEstimate = estimatedDetailHeight ?? DEFAULT_DETAIL_HEIGHT;
         if (rowEstimate !== model.state.estimatedRowHeight) {

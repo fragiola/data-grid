@@ -69,8 +69,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    with `estimatedRowHeight` (default `DEFAULT_ROW_HEIGHT`) and `detailHeight: "auto"` with
    `estimatedDetailHeight` (default `DEFAULT_DETAIL_HEIGHT`): model state, options and
    `sizes.set` (an estimate is a size above 0: `sizes.set` refuses another with
-   `invalid_payload`, an option leaves it out; `Root` sends only the sizes that changed, the
-   estimates in commands of their own, so a refused one never holds the others back). The engine
+   `invalid_payload`, an option leaves it out; `Root` sends `rowHeight`, `headerRowHeight` and
+   `detailHeight` together when one changed, exactly as before Epic #86, and `summaryRowHeight`
+   and each estimate in a command of its own, only when it changed, so a refused one never holds
+   the others back). The engine
    measures: `measuring(state)` while either is
    `"auto"`, nothing otherwise (a grid of given heights reads, observes and allocates nothing
    more). A loaded measured row registers as the engine's `row` element (`EngineLayer`; React's
@@ -310,6 +312,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     index rebuilt, the last one left at its position, none left the nearest row on its side; a
     header row stays in the header, a body row past a shrunken `rowCount` lands on the last body
     row (never a summary row); a new model's position is for its rows (`withSource(…, false)`).
+    The engine treats a summary row followed to a new index (the rows' count, the header's depth)
+    as the same cell (`followedActive`, as a column moved by an order: `interaction.cellMoved`,
+    no scroll, focus kept in its element: its interaction and its focused control stay).
     On screen and to the keys the rows go by **line** (`rowLine`/`lineRow` in `navigation.ts`,
     the identity without summary rows): header, top summary rows, body, bottom summary rows;
     `nextPosition` moves by line (`linesOf`, `isRowOf` and `keptRow` for the model's `isCell` and
@@ -335,7 +340,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     shared with `Cell`: `summaryCellPart` through `cellPartProps`/`cellBox` with the summary row's
     height, `useCellElement`: roving tab stop, pinned, spans, interaction;
     `data-grid-part="summary-cell"`, `data-summary`); `Body` starts below the top ones and `Grid`
-    holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells`, `useSummaryCell`;
+    holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells` (the body cells'
+    span-aware walk, `cellsOf` in `hooks.ts`, shared with `useCells`), `useSummaryCell`;
     `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Stacking is the app's,
     as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
     the main ones (their built files must not contain it): `@fragiola/data-grid/local` holds the
@@ -346,7 +352,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     which keeps that state itself and returns `props` to spread onto `Root` (`rows`,
     `sortColumns`, a stable `onSortColumnsChange`) and `sort`/`filter`/`page` for the app's
     controls (and `moveRow(move)`, Epic #86: a row move applied to the rows given; stable, the
-    latest rows read through a ref, moves before a render applied one after the other). Filter and page are not model state (no grid behaviour); the sort is. Values
+    latest rows and `rowIndexes` written to a ref in a layout effect, moves before a render applied
+    one after the other). Filter and page are not model state (no grid behaviour); the sort is. Values
     compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
     `Column.filter` override; a text filter contains (case and accents aside), a list holds,
     anything else equals. A filter, the search or the sort changing goes to the first page.
@@ -490,9 +497,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    it inserted there; `landingIndex`, the columns' too), `Root`'s `onRowMove`, whose presence
    turns it on (the engine option `reorderableRows`, `view.reorderableRows`; a grid without it
    is unchanged: no attribute, part state `undefined`). The app moves its rows (`moveRow(rows,
-   fromIndex, toIndex)` and `moveShownRow(rows, shown, …)` in `@fragiola/data-grid/local`,
-   `useLocalRows`'s `moveRow(move)` placing it beside the row it lands next to on screen, filtered
-   or paged). Refused (`rowsMove(reorderableRows, sortColumns)`, parts): while sorted (the handle
+   fromIndex, toIndex)` and `moveShownRow(rows, rowIndexes, …)`/`shownRowMove` in
+   `@fragiola/data-grid/local`, the shown rows by their places among the rows given
+   (`LocalRowsView.rowIndexes`, built when first read: equal rows told apart), `indexAfterMove`
+   (`utils.ts`, the engine's too); `useLocalRows`'s `moveRow(move)` placing it beside the row it
+   lands next to on screen, filtered or paged). Measured heights are kept by index with their key:
+   after a move, the shifted rows off screen count at the estimate until they render again
+   (documented; the store is not remapped). Refused (`rowsMove(reorderableRows, sortColumns)`, parts): while sorted (the handle
    does not drag, the keys move nothing, documented: clear the sort), a row not loaded (no
    key: neither dragged nor a target), a drop beside itself (null target, nothing told). The
    handle is the app's element with `useRowDragHandle(row)`'s props (a row's or a cell's info;
@@ -501,10 +512,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `data-grid-part="row-drag-handle"`, `data-reorderable`, `data-dragging`, an empty `style`;
    `state` `{ rowIndex, reorderable, dragging }`); a plain element, not a control. The drag
    shares the column reorder's machinery (`PointerDrag` with both coordinates, `listen`,
-   `capture`, `askFrame`, `endDrag`, `markedOf`, `keptIfSame` (a target worked out again
-   unchanged keeps its object, the columns' too), the edge scroll split into
-   `edgeStep(at, start, length)` and `edgeScrollBy(vertical, step)`, which tells whether the
-   rows moved: none past the first or last row): a primary press on an own
+   `capture`, `askFrame`, `endDrag`, `markedOf`, one frame step for both axes (`reorderStep`:
+   the view coordinate read once, `edgeStep(at, start, length)` (`columnEdgeStep` for a header
+   cell, its siblings' reach), `edgeScrollBy(vertical, step)`, which tells whether anything moved
+   (none past the first or last row), the target, `askFrame`) and one target tail
+   (`dropTargetOf`: the side of the item's middle, `landingIndex`, `keptIfSame`, so a target
+   worked out again unchanged keeps its object)): a primary press on an own
    handle (after the consumer's `onPointerDown`, a prevented one vetoes; not prevented: under
    `CLICK_SLOP` a click, which focuses its cell), past it the row drags (the active cell left as
    it is: `buildView` keeps `rowReorder.rowIndex` in `view.rows`, as the active row, so the
@@ -514,7 +527,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    body (`bodyTop`, `bodyHeight`), from the row axis (off screen, measured, variable, details,
    scaled alike), the side of its cells' middle (`cellsSizeOf`: over a detail, after); within
    40 px of the body's top or bottom edge (or past it) the rows scroll up to 20 px a frame
-   (from the drag's start too); a scroll during the drag retargets once a frame. After every
+   (from the drag's start too); a scroll during the drag retargets once a frame. The dragged row
+   counts as rendered (`rendersRows`, `viewChanged`'s details): a `rows.changed` covering it
+   renders, and another key there ends the drag. After every
    model change, laid out (`followRowDrag`, after `relayout`: the offset clamped), the target is
    worked out again from the last `viewY` (no layout read) and, held in an edge zone, a frame is
    asked (rows appended come into reach). The release emits one `row-move`; Escape (after the
@@ -525,13 +540,15 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    { targetIndex: null, side: null })` or `null`, the `row-reorder` event, `view.rowReorder`;
    `RowState.dragging` (`boolean | undefined`) and `dropTarget` (`ReorderSide | null |
    undefined`), `undefined` while rows do not move (pre-existing `RowState` assertions hold),
-   `data-dragging`/`data-drop-target` on the row. The active cell follows its row by key, only
+   `data-dragging`/`data-drop-target` on the row. The active cell stays on its row by key, only
    with `rowKey` (an index key cannot tell rows apart: without one it stays at its index): a move
-   from the active row remembers it (`movedRow`); at a new source or `rows.changed` that puts the
-   key at `toIndex`, the active cell still on `fromIndex`, an `active-position.set` runs (queued
-   after that change: no render in between), focus going with it. Kept through rows changing
-   otherwise (a server answering in pieces); forgotten once followed, once the active cell is on
-   another row (the person or the app moved it), at the next move and when the viewport detaches.
+   remembers the active cell and its row's key (`movedRow`); at a new source or `rows.changed`
+   that puts the moved key at `toIndex`, the active cell unchanged since, it goes to
+   `indexAfterMove` of its row (the moved row to `toIndex`, a row between one place toward
+   `fromIndex`) when its key is there, an `active-position.set` (queued after that change: no
+   render in between), focus going with it. Kept through rows changing otherwise (a server
+   answering in pieces); forgotten once followed, once the active cell changed (the person or the
+   app moved it), at the next move and when the viewport detaches.
    The indicator, the cursor, `touch-action` and announcements are the app's; live moves,
    between grids, several rows and touch gestures are not the grid's.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps

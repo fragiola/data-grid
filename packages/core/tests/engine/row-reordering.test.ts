@@ -382,6 +382,28 @@ describe("a drag on a row's handle", () => {
         press(handle, "pointerup", 300);
     });
 
+    it("follows the dragged row out of the window: new data for it renders, another key ends the drag", () => {
+        const ids = new Map<number, number>();
+        const { handleOf, drag, press, view, model, target, moves } = setup({
+            getRow: (index) => ({ id: ids.get(index) ?? index }),
+        });
+        const { handle } = handleOf(1);
+        drag(handle, middleOf(1), 300);
+        for (let i = 0; i < 2_000 && frames.size > 0; i++) frame();
+        expect(view().rows[0]).toBe(1);
+        // new data for it, the same row: rendered again, the drag goes on
+        const revision = view().rowsRevision;
+        model.run("rows.changed", { start: 1, end: 2 });
+        expect(view().rowsRevision).toBe(revision + 1);
+        expect(target()?.rowIndex).toBe(1);
+        // another row there now: the drag ends, telling nothing
+        ids.set(1, 500);
+        model.run("rows.changed", { start: 1, end: 2 });
+        expect(target()).toBeNull();
+        press(handle, "pointerup", 300);
+        expect(moves).toEqual([]);
+    });
+
     it("works under scroll scaling: the target is the virtual row", () => {
         // its row active already: the press makes no other cell active (which would scroll)
         const { handleOf, drag, press, engine, target } = setup(
@@ -571,6 +593,64 @@ describe("the active cell", () => {
         apply(drop);
         expect(model.state.activePosition).toEqual({
             rowIndex: 8,
+            columnIndex: 1,
+        });
+    });
+
+    it("stays on its own row when another row is dropped across it", () => {
+        const { handleOf, drag, press, model, moves, apply } = setup({
+            activePosition: { rowIndex: 5, columnIndex: 1 },
+        });
+        // row 2 dropped after row 6: rows 3–6 go up one, the active row 5 (id 5) to 4
+        const { handle } = handleOf(2);
+        drag(handle, middleOf(2), middleOf(6) + 5);
+        press(handle, "pointerup", middleOf(6) + 5);
+        const [down] = moves;
+        expect(down).toEqual({ fromIndex: 2, toIndex: 6, rowKey: "r2" });
+        if (!down) throw new Error("no move");
+        apply(down);
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 4,
+            columnIndex: 1,
+        });
+        // row 8 dropped before row 1: rows 1–7 go down one, the active row back to 5
+        const up = handleOf(8).handle;
+        drag(up, middleOf(8), middleOf(1) - 5);
+        press(up, "pointerup", middleOf(1) - 5);
+        const second = moves[1];
+        expect(second).toEqual({ fromIndex: 8, toIndex: 1, rowKey: "r8" });
+        if (!second) throw new Error("no move");
+        apply(second);
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 5,
+            columnIndex: 1,
+        });
+        // a move beyond it: it stays
+        const far = handleOf(9).handle;
+        drag(far, middleOf(9), middleOf(10) + 5);
+        press(far, "pointerup", middleOf(10) + 5);
+        const third = moves[2];
+        if (!third) throw new Error("no move");
+        apply(third);
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 5,
+            columnIndex: 1,
+        });
+    });
+
+    it("stays on its index across another row's drop without rowKey", () => {
+        const { handleOf, drag, press, model, moves, apply } = setup({
+            rowKey: undefined,
+            activePosition: { rowIndex: 5, columnIndex: 1 },
+        });
+        const { handle } = handleOf(2);
+        drag(handle, middleOf(2), middleOf(6) + 5);
+        press(handle, "pointerup", middleOf(6) + 5);
+        const [move] = moves;
+        if (!move) throw new Error("no move");
+        apply(move);
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 5,
             columnIndex: 1,
         });
     });
