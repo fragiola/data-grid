@@ -1,5 +1,5 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
-import { headerCellsIn, headerRowCount } from "../header/header";
+import { headerCellsIn, headerRowCount, pinnedEndFrom } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import { rowAt } from "../model/source";
 import type {
@@ -76,24 +76,31 @@ function indexes(
     return list;
 }
 
-/** A column window without the pinned columns (the overscan may reach into them). */
+/**
+ * A column window without the pinned columns (the overscan may reach into them): from the first
+ * column after those pinned at the start (`pinnedCount`) to the first pinned at the end
+ * (`endFrom`, none without).
+ */
 export function scrollingWindow(
     columns: AxisWindow,
     pinnedCount: number,
+    endFrom = Number.POSITIVE_INFINITY,
 ): AxisWindow {
     const { visible, rendered } = columns;
-    if (rendered.start >= pinnedCount) return columns;
+    if (rendered.start >= pinnedCount && rendered.end <= endFrom) {
+        return columns;
+    }
     return {
-        visible: rightOf(visible, pinnedCount),
-        rendered: rightOf(rendered, pinnedCount),
+        visible: between(visible, pinnedCount, endFrom),
+        rendered: between(rendered, pinnedCount, endFrom),
     };
 }
 
-/** A range kept right of the pinned columns. */
-function rightOf(range: Range, pinnedCount: number): Range {
-    return range.start >= pinnedCount
-        ? range
-        : { start: pinnedCount, end: Math.max(range.end, pinnedCount) };
+/** A range kept between the pinned columns: from `from` on, before `to`. */
+function between(range: Range, from: number, to: number): Range {
+    if (range.start >= from && range.end <= to) return range;
+    const start = Math.min(Math.max(range.start, from), to);
+    return { start, end: Math.min(Math.max(range.end, start), to) };
 }
 
 /**
@@ -105,9 +112,16 @@ export function activeColumn<TRow, TNode>(
     header: HeaderLayout<TRow, TNode>,
     pinnedCount: number,
     renderedColumns: Range,
+    endFrom = Number.POSITIVE_INFINITY,
 ): number | null {
     // a pinned column is always rendered
-    if (!active || active.columnIndex < pinnedCount) return null;
+    if (
+        !active ||
+        active.columnIndex < pinnedCount ||
+        active.columnIndex >= endFrom
+    ) {
+        return null;
+    }
     if (active.rowIndex < 0) {
         const cell = header.cellAt(active.rowIndex, active.columnIndex);
         if (
@@ -132,6 +146,7 @@ export type HeaderRowsFor<TRow, TNode> = (
     end: number,
     extra: number | null,
     pinned: number,
+    endFrom: number | null,
 ) => readonly HeaderRowView<TRow, TNode>[];
 
 /** The header rows for the rendered columns: laid out again only when they change. */
@@ -144,15 +159,25 @@ export function createHeaderRows<TRow, TNode>(): HeaderRowsFor<TRow, TNode> {
             end: number,
             extra: number | null,
             pinned: number,
+            endFrom: number | null,
         ): readonly HeaderRowView<TRow, TNode>[] => {
             if (count === 0) return [];
-            // the pinned columns' cells first: a pinned group holds only pinned columns
+            // the cells of the columns pinned at the start first, at the end last: a pinned group
+            // holds only columns pinned where it is
             const pinnedCells =
                 pinned > 0 ? headerCellsIn(header, 0, pinned) : [];
+            const endCells =
+                endFrom !== null
+                    ? headerCellsIn(header, endFrom, Number.POSITIVE_INFINITY)
+                    : [];
             return headerCellsIn(header, start, end, extra).map(
                 (cells, level) => ({
                     rowIndex: level - count,
-                    cells: [...(pinnedCells[level] ?? []), ...cells],
+                    cells: [
+                        ...(pinnedCells[level] ?? []),
+                        ...cells,
+                        ...(endCells[level] ?? []),
+                    ],
                 }),
             );
         },
@@ -172,10 +197,13 @@ export interface ViewInputs<TRow, TNode>
         | "viewportBodyHeight"
         | "pinnedColumnCount"
         | "pinnedWidth"
+        | "pinnedEndColumnCount"
+        | "pinnedEndWidth"
         | "rowsRevision"
         | "interaction"
         | "columnResize"
         | "columnReorder"
+        | "direction"
     > {
     readonly state: DataGridState<TRow, TNode>;
     readonly rowWindow: AxisWindow;
@@ -193,13 +221,21 @@ export function buildView<TRow, TNode>({
     headerRowsFor,
     ...measures
 }: ViewInputs<TRow, TNode>): GridView<TRow, TNode> {
-    const { rowAxis, columnAxis, pinnedColumnCount: pinnedCount } = measures;
+    const {
+        rowAxis,
+        columnAxis,
+        pinnedColumnCount: pinnedCount,
+        pinnedEndColumnCount: endCount,
+    } = measures;
     const active = state.activePosition;
+    const columnCount = state.columns.length;
+    const endFrom = pinnedEndFrom(columnCount, endCount);
     const extraColumn = activeColumn(
         active,
         state.header,
         pinnedCount,
         columnWindow.rendered,
+        endFrom,
     );
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
@@ -210,12 +246,12 @@ export function buildView<TRow, TNode>({
             rowWindow.rendered.end,
             active && active.rowIndex >= 0 ? active.rowIndex : null,
         ),
-        // the pinned columns first, always rendered
+        // the pinned columns first and last, always rendered
         columns: indexes(
-            start,
-            end,
-            extraColumn,
-            indexes(0, pinnedCount, null),
+            endFrom,
+            columnCount,
+            null,
+            indexes(start, end, extraColumn, indexes(0, pinnedCount, null)),
         ),
         renderedRows: rowWindow.rendered,
         renderedColumns: columnWindow.rendered,
@@ -230,10 +266,11 @@ export function buildView<TRow, TNode>({
             end,
             extraColumn,
             pinnedCount,
+            endCount > 0 ? endFrom : null,
         ),
         header: state.header,
         rowCount: state.rowCount,
-        columnCount: state.columns.length,
+        columnCount,
         columnDefs: state.columns,
         source: state.source,
         active,
@@ -263,6 +300,7 @@ const VIEW_KEYS = [
     "rowsRevision",
     "sortColumns",
     "pinnedColumnCount",
+    "pinnedEndColumnCount",
     "expandedRows",
     "rowKey",
     "rowSelection",
@@ -271,6 +309,7 @@ const VIEW_KEYS = [
     "interaction",
     "columnResize",
     "columnReorder",
+    "direction",
 ] as const satisfies readonly (keyof GridView)[];
 
 /** Whether `next` renders anything `current` does not: a new view to publish. */
@@ -320,12 +359,18 @@ export function columnToScrollTo<TRow, TNode>(
     header: HeaderLayout<TRow, TNode>,
     pinnedCount: number,
     visibleColumns: Range,
+    endFrom = Number.POSITIVE_INFINITY,
 ): number | undefined {
     if (position.rowIndex >= 0) return position.columnIndex;
     const cell = header.cellAt(position.rowIndex, position.columnIndex);
     if (!cell || cell.columnSpan <= 1) return position.columnIndex;
     // a pinned group is always in view
-    if (cell.columnIndex + cell.columnSpan <= pinnedCount) return undefined;
+    if (
+        cell.columnIndex + cell.columnSpan <= pinnedCount ||
+        cell.columnIndex >= endFrom
+    ) {
+        return undefined;
+    }
     const end = cell.columnIndex + cell.columnSpan;
     if (overlaps(visibleColumns, cell.columnIndex, end)) {
         return undefined;

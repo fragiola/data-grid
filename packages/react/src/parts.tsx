@@ -25,6 +25,7 @@ import {
     type CellState,
     type HeaderCellState,
     headerCellContent,
+    inlineSide,
     type RowDetailState,
     type RowState,
     rowStyle,
@@ -80,7 +81,8 @@ function useLayer(layer: EngineLayer): LayerRef {
 const LAYER_KEYS = ["transform"] as const;
 
 /**
- * A pinned cell's `left` inset is the engine's, and the other insets and a `transform` would let it
+ * A pinned cell's inline start inset (`left`, right to left `right`) is the engine's, and the
+ * other insets and a `transform` would let it
  * move from its place (`position: sticky` obeys every inset it is given).
  */
 const PINNED_KEYS = [
@@ -365,7 +367,7 @@ export function Empty(props: EmptyProps) {
             ...dataAttributes({ "grid-part": "empty" }),
             style: {
                 position: "sticky",
-                left: 0,
+                [inlineSide(view.direction)]: 0,
                 display: "block",
                 width: view.viewportWidth,
                 height: view.viewportBodyHeight,
@@ -397,7 +399,7 @@ export function Body(props: BodyProps) {
             style: {
                 position: "absolute",
                 top: view.headerHeight,
-                left: 0,
+                [inlineSide(view.direction)]: 0,
                 boxSizing: "border-box",
             },
         },

@@ -4,6 +4,7 @@ import type {
     ColumnOrGroup,
     HeaderCellLayout,
     HeaderLayout,
+    PinnedSide,
 } from "../model/types";
 import { isWidth, lowerBound } from "../utils";
 
@@ -43,15 +44,16 @@ export interface ColumnLayout<TRow, TNode> {
 /**
  * Why the entries are not a valid `columns`, or `null`: every key unique across groups and
  * columns (so no group inside itself), every width finite and not negative (limits and `flex`
- * too, the minimum not above the maximum), `flex` and `autoSize` on columns only, and at least
- * one column under every group.
+ * too, the minimum not above the maximum), `flex` and `autoSize` on columns only, at least one
+ * column under every group, the columns pinned at the start first and the ones pinned at the end
+ * last, and a group's columns in one part.
  */
 export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
     // a group inside itself repeats its own key: refused as a duplicate before it is entered again
     const keys = new Set<string>();
-    /** an unpinned column was met: a pinned one after it would not be at the start */
-    let unpinnedSeen = false;
+    /** each column's part, in order: pinned at the start (0), not pinned (1), at the end (2) */
+    const parts: number[] = [];
     /** the columns below `list`, or an error */
     const visit = (list: readonly unknown[]): number | string => {
         let leaves = 0;
@@ -80,13 +82,21 @@ export function columnsError(entries: unknown): string | null {
                     return `column "${key}" has an invalid autoSize`;
                 }
                 const pinned: unknown = Reflect.get(entry, "pinned");
-                if (pinned !== undefined && pinned !== "start") {
+                if (
+                    pinned !== undefined &&
+                    pinned !== "start" &&
+                    pinned !== "end"
+                ) {
                     return `column "${key}" has an invalid pin`;
                 }
-                if (pinned === "start" && unpinnedSeen) {
-                    return `pinned column "${key}" comes after an unpinned one: pinned columns come first`;
+                const part = pinned === "start" ? 0 : pinned === "end" ? 2 : 1;
+                const previous = parts[parts.length - 1] ?? 0;
+                if (part < previous) {
+                    return part === 0
+                        ? `pinned column "${key}" comes after one that is not pinned at the start: pinned columns come first`
+                        : `column "${key}" comes after one pinned at the end: those come last`;
                 }
-                if (pinned !== "start") unpinnedSeen = true;
+                parts.push(part);
                 leaves += 1;
                 continue;
             }
@@ -102,13 +112,17 @@ export function columnsError(entries: unknown): string | null {
             ) {
                 return `group "${key}" flexes or fits itself: a group is sized by its columns`;
             }
-            const before = unpinnedSeen;
+            const from = parts.length;
             const below = visit(children);
             if (typeof below === "string") return below;
             if (below === 0) return `group "${key}" has no column`;
-            // its columns all pinned, or none: one pinned column first then one that is not
-            if (!before && unpinnedSeen && pinnedIn(children)) {
-                return `group "${key}" mixes pinned and unpinned columns`;
+            // the parts come in order: its columns are in one part when its first and last are
+            const first = parts[from];
+            const last = parts[parts.length - 1];
+            if (first !== last) {
+                return first === 1 || last === 1
+                    ? `group "${key}" mixes pinned and unpinned columns`
+                    : `group "${key}" mixes columns pinned at the start and at the end`;
             }
             leaves += below;
         }
@@ -130,15 +144,16 @@ function limitsError(column: object): string | null {
     return null;
 }
 
-/** Whether a column below `list` is pinned (a group's columns are all pinned, or none). */
-export function pinnedIn(list: readonly unknown[]): boolean {
-    return list.some((entry) => {
-        if (typeof entry !== "object" || entry === null) return false;
-        const children: unknown = Reflect.get(entry, "children");
-        return Array.isArray(children)
-            ? pinnedIn(children)
-            : Reflect.get(entry, "pinned") === "start";
-    });
+/**
+ * The part an entry is pinned in: a column's `pinned`, a group's its first column's (a group's
+ * columns are all in one part); `undefined` when it is not pinned.
+ */
+export function pinnedPart(entry: unknown): PinnedSide | undefined {
+    if (typeof entry !== "object" || entry === null) return undefined;
+    const children: unknown = Reflect.get(entry, "children");
+    if (Array.isArray(children)) return pinnedPart(children[0]);
+    const pinned: unknown = Reflect.get(entry, "pinned");
+    return pinned === "start" || pinned === "end" ? pinned : undefined;
 }
 
 /** How many columns are pinned at the start: the leading ones with `pinned: "start"`. */
@@ -147,6 +162,26 @@ export function pinnedColumnCount<TRow, TNode>(
 ): number {
     let count = 0;
     while (columns[count]?.pinned === "start") count += 1;
+    return count;
+}
+
+/**
+ * The first column pinned at the end, of `columnCount` columns with `pinnedEndCount` pinned there:
+ * the column count without one. What tells a column of the end part (`index >= pinnedEndFrom`).
+ */
+export function pinnedEndFrom(
+    columnCount: number,
+    pinnedEndCount: number,
+): number {
+    return columnCount - pinnedEndCount;
+}
+
+/** How many columns are pinned at the end: the trailing ones with `pinned: "end"`. */
+export function pinnedEndColumnCount<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+): number {
+    let count = 0;
+    while (columns[columns.length - 1 - count]?.pinned === "end") count += 1;
     return count;
 }
 

@@ -74,7 +74,13 @@ export function fakeViewport({ width, height, clampTo }: FakeViewportOptions) {
         scrollLeft: {
             get: () => scroll.left,
             set: (value: number) => {
-                scroll.left = clamp(value, (view) => view.width - size.width);
+                // 0 to the maximum, or laid out right to left (its `dir`, the page's) the
+                // maximum's mirror to 0
+                const sign =
+                    getComputedStyle(element).direction === "rtl" ? -1 : 1;
+                scroll.left =
+                    sign *
+                    clamp(sign * value, (view) => view.width - size.width);
             },
         },
     });

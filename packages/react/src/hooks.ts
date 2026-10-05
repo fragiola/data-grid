@@ -11,11 +11,13 @@ import {
     cellValue,
     columnResizerPart,
     EMPTY_WINDOW,
+    type GridDirection,
     type GridView,
     type HeaderCellPart,
     type HeaderCellState,
     headerCellBox,
     headerCellPart,
+    inlineStart,
     type RowDetailState,
     type RowState,
     renderedWidth,
@@ -122,6 +124,25 @@ export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
 }
 
 /**
+ * The structural style key of an offset from a view's inline start (E1.1): `left`, or in a
+ * right-to-left grid `right`; with `"margin"`, `marginLeft` or `marginRight`. Written straight
+ * into the part's style object.
+ */
+export function inlineSide(direction: GridDirection): "left" | "right";
+export function inlineSide(
+    direction: GridDirection,
+    prefix: "margin",
+): "marginLeft" | "marginRight";
+export function inlineSide(
+    direction: GridDirection,
+    prefix?: "margin",
+): "left" | "right" | "marginLeft" | "marginRight" {
+    const side = inlineStart(direction);
+    if (!prefix) return side;
+    return side === "left" ? "marginLeft" : "marginRight";
+}
+
+/**
  * A row's structural style (a header row's too, at `top`): in its layer, from `rowLeft`, as wide
  * as its rendered cells (an expanded row, as what holds its detail); with pinned columns, a flex
  * container their sticky cells stack in.
@@ -137,7 +158,7 @@ export function rowStyle<TRow>(
         position: "absolute",
         ...(display ? { display } : {}),
         top,
-        left: rowLeft(view),
+        [inlineSide(view.direction)]: rowLeft(view),
         width,
         height,
         boxSizing: "border-box",
@@ -199,11 +220,13 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
 
 /**
  * The props a body cell and a header cell share, in one record: the roving tab stop, ARIA,
- * `data-*` and their structural style. A cell that scrolls is positioned in its row; a pinned one
- * is in the row's flow, `sticky`: the browser's scrolling keeps it in place, at the `left` inset
- * the engine writes (it is the engine's, like a layer's transform).
+ * `data-*` and their structural style. A cell that scrolls is positioned in its row (from its
+ * inline start); a pinned one is in the row's flow, `sticky`: the browser's scrolling keeps it in
+ * place, at the inline start inset the engine writes (it is the engine's, like a layer's
+ * transform).
  */
-function cellProps(
+function cellProps<TRow>(
+    view: GridView<TRow, ReactNode>,
     part: CellPart | HeaderCellPart,
     box: {
         readonly left: number;
@@ -233,7 +256,7 @@ function cellProps(
             sortable: header?.sortable,
             sort: header?.sortDirection,
             "sort-priority": header?.sortPriority,
-            pinned: pinned ? "start" : undefined,
+            pinned: state.pinnedSide,
             "pinned-edge": state.pinnedEdge,
             interacting: state.interacting,
             resizable: header?.resizable,
@@ -247,7 +270,7 @@ function cellProps(
             : {
                   position: "absolute",
                   top: 0,
-                  left: box.left,
+                  [inlineSide(view.direction)]: box.left,
                   width,
                   height,
                   boxSizing: "border-box",
@@ -261,7 +284,11 @@ export function useCell<TRow>(cell: CellInfo<TRow>): PartHookResult<CellState> {
     const part = cellPart(view, cell);
     return {
         state: part.state,
-        props: cellProps(part, cellBox(view, cell.rowIndex, cell.columnIndex)),
+        props: cellProps(
+            view,
+            part,
+            cellBox(view, cell.rowIndex, cell.columnIndex),
+        ),
     };
 }
 
@@ -292,7 +319,12 @@ export function useRowDetail<TRow>(
                 display: "block",
                 marginTop: box.top,
                 // in a row of pinned cells (flex), from the row's start, never shrunk
-                ...(flex ? { marginLeft: box.start, flexShrink: 0 } : {}),
+                ...(flex
+                    ? {
+                          [inlineSide(view.direction, "margin")]: box.start,
+                          flexShrink: 0,
+                      }
+                    : {}),
                 width: box.width,
                 height: box.height,
                 boxSizing: "border-box",
@@ -365,7 +397,7 @@ export function useHeaderCell<TRow>(
     return {
         state: part.state,
         // at its row's top: a cell spanning rows reaches down past it
-        props: cellProps(part, headerCellBox(view, cell)),
+        props: cellProps(view, part, headerCellBox(view, cell)),
     };
 }
 

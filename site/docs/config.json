@@ -63,6 +63,10 @@
                     "path": "concepts/auto-widths"
                 },
                 {
+                    "label": "Right to left",
+                    "path": "concepts/right-to-left"
+                },
+                {
                     "label": "Sorting",
                     "path": "concepts/sorting"
                 },

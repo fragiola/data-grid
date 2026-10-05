@@ -612,6 +612,7 @@ describe("the parts", () => {
                 width: 100,
                 minWidth: 50,
                 maxWidth: 200,
+                edge: "end",
             },
             tabIndex: 0,
             attributes: {

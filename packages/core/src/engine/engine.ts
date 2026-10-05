@@ -1,5 +1,10 @@
 import type { Axis } from "../axis/axis";
-import { headerRowCount, pinnedColumnCount } from "../header/header";
+import {
+    headerRowCount,
+    pinnedColumnCount,
+    pinnedEndColumnCount,
+    pinnedEndFrom,
+} from "../header/header";
 import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import {
@@ -15,6 +20,7 @@ import type {
     CellPosition,
     Column,
     ColumnWidths,
+    GridDirection,
     HeaderCellLayout,
     HeaderLayout,
 } from "../model/types";
@@ -59,6 +65,7 @@ import {
     COLUMN_RESIZER_ATTRIBUTE,
     CTRL_KEYS,
     cellSelector,
+    inlineKey,
     isCellNode,
     isControl,
     isEditable,
@@ -74,7 +81,13 @@ import {
     TAB_STOP_ATTRIBUTE,
     VIEWPORTS,
 } from "./dom";
-import { cellsSizeOf, pinnedInset } from "./geometry";
+import {
+    cellsSizeOf,
+    inlineSign,
+    inlineStart,
+    pinnedEndShift,
+    pinnedInset,
+} from "./geometry";
 import { createInteraction } from "./interaction";
 import type {
     ColumnReorder,
@@ -115,6 +128,12 @@ import {
 //       body layer     (below the header; translated on x and y)
 //
 // Every DOM access goes through the viewport's ownerDocument/defaultView, never the globals.
+//
+// Right to left (E1.1), the engine works in inline offsets from the view's start as it does left
+// to right, and mirrors only where it meets the DOM: the scroll it reads and sets (negative
+// `scrollLeft`, every current browser's), the pointer's x, the layers' transform and the side of
+// the insets it writes (`inlineSign`, `inlineStart`), and the arrows (`inlineKey`). The direction
+// is the model's, else the viewport's own as the page lays it out (a computed style read).
 
 /** The layers whose elements get an inset of the engine's (`left`), not a transform. */
 function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
@@ -146,6 +165,8 @@ interface ResizeDrag extends PointerDrag {
     readonly kind: "resize";
     /** the column's (or the group's) width when it started */
     readonly startWidth: number;
+    /** which way it grows on screen (`resizeSign`) */
+    readonly sign: number;
     /** the engine's widths when it started: its columns resized back to them need none of theirs */
     readonly autoWidths: ColumnWidths;
     /** the x the last resize was for */
@@ -218,6 +239,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let detachViewport: (() => void) | null = null;
 
     let state = model.state;
+    /** the direction in effect: the model's, else the viewport's (`updateDirection`) */
+    let direction: GridDirection = state.direction ?? "ltr";
     /** the rows' own heights; `rowAxis` adds the details */
     let baseRowAxis = rowAxisOf(state);
     let rowAxis = withDetails(baseRowAxis, state);
@@ -232,9 +255,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let autoWidths: ColumnWidths = NO_WIDTHS;
     updateAutoWidths();
     let columnAxis = columnAxisOf(state, autoWidths);
-    /** the pinned columns in effect, and their width */
+    /** the pinned columns in effect, at the start and at the end, and their widths */
     let pinnedCount = 0;
     let pinnedWidth = 0;
+    let pinnedEndCount = 0;
+    let pinnedEndWidth = 0;
     updatePinning();
     let height = 0;
 
@@ -341,10 +366,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             viewportBodyHeight: bodyHeight(),
             pinnedColumnCount: pinnedCount,
             pinnedWidth,
+            pinnedEndColumnCount: pinnedEndCount,
+            pinnedEndWidth,
             rowsRevision,
             interaction: interaction.cell,
             columnResize,
             columnReorder,
+            direction,
             headerRowsFor,
         });
     }
@@ -360,15 +388,57 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return Math.abs(moved - physical) > 0.5 ? moved : undefined;
     }
 
+    /** The viewport's scroll from its inline start: right to left, `scrollLeft` mirrored. */
+    function scrollX(element: HTMLElement | null): number {
+        return element ? inlineSign(direction) * element.scrollLeft : 0;
+    }
+
+    /** the `dir` the engine gave the viewport: the model's direction, while it has one */
+    let dirWritten: GridDirection | null = null;
+    /** the viewport's own direction as the page lays it out, last read (`updateDirection`) */
+    let pageDirection: GridDirection = "ltr";
+
+    /**
+     * Takes the direction in effect: the model's, which the viewport carries as `dir` (so the page
+     * lays the grid out in it), else the viewport's own as the page lays it out. That one is read
+     * (a computed style, from its window) only with `readPage` (on attach, when the view's size
+     * changes) or when the model's is taken back (its `dir` removed first): never per command or
+     * frame. A change mirrors whatever the engine writes from now on (the layers' transforms, the
+     * insets' side), before anything is written for it, and, with `follow`, sets the scroll at the
+     * same distance from the start on the new side. Returns whether it changed.
+     */
+    function updateDirection(follow: boolean, readPage = false): boolean {
+        const given = state.direction ?? null;
+        let read = readPage;
+        if (viewport && given !== dirWritten) {
+            if (given) viewport.setAttribute("dir", given);
+            else viewport.removeAttribute("dir");
+            // taken back: the page's, as it is now
+            read ||= given === null;
+            dirWritten = given;
+        }
+        if (viewport && read && given === null) {
+            pageDirection =
+                viewport.ownerDocument.defaultView?.getComputedStyle(viewport)
+                    .direction === "rtl"
+                    ? "rtl"
+                    : "ltr";
+        }
+        const next = given ?? pageDirection;
+        if (next === direction) return false;
+        direction = next;
+        layerX = Number.NaN;
+        if (follow) {
+            scrollWhenReady({ left: columnsX.scrollTo(columnsX.virtual) });
+        }
+        return true;
+    }
+
     /** Takes the current sizes into the scroll mappings; returns the physical moves needed. */
     function remap(): ScrollMoves {
         const moves = {
             top: remapAxis(rowsY, rowMapping(), viewport?.scrollTop ?? 0),
-            left: remapAxis(
-                columnsX,
-                columnMapping(),
-                viewport?.scrollLeft ?? 0,
-            ),
+            left: remapAxis(columnsX, columnMapping(), scrollX(viewport)),
         };
         listenToWheel();
         return moves;
@@ -387,16 +457,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             overscan.rows ?? 4,
             fresh ? undefined : rowWindow,
         );
-        // the columns that scroll, in the view right of the pinned ones
+        // the columns that scroll, in the view between the pinned ones
         const nextColumns = scrollingWindow(
             windowFor(
                 columnAxis,
                 columnsX.virtual + pinnedWidth,
-                width - pinnedWidth,
+                width - pinnedWidth - pinnedEndWidth,
                 overscan.columns ?? 2,
                 fresh ? undefined : columnWindow,
             ),
             pinnedCount,
+            pinnedEndFrom(columnAxis.count, pinnedEndCount),
         );
         const rowsMoved = !sameWindow(rowWindow, nextRows);
         const columnsMoved = !sameWindow(columnWindow, nextColumns);
@@ -449,20 +520,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * virtual offset's content, wherever the physical scroll stands.
      */
     function offsetX(shown: GridView<TRow, TNode>, element: HTMLElement) {
-        return columnsX.layerOffset(shown.columnBase, element.scrollLeft);
+        return columnsX.layerOffset(shown.columnBase, scrollX(element));
     }
 
     function offsetY(shown: GridView<TRow, TNode>, element: HTMLElement) {
         return rowsY.layerOffset(shown.rowBase, element.scrollTop);
     }
 
-    /** A layer's transform for offsets `x` and `y`: the header moves with the columns only. */
+    /**
+     * A layer's transform for offsets `x` (inline: mirrored right to left) and `y`: the header
+     * moves with the columns only.
+     */
     function layerTransform(
         layer: "body" | "header",
         x: number,
         y: number,
     ): string {
-        return `translate3d(${x}px, ${layer === "body" ? y : 0}px, 0px)`;
+        return `translate3d(${inlineSign(direction) * x}px, ${layer === "body" ? y : 0}px, 0px)`;
     }
 
     /**
@@ -471,11 +545,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     let layerX = Number.NaN;
     let layerY = Number.NaN;
-    /** what the pinned cells' insets were last written for: the layers' `x` and the column axis */
-    let pinnedFor: { x: number; columnAxis: Axis } | null = null;
+    /**
+     * what the pinned cells' insets were last written for: the layers' `x`, the columns, the
+     * view's width (where the ones pinned at the end show) and the side they are on
+     */
+    let insetsFor: {
+        x: number;
+        columnAxis: Axis;
+        width: number;
+        side: "left" | "right";
+    } | null = null;
 
     /**
-     * Writes a pinned cell's sticky inset for the layers' `x`: its column's offset less `x`.
+     * Writes a pinned cell's sticky inset on `side` for the layers' `x`: its column's offset less
+     * `x`, and for a column pinned at the end (from `endFrom`) `endShift` to the view's end.
      * Sticky is resolved in layout, before the layer's transform moves it by `x`, so it shows at
      * its offset from the view's start, on every frame the browser paints while it scrolls. An
      * element without its column (`data-column-index`) is left alone.
@@ -484,29 +567,68 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         layer: "pinned" | "detail",
         element: HTMLElement,
         x: number,
+        side: "left" | "right",
         columnAxis: Axis,
+        endFrom: number,
+        endShift: number,
     ) {
         if (layer === "detail") {
             // the view's start: what a column at offset 0 shows at
-            element.style.left = `${-x}px`;
+            element.style[side] = `${-x}px`;
             return;
         }
         const attribute = element.getAttribute("data-column-index");
         const columnIndex = attribute === null ? Number.NaN : Number(attribute);
         if (!Number.isInteger(columnIndex)) return;
-        element.style.left = `${pinnedInset(columnAxis, columnIndex, x)}px`;
+        element.style[side] = `${pinnedInset(
+            columnAxis,
+            columnIndex,
+            x,
+            columnIndex >= endFrom ? endShift : 0,
+        )}px`;
     }
 
     /**
-     * Writes the pinned cells' insets when the layers' `x` or the columns moved, and only then:
-     * unscaled, `x` is the base, which moves with a new view, never with a scroll frame.
+     * Writes the pinned cells' insets when the layers' `x`, the columns, the view's width or the
+     * direction moved, and only then: unscaled, `x` is the base, which moves with a new view,
+     * never with a scroll frame. On a new side, the other one is cleared.
      */
-    function writeInsets(x: number, columnAxis: Axis) {
-        if (pinnedFor?.x === x && pinnedFor.columnAxis === columnAxis) return;
-        pinnedFor = { x, columnAxis };
+    function writeInsets(x: number, shown: GridView<TRow, TNode>) {
+        const { columnAxis } = shown;
+        const side = inlineStart(direction);
+        if (
+            insetsFor?.x === x &&
+            insetsFor.columnAxis === columnAxis &&
+            insetsFor.width === width &&
+            insetsFor.side === side
+        ) {
+            return;
+        }
+        // the other side, cleared when the insets may be there (nothing changes where they are not)
+        const other =
+            insetsFor?.side === side
+                ? null
+                : side === "left"
+                  ? "right"
+                  : "left";
+        insetsFor = { x, columnAxis, width, side };
+        const endFrom = pinnedEndFrom(
+            shown.columnCount,
+            shown.pinnedEndColumnCount,
+        );
+        const endShift = pinnedEndShift(columnAxis, width);
         for (const layer of ["pinned", "detail"] as const) {
             for (const element of layers[layer]) {
-                writeInset(layer, element, x, columnAxis);
+                if (other) element.style[other] = "";
+                writeInset(
+                    layer,
+                    element,
+                    x,
+                    side,
+                    columnAxis,
+                    endFrom,
+                    endShift,
+                );
             }
         }
     }
@@ -522,7 +644,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             setTransform("body", layerTransform("body", x, y));
             setTransform("header", layerTransform("header", x, y));
         }
-        writeInsets(x, committed.columnAxis);
+        writeInsets(x, committed);
     }
 
     /**
@@ -541,13 +663,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function applyScroll(moves: ScrollMoves) {
         if (!viewport) return;
         if (moves.top !== undefined) viewport.scrollTop = moves.top;
-        if (moves.left !== undefined) viewport.scrollLeft = moves.left;
+        if (moves.left !== undefined) {
+            viewport.scrollLeft = inlineSign(direction) * moves.left;
+        }
     }
 
     /** Reads the physical scroll into both axes (both, always); returns whether either moved. */
     function syncScroll(): boolean {
         const rows = rowsY.sync(viewport?.scrollTop ?? 0);
-        const columns = columnsX.sync(viewport?.scrollLeft ?? 0);
+        const columns = columnsX.sync(scrollX(viewport));
         return rows || columns;
     }
 
@@ -559,16 +683,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * The pinned columns in effect: the leading `pinned` ones, while they leave part of the view
-     * to scroll. As wide as the view or wider (a narrow screen), they would hide every other
-     * column: they scroll with the rest until the view is wider again.
+     * The pinned columns in effect: the leading ones pinned at the start and the trailing ones
+     * pinned at the end, while together they leave part of the view to scroll. As wide as the view
+     * or wider (a narrow screen), they would hide every other column: they scroll with the rest
+     * until the view is wider again.
      */
     function updatePinning() {
         const count = pinnedColumnCount(state.columns);
+        const endCount = pinnedEndColumnCount(state.columns);
         const pinned = columnAxis.offsetOf(count);
-        const fits = width === 0 || pinned < width;
+        const pinnedEnd =
+            columnAxis.totalSize -
+            columnAxis.offsetOf(pinnedEndFrom(columnAxis.count, endCount));
+        const fits = width === 0 || pinned + pinnedEnd < width;
         pinnedCount = fits ? count : 0;
         pinnedWidth = fits ? pinned : 0;
+        pinnedEndCount = fits ? endCount : 0;
+        pinnedEndWidth = fits ? pinnedEnd : 0;
     }
 
     /**
@@ -604,7 +735,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** The physical scroll follows a kept anchor, even when the total did not change. */
     function followColumnAnchor() {
         const left = columnsX.scrollTo(columnsX.virtual);
-        if (Math.abs(left - (viewport?.scrollLeft ?? 0)) > 0.5) {
+        if (Math.abs(left - scrollX(viewport)) > 0.5) {
             scrollWhenReady({ left });
         }
     }
@@ -629,6 +760,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** The sizes or the content changed: remap, then update; scroll once the sizer has its size. */
     function relayout(fresh: boolean) {
+        // a new direction (the model's) first: nothing is written for the old one
+        updateDirection(true);
         viewStale = true;
         const moves = remap();
         update(fresh);
@@ -689,6 +822,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                   ? bodyHeight()
                   : 1;
         let dy = event.deltaY * unit;
+        // physical: right to left, a move to the right is one toward the start
         let dx = event.deltaX * unit;
         if (event.shiftKey && dx === 0) {
             dx = dy;
@@ -700,8 +834,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             else viewport.scrollTop += dy;
         }
         if (dx !== 0) {
-            if (xScaled) viewport.scrollLeft = columnsX.scrollBy(dx);
-            else viewport.scrollLeft += dx;
+            if (xScaled) {
+                const sign = inlineSign(direction);
+                viewport.scrollLeft = sign * columnsX.scrollBy(sign * dx);
+            } else {
+                viewport.scrollLeft += dx;
+            }
         }
         // the scroll event follows (or not, for a sub-pixel move): update now either way
         syncScroll();
@@ -739,17 +877,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (
             columnIndex !== undefined &&
             columnIndex >= pinnedCount &&
-            columnIndex < columnAxis.count
+            columnIndex < pinnedEndFrom(columnAxis.count, pinnedEndCount)
         ) {
-            // into the view right of the pinned columns; a pinned one is always in view
+            // into the view between the pinned columns; a pinned one is always in view
             const from = columnsX.virtual + pinnedWidth;
             const start = columnAxis.offsetOf(columnIndex);
             const target = scrollTargetForSpan(
                 start,
                 start + columnAxis.sizeOf(columnIndex),
                 from,
-                width - pinnedWidth,
-                columnAxis.totalSize,
+                width - pinnedWidth - pinnedEndWidth,
+                columnAxis.totalSize - pinnedEndWidth,
                 align,
             );
             // compared where it was computed: a column in view moves nothing, exactly
@@ -781,6 +919,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 state.header,
                 pinnedCount,
                 columnWindow.visible,
+                pinnedEndFrom(columnAxis.count, pinnedEndCount),
             ),
         };
     }
@@ -998,6 +1137,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     pointerId: event.pointerId,
                     startX: event.clientX,
                     startWidth: span.width,
+                    sign: resizeSign(columnKey),
                     autoWidths: resizeFrom(columnKey),
                     element,
                     doc,
@@ -1158,13 +1298,27 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         event.preventDefault();
     }
 
-    /** Resizes a drag's column to its pointer: right grows (LTR). */
+    /**
+     * Which way a column (or a group) grows on screen, 1 to the right, -1 to the left: toward the
+     * end, from its end edge, or for one pinned at the end toward the start, from its start edge
+     * (the boundary with the columns that scroll: `columnResizerPart`'s `edge`); mirrored right to
+     * left.
+     */
+    function resizeSign(columnKey: string): number {
+        const cell = state.header.cellByKey(columnKey);
+        const fromStart =
+            cell !== undefined &&
+            cell.columnIndex >= pinnedEndFrom(columnAxis.count, pinnedEndCount);
+        return fromStart ? -inlineSign(direction) : inlineSign(direction);
+    }
+
+    /** Resizes a drag's column to its pointer, growing the way `resizeSign` says. */
     function resizeTo(resize: ResizeDrag) {
         resize.appliedX = resize.x;
         // from the engine's widths when it started: dragged back, a column needs no width (A2)
         model.run("column-widths.resize", {
             columnKey: resize.columnKey,
-            width: resize.startWidth + resize.x - resize.startX,
+            width: resize.startWidth + resize.sign * (resize.x - resize.startX),
             autoWidths: resize.autoWidths,
         });
     }
@@ -1276,14 +1430,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const step = event.shiftKey ? RESIZE_SHIFT_STEP : RESIZE_STEP;
         // End: the maximum it reports (`aria-valuemax`), the view's width without one
         const viewWidth = width;
+        // an arrow moves the handle its way: wider where the column grows that way (`resizeSign`)
         const to =
-            key === "ArrowLeft"
-                ? span.width - step
-                : key === "ArrowRight"
-                  ? span.width + step
-                  : key === "Home"
-                    ? span.minWidth
-                    : resizeMaximum(span, viewWidth);
+            key === "ArrowLeft" || key === "ArrowRight"
+                ? span.width +
+                  (key === "ArrowRight" ? step : -step) *
+                      resizeSign(resizer.columnKey)
+                : key === "Home"
+                  ? span.minWidth
+                  : resizeMaximum(span, viewWidth);
         model.run("column-widths.resize", {
             columnKey: resizer.columnKey,
             width: to,
@@ -1524,19 +1679,43 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return current.siblings;
     }
 
-    /** Where a pointer's x is in the view: from its start, inside its border (a layout read). */
+    /**
+     * Where a pointer's x is in the view: from its inline start, inside its border and a
+     * scrollbar on that side (a layout read). Right to left, from its right edge.
+     */
     function viewXOf(clientX: number): number {
         if (!viewport) return clientX;
-        return (
-            clientX -
-            viewport.getBoundingClientRect().left -
-            viewport.clientLeft
-        );
+        const left =
+            viewport.getBoundingClientRect().left + viewport.clientLeft;
+        const start =
+            inlineStart(direction) === "left"
+                ? left
+                : left + viewport.clientWidth;
+        return inlineSign(direction) * (clientX - start);
     }
 
     /** Whether a drag's cell is pinned with the pinned columns in effect: always in view. */
     function inPinnedStrip(siblings: Siblings<TRow, TNode>): boolean {
-        return siblings.pinned && pinnedCount > 0;
+        return siblings.pinned === "start"
+            ? pinnedCount > 0
+            : siblings.pinned === "end" && pinnedEndCount > 0;
+    }
+
+    /**
+     * The virtual offset under a pointer at `x` in the view, kept over the part its siblings show
+     * in: the strip pinned at the start, the one pinned at the end (at the view's end, or where the
+     * columns end in a narrower grid), or the columns that scroll between them.
+     */
+    function offsetAt(siblings: Siblings<TRow, TNode>, x: number): number {
+        if (!inPinnedStrip(siblings)) {
+            return (
+                columnsX.virtual + clamp(x, pinnedWidth, width - pinnedEndWidth)
+            );
+        }
+        if (siblings.pinned === "start") return clamp(x, 0, pinnedWidth);
+        const end = columnAxis.totalSize;
+        const shown = Math.min(width, end) - pinnedEndWidth;
+        return end - pinnedEndWidth + clamp(x - shown, 0, pinnedEndWidth);
     }
 
     /**
@@ -1554,9 +1733,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const siblings = siblingsFor(current);
         if (!siblings) return null;
         const { cells, index, start, end } = siblings;
-        const offset = inPinnedStrip(siblings)
-            ? clamp(x, 0, pinnedWidth)
-            : columnsX.virtual + clamp(x, pinnedWidth, width);
+        const offset = offsetAt(siblings, x);
         const endOf = (cell: HeaderCellLayout<TRow, TNode>) =>
             columnAxis.offsetOf(cell.columnIndex + cell.columnSpan);
         // the first one ending past the pointer, else the last
@@ -1602,17 +1779,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * Near the left or right edge of the columns that scroll (or past it), scrolls them toward
+     * Near the start or end edge of the columns that scroll (or past it), scrolls them toward
      * it, faster nearer, through the engine's own scroll (scaled or not): far siblings come into
      * reach. The two zones never overlap: in a narrow view each is half of it. Returns whether
      * the columns moved. A pinned cell in effect is always in view: none for it.
      */
     function edgeScroll(current: ReorderDrag<TRow, TNode>, x: number): boolean {
         const siblings = siblingsFor(current);
-        const zone = Math.min(EDGE_ZONE, (width - pinnedWidth) / 2);
+        const scrolling = width - pinnedWidth - pinnedEndWidth;
+        const zone = Math.min(EDGE_ZONE, scrolling / 2);
         if (!siblings || inPinnedStrip(siblings) || zone <= 0) return false;
         const left = pinnedWidth + zone;
-        const right = width - zone;
+        const right = pinnedWidth + scrolling - zone;
         const depth = x < left ? x - left : x > right ? x - right : 0;
         if (depth === 0) return false;
         // nothing more comes into reach that way: the siblings end inside the view on that side
@@ -1622,7 +1800,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             !edge ||
             (depth > 0
                 ? columnAxis.offsetOf(edge.columnIndex + edge.columnSpan) <=
-                  columnsX.virtual + width
+                  columnsX.virtual + width - pinnedEndWidth
                 : columnAxis.offsetOf(edge.columnIndex) >=
                   columnsX.virtual + pinnedWidth)
         ) {
@@ -1641,9 +1819,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * gets them.
      */
     function reorderKey(event: KeyboardEvent, target: Element): boolean {
-        const left = event.key === "ArrowLeft";
+        const key = inlineKey(event.key, direction);
+        const left = key === "ArrowLeft";
         if (
-            (!left && event.key !== "ArrowRight") ||
+            (!left && key !== "ArrowRight") ||
             !event.shiftKey ||
             !(event.ctrlKey || event.metaKey) ||
             !isCellElement(target)
@@ -2005,9 +2184,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             });
             return true;
         }
-        const direction =
-            (ctrl ? CTRL_KEYS[event.key] : undefined) ?? KEYS[event.key];
-        if (!direction) return false;
+        const move =
+            (ctrl ? CTRL_KEYS[event.key] : undefined) ??
+            KEYS[inlineKey(event.key, direction)];
+        if (!move) return false;
         event.preventDefault();
         pendingFocus = true;
         if (!state.activePosition) {
@@ -2016,7 +2196,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         const visible = rowWindow.visible.end - rowWindow.visible.start;
         model.run("active-position.move", {
-            direction,
+            direction: move,
             pageSize: Math.max(1, visible - 1),
             visibleColumns: columnWindow.visible,
         });
@@ -2217,11 +2397,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const doc = element.ownerDocument;
             const defaultView = doc.defaultView;
             readSize();
+            // the direction first: the scroll already set is read on its side
+            // a new element: the model's direction is written on it
+            dirWritten = null;
+            updateDirection(false, true);
             const observer =
                 defaultView && "ResizeObserver" in defaultView
                     ? new defaultView.ResizeObserver(() => {
                           const before = width;
                           readSize();
+                          // the page's direction, read again with the view's size
+                          updateDirection(true, true);
                           // the flex columns follow the view's width (A1), and only they
                           if (
                               width === before ||
@@ -2270,7 +2456,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columnsX.mapping = columnMapping();
             syncScroll();
             // pinned cells may have registered while it was detached: write them all
-            pinnedFor = null;
+            insetsFor = null;
             // the `autoSize` columns fit again once in this attach (A5); the flex columns take
             // the view's width
             autoSized.clear();
@@ -2331,22 +2517,33 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     );
                 }
             } else if (viewport && committed) {
+                const { columnAxis } = committed;
                 writeInset(
                     layer,
                     element,
                     offsetX(committed, viewport),
-                    committed.columnAxis,
+                    inlineStart(direction),
+                    columnAxis,
+                    pinnedEndFrom(
+                        committed.columnCount,
+                        committed.pinnedEndColumnCount,
+                    ),
+                    pinnedEndShift(columnAxis, width),
                 );
             } else {
                 // nothing to write for yet (a detached viewport: a root re-mounting while its
                 // cells stay): the next write is for every pinned cell
-                pinnedFor = null;
+                insetsFor = null;
             }
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
-                // a cell no longer pinned keeps no inset of the engine's: its adapter places it
-                if (isInsetLayer(layer)) element.style.left = "";
+                // a cell no longer pinned keeps no inset of the engine's, on either side: its
+                // adapter places it
+                if (isInsetLayer(layer)) {
+                    element.style.left = "";
+                    element.style.right = "";
+                }
             };
         },
         getView: () => view,

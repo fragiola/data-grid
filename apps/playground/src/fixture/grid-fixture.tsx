@@ -33,6 +33,12 @@ import { createRoot } from "react-dom/client";
 //                        sort uncontrolled
 //   &pinned=2            the first N columns pinned at the start (with groups, 5 pins C0 and
 //                        the first group); the two lines of CSS stacking needs are the fixture's
+//   &pinnedEnd=2         the last N columns pinned at the end (with groups, a whole last group:
+//                        3 of 20 columns, 7 of 60); with &resize=1 they resize, with &reorder=1
+//                        they reorder (among themselves)
+//   &dir=rtl             the grid right to left (its `direction`): the resizers and the drop
+//                        indicator mirrored; &pageDir=rtl lays the page out right to left
+//                        instead (`<html dir>`), the grid given no direction
 //   &details=1           expandable rows: C0's cell holds an expander (`expand-<row>`); a
 //                        detail (&detailHeight=200 tall) holds a grid of its own
 //                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`)
@@ -318,23 +324,35 @@ function cellValue(
     return (row) => `${row.index}:${columnIndex}`;
 }
 
-/** Whether `&reorder=1` makes a column reorderable: C1–C5, and C0 when pinned. */
-function reorderColumn(columnIndex: number, pinnedCount: number): boolean {
-    return columnIndex <= 5 && (columnIndex > 0 || pinnedCount > 0);
+/**
+ * Whether `&reorder=1` makes a column reorderable: C1–C5, C0 when pinned, and the ones pinned at
+ * the end.
+ */
+function reorderColumn(
+    columnIndex: number,
+    pinnedCount: number,
+    pinnedEnd: boolean,
+): boolean {
+    return (
+        pinnedEnd || (columnIndex <= 5 && (columnIndex > 0 || pinnedCount > 0))
+    );
 }
 
-// The drop indicator is the app's (O4): a line on the target's side, from its attribute
+// The drop indicator is the app's (O4): a line on the target's side, from its attribute (its
+// start: the right edge right to left)
 const DROP_TARGET_CSS = `
 [data-drop-target="before"] { box-shadow: inset 3px 0 0 blue; }
 [data-drop-target="after"] { box-shadow: inset -3px 0 0 blue; }
+[dir="rtl"] [data-drop-target="before"] { box-shadow: inset -3px 0 0 blue; }
+[dir="rtl"] [data-drop-target="after"] { box-shadow: inset 3px 0 0 blue; }
 `;
 
-// A resizer's place is the app's (W3): a strip at the right edge of its header cell (which is
-// positioned, absolute or sticky), the browser's touch panning off
+// A resizer's place is the app's (W3): a strip at its edge of its header cell (which is
+// positioned, absolute or sticky): the end edge, the start one for a column pinned at the end
+// (`state.edge`), logical sides so it mirrors right to left; the browser's touch panning off
 const RESIZER_STYLE = {
     position: "absolute",
     top: 0,
-    right: 0,
     width: 6,
     height: "100%",
     touchAction: "none",
@@ -353,7 +371,11 @@ function Resizer({ cell }: { cell: HeaderCellInfo<FixtureRow> }) {
             {...props}
             aria-label={`Resize ${cell.key}`}
             data-testid={`resizer-${cell.key}`}
-            style={RESIZER_STYLE}
+            style={
+                state.edge === "start"
+                    ? { ...RESIZER_STYLE, insetInlineStart: 0 }
+                    : { ...RESIZER_STYLE, insetInlineEnd: 0 }
+            }
         />
     );
 }
@@ -404,6 +426,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const groups = params.get("groups") === "1";
     const sort = params.get("sort") === "1";
     const pinnedCount = numberParam(params, "pinned", 0);
+    const pinnedEndCount = numberParam(params, "pinnedEnd", 0);
+    const rtl = params.get("dir") === "rtl";
     const details = params.get("details") === "1";
     const controls = params.get("controls") === "1";
     const resizeParam = params.get("resize");
@@ -435,42 +459,48 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const columns = useMemo<ColumnOrGroup<FixtureRow>[]>(() => {
         const leaves = Array.from(
             { length: columnCount },
-            (_, columnIndex): Column<FixtureRow> => ({
-                key: `c${columnIndex}`,
-                name: `C${columnIndex}`,
-                width: 100,
-                getValue: cellValue(columnIndex, resize, autoSize),
-                ...(sort && columnIndex < 2 ? { sortable: true } : {}),
-                ...(columnIndex < pinnedCount
-                    ? { pinned: "start" as const }
-                    : {}),
-                ...(controls ? controlColumn(columnIndex) : {}),
-                ...(resize ? resizeColumn(columnIndex) : {}),
-                ...(flex ? flexColumn(columnIndex) : {}),
-                ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
-                ...(reorder && reorderColumn(columnIndex, pinnedCount)
-                    ? { reorderable: true }
-                    : {}),
-                ...(rowSelection && columnIndex === 1
-                    ? {
-                          renderCell: ({ row }) => (
-                              <SelectBox rowIndex={row.index} />
-                          ),
-                      }
-                    : {}),
-                ...(sort && columnIndex === 1
-                    ? {
-                          renderHeaderCell: () => (
-                              <>
-                                  C1{" "}
-                                  <button type="button" data-testid="menu">
-                                      menu
-                                  </button>
-                              </>
-                          ),
-                      }
-                    : {}),
-            }),
+            (_, columnIndex): Column<FixtureRow> => {
+                const pinnedEnd = columnIndex >= columnCount - pinnedEndCount;
+                return {
+                    key: `c${columnIndex}`,
+                    name: `C${columnIndex}`,
+                    width: 100,
+                    getValue: cellValue(columnIndex, resize, autoSize),
+                    ...(sort && columnIndex < 2 ? { sortable: true } : {}),
+                    ...(columnIndex < pinnedCount
+                        ? { pinned: "start" as const }
+                        : {}),
+                    ...(pinnedEnd ? { pinned: "end" as const } : {}),
+                    ...(controls ? controlColumn(columnIndex) : {}),
+                    ...(resize ? resizeColumn(columnIndex) : {}),
+                    ...(resize && pinnedEnd ? { resizable: true } : {}),
+                    ...(flex ? flexColumn(columnIndex) : {}),
+                    ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
+                    ...(reorder &&
+                    reorderColumn(columnIndex, pinnedCount, pinnedEnd)
+                        ? { reorderable: true }
+                        : {}),
+                    ...(rowSelection && columnIndex === 1
+                        ? {
+                              renderCell: ({ row }) => (
+                                  <SelectBox rowIndex={row.index} />
+                              ),
+                          }
+                        : {}),
+                    ...(sort && columnIndex === 1
+                        ? {
+                              renderHeaderCell: () => (
+                                  <>
+                                      C1{" "}
+                                      <button type="button" data-testid="menu">
+                                          menu
+                                      </button>
+                                  </>
+                              ),
+                          }
+                        : {}),
+                };
+            },
         );
         return groups ? grouped(leaves, reorder) : leaves;
     }, [
@@ -478,6 +508,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         groups,
         sort,
         pinnedCount,
+        pinnedEndCount,
         controls,
         flex,
         resize,
@@ -531,6 +562,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         if (controlledOrder) setColumnOrder(order);
                     }}
                     gridRef={gridRef}
+                    direction={rtl ? "rtl" : undefined}
                     data-testid="viewport"
                     style={{ width, height }}
                 >
@@ -639,6 +671,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
 }
 
 export function mountGridFixture(kind: "table" | "div") {
+    // a page laid out right to left: the grid, given no direction, takes it
+    if (new URLSearchParams(location.search).get("pageDir") === "rtl") {
+        document.documentElement.dir = "rtl";
+    }
     window.commits = 0;
     window.sortChanges = [];
     window.selectionChanges = [];

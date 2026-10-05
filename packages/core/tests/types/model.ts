@@ -149,14 +149,19 @@ grid.run("sort-columns.set", {
 });
 void sortableGroup;
 
-// a column pins at the start; a group is pinned by its columns, and "end" is not there yet
+// a column pins at the start or at the end (Epic #85); a group is pinned by its columns
 const pinnedColumn: Column<Person> = {
     key: "name",
     width: 60,
     pinned: "start",
 };
-// @ts-expect-error
 const pinnedEnd: Column<Person> = { key: "age", width: 60, pinned: "end" };
+const pinnedMiddle: Column<Person> = {
+    key: "age",
+    width: 60,
+    // @ts-expect-error
+    pinned: "middle",
+};
 // @ts-expect-error
 const pinnedGroup: ColumnOrGroup<Person> = {
     key: "g",
@@ -185,6 +190,7 @@ const comparingGroup: ColumnOrGroup<Person> = {
 void wrongCompare;
 void comparingGroup;
 void pinnedEnd;
+void pinnedMiddle;
 void pinnedGroup;
 
 // a row toggles by its index or by its key, never both; a detail's height is a function of the row

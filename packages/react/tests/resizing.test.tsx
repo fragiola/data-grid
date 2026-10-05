@@ -283,6 +283,7 @@ describe("useColumnResizer", () => {
             width: 80,
             minWidth: 60,
             maxWidth: 120,
+            edge: "end",
         });
         expect(states.get("id")?.resizable).toBe(false);
     });

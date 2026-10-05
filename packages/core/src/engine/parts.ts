@@ -2,6 +2,7 @@ import { isReorderable } from "../model/order";
 import type {
     CellPosition,
     HeaderCellLayout,
+    PinnedSide,
     ReorderSide,
     SortDirection,
 } from "../model/types";
@@ -48,10 +49,15 @@ export interface CellState {
     readonly loaded: boolean;
     /** it is the active cell (the one the keyboard moves) */
     readonly active: boolean;
-    /** its column is pinned at the start: sticky, it stays in view sideways */
+    /** its column is pinned, at the start or at the end: sticky, it stays in view sideways */
     readonly pinned: boolean;
-    /** its column is the last pinned one (for a divider or a shadow) */
+    /**
+     * its column is its pinned part's edge, the last pinned at the start or the first pinned at
+     * the end (for a divider or a shadow)
+     */
     readonly pinnedEdge: boolean;
+    /** where its column is pinned, `undefined` when it scrolls */
+    readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
 }
@@ -74,10 +80,15 @@ export interface HeaderCellState {
     readonly sortDirection: SortDirection | undefined;
     /** its column's place among the sorted columns, 1-based, when it is sorted */
     readonly sortPriority: number | undefined;
-    /** its columns are pinned at the start: sticky, it stays in view sideways */
+    /** its columns are pinned, at the start or at the end: sticky, it stays in view sideways */
     readonly pinned: boolean;
-    /** it ends at the last pinned column (for a divider or a shadow) */
+    /**
+     * it is its pinned part's edge: it ends at the last column pinned at the start, or starts at
+     * the first pinned at the end (for a divider or a shadow)
+     */
     readonly pinnedEdge: boolean;
+    /** where its columns are pinned, `undefined` when they scroll */
+    readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
     /** its column is resizable, or for a group one of its columns (a resizer can resize it) */
@@ -106,6 +117,13 @@ export interface ColumnResizerState {
     readonly minWidth: number;
     /** the widest it resizes to, or `undefined` when a resizable column has no maximum */
     readonly maxWidth: number | undefined;
+    /**
+     * the edge of its header cell it moves (Epic #85): `"end"`, the column growing toward the end;
+     * `"start"` for columns pinned at the end, whose boundary with the columns that scroll is
+     * their start edge, growing toward the start. Place the handle there (`inset-inline-start` or
+     * `inset-inline-end`): it follows the pointer
+     */
+    readonly edge: "start" | "end";
 }
 
 /** The state of a row's detail. */
@@ -208,7 +226,10 @@ export function cellPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     cell: CellPosition & { readonly loaded: boolean },
 ): CellPart {
-    const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
+    const { pinned, pinnedEdge, pinnedSide } = columnPinning(
+        view,
+        cell.columnIndex,
+    );
     const active = view.active !== null && sameCell(view.active, cell);
     return {
         state: {
@@ -218,6 +239,7 @@ export function cellPart<TRow, TNode>(
             active,
             pinned,
             pinnedEdge,
+            pinnedSide,
             interacting: interacting(view, cell),
         },
         tabIndex: active ? 0 : -1,
@@ -249,7 +271,7 @@ export function headerCellPart<TRow, TNode>(
     cell: HeaderCellLayout<TRow, TNode>,
 ): HeaderCellPart {
     const sort = headerCellSort(view, cell);
-    const { pinned, pinnedEdge } = columnPinning(
+    const { pinned, pinnedEdge, pinnedSide } = columnPinning(
         view,
         cell.columnIndex,
         cell.columnSpan,
@@ -275,6 +297,7 @@ export function headerCellPart<TRow, TNode>(
             sortPriority: sort.priority,
             pinned,
             pinnedEdge,
+            pinnedSide,
             interacting: interacting(view, cell),
         },
         tabIndex: active ? 0 : -1,
@@ -300,6 +323,11 @@ export function columnResizerPart<TRow, TNode>(
         ? spanWidths(view.columnDefs, axis, cell)
         : { width: fixed, minWidth: fixed, maxWidth: fixed };
     const { width, minWidth, maxWidth } = span;
+    const { pinnedSide } = columnPinning(
+        view,
+        cell.columnIndex,
+        cell.columnSpan,
+    );
     return {
         state: {
             columnKey: cell.key,
@@ -308,6 +336,7 @@ export function columnResizerPart<TRow, TNode>(
             width,
             minWidth,
             maxWidth,
+            edge: pinnedSide === "end" ? "start" : "end",
         },
         tabIndex: 0,
         attributes: {

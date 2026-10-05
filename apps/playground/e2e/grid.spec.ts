@@ -2334,5 +2334,824 @@ for (const kind of KINDS) {
                 ]);
             });
         });
+
+        // Epic #85 (E1.1): columns pinned at the end, and the grid right to left. Offsets are
+        // inline: from the view's start, its left edge, or right to left its right edge
+        test.describe("pinned end columns and direction", () => {
+            /** The viewport's content box: its inline edges, inside the border and a scrollbar. */
+            function viewEdges(viewport: Locator) {
+                return viewport.evaluate((element) => {
+                    const left =
+                        element.getBoundingClientRect().left +
+                        element.clientLeft;
+                    return {
+                        left,
+                        right: left + element.clientWidth,
+                        width: element.clientWidth,
+                    };
+                });
+            }
+
+            /** An element's start from the view's start, and its width. */
+            async function inlineBox(
+                viewport: Locator,
+                target: Locator,
+                rtl: boolean,
+            ) {
+                const view = await viewEdges(viewport);
+                const box = await boxOf(target);
+                return {
+                    start: rtl
+                        ? view.right - (box.x + box.width)
+                        : box.x - view.left,
+                    width: box.width,
+                };
+            }
+
+            const startOf = async (
+                viewport: Locator,
+                target: Locator,
+                rtl: boolean,
+            ) => (await inlineBox(viewport, target, rtl)).start;
+
+            /** A native scroll from the start (negative `scrollLeft` right to left). */
+            async function scrollInline(
+                page: Page,
+                viewport: Locator,
+                inline: number | "end",
+                rtl: boolean,
+                top = 0,
+            ) {
+                await viewport.evaluate(
+                    (element, [x, y, mirrored]) => {
+                        const to = x === "end" ? element.scrollWidth : x;
+                        element.scrollTop = y;
+                        element.scrollLeft = mirrored ? -to : to;
+                    },
+                    [inline, top, rtl] as const,
+                );
+                await settle(page);
+            }
+
+            const scrollFromStart = (viewport: Locator, rtl: boolean) =>
+                viewport.evaluate(
+                    // + 0: a scroll of 0 right to left reads -0
+                    (element, mirrored) =>
+                        (mirrored ? -1 : 1) * element.scrollLeft + 0,
+                    rtl,
+                );
+
+            function headerCell(
+                page: Page,
+                rowIndex: number,
+                columnIndex: number,
+            ) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
+                );
+            }
+
+            /** A column's header cell (not a group's above it). */
+            function columnHeader(page: Page, columnIndex: number) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]:not([data-group])`,
+                );
+            }
+
+            /**
+             * Scrolls by `delta` from where the view is and reads the elements' starts in the same
+             * task, before any `scroll` listener runs: what a frame painted before the engine's
+             * JavaScript shows. `fired` tells whether a scroll listener ran meanwhile.
+             */
+            function startsBeforeTheScrollEvent(
+                viewport: Locator,
+                delta: number,
+                selectors: readonly string[],
+                rtl: boolean,
+            ) {
+                return viewport.evaluate(
+                    (element, [by, targets, mirrored]) => {
+                        let fired = false;
+                        const onScroll = () => {
+                            fired = true;
+                        };
+                        element.addEventListener("scroll", onScroll);
+                        element.scrollLeft += mirrored ? -by : by;
+                        const rect = element.getBoundingClientRect();
+                        const left = rect.left + element.clientLeft;
+                        const right = left + element.clientWidth;
+                        const starts = targets.map((selector) => {
+                            const target = element.querySelector(selector);
+                            if (!target) throw new Error(`no ${selector}`);
+                            const box = target.getBoundingClientRect();
+                            return mirrored
+                                ? right - box.right
+                                : box.left - left;
+                        });
+                        element.removeEventListener("scroll", onScroll);
+                        return { starts, fired };
+                    },
+                    [delta, selectors, rtl] as const,
+                );
+            }
+
+            const BOTH = {
+                rows: 1_000,
+                columns: 60,
+                pinned: 2,
+                pinnedEnd: 2,
+            } as const;
+
+            for (const dir of ["ltr", "rtl"] as const) {
+                const rtl = dir === "rtl";
+                const suffix = rtl ? ", right to left" : "";
+                const open2 = (
+                    page: Page,
+                    query: Record<string, string | number>,
+                ) => open(page, kind, rtl ? { ...query, dir } : query);
+
+                test(`keeps both pinned parts and their header cells in place while scrolling sideways${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, BOTH);
+                    const { width } = await viewEdges(viewport);
+                    if (rtl) {
+                        await expect(viewport).toHaveAttribute("dir", "rtl");
+                    }
+                    for (const inline of [0, 1_234, "end"] as const) {
+                        await scrollInline(page, viewport, inline, rtl, 32 * 5);
+                        const at = {
+                            0: 0,
+                            1: 100,
+                            58: width - 200,
+                            59: width - 100,
+                        } as const;
+                        for (const [columnIndex, start] of Object.entries(at)) {
+                            const index = Number(columnIndex);
+                            expect(
+                                await startOf(
+                                    viewport,
+                                    cell(page, 6, index),
+                                    rtl,
+                                ),
+                                `cell ${index} at ${inline}`,
+                            ).toBeCloseTo(start, 0);
+                            expect(
+                                await startOf(
+                                    viewport,
+                                    headerCell(page, -1, index),
+                                    rtl,
+                                ),
+                                `header ${index} at ${inline}`,
+                            ).toBeCloseTo(start, 0);
+                        }
+                    }
+                    // the last column that scrolls ends where the end part starts
+                    const last = await inlineBox(
+                        viewport,
+                        cell(page, 6, 57),
+                        rtl,
+                    );
+                    expect(last.start + last.width).toBeCloseTo(width - 200, 0);
+                    await expect(cell(page, 6, 58)).toHaveAttribute(
+                        "data-pinned",
+                        "end",
+                    );
+                    await expect(cell(page, 6, 58)).toHaveAttribute(
+                        "data-pinned-edge",
+                        "",
+                    );
+                    await expect(cell(page, 6, 59)).not.toHaveAttribute(
+                        "data-pinned-edge",
+                    );
+                    await expect(cell(page, 6, 0)).toHaveAttribute(
+                        "data-pinned",
+                        "start",
+                    );
+                    await expect(cell(page, 6, 59)).toHaveAttribute(
+                        "aria-colindex",
+                        "60",
+                    );
+                });
+
+                const TARGETS = [0, 58, 59].flatMap((columnIndex) => [
+                    `[data-grid-part="cell"][data-row-index="6"][data-column-index="${columnIndex}"]`,
+                    `[data-grid-part="header-cell"][data-row-index="-1"][data-column-index="${columnIndex}"]`,
+                ]);
+
+                test(`has both pinned parts in place before the scroll event runs${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, BOTH);
+                    const { width } = await viewEdges(viewport);
+                    await scrollInline(page, viewport, 1_000, rtl, 32 * 5);
+                    const expected = [
+                        0,
+                        0,
+                        width - 200,
+                        width - 200,
+                        width - 100,
+                        width - 100,
+                    ];
+                    // small moves both ways, and one past a column
+                    for (const delta of [40, -40, 130]) {
+                        const { starts, fired } =
+                            await startsBeforeTheScrollEvent(
+                                viewport,
+                                delta,
+                                TARGETS,
+                                rtl,
+                            );
+                        expect(fired).toBe(false);
+                        for (const [index, value] of starts.entries()) {
+                            expect(
+                                value,
+                                `${TARGETS[index]} by ${delta}`,
+                            ).toBeCloseTo(expected[index] ?? 0, 0);
+                        }
+                        await settle(page);
+                    }
+                });
+
+                test(`keeps both pinned parts in place under scaled column scroll${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, {
+                        rows: 100,
+                        columns: 1_000_000,
+                        maxScrollSize: 1_000_000,
+                        pinned: 1,
+                        pinnedEnd: 1,
+                    });
+                    const { width } = await viewEdges(viewport);
+                    for (const inline of [0, 333_333, "end"] as const) {
+                        await scrollInline(page, viewport, inline, rtl);
+                        expect(
+                            await startOf(viewport, cell(page, 0, 0), rtl),
+                        ).toBeCloseTo(0, 0);
+                        expect(
+                            await startOf(
+                                viewport,
+                                cell(page, 0, 999_999),
+                                rtl,
+                            ),
+                        ).toBeCloseTo(width - 100, 0);
+                        expect(
+                            await startOf(
+                                viewport,
+                                headerCell(page, -1, 999_999),
+                                rtl,
+                            ),
+                        ).toBeCloseTo(width - 100, 0);
+                    }
+                    // small physical moves, before the scroll event
+                    const { starts, fired } = await startsBeforeTheScrollEvent(
+                        viewport,
+                        -3,
+                        [
+                            '[data-grid-part="cell"][data-row-index="0"][data-column-index="0"]',
+                            '[data-grid-part="cell"][data-row-index="0"][data-column-index="999999"]',
+                        ],
+                        rtl,
+                    );
+                    expect(fired).toBe(false);
+                    expect(starts[0]).toBeCloseTo(0, 0);
+                    expect(starts[1]).toBeCloseTo(width - 100, 0);
+                });
+
+                test(`brings a cell into view between the pinned parts, from the keyboard${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, BOTH);
+                    const { width } = await viewEdges(viewport);
+                    const [next, previous] = rtl
+                        ? ["ArrowLeft", "ArrowRight"]
+                        : ["ArrowRight", "ArrowLeft"];
+                    await cell(page, 3, 1).click();
+                    await page.keyboard.press(next);
+                    await settle(page);
+                    await expect(cell(page, 3, 2)).toBeFocused();
+                    expect(
+                        await startOf(viewport, cell(page, 3, 2), rtl),
+                    ).toBeCloseTo(200, 0);
+                    await page.keyboard.press("End");
+                    await settle(page);
+                    await expect(cell(page, 3, 59)).toBeFocused();
+                    expect(
+                        await startOf(viewport, cell(page, 3, 59), rtl),
+                    ).toBeCloseTo(width - 100, 0);
+                    await page.keyboard.press(previous);
+                    await page.keyboard.press(previous);
+                    await settle(page);
+                    await expect(cell(page, 3, 57)).toBeFocused();
+                    // the last column that scrolls, whole, before the end part
+                    const box = await inlineBox(
+                        viewport,
+                        cell(page, 3, 57),
+                        rtl,
+                    );
+                    expect(box.start + box.width).toBeLessThanOrEqual(
+                        width - 200 + 0.5,
+                    );
+                    expect(box.start).toBeGreaterThanOrEqual(200 - 0.5);
+                    await page.keyboard.press("Home");
+                    await settle(page);
+                    await expect(cell(page, 3, 0)).toBeFocused();
+                    expect(
+                        await startOf(viewport, cell(page, 3, 0), rtl),
+                    ).toBeCloseTo(0, 0);
+                });
+
+                test(`keeps a group pinned at the end over its columns${suffix}`, async ({
+                    page,
+                }) => {
+                    // 20 columns: C0, G0 (C1–C4), G1 (C5–C16), G2 (C17–C19) pinned at the end
+                    const viewport = await open2(page, {
+                        rows: 1_000,
+                        columns: 20,
+                        groups: 1,
+                        pinnedEnd: 3,
+                    });
+                    const { width } = await viewEdges(viewport);
+                    await scrollInline(page, viewport, 700, rtl);
+                    const group = await inlineBox(
+                        viewport,
+                        headerCell(page, -2, 17),
+                        rtl,
+                    );
+                    expect(group.start).toBeCloseTo(width - 300, 0);
+                    expect(group.width).toBeCloseTo(300, 0);
+                    await expect(headerCell(page, -2, 17)).toHaveAttribute(
+                        "data-pinned-edge",
+                        "",
+                    );
+                    expect(
+                        await startOf(viewport, columnHeader(page, 19), rtl),
+                    ).toBeCloseTo(width - 100, 0);
+                });
+
+                test(`does not render React while scrolling sideways inside the overscan, with both pinned parts${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, BOTH);
+                    const { width } = await viewEdges(viewport);
+                    await scrollInline(page, viewport, 1_000, rtl);
+                    const before = await page.evaluate(() => window.commits);
+                    await scrollInline(page, viewport, 1_040, rtl);
+                    expect(await page.evaluate(() => window.commits)).toBe(
+                        before,
+                    );
+                    expect(
+                        await startOf(viewport, cell(page, 0, 59), rtl),
+                    ).toBeCloseTo(width - 100, 0);
+                });
+
+                for (const [name, query] of [
+                    ["at the end", { columns: 3, pinnedEnd: 3 }],
+                    ["at both ends", { columns: 4, pinned: 2, pinnedEnd: 2 }],
+                ] as const) {
+                    test(`lays every column out where it is, all of them pinned ${name}${suffix}`, async ({
+                        page,
+                    }) => {
+                        const viewport = await open2(page, {
+                            rows: 100,
+                            ...query,
+                        });
+                        for (let i = 0; i < query.columns; i++) {
+                            expect(
+                                await startOf(viewport, cell(page, 2, i), rtl),
+                                `cell ${i}`,
+                            ).toBeCloseTo(i * 100, 0);
+                            expect(
+                                await startOf(
+                                    viewport,
+                                    columnHeader(page, i),
+                                    rtl,
+                                ),
+                                `header ${i}`,
+                            ).toBeCloseTo(i * 100, 0);
+                        }
+                        await expect(
+                            cell(page, 2, query.columns - 1),
+                        ).toHaveAttribute("data-pinned", "end");
+                    });
+                }
+
+                test(`shows the columns pinned at the end where the columns end in a narrower grid${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, {
+                        rows: 100,
+                        columns: 5,
+                        pinnedEnd: 1,
+                    });
+                    expect(
+                        await startOf(viewport, cell(page, 0, 4), rtl),
+                    ).toBeCloseTo(400, 0);
+                    expect(
+                        await startOf(viewport, columnHeader(page, 4), rtl),
+                    ).toBeCloseTo(400, 0);
+                });
+
+                test(`resizes and reorders the columns pinned at the end, among themselves${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, {
+                        rows: 1_000,
+                        columns: 20,
+                        pinnedEnd: 2,
+                        resize: 1,
+                        reorder: 1,
+                    });
+                    const { width } = await viewEdges(viewport);
+                    // its handle is at its start edge, the boundary with the columns that
+                    // scroll: dragged toward the start, it grows, the edge under the pointer
+                    const handle = page.getByTestId("resizer-c18");
+                    expect(await startOf(viewport, handle, rtl)).toBeCloseTo(
+                        width - 200,
+                        0,
+                    );
+                    await dragBy(page, handle, rtl ? 40 : -40);
+                    const resized = await inlineBox(
+                        viewport,
+                        columnHeader(page, 18),
+                        rtl,
+                    );
+                    expect(resized.width).toBeCloseTo(140, 0);
+                    expect(resized.start).toBeCloseTo(width - 240, 0);
+                    expect(await startOf(viewport, handle, rtl)).toBeCloseTo(
+                        width - 240,
+                        0,
+                    );
+                    expect(
+                        await startOf(viewport, cell(page, 0, 19), rtl),
+                    ).toBeCloseTo(width - 100, 0);
+                    expect(
+                        await page.evaluate(() => window.widthChanges.at(-1)),
+                    ).toEqual({ c18: 140 });
+                    // a double click fits it to its content, within its minimum
+                    const fitted = Math.max(40, await contentWidth(page, 18));
+                    await page.getByTestId("resizer-c18").dblclick();
+                    await settle(page);
+                    expect(
+                        (await inlineBox(viewport, columnHeader(page, 18), rtl))
+                            .width,
+                    ).toBeCloseTo(fitted, 0);
+                    expect(
+                        await startOf(viewport, cell(page, 0, 19), rtl),
+                    ).toBeCloseTo(width - 100, 0);
+                    // C19 dropped before C18: they swap
+                    await dragBy(
+                        page,
+                        columnHeader(page, 19),
+                        rtl ? 130 : -130,
+                    );
+                    await expect(columnHeader(page, 18)).toHaveText("C19");
+                    await expect(cell(page, 0, 18)).toHaveText("0:19");
+                    // and a column of the end part held over one that scrolls lands nowhere
+                    const changes = (
+                        await page.evaluate(() => window.orderChanges)
+                    ).length;
+                    await dragBy(
+                        page,
+                        columnHeader(page, 18),
+                        rtl ? 300 : -300,
+                    );
+                    expect(
+                        (await page.evaluate(() => window.orderChanges)).length,
+                    ).toBe(changes);
+                    await expect(columnHeader(page, 18)).toHaveText("C19");
+                });
+
+                test(`keeps a detail as wide as the view with both pinned parts${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open2(page, {
+                        rows: 1_000,
+                        columns: 40,
+                        details: 1,
+                        pinned: 2,
+                        pinnedEnd: 2,
+                    });
+                    const { width } = await viewEdges(viewport);
+                    await page.getByTestId("expand-1").click();
+                    await settle(page);
+                    const detail = page.locator(
+                        '[data-grid-part="row-detail"][data-row-index="1"]',
+                    );
+                    for (const inline of [0, 1_234, "end", 450] as const) {
+                        await scrollInline(page, viewport, inline, rtl);
+                        const box = await inlineBox(viewport, detail, rtl);
+                        expect(box.start, `at ${inline}`).toBeCloseTo(0, 0);
+                        expect(box.width).toBeCloseTo(width, 0);
+                        expect(
+                            await startOf(
+                                viewport,
+                                page
+                                    .locator(
+                                        '[data-grid-part="cell"][data-row-index="1"][data-column-index="39"]',
+                                    )
+                                    .filter({ hasText: "1:39" }),
+                                rtl,
+                            ),
+                        ).toBeCloseTo(width - 100, 0);
+                    }
+                });
+            }
+
+            test.describe("right to left", () => {
+                const RTL = { dir: "rtl" } as const;
+
+                test("takes the page's direction without one of its own, adding no dir", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 60,
+                        pinned: 1,
+                        pinnedEnd: 1,
+                        pageDir: "rtl",
+                    });
+                    const { width } = await viewEdges(viewport);
+                    await expect(viewport).not.toHaveAttribute("dir");
+                    expect(
+                        await startOf(viewport, cell(page, 0, 0), true),
+                    ).toBeCloseTo(0, 0);
+                    expect(
+                        await startOf(viewport, cell(page, 0, 59), true),
+                    ).toBeCloseTo(width - 100, 0);
+                    await scrollInline(page, viewport, 1_000, true);
+                    expect(
+                        await page.evaluate(
+                            () =>
+                                window.grid?.engine.get("scroll-position").left,
+                        ),
+                    ).toBe(1_000);
+                    // the arrows mirrored: from the pinned C0, ArrowLeft to C1, into view
+                    await cell(page, 3, 0).click();
+                    await page.keyboard.press("ArrowLeft");
+                    await expect(cell(page, 3, 1)).toBeFocused();
+                    await settle(page);
+                    expect(
+                        await startOf(viewport, cell(page, 3, 1), true),
+                    ).toBeCloseTo(100, 0);
+                });
+
+                test("lays the grid out from the right edge, its ARIA unchanged, its scroll negative", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 60,
+                        ...RTL,
+                    });
+                    await expect(viewport).toHaveAttribute("dir", "rtl");
+                    expect(
+                        await startOf(viewport, cell(page, 0, 0), true),
+                    ).toBeCloseTo(0, 0);
+                    expect(
+                        await startOf(viewport, columnHeader(page, 1), true),
+                    ).toBeCloseTo(100, 0);
+                    await expect(cell(page, 0, 1)).toHaveAttribute(
+                        "aria-colindex",
+                        "2",
+                    );
+                    await scrollInline(page, viewport, 1_000, true);
+                    expect(
+                        await viewport.evaluate(
+                            (element) => element.scrollLeft,
+                        ),
+                    ).toBe(-1_000);
+                    const { columns } = await windows(page);
+                    expect(columns.visible.start).toBe(10);
+                    expect(
+                        await startOf(viewport, cell(page, 0, 12), true),
+                    ).toBeCloseTo(200, 0);
+                    expect(
+                        await page.evaluate(
+                            () =>
+                                window.grid?.engine.get("scroll-position").left,
+                        ),
+                    ).toBe(1_000);
+                });
+
+                test("reaches the far end and back under scaled column scroll", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 100,
+                        columns: 1_000_000,
+                        maxScrollSize: 1_000_000,
+                        ...RTL,
+                    });
+                    const { width } = await viewEdges(viewport);
+                    await scrollInline(page, viewport, "end", true);
+                    // the last column at the view's left end
+                    const last = await inlineBox(
+                        viewport,
+                        cell(page, 0, 999_999),
+                        true,
+                    );
+                    expect(last.start + last.width).toBeCloseTo(width, 0);
+                    await expect(cell(page, 0, 999_999)).toHaveAttribute(
+                        "aria-colindex",
+                        "1000000",
+                    );
+                    await cell(page, 0, 999_999).click();
+                    await page.keyboard.press("ArrowRight");
+                    await settle(page);
+                    await expect(cell(page, 0, 999_998)).toBeFocused();
+                    await page.keyboard.press("Control+Home");
+                    await settle(page);
+                    expect(await scrollFromStart(viewport, true)).toBe(0);
+                    expect(
+                        await startOf(viewport, cell(page, 0, 0), true),
+                    ).toBeCloseTo(0, 0);
+                    // a small move by the wheel moves the content by exactly its delta
+                    await page.mouse.move(400, 300);
+                    await page.mouse.wheel(-120, 0);
+                    await settle(page);
+                    expect(
+                        await page.evaluate(
+                            () =>
+                                window.grid?.engine.get("scroll-position").left,
+                        ),
+                    ).toBe(120);
+                    expect(
+                        await startOf(viewport, cell(page, 0, 2), true),
+                    ).toBeCloseTo(80, 0);
+                });
+
+                test("moves with the arrows mirrored: ArrowLeft to the next column", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 20,
+                        ...RTL,
+                    });
+                    await cell(page, 3, 1).click();
+                    await page.keyboard.press("ArrowLeft");
+                    await expect(cell(page, 3, 2)).toBeFocused();
+                    await page.keyboard.press("ArrowRight");
+                    await page.keyboard.press("ArrowRight");
+                    await expect(cell(page, 3, 0)).toBeFocused();
+                    await page.keyboard.press("End");
+                    await settle(page);
+                    await expect(cell(page, 3, 19)).toBeFocused();
+                    await expectFullyInBody(viewport, cell(page, 3, 19));
+                    expect(
+                        await scrollFromStart(viewport, true),
+                    ).toBeGreaterThan(0);
+                    await page.keyboard.press("Home");
+                    await settle(page);
+                    await expect(cell(page, 3, 0)).toBeFocused();
+                    expect(await scrollFromStart(viewport, true)).toBe(0);
+                });
+
+                test("resizes a column dragged toward the end, to the left", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 20,
+                        resize: 1,
+                        ...RTL,
+                    });
+                    await dragBy(page, page.getByTestId("resizer-c0"), -60, {
+                        hold: true,
+                    });
+                    const c0 = await inlineBox(
+                        viewport,
+                        columnHeader(page, 0),
+                        true,
+                    );
+                    expect(c0.width).toBeCloseTo(160, 0);
+                    expect(
+                        await startOf(viewport, cell(page, 0, 1), true),
+                    ).toBeCloseTo(160, 0);
+                    await page.mouse.up();
+                    await settle(page);
+                    expect(
+                        await page.evaluate(() => window.widthChanges.at(-1)),
+                    ).toEqual({ c0: 160 });
+                    // the arrows on its focused handle: ArrowLeft grows it
+                    await page.getByTestId("resizer-c0").focus();
+                    await page.keyboard.press("ArrowLeft");
+                    await settle(page);
+                    expect(
+                        await page.evaluate(() => window.widthChanges.at(-1)),
+                    ).toEqual({ c0: 170 });
+                });
+
+                test("moves a column dropped toward the end, and scrolls held at the left edge", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 20,
+                        reorder: 1,
+                        ...RTL,
+                    });
+                    // C1's middle (150 from the right) to C3's second half (380): after C3
+                    await dragBy(page, columnHeader(page, 1), -230, {
+                        hold: true,
+                    });
+                    await expect(columnHeader(page, 3)).toHaveAttribute(
+                        "data-drop-target",
+                        "after",
+                    );
+                    await page.mouse.up();
+                    await settle(page);
+                    await expect(columnHeader(page, 3)).toHaveText("C1");
+                    await expect(cell(page, 0, 1)).toHaveText("0:2");
+                    // held near the left edge, the columns scroll toward the end
+                    await dragBy(page, columnHeader(page, 2), -50, {
+                        hold: true,
+                    });
+                    const view = await viewEdges(viewport);
+                    const box = await boxOf(viewport);
+                    await page.mouse.move(view.left + 5, box.y + 10, {
+                        steps: 5,
+                    });
+                    await expect
+                        .poll(() => scrollFromStart(viewport, true))
+                        .toBeGreaterThan(500);
+                    await page.mouse.up();
+                    await settle(page);
+                });
+
+                test("fills the view with flex columns and fits one to its content", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 5,
+                        width: 800,
+                        flex: 1,
+                        resize: 1,
+                        ...RTL,
+                    });
+                    const { width } = await viewEdges(viewport);
+                    const c2 = await inlineBox(
+                        viewport,
+                        columnHeader(page, 2),
+                        true,
+                    );
+                    expect(c2.width).toBeCloseTo(300, 0);
+                    // the last column ends at the view's left end
+                    const c4 = await inlineBox(
+                        viewport,
+                        columnHeader(page, 4),
+                        true,
+                    );
+                    expect(c4.start + c4.width).toBeCloseTo(width, 0);
+                    // within its minimum (40 by default)
+                    const fitted = Math.max(40, await contentWidth(page, 0));
+                    await page.getByTestId("resizer-c0").dblclick();
+                    await settle(page);
+                    expect(
+                        (await inlineBox(viewport, columnHeader(page, 0), true))
+                            .width,
+                    ).toBeCloseTo(fitted, 0);
+                });
+
+                test("lays column groups over their columns, from the right", async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 40,
+                        groups: 1,
+                        ...RTL,
+                    });
+                    const g0 = await inlineBox(
+                        viewport,
+                        headerCell(page, -2, 1),
+                        true,
+                    );
+                    expect(g0.start).toBeCloseTo(100, 0);
+                    expect(g0.width).toBeCloseTo(400, 0);
+                    // a group cut by the view keeps its columns under it
+                    await scrollInline(page, viewport, 900, true);
+                    const g1 = await inlineBox(
+                        viewport,
+                        headerCell(page, -2, 5),
+                        true,
+                    );
+                    expect(g1.start + g1.width).toBeCloseTo(
+                        (await startOf(
+                            viewport,
+                            columnHeader(page, 16),
+                            true,
+                        )) + 100,
+                        0,
+                    );
+                    await columnHeader(page, 10).click();
+                    await page.keyboard.press("ArrowUp");
+                    await expect(headerCell(page, -2, 5)).toBeFocused();
+                });
+            });
+        });
     });
 }

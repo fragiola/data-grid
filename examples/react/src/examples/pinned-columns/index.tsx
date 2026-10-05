@@ -42,8 +42,33 @@ function month(year: number, monthIndex: number): Column<Person> {
     };
 }
 
-// the person stays at the start (a pinned group: its columns pinned, first), three years of
-// months scroll under it
+/** A person's months, every year: what the summary reads. */
+function months(row: Person): number[] {
+    return Array.from({ length: YEARS.length * 12 }, (_, columnIndex) =>
+        measurement(row.id, columnIndex),
+    );
+}
+
+/** A summary number: one decimal, on the right like the months. */
+function summary(
+    key: string,
+    name: string,
+    value: (scores: number[]) => number,
+): Column<Person> {
+    return {
+        key,
+        name,
+        width: 96,
+        pinned: "end",
+        getValue: (row) => value(months(row)),
+        renderCell: ({ value }) =>
+            typeof value === "number" ? value.toFixed(1) : null,
+        meta: { numeric: true },
+    };
+}
+
+// the person stays at the start (a pinned group: its columns pinned, first), the summary at the
+// end (pinned last), three years of months scroll between them
 const columns: ColumnOrGroup<Person>[] = [
     {
         key: "person",
@@ -60,6 +85,20 @@ const columns: ColumnOrGroup<Person>[] = [
             children: MONTHS.map((_, monthIndex) => month(year, monthIndex)),
         }),
     ),
+    {
+        key: "summary",
+        name: "Summary",
+        children: [
+            summary(
+                "average",
+                "Average",
+                (scores) =>
+                    scores.reduce((sum, score) => sum + score, 0) /
+                    scores.length,
+            ),
+            summary("best", "Best", (scores) => Math.max(...scores)),
+        ],
+    },
 ];
 
 export default function PinnedColumns() {

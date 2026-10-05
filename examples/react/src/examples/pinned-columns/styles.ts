@@ -39,9 +39,14 @@ const active =
  */
 const pinned = "z-1 bg-palette-base";
 
-/** the last pinned column ends on a shadow, so the columns scrolling under it read as such */
-const pinnedEdge =
-    "shadow-[6px_0_8px_-6px_color-mix(in_oklab,var(--palette-contrast)_35%,transparent)]";
+/**
+ * a pinned part's edge casts a shadow over the columns scrolling under it: the last column pinned
+ * at the start on its right, the first pinned at the end on its left
+ */
+const pinnedEdge = (state: { pinnedSide: "start" | "end" | undefined }) =>
+    state.pinnedSide === "end"
+        ? "shadow-[-6px_0_8px_-6px_color-mix(in_oklab,var(--palette-contrast)_35%,transparent)]"
+        : "shadow-[6px_0_8px_-6px_color-mix(in_oklab,var(--palette-contrast)_35%,transparent)]";
 
 /** a group centred over its columns, a line under it */
 export const headerCell = (state: HeaderCellState) =>
@@ -57,7 +62,7 @@ export const headerCell = (state: HeaderCellState) =>
             pinned,
             "[background-image:linear-gradient(var(--dg-header-bg),var(--dg-header-bg))]",
         ],
-        state.pinnedEdge && pinnedEdge,
+        state.pinnedEdge && pinnedEdge(state),
     );
 
 /** `group/row`: a pinned cell shows its row's hover too */
@@ -79,10 +84,10 @@ export const cell = (state: CellState) =>
                 "[background-image:linear-gradient(var(--dg-row-alt-bg),var(--dg-row-alt-bg))]",
             "group-hover/row:[background-image:linear-gradient(var(--dg-row-hover-bg),var(--dg-row-hover-bg))]",
         ],
-        state.pinnedEdge && pinnedEdge,
+        state.pinnedEdge && pinnedEdge(state),
     );
 
-/** numbers line up on the right, in the theme's numeric font (the months never pin) */
+/** numbers line up on the right, in the theme's numeric font (the summary pinned at the end) */
 export const numeric = (state: CellState) =>
     cn(
         cell(state),

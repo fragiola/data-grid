@@ -3,6 +3,7 @@ import type {
     CellPosition,
     Column,
     ColumnWidths,
+    GridDirection,
     HeaderCellLayout,
     HeaderLayout,
     ReorderSide,
@@ -95,8 +96,18 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly sortColumns: readonly SortColumn[];
     /** how many columns are pinned at the start (always rendered, in `columns` first) */
     readonly pinnedColumnCount: number;
-    /** their width: the column window covers the view right of it */
+    /** their width: the column window covers the view after it */
     readonly pinnedWidth: number;
+    /** how many columns are pinned at the end (always rendered, in `columns` last) */
+    readonly pinnedEndColumnCount: number;
+    /** their width: the column window covers the view before it */
+    readonly pinnedEndWidth: number;
+    /**
+     * the grid's direction in effect, the model's else its viewport's (the page's): in `"rtl"`,
+     * every offset counts from the right edge (an adapter places by `right` where it places by
+     * `left` otherwise)
+     */
+    readonly direction: GridDirection;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
@@ -226,10 +237,11 @@ export type EngineEventKey = keyof EngineEventMap;
 
 /**
  * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
- * pinned columns (`pinned`: `position: sticky` in their row's flow, whose `left` inset the engine
- * writes so the browser's scrolling keeps them at the view's start; their `data-column-index`
- * says which column they are, a header cell's first), and expanded rows' details (`detail`:
- * sticky the same way, at the view's start: as a column at offset 0 would be).
+ * pinned columns (`pinned`: `position: sticky` in their row's flow, whose inline start inset,
+ * `left` or in RTL `right`, the engine writes so the browser's scrolling keeps them at the view's
+ * start or end; their `data-column-index` says which column they are, a header cell's first),
+ * and expanded rows' details (`detail`: sticky the same way, at the view's start: as a column at
+ * offset 0 would be).
  */
 export type EngineLayer = "grid" | "header" | "body" | "pinned" | "detail";
 

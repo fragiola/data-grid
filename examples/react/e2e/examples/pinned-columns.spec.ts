@@ -2,8 +2,9 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import { openExample, THEMES } from "../helpers";
 import { cell, scrollTo, settle, viewport } from "./helpers";
 
-// Pinned columns (Epic #31, Epic #38): the Person group stays at the start while the months scroll
-// under it, on every frame the browser paints, in every theme.
+// Pinned columns (Epic #31, Epic #38, Epic #85): the Person group stays at the start and the
+// Summary group at the end while the months scroll between them, on every frame the browser
+// paints, in every theme.
 
 async function leftInView(page: Page, target: Locator) {
     const view = await viewport(page).boundingBox();
@@ -117,4 +118,52 @@ test("brings a month into view right of the pinned columns from the keyboard", a
     if (!team || !box) throw new Error("no box");
     // right of the pinned Team column, not under it
     expect(box.x).toBeGreaterThanOrEqual(team.x + team.width - 1);
+});
+
+/** An element's right edge from the viewport's content's right edge (inside its border). */
+async function rightInView(page: Page, target: Locator) {
+    const right = await viewport(page).evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left + element.clientLeft + element.clientWidth;
+    });
+    const box = await target.boundingBox();
+    if (!box) throw new Error("no box");
+    return right - (box.x + box.width);
+}
+
+test("keeps the summary pinned at the end while the months scroll", async ({
+    page,
+}) => {
+    await openExample(page, "pinned-columns");
+    // Name, Team, 36 months, Average, Best
+    const best = cell(page, 0, 39);
+    const average = cell(page, 0, 38);
+    for (const left of [0, "50%", "100%"] as const) {
+        if (left !== 0) await scrollTo(page, { left });
+        expect(await rightInView(page, best)).toBeCloseTo(0, 0);
+        expect(await rightInView(page, average)).toBeCloseTo(96, 0);
+        expect(await rightInView(page, header(page, "Summary"))).toBeCloseTo(
+            0,
+            0,
+        );
+    }
+    await expect(average).toHaveAttribute("data-pinned", "end");
+    await expect(average).toHaveAttribute("data-pinned-edge", "");
+    await expect(best).not.toHaveAttribute("data-pinned-edge");
+    await expect(best).toHaveText(/^\d+\.\d$/);
+});
+
+test("brings a month into view left of the summary from the keyboard", async ({
+    page,
+}) => {
+    await openExample(page, "pinned-columns");
+    await cell(page, 2, 38).click();
+    await page.keyboard.press("ArrowLeft");
+    const month = cell(page, 2, 37);
+    await expect(month).toBeFocused();
+    const average = await cell(page, 2, 38).boundingBox();
+    const box = await month.boundingBox();
+    if (!average || !box) throw new Error("no box");
+    // left of the pinned Average column, not under it
+    expect(box.x + box.width).toBeLessThanOrEqual(average.x + 1);
 });

@@ -65,6 +65,7 @@ import type {
     CommandResult,
     DataGridModelOptions,
     DataGridState,
+    GridDirection,
     Middleware,
     PayloadArgs,
     PayloadOf,
@@ -152,6 +153,16 @@ const TOGGLE_BY =
 
 /** The sides a column lands on, beside a sibling. */
 const REORDER_SIDES: readonly ReorderSide[] = ["before", "after"];
+
+/** A column's part, as a refused move names it. */
+const PART_NAMES = {
+    start: "pinned at the start",
+    end: "pinned at the end",
+    none: "unpinned",
+} as const;
+
+/** The grid's directions. */
+const GRID_DIRECTIONS: readonly GridDirection[] = ["ltr", "rtl"];
 
 /** The refusal of a payload that is not what the command takes. */
 function invalid(message: string): CommandFailure {
@@ -771,13 +782,13 @@ function createHandlers<TRow, TNode>(
                     `"${targetKey}" is not a sibling of "${columnKey}"`,
                 );
             }
-            // pinned columns lead (P1): the pinned land among the pinned, the others among theirs
+            // pinned columns lead and trail (P1): each part's land among their own
             // (beside the first one past the edge, on its near side, is still their own part)
             const to = landingIndex(index, target, side);
             if (to < start || to >= end) {
                 return fail(
                     "refused",
-                    `"${columnKey}" moves among the ${siblings.pinned ? "pinned" : "unpinned"} ones only`,
+                    `"${columnKey}" moves among the ${PART_NAMES[siblings.pinned ?? "none"]} ones only`,
                 );
             }
             if (to === index) return done(state, state.columnOrder);
@@ -787,6 +798,18 @@ function createHandlers<TRow, TNode>(
             return withOrder(state, movedOrder(state.columnOrder, keys));
         },
         "column-order.reset": (state) => withOrder(state, []),
+        "direction.set": (state, { direction }) => {
+            if (direction !== null && !GRID_DIRECTIONS.includes(direction)) {
+                return notOneOf("direction", GRID_DIRECTIONS);
+            }
+            const next = direction ?? undefined;
+            return done(
+                next === state.direction
+                    ? state
+                    : { ...state, direction: next },
+                next,
+            );
+        },
         "sizes.set": (state, { rowHeight, headerRowHeight, detailHeight }) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return invalid("rowHeight must be a size or a function");
@@ -920,6 +943,10 @@ export function createDataGridModel<TRow, TNode = unknown>(
         selectionAnchor: null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
+        direction:
+            options.direction && GRID_DIRECTIONS.includes(options.direction)
+                ? options.direction
+                : undefined,
     };
     let state = withSource(
         blank,
@@ -1097,6 +1124,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "column-order": () => state.columnOrder,
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
+        direction: () => state.direction,
         "expanded-row-keys": () => state.expandedRowKeys,
         "expanded-rows": () => state.expandedRows,
         "detail-height": () => state.detailHeight,
@@ -1188,6 +1216,7 @@ export const COMMANDS = [
     "column-order.set",
     "column-order.move",
     "column-order.reset",
+    "direction.set",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

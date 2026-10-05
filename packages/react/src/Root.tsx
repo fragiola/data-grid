@@ -11,6 +11,7 @@ import {
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
+    type GridDirection,
     type GridView,
     keptOrder,
     keptWidths,
@@ -187,6 +188,12 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         /** the cap on an axis's scroll size before scroll scaling takes over (default 10M px) */
         maxScrollSize?: number | undefined;
         /**
+         * the grid's direction (default `"ltr"`): in `"rtl"` its start is the right edge, the
+         * columns, pinned ones and scroll mirrored, and ArrowLeft moves to the next column. Given,
+         * the root carries it as `dir`
+         */
+        direction?: GridDirection | undefined;
+        /**
          * a handle on this grid from outside the root (`useDataGridRef()`): its model and engine,
          * and the hooks that take it. `ref` stays the root's element.
          */
@@ -298,6 +305,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         endReachedThreshold,
         overscan,
         maxScrollSize,
+        direction,
         gridRef,
         children,
         ...rest
@@ -326,6 +334,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
             columnWidths: columnWidths ?? defaultColumnWidths,
             columnOrder: columnOrder ?? defaultColumnOrder,
+            direction,
         });
         const flags: ControlledFlags = {
             syncing: { current: false },
@@ -589,6 +598,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
             });
         }
     }, [model, rowSelection, isRowSelectable]);
+
+    useLayoutEffect(() => {
+        // a prop removed goes back to the page's direction (the engine reads the viewport's)
+        if (direction !== model.state.direction) {
+            model.run("direction.set", { direction: direction ?? null });
+        }
+    }, [model, direction]);
 
     // and last: a controlled position valid only after the data changed (rows grown) follows now;
     // one the data made impossible was clamped by the model, and the parent is told where. A

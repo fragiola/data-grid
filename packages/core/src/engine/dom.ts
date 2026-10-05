@@ -1,4 +1,4 @@
-import type { CellPosition } from "../model/types";
+import type { CellPosition, GridDirection } from "../model/types";
 import type { Direction } from "../navigation/navigation";
 
 // What the engine reads in the DOM, with no state of its own: the keys it maps, the controls and
@@ -16,6 +16,17 @@ export const KEYS: Record<string, Direction> = {
     PageUp: "page-up",
     PageDown: "page-down",
 };
+
+/**
+ * A key as the grid reads it (E1.1): in a right-to-left grid the left and right arrows swap, so
+ * ArrowLeft goes to the next column, as it goes to the right in a left-to-right one. Home and End
+ * stay the row's start and end.
+ */
+export function inlineKey(key: string, direction: GridDirection): string {
+    if (direction === "ltr") return key;
+    if (key === "ArrowLeft") return "ArrowRight";
+    return key === "ArrowRight" ? "ArrowLeft" : key;
+}
 
 /** A key with Ctrl (or ⌘) held: Ctrl+Home and Ctrl+End reach the grid's ends. */
 export const CTRL_KEYS: Record<string, Direction> = {

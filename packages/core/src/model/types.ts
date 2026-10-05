@@ -61,10 +61,11 @@ export interface Column<TRow, TNode = unknown> {
      */
     readonly sortable?: boolean | undefined;
     /**
-     * `"start"`: the column stays at the visible start while the others scroll sideways. Pinned
-     * columns come first, and a group's columns are all pinned or none
+     * `"start"`: the column stays at the view's start while the others scroll sideways; `"end"`:
+     * at its end. Columns pinned at the start come first, the ones pinned at the end last, and a
+     * group's columns are all in one part (pinned at the start, at the end, or not)
      */
-    readonly pinned?: "start" | undefined;
+    readonly pinned?: PinnedSide | undefined;
     /**
      * whether a person can resize it (a handle the app renders in its header cell, dragged or
      * moved with the arrows). The grid keeps the widths; without it, the column is its `width`
@@ -90,7 +91,8 @@ export interface Column<TRow, TNode = unknown> {
     readonly autoSize?: boolean | undefined;
     /**
      * whether a person can move it among its siblings (its header cell dragged, or Ctrl/⌘+Shift
-     * with the arrows), the pinned ones among the pinned. The grid keeps the order
+     * with the arrows), within its part (pinned at the start, at the end, or not). The grid keeps
+     * the order
      */
     readonly reorderable?: boolean | undefined;
     /**
@@ -251,6 +253,15 @@ export type DetailHeight<TRow> =
  */
 export type RowSelection = "single" | "multiple";
 
+/** Where a pinned column stays: at the view's start, or at its end (Epic #85, E1.1). */
+export type PinnedSide = "start" | "end";
+
+/**
+ * The grid's direction (E1.1): left to right, or right to left, where its start is the right
+ * edge. Indexes, windows and offsets are the same both ways: only where they show is mirrored
+ */
+export type GridDirection = "ltr" | "rtl";
+
 /** Whether a loaded row can be selected (R5): a row it refuses is never added. */
 export type RowSelectable<TRow> = (row: TRow, rowIndex: number) => boolean;
 
@@ -330,6 +341,11 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly columnWidths: ColumnWidths;
     /** the order columns and groups take among their siblings (empty: as declared) */
     readonly columnOrder: ColumnOrder;
+    /**
+     * the grid's direction: in `"rtl"`, its start is the right edge; `undefined`, the page's (an
+     * engine reads its viewport's)
+     */
+    readonly direction: GridDirection | undefined;
 }
 
 /** What `createDataGridModel` starts from. */
@@ -361,6 +377,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     columnWidths?: ColumnWidths;
     /** the column order to start with (an entry that is not a string is dropped) */
     columnOrder?: ColumnOrder;
+    /** the grid's direction (default: the page's, as an engine reads it from its viewport) */
+    direction?: GridDirection | undefined;
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -552,8 +570,8 @@ export interface CommandMap<TRow, TNode = unknown> {
     };
     /**
      * moves a reorderable column or group before or after one of its siblings (its parent
-     * group's entries, or the top level; that one may be fixed): a pinned one beside a pinned
-     * one, another beside another. One landing where it is commits nothing. Returns the column
+     * group's entries, or the top level; that one may be fixed) within its part: one pinned at
+     * the start beside another, one pinned at the end beside another, the others among theirs. One landing where it is commits nothing. Returns the column
      * order
      */
     "column-order.move": {
@@ -568,6 +586,14 @@ export interface CommandMap<TRow, TNode = unknown> {
     "column-order.reset": {
         payload: NoPayload;
         result: ColumnOrder;
+    };
+    /**
+     * changes the grid's direction: in `"rtl"`, its start is the right edge; `null`, the page's
+     * (an engine reads its viewport's). Returns it
+     */
+    "direction.set": {
+        payload: { readonly direction: GridDirection | null };
+        result: GridDirection | undefined;
     };
     /**
      * changes the row height (a number or a function of the index), the header row's, or an
@@ -763,6 +789,8 @@ export interface QueryMap<TRow, TNode = unknown> {
     "column-order": { payload: undefined; result: ColumnOrder };
     "row-height": { payload: undefined; result: Size };
     "header-row-height": { payload: undefined; result: number };
+    /** the grid's direction, `undefined` for the page's (an engine's view tells the one in effect) */
+    direction: { payload: undefined; result: GridDirection | undefined };
     /** the expanded rows' keys, in the order they were expanded */
     "expanded-row-keys": { payload: undefined; result: readonly RowKey[] };
     /** the indexes of the rows shown expanded (loaded, their key expanded), ascending */

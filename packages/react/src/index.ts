@@ -8,6 +8,8 @@ export type {
     DataGridEngine,
     DataGridModel,
     DetailHeight,
+    GridDirection,
+    PinnedSide,
     Range,
     ReorderSide,
     RowKey,
