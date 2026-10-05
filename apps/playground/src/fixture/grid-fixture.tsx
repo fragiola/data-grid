@@ -15,6 +15,8 @@ import {
     useDataGrid,
     useDataGridRef,
     useGridView,
+    useGroupLabel,
+    useHeaderCell,
 } from "@fragiola/data-grid-react";
 import { Profiler, StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -66,11 +68,20 @@ import { createRoot } from "react-dom/client";
 //   &span=1              column spans: on every fifth row (index % 5 = 0), C1's cell spans 3
 //                        columns (C1–C3) and the second to last column's asks for 5 (the last
 //                        column and its part keep it to fewer); C5's header cell spans C5–C6
+//   &collapsible=1       with &groups=1, the groups of 12 (G1, G3, …) collapsible: expanded,
+//                        all but their last column; collapsed, their first and last (C5 and
+//                        C16 for G1); their columns resizable. A group's header cell holds a
+//                        toggle (`toggle-<key>`, `aria-expanded`), the collapsed groups
+//                        uncontrolled
+//   &stickyLabels=1      a group's name (and its toggle) in a label that stays in view while the
+//                        group scrolls (`useGroupLabel`, `label-<key>`), a block as wide as its
+//                        content
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
-// `window.orderChanges` the column orders, and a button before and after the grid take Tab.
+// `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups, and a
+// button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -84,6 +95,7 @@ declare global {
         selectionChanges: (readonly RowKey[])[];
         widthChanges: ColumnWidths[];
         orderChanges: ColumnOrder[];
+        collapseChanges: (readonly string[])[];
     }
 }
 
@@ -264,25 +276,95 @@ function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
 
 /**
  * The columns under groups: C0 alone, then groups of 4 and 12 columns in turn (reorderable
- * with `reorderable`).
+ * with `reorderable`; the groups of 12 collapsible with `collapsible`: all but their last column
+ * expanded, their first and last collapsed, every one resizable).
  */
 function grouped(
     columns: Column<FixtureRow>[],
     reorderable: boolean,
+    collapsible: boolean,
 ): ColumnOrGroup<FixtureRow>[] {
     const [first, ...rest] = columns;
     const entries: ColumnOrGroup<FixtureRow>[] = first ? [first] : [];
     for (let start = 0, group = 0; start < rest.length; group++) {
         const size = group % 2 === 0 ? 4 : 12;
+        const children = rest.slice(start, start + size);
+        const collapses = collapsible && group % 2 === 1;
         entries.push({
             key: `G${group}`,
             name: `G${group}`,
-            children: rest.slice(start, start + size),
+            children: collapses
+                ? children.map((child, index) => ({
+                      ...child,
+                      resizable: true,
+                      ...(index === 0
+                          ? {}
+                          : {
+                                groupShow:
+                                    index === children.length - 1
+                                        ? ("collapsed" as const)
+                                        : ("expanded" as const),
+                            }),
+                  }))
+                : children,
             ...(reorderable ? { reorderable } : {}),
+            ...(collapses ? { collapsible } : {}),
         });
         start += size;
     }
     return entries;
+}
+
+// A group's label is a block as wide as its content: sticky moves it inside its header cell
+const LABEL_STYLE = { display: "block", width: "fit-content" } as const;
+
+/**
+ * A group's header content, as an app writes it: its name and, collapsible, its toggle (the
+ * grid's command), in a label that stays in view with `sticky`.
+ */
+function GroupContent({
+    cell,
+    sticky,
+}: {
+    cell: HeaderCellInfo<FixtureRow>;
+    sticky: boolean;
+}) {
+    const { model } = useDataGrid<FixtureRow>();
+    const { state } = useHeaderCell(cell);
+    const label = useGroupLabel(cell);
+    const content = (
+        <>
+            {headerCellContent(cell)}
+            {state.collapsed === undefined ? null : (
+                <>
+                    {" "}
+                    <button
+                        type="button"
+                        data-testid={`toggle-${cell.key}`}
+                        aria-expanded={!state.collapsed}
+                        onClick={() =>
+                            model.run("column-groups.toggle", {
+                                groupKey: cell.key,
+                            })
+                        }
+                    >
+                        {state.collapsed ? "+" : "-"}
+                    </button>
+                </>
+            )}
+        </>
+    );
+    return sticky ? (
+        <span
+            {...label.props}
+            data-testid={`label-${cell.key}`}
+            style={{ ...label.props.style, ...LABEL_STYLE }}
+        >
+            {content}
+        </span>
+    ) : (
+        content
+    );
 }
 
 // The empty state's content, centred in it (the part's own display is structural: a block)
@@ -407,30 +489,45 @@ function HeaderRow({
     table,
     row,
     resize = false,
+    groupContent = false,
+    stickyLabels = false,
 }: {
     table: boolean;
     row?: HeaderRowInfo<FixtureRow> | undefined;
     resize?: boolean;
+    /** a group's header cell holds its toggle, or its label (`GroupContent`) */
+    groupContent?: boolean;
+    stickyLabels?: boolean;
 }) {
     const tag = tags(table);
     return (
         <DataGrid.HeaderRow row={row} render={tag.headerRow}>
             <DataGrid.HeaderCells<FixtureRow>>
-                {(cell) => (
-                    <DataGrid.HeaderCell
-                        cell={cell}
-                        render={tag.headerCell}
-                        style={pinnedStyle}
-                    >
-                        {resize ? (
-                            // its own content, then its resizer
-                            <>
-                                {headerCellContent(cell)}
-                                <Resizer cell={cell} />
-                            </>
-                        ) : undefined}
-                    </DataGrid.HeaderCell>
-                )}
+                {(cell) => {
+                    const own = groupContent && cell.group !== undefined;
+                    return (
+                        <DataGrid.HeaderCell
+                            cell={cell}
+                            render={tag.headerCell}
+                            style={pinnedStyle}
+                        >
+                            {resize || own ? (
+                                // its own content, then its resizer
+                                <>
+                                    {own ? (
+                                        <GroupContent
+                                            cell={cell}
+                                            sticky={stickyLabels}
+                                        />
+                                    ) : (
+                                        headerCellContent(cell)
+                                    )}
+                                    {resize ? <Resizer cell={cell} /> : null}
+                                </>
+                            ) : undefined}
+                        </DataGrid.HeaderCell>
+                    );
+                }}
             </DataGrid.HeaderCells>
         </DataGrid.HeaderRow>
     );
@@ -460,6 +557,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const flex = params.get("flex") === "1";
     const autoSize = params.get("autosize") === "1";
     const span = params.get("span") === "1";
+    const collapsible = params.get("collapsible") === "1";
+    const stickyLabels = params.get("stickyLabels") === "1";
     const reorderParam = params.get("reorder");
     const reorder = reorderParam === "1" || reorderParam === "controlled";
     const controlledOrder = reorderParam === "controlled";
@@ -526,7 +625,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                 };
             },
         );
-        return groups ? grouped(leaves, reorder) : leaves;
+        return groups ? grouped(leaves, reorder, collapsible) : leaves;
     }, [
         columnCount,
         groups,
@@ -539,6 +638,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         autoSize,
         span,
         reorder,
+        collapsible,
         rowSelection,
     ]);
     const rowHeight = useMemo(
@@ -586,6 +686,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         window.orderChanges.push(order);
                         if (controlledOrder) setColumnOrder(order);
                     }}
+                    onCollapsedGroupKeysChange={(keys) =>
+                        window.collapseChanges.push(keys)
+                    }
                     gridRef={gridRef}
                     direction={rtl ? "rtl" : undefined}
                     data-testid="viewport"
@@ -605,6 +708,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                             table={table}
                                             row={row}
                                             resize={resize}
+                                            groupContent={
+                                                collapsible || stickyLabels
+                                            }
+                                            stickyLabels={stickyLabels}
                                         />
                                     )}
                                 </DataGrid.HeaderRows>
@@ -705,6 +812,7 @@ export function mountGridFixture(kind: "table" | "div") {
     window.selectionChanges = [];
     window.widthChanges = [];
     window.orderChanges = [];
+    window.collapseChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

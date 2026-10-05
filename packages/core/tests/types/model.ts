@@ -288,6 +288,37 @@ const spanningGroup: ColumnOrGroup<Person> = {
 };
 void spanningGroup;
 
+// collapsible groups (Epic #85, E1.3): a group collapses, a child shows in a state
+const collapsible: ColumnOrGroup<Person> = {
+    key: "g",
+    collapsible: true,
+    children: [
+        { key: "name", width: 80 },
+        { key: "age", width: 80, groupShow: "expanded" },
+    ],
+};
+void collapsible;
+const collapsingColumn: Column<Person> = {
+    key: "a",
+    width: 1,
+    // @ts-expect-error: a column does not collapse
+    collapsible: true,
+};
+void collapsingColumn;
+// @ts-expect-error
+const wrongShow: Column<Person> = { key: "a", width: 1, groupShow: "open" };
+void wrongShow;
+const collapsed: readonly string[] = grid.get("collapsed-group-keys");
+void collapsed;
+grid.run("column-groups.toggle", { groupKey: "g" });
+grid.run("column-groups.set", { groupKeys: ["g"] });
+// @ts-expect-error
+grid.run("column-groups.toggle", { columnKey: "g" });
+// @ts-expect-error
+grid.run("column-groups.set", { groupKeys: [1] });
+const isCollapsed: boolean = grid.is("group-collapsed", { groupKey: "g" });
+void isCollapsed;
+
 void groupWithCells;
 void groupWithWidth;
 void columnWithChildren;

@@ -416,7 +416,8 @@ export interface HeaderCellSort {
     /** its column's place among the sorted columns, 1-based, when it is sorted */
     readonly priority: number | undefined;
     /**
-     * `aria-sort`, on the first sorted column's header cell only (ARIA 1.2: one header at a time)
+     * `aria-sort`, on the first sorted column shown, its header cell only (ARIA 1.2: one header
+     * at a time; a column a collapsed group hides holds none, and may hold priority 1)
      */
     readonly ariaSort: SortDirection | undefined;
 }
@@ -431,10 +432,17 @@ export function headerCellSort<TRow, TNode>(
         ? view.sortColumns.findIndex((entry) => entry.columnKey === column.key)
         : -1;
     const sorted = view.sortColumns[index];
+    // `aria-sort` on the first sorted column shown: a column a collapsed group hides (E1.3)
+    // still sorts, and keeps its priority
+    const first =
+        sorted &&
+        view.sortColumns.find(
+            (entry) => view.header.cellByKey(entry.columnKey) !== undefined,
+        );
     return {
         sortable: column?.sortable === true,
         direction: sorted?.direction,
         priority: sorted ? index + 1 : undefined,
-        ariaSort: index === 0 ? sorted?.direction : undefined,
+        ariaSort: first === sorted ? sorted?.direction : undefined,
     };
 }

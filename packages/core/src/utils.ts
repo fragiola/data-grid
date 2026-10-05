@@ -79,11 +79,19 @@ export function keySet(keys: readonly RowKey[]): ReadonlySet<RowKey> {
 }
 
 /** `keys` with `key` removed when it is there, else added last (alone when `single`). */
-export function toggledKey(
-    keys: readonly RowKey[],
-    key: RowKey,
+export function toggledKey<K extends RowKey>(
+    keys: readonly K[],
+    key: K,
     single = false,
-): readonly RowKey[] {
+): readonly K[] {
     if (keySet(keys).has(key)) return keys.filter((entry) => entry !== key);
     return single ? [key] : [...keys, key];
+}
+
+/** Whether two lists hold the same keys, whatever their order (each list holds a key once). */
+export function sameKeys(a: readonly RowKey[], b: readonly RowKey[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    const held = keySet(b);
+    return a.every((key) => held.has(key));
 }

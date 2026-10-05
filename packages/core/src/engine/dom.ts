@@ -132,6 +132,12 @@ export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
  */
 export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
 
+/**
+ * A group's label (Epic #85, E1.3): an element the app renders in a group's header cell, its value
+ * the group's key. The engine keeps it in view while the group scrolls (the `label` layer).
+ */
+export const GROUP_LABEL_ATTRIBUTE = "data-grid-group-label";
+
 /** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
 export function isResizer(element: Element): boolean {
     return element.hasAttribute(COLUMN_RESIZER_ATTRIBUTE);

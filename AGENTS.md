@@ -70,15 +70,17 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    Small moves stay pixel-exact relative to the content, the scrollbar reaches the whole dataset,
    both axes alike.
 9. **Scrolling does not render React (D9)** unless the rendered window changes. The engine writes
-   the layers' offsets imperatively; React never reconciles what the engine writes.
+   the layers' offsets imperatively; React never reconciles what the engine writes. A commit reads
+   the scroll as it is first (`syncScroll`), so a scroll whose event has not run yet (a scroll and
+   a click in one task) never has the layers written against the scroll the engine last knew.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
-    flex?, autoSize?, reorderable?, colSpan?, compare?, filter?, meta? }`. Without children, a header cell renders
+    flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
     entry is a `Column` or a `ColumnGroup<TRow>` `{ key, name?, renderHeaderCell?, children,
-    reorderable?, meta? }`, nested to any depth, keys unique across both; the leaves, in order, are the grid's
+    reorderable?, collapsible?, groupShow?, meta? }`, nested to any depth, keys unique across both; the leaves, in order, are the grid's
     columns (the column axis, cells and windows never see groups). The header has a row per level
     (rows `-depth … -1`, each `headerRowHeight` tall); a leaf with fewer groups above it spans the
     rows down to -1 (G2). The core lays the header cells out per column window (G3, a cut group
@@ -163,6 +165,46 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `is("cell-active")` holds on any of its columns, and `elementPosition` finds its element. A fit
     never measures a spanning cell; a header span reorders with the columns it covers, a covered
     column cannot move.
+    **Collapsible groups and sticky labels (Epic #85, E1.3):** `collapsible: true` on a group;
+    its children `groupShow?: GroupShow` (`"expanded" | "collapsed"`, unset: both; `columnsError`
+    refuses `groupShow` outside a collapsible group's children, a collapsible group showing
+    no child in either state, and `collapsible` on a column). The model keeps
+    `collapsedGroupKeys`, a set (in the order collapsed; compared by membership, `sameKeys`, in
+    the model and `Root`: the same keys reordered change nothing; a key that is no collapsible
+    group is kept: it may come back), controlled or not on `Root` through
+    the controlled factory (`collapsedGroupKeys`/`defaultCollapsedGroupKeys`/
+    `onCollapsedGroupKeysChange`, a layout input followed and settled with the widths and the
+    order); `column-groups.toggle { groupKey }` (`not_found` for no group, `refused` for one not
+    collapsible; a group a collapsed one hides toggles too; `toggledKey`),
+    `column-groups.set { groupKeys }`,
+    `get("collapsed-group-keys")`, `is("group-collapsed", { groupKey })`. `layoutColumns` takes
+    the collapsed keys and shows a collapsible group's children by its state after ordering each
+    sibling list (a hidden entry keeps its place in `columnOrder`); the depth counts every entry,
+    so a toggle never changes the header's height (a column left with fewer groups above spans
+    down, G2). A hidden column is no column: not in `state.columns`, the header, the axis, the
+    windows, `aria-colcount` or the keys. By key it keeps its width (`columnWidths`), its place
+    and its sort (sort validity reads every leaf: `entryByKey`, one walk for a column or a group
+    at any depth; `sortableColumn` and `validSortColumns` take the entries); `aria-sort` is on
+    the first sorted column shown, a hidden one keeping its `data-sort-priority`. `/local` reads
+    every leaf, hidden ones included (`leafColumns`): a sort, a filter or a search on one is data.
+    `withLayout` (`model.ts`) lays out a new order or new collapsed keys alike: the active cell
+    follows its column or header cell by key (`followedColumn`), else `shownColumnOf`
+    (`model/collapse.ts`): the nearest column the nearest group above it still shows, the
+    start's side first, else that group's first column (its other state's); the engine keeps the
+    view on its first column by key across a collapse, else on `shownColumnOf`'s
+    (`collapseAnchor`). A header cell's part state `collapsed` (`boolean`, `undefined` for a cell
+    that does not collapse), `data-collapsible`/`data-collapsed`; the view's
+    `collapsedGroupKeys`. The toggle is the app's control in the group's header cell (a control
+    of the cell: interaction, never a sort). Sticky labels: `useGroupLabel(cell)` returns
+    `{ state: { groupKey }, props }` (the `label` layer's ref, `data-grid-group-label` = the key
+    (`GROUP_LABEL_ATTRIBUTE`), `data-grid-part="group-label"`, `position: sticky`) for an element
+    the app renders inside the header cell; the engine writes its inline start inset with the
+    pinned cells' and details' (`writeInsets`: only when `layerX`, the columns, the view's width
+    or the direction change; scaled, with the engine's own moves) as `pinnedWidth − layerX`, so
+    the browser's sticky holds it at the start of the columns that scroll on every painted frame
+    and the header cell's box (cut under scaling) keeps it inside its group; none in a pinned
+    group. The label is narrower than its cell, and nothing between it and the cell clips (an
+    `overflow` other than `visible`/`clip`).
     **Master-detail (Epic #41, M1–M4):** the model keeps `expandedRowKeys` (keys, `rowKey` else index; `expanded-rows.set { rowKeys }`,
     `expanded-rows.toggle { rowIndex } | { rowKey }`, `is("row-expanded", { rowIndex })`),
     controlled or not on `Root` like the sort (`expandedRowKeys`/`defaultExpandedRowKeys`/
@@ -301,7 +343,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    moved piece is told at once; controlled, the moved value stands (its prop, unchanged, never
    pulls it back) and is told once: when the root settles (another piece's prop moved it) or at
    once (another piece's own commit, an uncontrolled order's drop); a prop that changes wins
-   again. `Root` settles the pieces widths, order, position, selection, sort, expansion. The
+   again. `Root` settles the pieces widths, order, collapsed groups, position, selection, sort,
+   expansion. The
    engine drags a reorderable header cell: a primary press (after the consumer's
    `onPointerDown`, which vetoes with `preventDefault`), not on a control inside the cell nor a
    resizer, is not prevented: under `CLICK_SLOP` it stays a click (focus, a sort); past it the
@@ -466,7 +509,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
 - **Structural inline style only**: `position` (`sticky` on the header, `Empty`, pinned
-  cells and a row's detail), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
+  cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
   right to left: `inlineSide`), `transform` on the layers,
   `display` (also to make table parts positionable, and `flex` on rows and header rows with
   pinned columns), `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
@@ -494,7 +537,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   take focus).
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
   until a root holds it); a part hook (`useRow`, `useCell`, `useHeaderCell`,
-  `useColumnResizer`) returns `{ state, props }`, the structural style in `props.style`.
+  `useColumnResizer`, `useGroupLabel`) returns `{ state, props }`, the structural style in
+  `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
   before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and

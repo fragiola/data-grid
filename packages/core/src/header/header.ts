@@ -2,11 +2,12 @@ import type {
     Column,
     ColumnGroup,
     ColumnOrGroup,
+    GroupShow,
     HeaderCellLayout,
     HeaderLayout,
     PinnedSide,
 } from "../model/types";
-import { isWidth, lowerBound, spanValue } from "../utils";
+import { isWidth, keySet, lowerBound, spanValue } from "../utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,
@@ -46,7 +47,8 @@ export interface ColumnLayout<TRow, TNode> {
  * columns (so no group inside itself), every width finite and not negative (limits and `flex`
  * too, the minimum not above the maximum), `flex`, `autoSize` and `colSpan` (a function) on
  * columns only, at least one column under every group, the columns pinned at the start first and
- * the ones pinned at the end last, and a group's columns in one part.
+ * the ones pinned at the end last, and a group's columns in one part; `groupShow` only under a
+ * collapsible group, which shows a column in each of its states (E1.3).
  */
 export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
@@ -54,8 +56,11 @@ export function columnsError(entries: unknown): string | null {
     const keys = new Set<string>();
     /** each column's part, in order: pinned at the start (0), not pinned (1), at the end (2) */
     const parts: number[] = [];
-    /** the columns below `list`, or an error */
-    const visit = (list: readonly unknown[]): number | string => {
+    /** the columns below `list` (the children of a collapsible group or not), or an error */
+    const visit = (
+        list: readonly unknown[],
+        collapsible: boolean,
+    ): number | string => {
         let leaves = 0;
         for (const entry of list) {
             if (typeof entry !== "object" || entry === null) {
@@ -66,6 +71,15 @@ export function columnsError(entries: unknown): string | null {
             if (keys.has(key))
                 return `two columns or groups have the key "${key}"`;
             keys.add(key);
+            const show: unknown = Reflect.get(entry, "groupShow");
+            if (show !== undefined) {
+                if (show !== "expanded" && show !== "collapsed") {
+                    return `"${key}" has an invalid groupShow`;
+                }
+                if (!collapsible) {
+                    return `"${key}" has a groupShow, and its group is not collapsible`;
+                }
+            }
             const children: unknown = Reflect.get(entry, "children");
             if (children === undefined) {
                 if (!isWidth(Reflect.get(entry, "width"))) {
@@ -84,6 +98,9 @@ export function columnsError(entries: unknown): string | null {
                 const colSpan: unknown = Reflect.get(entry, "colSpan");
                 if (colSpan !== undefined && typeof colSpan !== "function") {
                     return `column "${key}" has a colSpan that is not a function`;
+                }
+                if (Reflect.get(entry, "collapsible") !== undefined) {
+                    return `column "${key}" is collapsible: a group collapses`;
                 }
                 const pinned: unknown = Reflect.get(entry, "pinned");
                 if (
@@ -119,10 +136,22 @@ export function columnsError(entries: unknown): string | null {
             if (Reflect.get(entry, "colSpan") !== undefined) {
                 return `group "${key}" has a colSpan: a group spans its columns`;
             }
+            const collapses: unknown = Reflect.get(entry, "collapsible");
+            if (collapses !== undefined && typeof collapses !== "boolean") {
+                return `group "${key}" has an invalid collapsible`;
+            }
             const from = parts.length;
-            const below = visit(children);
+            const below = visit(children, collapses === true);
             if (typeof below === "string") return below;
             if (below === 0) return `group "${key}" has no column`;
+            if (collapses === true) {
+                // each state shows a child, and every child shows a column (a collapsible one too)
+                for (const state of GROUP_SHOWS) {
+                    if (!children.some((child) => showsIn(child, state))) {
+                        return `group "${key}" shows no column ${state}`;
+                    }
+                }
+            }
             // the parts come in order: its columns are in one part when its first and last are
             const first = parts[from];
             const last = parts[parts.length - 1];
@@ -135,8 +164,64 @@ export function columnsError(entries: unknown): string | null {
         }
         return leaves;
     };
-    const result = visit(entries);
+    const result = visit(entries, false);
     return typeof result === "string" ? result : null;
+}
+
+/** The states a collapsible group is in. */
+const GROUP_SHOWS: readonly GroupShow[] = ["expanded", "collapsed"];
+
+/** Whether a child of a collapsible group shows while it is in `state` (its `groupShow`, E1.3). */
+function showsIn(child: unknown, state: GroupShow): boolean {
+    const show: unknown =
+        typeof child === "object" && child !== null
+            ? Reflect.get(child, "groupShow")
+            : undefined;
+    return show === undefined || show === state;
+}
+
+/**
+ * The column or group with this key among the entries, at any depth, the ones a collapsed group
+ * hides included (E1.3): what a sort and a toggle find their entry by.
+ */
+export function entryByKey<TRow, TNode>(
+    entries: readonly ColumnOrGroup<TRow, TNode>[],
+    key: unknown,
+): ColumnOrGroup<TRow, TNode> | undefined {
+    for (const entry of entries) {
+        if (entry.key === key) return entry;
+        if (isColumnGroup(entry)) {
+            const found = entryByKey(childrenOf(entry), key);
+            if (found) return found;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Every leaf of the entries, in declared order, the ones a collapsed group hides included (E1.3):
+ * the data a pipeline over rows reads (`/local`), not the grid's layout. The same array without
+ * a group.
+ */
+export function leafColumns<TRow, TNode>(
+    entries: readonly ColumnOrGroup<TRow, TNode>[],
+): readonly Column<TRow, TNode>[] {
+    if (
+        entries.every(
+            (entry): entry is Column<TRow, TNode> => !isColumnGroup(entry),
+        )
+    ) {
+        return entries;
+    }
+    const leaves: Column<TRow, TNode>[] = [];
+    const walk = (list: readonly ColumnOrGroup<TRow, TNode>[]) => {
+        for (const entry of list) {
+            if (isColumnGroup(entry)) walk(childrenOf(entry));
+            else leaves.push(entry);
+        }
+    };
+    walk(entries);
+    return leaves;
 }
 
 /** Why a column's limits are invalid (W2), or `null`: each a width, the minimum not above the maximum. */
@@ -257,15 +342,19 @@ function cellsByKey<TRow, TNode>(
 
 /**
  * Lays the entries of `columns` out: their leaves, and the header's rows and cells, each sibling
- * list in the order `order` gives it (the column order, Epic #75). Without a group, a `colSpan`
- * and an order, the columns are the entries themselves (the same array). It never throws: a group inside itself
- * is not entered again, and a group without columns has no cell (`columnsError` refuses both).
+ * list in the order `order` gives it (the column order, Epic #75), and a collapsible group's
+ * children shown by its state (`collapsed`, the collapsed groups' keys, E1.3: the ones it hides
+ * are no columns, but keep their places in the order; the header keeps the rows every entry
+ * needs, so a toggle never changes its height). Without a group, a `colSpan` and an order, the
+ * columns are the entries themselves (the same array). It never throws: a group inside itself is
+ * not entered again, and a group without columns has no cell (`columnsError` refuses both).
  */
 export function layoutColumns<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],
     order?: <E extends ColumnOrGroup<TRow, TNode>>(
         list: readonly E[],
     ) => readonly E[],
+    collapsed: readonly string[] = [],
 ): ColumnLayout<TRow, TNode> {
     // a header span (E1.2) is laid out as a group is
     if (
@@ -299,11 +388,17 @@ export function layoutColumns<TRow, TNode>(
     const columns: Column<TRow, TNode>[] = [];
     /** the columns' cells a header span covers: no cell on screen, kept for `cellByKey` */
     const covered: HeaderCellLayout<TRow, TNode>[] = [];
+    const collapsedKeys = keySet(collapsed);
+    /** places `list`, the children of a collapsible group in `state` showing only that state's */
     const place = (
         list: readonly ColumnOrGroup<TRow, TNode>[],
         level: number,
+        state?: GroupShow,
     ) => {
-        const siblings = order ? order(list) : list;
+        const ordered = order ? order(list) : list;
+        const siblings = state
+            ? ordered.filter((entry) => showsIn(entry, state))
+            : ordered;
         /** the siblings after a header span it covers */
         let skip = 0;
         for (const [index, entry] of siblings.entries()) {
@@ -334,7 +429,15 @@ export function layoutColumns<TRow, TNode>(
             const at = row.length;
             const columnIndex = columns.length;
             path.add(entry);
-            place(childrenOf(entry), level + 1);
+            place(
+                childrenOf(entry),
+                level + 1,
+                entry.collapsible !== true
+                    ? undefined
+                    : collapsedKeys.has(entry.key)
+                      ? "collapsed"
+                      : "expanded",
+            );
             path.delete(entry);
             const columnSpan = columns.length - columnIndex;
             if (columnSpan === 0) continue;

@@ -5,8 +5,9 @@ import {
     nextPosition,
     sameCell,
 } from "../navigation/navigation";
-import { clamp, isIndex, keySet, toggledKey } from "../utils";
+import { clamp, isIndex, keySet, sameKeys, toggledKey } from "../utils";
 import { overlaps } from "../viewport/window";
+import { followedColumn, groupByKey, isGroupCollapsed } from "./collapse";
 import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
@@ -20,7 +21,6 @@ import {
     withRow,
 } from "./expansion";
 import {
-    cellKeyAt,
     isReorderable,
     keptOrder,
     landingIndex,
@@ -372,45 +372,90 @@ function withWidths<TRow, TNode>(
     return done(next, next.columnWidths);
 }
 
-/** The columns and the header of the entries, each sibling list in the column order. */
+/**
+ * The columns and the header of the entries, each sibling list in the column order, the
+ * collapsible groups' children shown by their state (E1.3).
+ */
 function layoutOf<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],
     columnOrder: ColumnOrder,
+    collapsedGroupKeys: readonly string[],
 ) {
-    return layoutColumns(entries, siblingOrder(columnOrder));
+    return layoutColumns(
+        entries,
+        siblingOrder(columnOrder),
+        collapsedGroupKeys,
+    );
 }
 
 /**
- * The state in a new column order (O1), the same object when it did not change: the columns and
- * the header laid out again, and the active cell on its column, wherever it went (a header
- * cell's at its cell's new first column, on the same row).
+ * The state in a new column order (O1) or with new collapsed groups (E1.3), the same object when
+ * neither changed: the columns and the header laid out again, and the active cell on its column,
+ * wherever it went (a header cell's at its cell's new first column, on the same row), or, hidden
+ * by a collapse, on the nearest column its group still shows (`followedColumn`).
  */
+function withLayout<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    next: {
+        readonly columnOrder?: ColumnOrder;
+        readonly collapsedGroupKeys?: readonly string[];
+    },
+): DataGridState<TRow, TNode> {
+    const columnOrder = next.columnOrder ?? state.columnOrder;
+    // the collapsed groups are a set: the same keys in another order change nothing
+    const collapsedGroupKeys =
+        next.collapsedGroupKeys &&
+        !sameKeys(next.collapsedGroupKeys, state.collapsedGroupKeys)
+            ? next.collapsedGroupKeys
+            : state.collapsedGroupKeys;
+    if (
+        sameOrder(columnOrder, state.columnOrder) &&
+        collapsedGroupKeys === state.collapsedGroupKeys
+    ) {
+        return state;
+    }
+    const { columns, header } = layoutOf(
+        state.columnEntries,
+        columnOrder,
+        collapsedGroupKeys,
+    );
+    const active = state.activePosition;
+    const columnIndex = active
+        ? followedColumn(state, header, active)
+        : undefined;
+    const activePosition =
+        active &&
+        columnIndex !== undefined &&
+        columnIndex !== active.columnIndex
+            ? { rowIndex: active.rowIndex, columnIndex }
+            : active;
+    // in its new place, a span may cover it (E1.2)
+    return reconcile({
+        ...state,
+        columnOrder,
+        collapsedGroupKeys,
+        columns,
+        header,
+        activePosition,
+    });
+}
+
+/** The state in a new column order (`withLayout`), and the order. */
 function withOrder<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     columnOrder: ColumnOrder,
 ): Applied<TRow, TNode, ColumnOrder> {
-    if (sameOrder(columnOrder, state.columnOrder)) {
-        return done(state, state.columnOrder);
-    }
-    const { columns, header } = layoutOf(state.columnEntries, columnOrder);
-    const active = state.activePosition;
-    const key = active ? cellKeyAt(state, active) : undefined;
-    const moved = key === undefined ? undefined : header.cellByKey(key);
-    const activePosition =
-        active && moved && moved.columnIndex !== active.columnIndex
-            ? { rowIndex: active.rowIndex, columnIndex: moved.columnIndex }
-            : active;
-    // in its new place, a span may cover it (E1.2)
-    return done(
-        withSnappedActive({
-            ...state,
-            columnOrder,
-            columns,
-            header,
-            activePosition,
-        }),
-        columnOrder,
-    );
+    const next = withLayout(state, { columnOrder });
+    return done(next, next.columnOrder);
+}
+
+/** The state with new collapsed groups (`withLayout`), and their keys. */
+function withCollapsed<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    collapsedGroupKeys: readonly string[],
+): Applied<TRow, TNode, readonly string[]> {
+    const next = withLayout(state, { collapsedGroupKeys });
+    return done(next, next.collapsedGroupKeys);
 }
 
 /**
@@ -443,14 +488,19 @@ function createHandlers<TRow, TNode>(
         "columns.set": (state, { columns: entries }) => {
             const error = columnsError(entries);
             if (error) return invalid(error);
-            const { columns, header } = layoutOf(entries, state.columnOrder);
+            const { columns, header } = layoutOf(
+                entries,
+                state.columnOrder,
+                state.collapsedGroupKeys,
+            );
             const next = reconcile({
                 ...state,
                 columns,
                 columnEntries: entries,
                 header,
-                // a sorted column gone, or no longer sortable, leaves the sort
-                sortColumns: validSortColumns(columns, state.sortColumns),
+                // a sorted column gone, or no longer sortable, leaves the sort (one a collapsed
+                // group hides keeps it)
+                sortColumns: validSortColumns(entries, state.sortColumns),
             });
             return done(next, { columnCount: columns.length });
         },
@@ -526,7 +576,10 @@ function createHandlers<TRow, TNode>(
                 if (!SORT_DIRECTIONS.includes(entry?.direction)) {
                     return notOneOf("direction", SORT_DIRECTIONS);
                 }
-                const found = sortableColumn(state.columns, entry.columnKey);
+                const found = sortableColumn(
+                    state.columnEntries,
+                    entry.columnKey,
+                );
                 if (!found.ok) return found;
                 if (seen.has(entry.columnKey)) {
                     return invalid(
@@ -541,7 +594,7 @@ function createHandlers<TRow, TNode>(
             return done(next, next.sortColumns);
         },
         "sort-columns.toggle": (state, { columnKey, multi }) => {
-            const found = sortableColumn(state.columns, columnKey);
+            const found = sortableColumn(state.columnEntries, columnKey);
             if (!found.ok) return found;
             const sortColumns = toggledSort(
                 state.sortColumns,
@@ -859,6 +912,29 @@ function createHandlers<TRow, TNode>(
             );
         },
         "column-order.reset": (state) => withOrder(state, []),
+        "column-groups.set": (state, { groupKeys }) => {
+            if (
+                !Array.isArray(groupKeys) ||
+                groupKeys.some((key) => typeof key !== "string")
+            ) {
+                return invalid("groupKeys must be an array of keys");
+            }
+            return withCollapsed(state, [...new Set(groupKeys)]);
+        },
+        "column-groups.toggle": (state, { groupKey }) => {
+            const group =
+                typeof groupKey === "string"
+                    ? groupByKey(state.columnEntries, groupKey)
+                    : undefined;
+            if (!group) return fail("not_found", `no group "${groupKey}"`);
+            if (group.collapsible !== true) {
+                return fail("refused", `group "${groupKey}" does not collapse`);
+            }
+            return withCollapsed(
+                state,
+                toggledKey(state.collapsedGroupKeys, groupKey),
+            );
+        },
         "direction.set": (state, { direction }) => {
             if (direction !== null && !GRID_DIRECTIONS.includes(direction)) {
                 return notOneOf("direction", GRID_DIRECTIONS);
@@ -972,7 +1048,12 @@ export function createDataGridModel<TRow, TNode = unknown>(
     const error = columnsError(entries);
     if (error) throw new TypeError(`invalid columns: ${error}`);
     const columnOrder = keptOrder(options.columnOrder);
-    const { columns, header } = layoutOf(entries, columnOrder);
+    const collapsedGroupKeys = keptOrder(options.collapsedGroupKeys);
+    const { columns, header } = layoutOf(
+        entries,
+        columnOrder,
+        collapsedGroupKeys,
+    );
     const selectionMode =
         options.rowSelection && ROW_SELECTIONS.includes(options.rowSelection)
             ? options.rowSelection
@@ -989,7 +1070,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
         activePosition: options.activePosition ?? null,
         sortColumns: copied(
-            validSortColumns(columns, options.sortColumns ?? []),
+            validSortColumns(entries, options.sortColumns ?? []),
         ),
         rowsChanged: { revision: 0, start: 0, end: 0 },
         expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
@@ -1004,6 +1085,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         selectionAnchor: null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
+        collapsedGroupKeys,
         direction:
             options.direction && GRID_DIRECTIONS.includes(options.direction)
                 ? options.direction
@@ -1183,6 +1265,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 : undefined;
         },
         "column-order": () => state.columnOrder,
+        "collapsed-group-keys": () => state.collapsedGroupKeys,
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
         direction: () => state.direction,
@@ -1218,7 +1301,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "row-loaded": ({ rowIndex }) =>
             rowAt(state.source, rowIndex) !== undefined,
         "column-sortable": ({ columnKey }) =>
-            sortableColumn(state.columns, columnKey).ok,
+            sortableColumn(state.columnEntries, columnKey).ok,
+        "group-collapsed": ({ groupKey }) => isGroupCollapsed(state, groupKey),
         "row-expanded": ({ rowIndex }) =>
             holdsRow(state.expandedRows, rowIndex),
         "row-selected": ({ rowIndex }) => isRowSelected(state, rowIndex),
@@ -1290,6 +1374,8 @@ export const COMMANDS = [
     "column-order.set",
     "column-order.move",
     "column-order.reset",
+    "column-groups.set",
+    "column-groups.toggle",
     "direction.set",
     "sizes.set",
     "active-position.set",

@@ -10,6 +10,7 @@ export type {
     DataGridModel,
     DetailHeight,
     GridDirection,
+    GroupShow,
     PinnedSide,
     Range,
     ReorderSide,
@@ -40,6 +41,7 @@ export {
 export {
     type CellState,
     type ColumnResizerState,
+    type GroupLabelState,
     type HeaderCellState,
     headerCellContent,
     type RowDetailState,
@@ -49,6 +51,7 @@ export {
     useColumnResizer,
     useColumnWindow,
     useGridView,
+    useGroupLabel,
     useHeaderCell,
     useHeaderCells,
     useHeaderRows,

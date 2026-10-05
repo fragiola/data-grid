@@ -275,6 +275,25 @@ describe("the layers", () => {
         scrollTo(400, 1_000);
         expect(set).not.toHaveBeenCalled();
     });
+
+    it("are written at a commit for the scroll as it is, one whose event has not run yet", () => {
+        const { engine, model, element, header, view, render } = setup();
+        // the browser scrolled (a click on a control out of view), its event still to come, and
+        // something renders meanwhile
+        element.scrollLeft = 1_000;
+        model.run("active-position.set", { rowIndex: 3, columnIndex: 1 });
+        render();
+        expect(engine.get("scroll-position").left).toBe(1_000);
+        // the view committed was laid out from 0: its layers stay there, the native scroll showing
+        // what is at 1,000 (against the scroll the engine knew, they moved by 1,000)
+        expect(header.style.transform).toBe("translate3d(0px, 0px, 0px)");
+        // the view for 1,000: its layers at its base
+        render();
+        expect(header.style.transform).toBe(
+            `translate3d(${view().columnBase}px, 0px, 0px)`,
+        );
+        expect(view().columnBase).toBeGreaterThan(0);
+    });
 });
 
 describe("attaching", () => {

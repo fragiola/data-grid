@@ -137,6 +137,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly selectedRowKeys: readonly RowKey[];
     /** whether a loaded row can be selected; `undefined`: every row can */
     readonly isRowSelectable: RowSelectable<TRow> | undefined;
+    /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
+    readonly collapsedGroupKeys: readonly string[];
     /**
      * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
      * leaves), at its element's position (a header cell's top row and first column); `null` in
@@ -259,10 +261,18 @@ export type EngineEventKey = keyof EngineEventMap;
  * pinned columns (`pinned`: `position: sticky` in their row's flow, whose inline start inset,
  * `left` or in RTL `right`, the engine writes so the browser's scrolling keeps them at the view's
  * start or end; their `data-column-index` says which column they are, a header cell's first),
- * and expanded rows' details (`detail`: sticky the same way, at the view's start: as a column at
- * offset 0 would be).
+ * expanded rows' details (`detail`: sticky the same way, at the view's start: as a column at
+ * offset 0 would be), and group labels (`label`, Epic #85, E1.3: sticky the same way inside their
+ * header cell, at the start of the columns that scroll, which the cell's box keeps them within;
+ * their `data-grid-group-label` names the header cell's key).
  */
-export type EngineLayer = "grid" | "header" | "body" | "pinned" | "detail";
+export type EngineLayer =
+    | "grid"
+    | "header"
+    | "body"
+    | "pinned"
+    | "detail"
+    | "label";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {

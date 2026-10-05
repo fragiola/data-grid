@@ -343,6 +343,7 @@ export function buildView<TRow, TNode>({
         rowSelection: state.rowSelection,
         selectedRowKeys: state.selectedRowKeys,
         isRowSelectable: state.isRowSelectable,
+        collapsedGroupKeys: state.collapsedGroupKeys,
     };
 }
 
@@ -369,6 +370,7 @@ const VIEW_KEYS = [
     "rowSelection",
     "selectedRowKeys",
     "isRowSelectable",
+    "collapsedGroupKeys",
     "interaction",
     "columnResize",
     "columnReorder",

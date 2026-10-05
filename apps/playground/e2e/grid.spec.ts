@@ -3331,5 +3331,357 @@ for (const kind of KINDS) {
                 expect(moved.start).toBeCloseTo(box.start, 0);
             });
         });
+
+        test.describe("collapsible groups and sticky labels", () => {
+            // 60 columns under groups: G1 (C5–C16) collapses to C5 and C16, expanded C5–C15
+            const COLLAPSIBLE = {
+                rows: 1_000,
+                columns: 60,
+                groups: 1,
+                collapsible: 1,
+            } as const;
+            const LABELS = { ...COLLAPSIBLE, stickyLabels: 1 } as const;
+
+            const groupCell = (page: Page, columnIndex: number) =>
+                page.locator(
+                    `[data-grid-part="header-cell"][data-group][data-column-index="${columnIndex}"]`,
+                );
+            const columnHeader = (page: Page, columnIndex: number) =>
+                page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]:not([data-group])`,
+                );
+            const toggleG1 = (page: Page) =>
+                page.evaluate(() =>
+                    window.grid?.model.run("column-groups.toggle", {
+                        groupKey: "G1",
+                    }),
+                );
+
+            test("toggles a group from its toggle and by command, its columns following", async ({
+                page,
+            }) => {
+                await open(page, kind, COLLAPSIBLE);
+                const g1 = groupCell(page, 5);
+                await expect(g1).toHaveAttribute("data-collapsible", "");
+                await expect(g1).not.toHaveAttribute("data-collapsed");
+                await expect(g1).toHaveAttribute("aria-colspan", "11");
+                await expect(columnHeader(page, 6)).toHaveText("C6");
+                await expect(page.getByRole("grid")).toHaveAttribute(
+                    "aria-colcount",
+                    "56",
+                );
+                const toggle = page.getByTestId("toggle-G1");
+                await expect(toggle).toHaveAttribute("aria-expanded", "true");
+                // a table centres it in its 1,100px cell: the click scrolls it into view first
+                await toggle.click();
+                await expect(g1).toHaveAttribute("data-collapsed", "");
+                await expect(g1).toHaveAttribute("aria-colspan", "2");
+                if (kind === "table") {
+                    await expect(g1).toHaveAttribute("colspan", "2");
+                }
+                await expect(toggle).toHaveAttribute("aria-expanded", "false");
+                await expect(columnHeader(page, 6)).toHaveText("C16");
+                await expect(cell(page, 0, 6)).toHaveText("0:16");
+                await expect(cell(page, 0, 7)).toHaveText("0:17");
+                await expect(page.getByRole("grid")).toHaveAttribute(
+                    "aria-colcount",
+                    "47",
+                );
+                // the header keeps its two rows
+                await expect(
+                    page.locator('[data-grid-part="header-row"]'),
+                ).toHaveCount(2);
+                expect(
+                    await page.evaluate(() => window.collapseChanges),
+                ).toEqual([["G1"]]);
+                // a group that does not collapse says nothing, and has no toggle
+                await expect(groupCell(page, 1)).not.toHaveAttribute(
+                    "data-collapsible",
+                );
+                await expect(page.getByTestId("toggle-G0")).toHaveCount(0);
+                await toggleG1(page);
+                await expect(g1).not.toHaveAttribute("data-collapsed");
+                await expect(columnHeader(page, 6)).toHaveText("C6");
+            });
+
+            test("keeps the active cell, the widths and the order by key", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, COLLAPSIBLE);
+                // C17: 16 expanded, 7 collapsed (the view keeps G1 at its start, C11 hidden)
+                await scroll(page, viewport, 0, 1_000);
+                await cell(page, 2, 16).click();
+                await toggleG1(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 7,
+                });
+                await expect(cell(page, 2, 7)).toBeFocused();
+                await toggleG1(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 16,
+                });
+                // C8, hidden by the collapse: the nearest column G1 shows, C5
+                await scroll(page, viewport, 0, 0);
+                await cell(page, 2, 8).click();
+                await toggleG1(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 5,
+                });
+                await expect(cell(page, 2, 5)).toBeFocused();
+                await toggleG1(page);
+                // a width kept while its column is hidden
+                await page.evaluate(() =>
+                    window.grid?.model.run("column-widths.resize", {
+                        columnKey: "c6",
+                        width: 150,
+                    }),
+                );
+                await settle(page);
+                expect((await boxOf(columnHeader(page, 6))).width).toBeCloseTo(
+                    150,
+                    0,
+                );
+                await toggleG1(page);
+                await toggleG1(page);
+                await settle(page);
+                expect((await boxOf(columnHeader(page, 6))).width).toBeCloseTo(
+                    150,
+                    0,
+                );
+                // an order: the hidden C16 keeps its place in it
+                await page.evaluate(() =>
+                    window.grid?.model.run("column-order.set", {
+                        columnOrder: ["c16", "c5"],
+                    }),
+                );
+                await expect(columnHeader(page, 5)).toHaveText("C6");
+                await expect(columnHeader(page, 15)).toHaveText("C5");
+                await toggleG1(page);
+                await expect(columnHeader(page, 5)).toHaveText("C16");
+                await expect(columnHeader(page, 6)).toHaveText("C5");
+            });
+
+            test("keeps the view on the column it shows first, or a hidden one's group at its start", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, COLLAPSIBLE);
+                const left = () =>
+                    page.evaluate(() => ({
+                        engine: window.grid?.engine.get("scroll-position").left,
+                        scroll: document.querySelector(
+                            '[data-testid="viewport"]',
+                        )?.scrollLeft,
+                    }));
+                // C18 first, 30px into it
+                await scroll(page, viewport, 0, 1_730);
+                await toggleG1(page);
+                await settle(page);
+                expect(await left()).toEqual({ engine: 830, scroll: 830 });
+                await toggleG1(page);
+                await settle(page);
+                // C6 first: hidden, G1 starts the view
+                await scroll(page, viewport, 0, 650);
+                await toggleG1(page);
+                await settle(page);
+                expect(await left()).toEqual({ engine: 500, scroll: 500 });
+            });
+
+            /**
+             * Every rendered group label's start from the start of the view's columns that scroll
+             * (right of `pinned` pixels pinned at the start), and where sticky should hold it: at
+             * its header cell's start, moved to the view's (`pinned`) while its group is scrolled
+             * out there, never past its cell's end; a pinned group's at its place. With `by`, the
+             * view scrolls by that many pixels first and they are read in the same task, before
+             * any `scroll` listener runs (`fired` tells whether one did).
+             */
+            function labelPlaces(
+                viewport: Locator,
+                rtl: boolean,
+                pinned: number,
+                by: number | null = null,
+            ) {
+                return viewport.evaluate(
+                    (element, [mirrored, pinnedWidth, delta]) => {
+                        let fired = false;
+                        const onScroll = () => {
+                            fired = true;
+                        };
+                        element.addEventListener("scroll", onScroll);
+                        if (delta !== null) {
+                            element.scrollLeft += mirrored ? -delta : delta;
+                        }
+                        const rect = element.getBoundingClientRect();
+                        const left = rect.left + element.clientLeft;
+                        const right = left + element.clientWidth;
+                        const start = (box: DOMRect) =>
+                            mirrored ? right - box.right : box.left - left;
+                        const places = [
+                            ...element.querySelectorAll(
+                                '[data-grid-part="group-label"]',
+                            ),
+                        ].map((label) => {
+                            const cell = label.closest(
+                                '[data-grid-part="header-cell"]',
+                            );
+                            if (!cell)
+                                throw new Error("a label out of its cell");
+                            const box = label.getBoundingClientRect();
+                            const cellBox = cell.getBoundingClientRect();
+                            const cellStart = start(cellBox);
+                            const expected = cell.hasAttribute("data-pinned")
+                                ? cellStart
+                                : Math.min(
+                                      Math.max(cellStart, pinnedWidth),
+                                      cellStart + cellBox.width - box.width,
+                                  );
+                            return {
+                                key: label.getAttribute(
+                                    "data-grid-group-label",
+                                ),
+                                actual: start(box),
+                                expected,
+                            };
+                        });
+                        element.removeEventListener("scroll", onScroll);
+                        return { places, fired };
+                    },
+                    [rtl, pinned, by] as const,
+                );
+            }
+
+            function expectPlaced(
+                places: Awaited<ReturnType<typeof labelPlaces>>["places"],
+                at: string,
+            ) {
+                expect(places.length, at).toBeGreaterThan(0);
+                for (const place of places) {
+                    expect(
+                        Math.abs(place.actual - place.expected),
+                        `${place.key} ${at}: ${place.actual} for ${place.expected}`,
+                    ).toBeLessThan(1.5);
+                }
+            }
+
+            for (const dir of ["ltr", "rtl"] as const) {
+                const rtl = dir === "rtl";
+                const suffix = rtl ? ", right to left" : "";
+                const query = (extra: Record<string, string | number> = {}) =>
+                    rtl
+                        ? { ...LABELS, ...extra, dir }
+                        : { ...LABELS, ...extra };
+
+                test(`keeps a group's label at the view's start while its group scrolls out, within its group${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, query());
+                    for (const left of [0, 700, 1_480, 1_590, 2_345, 4_000]) {
+                        await scroll(page, viewport, 0, rtl ? -left : left);
+                        const { places } = await labelPlaces(viewport, rtl, 0);
+                        expectPlaced(places, `at ${left}`);
+                        if (left === 700) {
+                            // G1 (500–1,600) is scrolled out at the start: its label at the view's
+                            const g1 = places.find(
+                                (place) => place.key === "G1",
+                            );
+                            expect(g1?.actual).toBeCloseTo(0, 0);
+                        }
+                    }
+                    // in place in the frames painted before the scroll event, React rendering
+                    // nothing inside the overscan
+                    await scroll(page, viewport, 0, rtl ? -700 : 700);
+                    await page.evaluate(() => {
+                        window.commits = 0;
+                    });
+                    for (const by of [13, -7, 40]) {
+                        const { places, fired } = await labelPlaces(
+                            viewport,
+                            rtl,
+                            0,
+                            by,
+                        );
+                        expect(fired).toBe(false);
+                        expectPlaced(places, `by ${by}`);
+                        await settle(page);
+                    }
+                    expect(await page.evaluate(() => window.commits)).toBe(0);
+                    // collapsed, G1's label is in its narrower cell
+                    await page.getByTestId("toggle-G1").click();
+                    await settle(page);
+                    expectPlaced(
+                        (await labelPlaces(viewport, rtl, 0)).places,
+                        "collapsed",
+                    );
+                });
+
+                test(`keeps a label right of the columns pinned at the start, and a pinned group's in place${suffix}`, async ({
+                    page,
+                }) => {
+                    // C0 and G0 pinned: 500px
+                    const viewport = await open(
+                        page,
+                        kind,
+                        query({ pinned: 5 }),
+                    );
+                    for (const left of [0, 300, 1_000, 2_600]) {
+                        await scroll(page, viewport, 0, rtl ? -left : left);
+                        const { places } = await labelPlaces(
+                            viewport,
+                            rtl,
+                            500,
+                        );
+                        expectPlaced(places, `at ${left}`);
+                        if (left === 300) {
+                            const g1 = places.find(
+                                (place) => place.key === "G1",
+                            );
+                            expect(g1?.actual).toBeCloseTo(500, 0);
+                        }
+                    }
+                });
+
+                test(`keeps a label in view under scaled column scroll, a cut group's too${suffix}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(
+                        page,
+                        kind,
+                        query({
+                            rows: 100,
+                            columns: 2_000,
+                            maxScrollSize: 50_000,
+                        }),
+                    );
+                    expect(
+                        await page.evaluate(
+                            () =>
+                                window.grid?.engine.get("scroll-scaled")
+                                    .columns,
+                        ),
+                    ).toBe(true);
+                    for (const left of [20_000, 20_003, 33_333]) {
+                        await scroll(page, viewport, 0, rtl ? -left : left);
+                        expectPlaced(
+                            (await labelPlaces(viewport, rtl, 0)).places,
+                            `at ${left}`,
+                        );
+                    }
+                    // small physical moves, before the scroll event
+                    for (const by of [3, -2, 8]) {
+                        const { places, fired } = await labelPlaces(
+                            viewport,
+                            rtl,
+                            0,
+                            by,
+                        );
+                        expect(fired).toBe(false);
+                        expectPlaced(places, `by ${by}`);
+                        await settle(page);
+                    }
+                });
+            }
+        });
     });
 }

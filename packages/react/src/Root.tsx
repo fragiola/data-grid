@@ -22,6 +22,7 @@ import {
     type RowSelection,
     type Size,
     type SortColumn,
+    sameKeys,
     sameOrder,
     sameRowKeys,
     sameSortColumns,
@@ -175,6 +176,18 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
          * the keys, or a command ran
          */
         onColumnOrderChange?: ((columnOrder: ColumnOrder) => void) | undefined;
+        /**
+         * the collapsed groups' keys (groups with `collapsible`), controlled; pair it with
+         * `onCollapsedGroupKeysChange`. A collapsed group shows only its children for that state
+         * (`groupShow`)
+         */
+        collapsedGroupKeys?: readonly string[] | undefined;
+        /** the collapsed groups' keys to start with, uncontrolled */
+        defaultCollapsedGroupKeys?: readonly string[] | undefined;
+        /** the collapsed groups changed (or, controlled, ask to): a group was toggled, or a command ran */
+        onCollapsedGroupKeysChange?:
+            | ((collapsedGroupKeys: readonly string[]) => void)
+            | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -299,6 +312,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         columnOrder,
         defaultColumnOrder,
         onColumnOrderChange,
+        collapsedGroupKeys,
+        defaultCollapsedGroupKeys,
+        onCollapsedGroupKeysChange,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -334,6 +350,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
             columnWidths: columnWidths ?? defaultColumnWidths,
             columnOrder: columnOrder ?? defaultColumnOrder,
+            collapsedGroupKeys: collapsedGroupKeys ?? defaultCollapsedGroupKeys,
             direction,
         });
         const flags: ControlledFlags = {
@@ -376,7 +393,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 apply: (value) => {
                     model.run("sort-columns.set", {
                         sortColumns: validSortColumns(
-                            model.state.columns,
+                            model.state.columnEntries,
                             value,
                         ),
                     });
@@ -471,6 +488,25 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const collapsed = bind(
+            propsState<TRow, readonly string[]>(latest, {
+                prefix: "column-groups.",
+                prop: (props) => props.collapsedGroupKeys,
+                onChange: (props) => props.onCollapsedGroupKeysChange,
+                // keys to start with that were not all strings (or listed one twice) start
+                // without those: the app is told the keys the grid holds
+                start: (props) => props.defaultCollapsedGroupKeys,
+                read: (state) => state.collapsedGroupKeys,
+                // a set: the same keys in another order are no change
+                same: sameKeys,
+                // kept as at mount, and the parent told the keys as they settled
+                apply: (groupKeys) => {
+                    model.run("column-groups.set", {
+                        groupKeys: keptOrder(groupKeys),
+                    });
+                },
+            }),
+        );
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -506,10 +542,19 @@ export function Root<TRow>(props: RootProps<TRow>) {
             selection,
             widths,
             order,
+            collapsed,
             // settled (and started) in this order: the layout inputs first, so a position the order
-            // moved settles in the same pass; then the selection before the sort, as their
-            // values to start with are told
-            controlled: [widths, order, position, selection, sort, expanded],
+            // or a collapse moved settles in the same pass; then the selection before the sort, as
+            // their values to start with are told
+            controlled: [
+                widths,
+                order,
+                collapsed,
+                position,
+                selection,
+                sort,
+                expanded,
+            ],
             after,
         };
     });
@@ -530,13 +575,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // the viewport attaches after the parts' first layout effects (refs attach child first)
         // and its size makes a new view: render it before the first paint, not after
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
-        // the props follow onto the model, before paint. Controlled widths and order first: layout
-        // inputs, the axis a position scrolls into view against (an order moves the active cell
-        // with its column: there it stays unless its own prop changed, told at the settle). Then
-        // a controlled position: valid before the data changes (rows filtered down), it survives
-        // them
+        // the props follow onto the model, before paint. Controlled widths, order and collapsed
+        // groups first: layout inputs, the axis a position scrolls into view against (an order or
+        // a collapse moves the active cell with its column: there it stays unless its own prop
+        // changed, told at the settle). Then a controlled position: valid before the data changes
+        // (rows filtered down), it survives them
         grid.widths.follow();
         grid.order.follow();
+        grid.collapsed.follow();
         grid.position.follow();
         flags.applying.current = true;
     });

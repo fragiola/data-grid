@@ -9,10 +9,13 @@ present (empty) or absent, never `"false"`.
 ## Parts
 
 Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
-`body`, `row`, `cell`, `row-detail` or `empty`, and `column-resizer` on a resize handle you render
-with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)). Rows and cells carry their indexes: `data-row-index` (header
-rows are `-1` and above, a header cell spanning rows is at its top one) and `data-column-index`
-(a header cell spanning columns is at its first). Tests select by them, never by class names.
+`body`, `row`, `cell`, `row-detail` or `empty`, `column-resizer` on a resize handle you render
+with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), and `group-label` on a
+group's label you render with `useGroupLabel`
+([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)). Rows and cells carry
+their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
+its top one) and `data-column-index` (a header cell spanning columns is at its first). Tests
+select by them, never by class names.
 
 ## States
 
@@ -24,6 +27,8 @@ rows are `-1` and above, a header cell spanning rows is at its top one) and `dat
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
+| `data-collapsible` | header cell | it is a collapsible group's ([Collapsible groups](/docs/concepts/collapsible-groups)) |
+| `data-collapsed` | header cell | its collapsible group is closed |
 | `data-expanded` | row | it shows its detail ([Master-detail](/docs/guides/master-detail)) |
 | `data-selected` | row | it is selected ([Row selection](/docs/concepts/row-selection)) |
 | `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |

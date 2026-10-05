@@ -1,5 +1,5 @@
-import { layoutColumns } from "../header/header";
-import type { Column, ColumnOrGroup, SortColumn } from "../model/types";
+import { leafColumns } from "../header/header";
+import type { ColumnOrGroup, SortColumn } from "../model/types";
 import { memo } from "../utils";
 import {
     entriesOf,
@@ -16,20 +16,13 @@ import { sortEntries } from "./sort";
 // The local pipeline (Epic #47): rows in memory filtered, searched, sorted and paged, in that
 // order, each stage computed again only when its own inputs change.
 
-/** The grid's columns (the leaves) of a list of columns and groups. */
-function leavesOf<TRow, TNode>(
-    columns: readonly ColumnOrGroup<TRow, TNode>[],
-): readonly Column<TRow, TNode>[] {
-    return layoutColumns(columns).columns;
-}
-
 /** The rows sorted by `sortColumns` (see `Column.compare`; empty values last; stable). */
 export function sortRows<TRow, TNode>(
     rows: readonly TRow[],
     sortColumns: readonly SortColumn[],
     columns: readonly ColumnOrGroup<TRow, TNode>[],
 ): TRow[] {
-    return sortEntries(entriesOf(rows), sortColumns, leavesOf(columns)).map(
+    return sortEntries(entriesOf(rows), sortColumns, leafColumns(columns)).map(
         (entry) => entry.row,
     );
 }
@@ -40,7 +33,7 @@ export function filterRows<TRow, TNode>(
     filters: LocalFilters,
     columns: readonly ColumnOrGroup<TRow, TNode>[],
 ): TRow[] {
-    return filterEntries(entriesOf(rows), filters, leavesOf(columns)).map(
+    return filterEntries(entriesOf(rows), filters, leafColumns(columns)).map(
         (entry) => entry.row,
     );
 }
@@ -51,7 +44,7 @@ export function searchRows<TRow, TNode>(
     text: string,
     columns: readonly ColumnOrGroup<TRow, TNode>[],
 ): TRow[] {
-    return searchEntries(entriesOf(rows), text, leavesOf(columns)).map(
+    return searchEntries(entriesOf(rows), text, leafColumns(columns)).map(
         (entry) => entry.row,
     );
 }
@@ -158,7 +151,7 @@ export function createLocalRows<TRow, TNode = unknown>(
         for (const listener of [...listeners]) listener();
     }
 
-    const leaves = memo(leavesOf<TRow, TNode>);
+    const leaves = memo(leafColumns<TRow, TNode>);
     const entries = memo(entriesOf<TRow>);
     const filtered = memo(filterEntries<TRow, TNode>);
     const searched = memo(searchEntries<TRow, TNode>);

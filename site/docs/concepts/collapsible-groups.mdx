@@ -1,0 +1,171 @@
+---
+title: Collapsible groups and sticky labels
+description: Open and close column groups from your own toggle, with columns for each state, and keep a group's label in view while its columns scroll.
+---
+
+A column group can open and close: a year that shows its quarters while open and its total while
+closed. The grid keeps which groups are collapsed and lays the columns out for each group's
+state; the toggle is yours, a button in the group's header cell. A group's label, its name and
+that toggle, can stay in view while the group scrolls sideways.
+
+<Example id="collapsible-groups" />
+
+## Collapsible groups
+
+`collapsible: true` on a group makes it open and close. Its children say which state they show
+in with `groupShow`: `"expanded"` (only while the group is open), `"collapsed"` (only while it is
+closed), or nothing (in both). A child can be a group, collapsible itself.
+
+```tsx title="columns.tsx"
+import type { ColumnOrGroup } from "@fragiola/data-grid-react";
+
+const year: ColumnOrGroup<Sales> = {
+    key: "2026",
+    name: "2026",
+    collapsible: true,
+    children: [
+        { key: "q1", name: "Q1", width: 90, groupShow: "expanded" },
+        { key: "q2", name: "Q2", width: 90, groupShow: "expanded" },
+        { key: "total", name: "Total", width: 100, groupShow: "collapsed" },
+    ],
+};
+```
+
+A collapsible group shows at least one child in each state, and `groupShow` is only for the
+children of a collapsible group: the model refuses anything else, as it refuses any invalid
+`columns`.
+
+A child a group's state hides is no column of the grid while it is hidden: no header cell, no
+cells, no place in the column axis, the windows, `aria-colcount` or the keys. The header keeps
+the rows every column needs, so opening or closing a group never changes its height; a column
+with fewer groups above it spans the rows down to the last, as in any
+[column group](/docs/concepts/column-groups).
+
+## Opening and closing
+
+The model keeps the collapsed groups' keys, `collapsedGroupKeys`, in the order they were
+collapsed. Two commands change them:
+
+- `column-groups.toggle { groupKey }` opens a collapsible group, or closes it when it is open. It
+  works on a group that a closed group hides too: it opens in the state you left it in.
+- `column-groups.set { groupKeys }` replaces them all: `[]` opens every group. They are a set:
+  the same keys in another order change nothing.
+
+A key that is no collapsible group is kept, as with the column widths: the group may come back
+with new `columns`. Read them with `get("collapsed-group-keys")`, and a group's state with
+`is("group-collapsed", { groupKey })`.
+
+On `Root` they are controlled or not, as every piece of grid state: `collapsedGroupKeys` with
+`onCollapsedGroupKeysChange`, or `defaultCollapsedGroupKeys`.
+
+```tsx title="grid.tsx"
+<DataGrid.Root
+    columns={columns}
+    rows={rows}
+    defaultCollapsedGroupKeys={["2025"]}
+    onCollapsedGroupKeysChange={(keys) => save(keys)}
+>
+```
+
+## The toggle
+
+The grid renders no toggle: put your own button in the group's header cell. A header cell's
+state has `collapsed`, `true` or `false` for a collapsible group's and `undefined` for any other,
+and the cell carries `data-collapsible` and, while closed, `data-collapsed`.
+
+```tsx title="group-header.tsx"
+function GroupHeader({ cell }: { cell: HeaderCellInfo<Sales> }) {
+    const { model } = useDataGrid<Sales>();
+    const { state } = useHeaderCell(cell);
+    return (
+        <>
+            {state.collapsed === undefined ? null : (
+                <button
+                    type="button"
+                    aria-label={cell.group?.name}
+                    aria-expanded={!state.collapsed}
+                    onClick={() =>
+                        model.run("column-groups.toggle", { groupKey: cell.key })
+                    }
+                >
+                    <ChevronRight aria-hidden />
+                </button>
+            )}
+            {headerCellContent(cell)}
+        </>
+    );
+}
+```
+
+A button in a header cell is a control of that cell: a click on it never sorts, and from the
+keyboard Enter or F2 on the cell hands its keys to it
+([Controls in cells](/docs/concepts/keyboard#controls-in-cells)). Its name and `aria-expanded`
+are yours.
+
+## What follows a group
+
+Everything the grid keeps by key stays with its column while the column is hidden, and is there
+again when it shows:
+
+- **Widths**: a resized column keeps its width in `columnWidths`.
+- **Order**: a hidden column keeps its place among its siblings in `columnOrder`; a move among
+  the columns in view leaves it there.
+- **Sort**: a sorted column stays sorted while hidden (the rows are yours to order), and a sort
+  can name it. `aria-sort` goes to the first sorted column shown; `data-sort-priority` keeps the
+  sort's own order, so a column shown can hold priority 2 while a hidden one holds 1.
+- **Rows in memory**: [`useLocalRows`](/docs/concepts/rows-in-memory) sorts, filters and searches
+  by every column, a hidden one too (a total shown only while its group is closed is data all
+  the same).
+- **The active cell**: on a column that stays, it follows its column wherever it goes. On a
+  column the group hides, it moves to the nearest column the same group still shows, the start's
+  side first, else (the group shows only its other state's columns) to the group's first column;
+  a group's header cell stays active as the group opens and closes.
+- **The view**: it stays on the column it shows first. When that column is hidden, it starts on
+  the column the active cell would go to, so the group whose toggle you pressed stays near your
+  pointer.
+
+## Sticky labels
+
+A group wider than the view can have its start scrolled out, its name with it. `useGroupLabel`
+gives the props of a label inside the group's header cell that stays at the start of the
+columns that scroll (right of the [pinned](/docs/concepts/pinned-columns) ones) while its group
+is partly scrolled out, and never leaves its group: as the group's end comes, the label goes with
+it.
+
+```tsx title="group-label.tsx"
+function GroupLabel({ cell }: { cell: HeaderCellInfo<Sales> }) {
+    const label = useGroupLabel(cell);
+    return (
+        <span {...label.props} className="label">
+            <GroupToggle cell={cell} />
+            {headerCellContent(cell)}
+        </span>
+    );
+}
+```
+
+The label is `position: sticky` in its header cell, at an inset the engine writes: like a pinned
+cell's, written only when the layers move, so the browser's own scrolling holds it in place on
+every frame, React never renders for a scroll ([Virtualization](/docs/concepts/virtualization)),
+and under [scroll scaling](/docs/concepts/scroll-scaling), where the engine moves the layers
+itself, it follows each move. Right to left, it holds at the right edge.
+
+A few rules make it work:
+
+- **Narrower than its cell.** A label as wide as its cell has no room to move: an inline block,
+  or a flex item, as wide as its content.
+- **Nothing clips between it and the cell.** An `overflow` other than `visible` or `clip` on the
+  header cell (or on anything between) holds it in place. Truncate with `overflow: clip`.
+- **Padding on the label.** Stuck, the label sits at the view's start: the cell's padding is
+  not there, so give the label its own.
+- **No inset of your own.** Its inline start inset is the engine's.
+
+A pinned group is always in view: its label stays where it is.
+
+## State
+
+| attribute | on | when |
+| --- | --- | --- |
+| `data-collapsible` | header cell | it is a collapsible group's |
+| `data-collapsed` | header cell | its group is closed |
+| `data-grid-part="group-label"` | group label | always, with `data-grid-group-label` naming its group's key |

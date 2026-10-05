@@ -14,6 +14,7 @@ import {
     spanWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
+import { keySet } from "../utils";
 import { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
 import {
     cellSpan,
@@ -104,6 +105,11 @@ export interface HeaderCellState {
     readonly dragging: boolean;
     /** a drag would drop beside it, on this side (the app draws the indicator); else `null` */
     readonly dropTarget: ReorderSide | null;
+    /**
+     * a collapsible group's (Epic #85, E1.3): whether it is collapsed (`column-groups.toggle`
+     * opens and closes it); `undefined` for a header cell that does not collapse
+     */
+    readonly collapsed: boolean | undefined;
 }
 
 /** The state of a column resizer: the handle the app renders in a resizable header cell. */
@@ -165,7 +171,7 @@ export interface HeaderCellPart {
     readonly state: HeaderCellState;
     /** the roving tab stop, as a body cell's */
     readonly tabIndex: 0 | -1;
-    /** on the first sorted column's header cell only (ARIA 1.2: one header at a time) */
+    /** on the first sorted column shown, its header cell only (ARIA 1.2: one header at a time) */
     readonly ariaSort: SortDirection | undefined;
 }
 
@@ -311,6 +317,10 @@ export function headerCellPart<TRow, TNode>(
     const reorder = view.columnReorder;
     return {
         state: {
+            collapsed:
+                cell.group?.collapsible === true
+                    ? keySet(view.collapsedGroupKeys).has(cell.key)
+                    : undefined,
             resizable: spanResizable(view.columnDefs, cell),
             resizing: view.columnResize?.columnKey === cell.key,
             reorderable: isReorderable(cell),

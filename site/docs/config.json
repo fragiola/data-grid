@@ -47,6 +47,10 @@
                     "path": "concepts/column-groups"
                 },
                 {
+                    "label": "Collapsible groups",
+                    "path": "concepts/collapsible-groups"
+                },
+                {
                     "label": "Column spanning",
                     "path": "concepts/column-spanning"
                 },

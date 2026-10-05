@@ -5,6 +5,7 @@ import {
     pinnedEndColumnCount,
     pinnedEndFrom,
 } from "../header/header";
+import { shownColumnOf } from "../model/collapse";
 import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import {
@@ -66,6 +67,7 @@ import {
     COLUMN_RESIZER_ATTRIBUTE,
     CTRL_KEYS,
     cellSelector,
+    GROUP_LABEL_ATTRIBUTE,
     inlineKey,
     isCellNode,
     isControl,
@@ -85,6 +87,7 @@ import {
 import {
     cellSpan,
     cellsSizeOf,
+    columnPinning,
     inlineSign,
     inlineStart,
     pinnedEndShift,
@@ -138,8 +141,12 @@ import {
 // is the model's, else the viewport's own as the page lays it out (a computed style read).
 
 /** The layers whose elements get an inset of the engine's (`left`), not a transform. */
-function isInsetLayer(layer: EngineLayer): layer is "pinned" | "detail" {
-    return layer === "pinned" || layer === "detail";
+type InsetLayer = "pinned" | "detail" | "label";
+
+const INSET_LAYERS: readonly InsetLayer[] = ["pinned", "detail", "label"];
+
+function isInsetLayer(layer: EngineLayer): layer is InsetLayer {
+    return INSET_LAYERS.some((inset) => inset === layer);
 }
 
 /** Physical scroll moves, on either axis or both. */
@@ -231,6 +238,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         body: new Set(),
         pinned: new Set(),
         detail: new Set(),
+        label: new Set(),
     };
     /** the layers that hold rows: a key on one is the grid's (a detail's are its content's) */
     const rowLayers: readonly ReadonlySet<Element>[] = [
@@ -563,14 +571,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * `x`, and for a column pinned at the end (from `endFrom`) `endShift` to the view's end.
      * Sticky is resolved in layout, before the layer's transform moves it by `x`, so it shows at
      * its offset from the view's start, on every frame the browser paints while it scrolls. An
-     * element without its column (`data-column-index`) is left alone.
+     * element without its column (`data-column-index`) is left alone. A group's label (E1.3) is
+     * held the same way at the start of the columns that scroll (right of the ones pinned at the
+     * start), its header cell's box keeping it from leaving its group: none in a pinned group,
+     * always in view.
      */
     function writeInset(
-        layer: "pinned" | "detail",
+        layer: InsetLayer,
         element: HTMLElement,
         x: number,
         side: "left" | "right",
-        columnAxis: Axis,
+        shown: GridView<TRow, TNode>,
         endFrom: number,
         endShift: number,
     ) {
@@ -579,11 +590,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             element.style[side] = `${-x}px`;
             return;
         }
+        if (layer === "label") {
+            const cell = shown.header.cellByKey(
+                element.getAttribute(GROUP_LABEL_ATTRIBUTE) ?? "",
+            );
+            element.style[side] =
+                cell &&
+                !columnPinning(shown, cell.columnIndex, cell.columnSpan).pinned
+                    ? `${shown.pinnedWidth - x}px`
+                    : "";
+            return;
+        }
         const attribute = element.getAttribute("data-column-index");
         const columnIndex = attribute === null ? Number.NaN : Number(attribute);
         if (!Number.isInteger(columnIndex)) return;
         element.style[side] = `${pinnedInset(
-            columnAxis,
+            shown.columnAxis,
             columnIndex,
             x,
             columnIndex >= endFrom ? endShift : 0,
@@ -619,18 +641,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             shown.pinnedEndColumnCount,
         );
         const endShift = pinnedEndShift(columnAxis, width);
-        for (const layer of ["pinned", "detail"] as const) {
+        for (const layer of INSET_LAYERS) {
             for (const element of layers[layer]) {
                 if (other) element.style[other] = "";
-                writeInset(
-                    layer,
-                    element,
-                    x,
-                    side,
-                    columnAxis,
-                    endFrom,
-                    endShift,
-                );
+                writeInset(layer, element, x, side, shown, endFrom, endShift);
             }
         }
     }
@@ -724,6 +738,25 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columnsX.virtual,
             columnsX.virtual + pinnedWidth,
         );
+    }
+
+    /**
+     * The column the view shows first across a collapse (E1.3), by key in the new layout: itself
+     * as far into it as it was, else (hidden) where the active cell would go (`shownColumnOf`),
+     * from its start: the group whose toggle the view showed stays near it.
+     */
+    function collapseAnchor(
+        before: DataGridModel<TRow, TNode>["state"],
+        after: DataGridModel<TRow, TNode>["state"],
+    ): { index: number; within: number } | null {
+        const anchor = columnAnchor();
+        if (!anchor) return null;
+        const kept = after.header.cellByKey(
+            before.columns[anchor.index]?.key ?? "",
+        );
+        if (kept) return { index: kept.columnIndex, within: anchor.within };
+        const index = shownColumnOf(before, after.header, anchor.index);
+        return index === undefined ? null : { index, within: 0 };
     }
 
     /** Keeps the view on an anchor's column, as far into it as it was, on a new column axis. */
@@ -2334,12 +2367,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const resizing = columnResize;
         const engineWidths = autoWidths;
         // a width changing left of the view keeps the view on the column it shows first, right
-        // of the pinned ones, as far into it as it was (as a row expanding above it, M2)
+        // of the pinned ones, as far into it as it was (as a row expanding above it, M2); a
+        // collapse too, by its key (E1.3)
         const anchor =
-            after.columns === before.columns &&
-            after.columnWidths !== before.columnWidths
-                ? columnAnchor()
-                : null;
+            after.columns === before.columns
+                ? after.columnWidths !== before.columnWidths
+                    ? columnAnchor()
+                    : null
+                : after.collapsedGroupKeys !== before.collapsedGroupKeys
+                  ? collapseAnchor(before, after)
+                  : null;
         if (columnsChanged) {
             // the flex shares follow the columns, their order and the overrides (A1)
             updateAutoWidths();
@@ -2529,18 +2566,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     );
                 }
             } else if (viewport && committed) {
-                const { columnAxis } = committed;
                 writeInset(
                     layer,
                     element,
                     offsetX(committed, viewport),
                     inlineStart(direction),
-                    columnAxis,
+                    committed,
                     pinnedEndFrom(
                         committed.columnCount,
                         committed.pinnedEndColumnCount,
                     ),
-                    pinnedEndShift(columnAxis, width),
+                    pinnedEndShift(committed.columnAxis, width),
                 );
             } else {
                 // nothing to write for yet (a detached viewport: a root re-mounting while its
@@ -2577,11 +2613,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             focusBeforeRender = false;
             const moves = pendingScroll;
             pendingScroll = {};
-            if (moves.top !== undefined || moves.left !== undefined) {
-                applyScroll(moves);
-                syncScroll();
-                update();
-            }
+            const moved = moves.top !== undefined || moves.left !== undefined;
+            if (moved) applyScroll(moves);
+            // the scroll as it is now: one the browser made before its event reached the engine
+            // (a scroll and a click in one task) is read here, so the layers are written for it,
+            // never against the scroll the engine last knew
+            if (syncScroll() || moved) update();
             writeLayers();
             interaction.committed();
             flushFocus();

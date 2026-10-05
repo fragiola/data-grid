@@ -1,7 +1,6 @@
 import {
     ariaRowCount,
     ariaRowIndex,
-    type DataGridEngine,
     type EngineLayer,
 } from "@fragiola/data-grid";
 import type * as React from "react";
@@ -40,6 +39,7 @@ import {
     useRowDetail,
     useRows,
 } from "./hooks";
+import { layerRef } from "./utils/layerRef";
 import {
     type DivPrimitiveProps,
     dataAttributes,
@@ -48,32 +48,8 @@ import {
 
 export { Root, type RootProps, type RootState } from "./Root";
 
-type LayerRef = React.RefCallback<HTMLElement>;
-
-/** Each engine's layer refs, made once: a part's ref keeps its identity across renders. */
-const layerRefs = new WeakMap<object, Map<EngineLayer, LayerRef>>();
-
-/** A ref that registers an element as one of the layers an engine writes. */
-function layerRef(
-    engine: DataGridEngine<unknown, ReactNode>,
-    layer: EngineLayer,
-): LayerRef {
-    let refs = layerRefs.get(engine);
-    if (!refs) {
-        refs = new Map();
-        layerRefs.set(engine, refs);
-    }
-    let ref = refs.get(layer);
-    if (!ref) {
-        ref = (element) =>
-            element ? engine.adapter.registerLayer(layer, element) : undefined;
-        refs.set(layer, ref);
-    }
-    return ref;
-}
-
 /** A ref that registers an element as one of the layers the engine of the `Root` around writes. */
-function useLayer(layer: EngineLayer): LayerRef {
+function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
     return layerRef(useRootGrid().engine, layer);
 }
 

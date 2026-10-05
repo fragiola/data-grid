@@ -19,6 +19,7 @@ const REPRESENTATIVE: string[] = [
     "auto-widths", // a native range input and a grid narrower than its frame
     "rtl", // the grid mirrored: logical sides, both pinned parts, the handles at the left edge
     "column-spanning", // cells and header cells spanning columns, a tint filling a span
+    "collapsible-groups", // three header rows, the toggles and the labels that stay in view
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

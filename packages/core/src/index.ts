@@ -1,7 +1,11 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
 export type { Axis, Size } from "./axis/axis";
-export { COLUMN_RESIZER_ATTRIBUTE, TAB_STOP_ATTRIBUTE } from "./engine/dom";
+export {
+    COLUMN_RESIZER_ATTRIBUTE,
+    GROUP_LABEL_ATTRIBUTE,
+    TAB_STOP_ATTRIBUTE,
+} from "./engine/dom";
 export { createDataGridEngine } from "./engine/engine";
 export {
     ariaHeaderCellSpans,
@@ -98,6 +102,7 @@ export type {
     DetailHeight,
     GridDirection,
     GroupHeaderCellRenderProps,
+    GroupShow,
     HeaderCellLayout,
     HeaderCellRenderProps,
     HeaderLayout,
@@ -127,6 +132,7 @@ export {
     type HeaderCellSpan,
     sameCell,
 } from "./navigation/navigation";
+export { sameKeys } from "./utils";
 export { DEFAULT_MAX_SCROLL_SIZE } from "./viewport/scaling";
 export type { ScrollAlign } from "./viewport/scroll-target";
 export {
