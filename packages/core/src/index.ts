@@ -4,6 +4,7 @@ export type { Axis, Size } from "./axis/axis";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
+    ROW_DRAG_HANDLE_ATTRIBUTE,
     TAB_STOP_ATTRIBUTE,
 } from "./engine/dom";
 export { createDataGridEngine } from "./engine/engine";
@@ -19,6 +20,7 @@ export {
     headerCellBox,
     headerCellSort,
     inlineStart,
+    measuredRow,
     renderedWidth,
     rowCellsHeight,
     rowColumns,
@@ -30,6 +32,7 @@ export {
     rowSelected,
     rowTop,
     rowWidth,
+    summaryHeight,
 } from "./engine/geometry";
 export {
     type CellPart,
@@ -44,10 +47,18 @@ export {
     headerCellPart,
     type RowDetailPart,
     type RowDetailState,
+    type RowDragHandlePart,
+    type RowDragHandleState,
     type RowPart,
     type RowState,
     rowDetailPart,
+    rowDragHandlePart,
     rowPart,
+    type SummaryCellPart,
+    type SummaryCellState,
+    type SummaryRowState,
+    summaryCellPart,
+    summaryRowPart,
 } from "./engine/parts";
 export type {
     ColumnReorder,
@@ -64,6 +75,8 @@ export type {
     EngineQueryMap,
     GridView,
     HeaderRowView,
+    RowMove,
+    RowReorder,
     RowSpans,
 } from "./engine/types";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
@@ -77,6 +90,11 @@ export { keptOrder, sameOrder } from "./model/order";
 export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
 export { cellValue, rowAt } from "./model/source";
+export {
+    summaryRowAt,
+    summaryRowIndex,
+    summaryRowsOf,
+} from "./model/summary";
 export type {
     CellPosition,
     CellRenderProps,
@@ -117,6 +135,7 @@ export type {
     QuestionMap,
     ReorderSide,
     ResultOf,
+    RowHeight,
     RowKey,
     RowKeyGetter,
     RowSelectable,
@@ -125,6 +144,11 @@ export type {
     SelectionAnchor,
     SortColumn,
     SortDirection,
+    SummaryCellRenderProps,
+    SummaryColSpanArgs,
+    SummaryPosition,
+    SummaryRowCounts,
+    SummaryRowView,
 } from "./model/types";
 export { DEFAULT_MIN_WIDTH, keptWidths, sameWidths } from "./model/widths";
 export {

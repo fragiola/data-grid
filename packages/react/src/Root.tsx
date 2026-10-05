@@ -16,11 +16,12 @@ import {
     keptOrder,
     keptWidths,
     type ResultOf,
+    type RowHeight,
     type RowKey,
     type RowKeyGetter,
+    type RowMove,
     type RowSelectable,
     type RowSelection,
-    type Size,
     type SortColumn,
     sameKeys,
     sameOrder,
@@ -45,6 +46,8 @@ import {
     type DataGridContextValue,
     HeaderRowContext,
     RowContext,
+    SummaryContext,
+    SummaryRowContext,
     ViewContext,
 } from "./context";
 import { attachGridRef, type DataGridRef } from "./gridRef";
@@ -91,10 +94,28 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         columns: readonly ColumnOrGroup<TRow>[];
         /** a row's key; without one, rows are keyed by their index */
         rowKey?: RowKeyGetter<TRow> | undefined;
-        /** a row's height in pixels, or a function of its index (default 35) */
-        rowHeight?: Size | undefined;
+        /**
+         * a row's height in pixels, or a function of its index (default 35); `"auto"`: as tall as
+         * its content, measured once rendered (`estimatedRowHeight` until then)
+         */
+        rowHeight?: RowHeight | undefined;
+        /**
+         * a measured row's height until it is measured, in pixels (default 35): the scrollbar is
+         * approximate until the rows are
+         */
+        estimatedRowHeight?: number | undefined;
         /** a header row's height in pixels (default 35); 0 for no header */
         headerRowHeight?: number | undefined;
+        /**
+         * how many summary rows the grid has: at the top, under the header, and at the bottom, at
+         * the view's bottom edge (default none). Each column's `renderSummaryCell` draws their
+         * cells from the app's own values; `DataGrid.Summary` renders them
+         */
+        summaryRows?:
+            | { readonly top?: number; readonly bottom?: number }
+            | undefined;
+        /** a summary row's height in pixels (default 35) */
+        summaryRowHeight?: number | undefined;
         /** the active cell, controlled (`null` for none); pair it with `onActivePositionChange` */
         activePosition?: CellPosition | null | undefined;
         /** the active cell to start with, uncontrolled */
@@ -127,9 +148,12 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
             | undefined;
         /**
          * an expanded row's detail height in pixels, or a function of the row (default 300): it
-         * adds to the row's own height
+         * adds to the row's own height. `"auto"`: as tall as its content, measured once rendered
+         * (`estimatedDetailHeight` until then)
          */
         detailHeight?: DetailHeight<TRow> | undefined;
+        /** a measured detail's height until it is measured, in pixels (default 300) */
+        estimatedDetailHeight?: number | undefined;
         /**
          * how rows are selected: one at a time or many (default: not at all). Selected rows carry
          * `data-selected` and `aria-selected`; Shift+Space, Shift+Up/Down and Ctrl/⌘+A select
@@ -188,6 +212,14 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onCollapsedGroupKeysChange?:
             | ((collapsedGroupKeys: readonly string[]) => void)
             | undefined;
+        /**
+         * a row was moved (Epic #86): dropped elsewhere by its drag handle (`useRowDragHandle`),
+         * or by Ctrl/⌘+Shift+↑/↓ on one of its cells. Given, the rows move: the app moves the row
+         * in its own rows, from `fromIndex` to `toIndex` (its index once moved: `moveRow` in
+         * `@fragiola/data-grid/local`), and the active cell follows it. Never while the grid is
+         * sorted, nor for rows not loaded
+         */
+        onRowMove?: ((move: RowMove) => void) | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -291,7 +323,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
         getRow,
         rowKey,
         rowHeight,
+        estimatedRowHeight,
         headerRowHeight,
+        summaryRows,
+        summaryRowHeight,
         activePosition,
         defaultActivePosition,
         onActivePositionChange,
@@ -302,6 +337,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         defaultExpandedRowKeys,
         onExpandedRowKeysChange,
         detailHeight,
+        estimatedDetailHeight,
         rowSelection,
         isRowSelectable,
         selectedRowKeys,
@@ -316,6 +352,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         collapsedGroupKeys,
         defaultCollapsedGroupKeys,
         onCollapsedGroupKeysChange,
+        onRowMove,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -338,7 +375,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 : { rowCount: rowCount ?? 0, getRow }),
             rowKey,
             rowHeight,
+            estimatedRowHeight,
             headerRowHeight,
+            summaryRows,
+            summaryRowHeight,
             activePosition:
                 activePosition !== undefined
                     ? activePosition
@@ -346,6 +386,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             sortColumns: sortColumns ?? defaultSortColumns,
             expandedRowKeys: expandedRowKeys ?? defaultExpandedRowKeys,
             detailHeight,
+            estimatedDetailHeight,
             rowSelection,
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
@@ -512,6 +553,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             overscan,
             maxScrollSize,
             endReachedThreshold,
+            reorderableRows: onRowMove !== undefined,
         });
         // subscribed before the viewport attaches, so the first windows are reported too
         engine.subscribe("row-window", (window) =>
@@ -522,6 +564,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         );
         engine.subscribe("rows-end-reached", (info) =>
             latest.current.onRowsEndReached?.(info),
+        );
+        engine.subscribe("row-move", (move) =>
+            latest.current.onRowMove?.(move),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
         // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
@@ -618,7 +663,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // a prop removed goes back to the default
         const rows = rowHeight ?? DEFAULT_ROW_HEIGHT;
         const header = headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT;
+        const summary = summaryRowHeight ?? DEFAULT_ROW_HEIGHT;
         const detail = detailHeight ?? DEFAULT_DETAIL_HEIGHT;
+        // the three sizes together when one changed, as always; the summary rows' height and the
+        // estimates (Epic #86) each on its own, only when it changed: one refused (an estimate
+        // that is no size above 0) never holds the others back
         if (
             rows !== state.rowHeight ||
             header !== state.headerRowHeight ||
@@ -630,7 +679,39 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 detailHeight: detail,
             });
         }
-    }, [model, rowHeight, headerRowHeight, detailHeight]);
+        if (summary !== model.state.summaryRowHeight) {
+            model.run("sizes.set", { summaryRowHeight: summary });
+        }
+        const rowEstimate = estimatedRowHeight ?? DEFAULT_ROW_HEIGHT;
+        const detailEstimate = estimatedDetailHeight ?? DEFAULT_DETAIL_HEIGHT;
+        if (rowEstimate !== model.state.estimatedRowHeight) {
+            model.run("sizes.set", { estimatedRowHeight: rowEstimate });
+        }
+        if (detailEstimate !== model.state.estimatedDetailHeight) {
+            model.run("sizes.set", { estimatedDetailHeight: detailEstimate });
+        }
+    }, [
+        model,
+        rowHeight,
+        headerRowHeight,
+        summaryRowHeight,
+        detailHeight,
+        estimatedRowHeight,
+        estimatedDetailHeight,
+    ]);
+
+    const summaryTop = summaryRows?.top ?? 0;
+    const summaryBottom = summaryRows?.bottom ?? 0;
+    useLayoutEffect(() => {
+        const { top, bottom } = model.state.summaryRows;
+        // a count left out (the prop removed) is 0
+        if (summaryTop !== top || summaryBottom !== bottom) {
+            model.run("summary-rows.set", {
+                top: summaryTop,
+                bottom: summaryBottom,
+            });
+        }
+    }, [model, summaryTop, summaryBottom]);
 
     useLayoutEffect(() => {
         const { state } = model;
@@ -670,11 +751,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
 
     const overscanRows = overscan?.rows;
     const overscanColumns = overscan?.columns;
+    // the rows move while the app takes their moves
+    const reorderableRows = onRowMove !== undefined;
     useLayoutEffect(() => {
         engine.adapter.setOptions({
             overscan: { rows: overscanRows, columns: overscanColumns },
             maxScrollSize,
             endReachedThreshold,
+            reorderableRows,
         });
     }, [
         engine,
@@ -682,6 +766,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         overscanColumns,
         maxScrollSize,
         endReachedThreshold,
+        reorderableRows,
     ]);
 
     const ref = useCallback(
@@ -715,7 +800,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
             >
                 {/* a grid nested in a cell of another one is not inside the outer one's rows */}
                 <RowContext value={null}>
-                    <HeaderRowContext value={null}>{element}</HeaderRowContext>
+                    <HeaderRowContext value={null}>
+                        <SummaryContext value={null}>
+                            <SummaryRowContext value={null}>
+                                {element}
+                            </SummaryRowContext>
+                        </SummaryContext>
+                    </HeaderRowContext>
                 </RowContext>
             </ViewContext>
         </DataGridContext>

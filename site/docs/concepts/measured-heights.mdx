@@ -1,0 +1,105 @@
+---
+title: Measured heights
+description: Rows and details as tall as their content, measured once they render, with the view kept on what it shows while rows above it are measured.
+---
+
+A row can be as tall as its content. With `rowHeight="auto"` the grid renders each row without a
+height of its own, measures it once it is on screen, and lays the rows out from what it measured.
+A detail can do the same with `detailHeight="auto"`. Rows of a given height, a number or a
+function of the index, render exactly as before.
+
+<Example id="auto-row-heights" />
+
+## Rows as tall as their content
+
+```tsx title="notes.tsx"
+<DataGrid.Root
+    columns={columns}
+    rows={people}
+    rowKey={(person) => person.id}
+    rowHeight="auto"
+    estimatedRowHeight={64}
+>
+    …
+</DataGrid.Root>
+```
+
+Until a row is measured, the grid counts it at `estimatedRowHeight` (35 by default), so the
+scroll space represents the whole dataset from the start. Pick a value near your typical row: the
+closer it is, the less the rows move once they are measured.
+
+A row renders as a grid of one area: its cells share it, each at its column's place (an inline
+start margin, in place of `left`) and as wide as its column, and every cell is as tall as the
+tallest one. So the content of a cell sets its row's height:
+
+- **Let the text wrap.** A cell with `white-space: nowrap` and `overflow: hidden` is one line tall
+  whatever its text. Drop `nowrap` on the columns that should grow.
+- **Padding and borders count.** The grid measures the row's whole box: a cell's vertical padding,
+  a row's border, any margin inside a cell are part of its height.
+- **Align inside the cell.** Cells stretch to the row's height, so `align-items` (or your own
+  wrapper) places the content inside a taller cell.
+- **Pinned and spanning cells** follow: a pinned cell stays sticky in the same area, a cell
+  spanning columns is as wide as its columns, both as tall as the row. Right to left, the margin
+  is on the right.
+
+A row that is not loaded (`getRow` returned `undefined`) keeps the estimated height, so a
+placeholder takes its place until the row arrives.
+
+## What the grid measures, and when
+
+The engine reads a row's height when its row is rendered for the first time, at the commit, before
+the browser paints, so a row never shows at the wrong place. From the next frame on, a
+`ResizeObserver` (from the page the grid is in) watches it, and a row whose content changes size
+later (an image loading, a column resized and the text wrapping again) is laid out again. Nothing
+is measured while the grid scrolls: only rows rendered for the first time are read, and a row is
+read once until it resizes.
+
+The heights are kept by index, each with its row's key (`rowKey`, else the index). A row scrolled
+away and back keeps its height. When the rows change (a new array, `rows.changed`), a height stays
+where its row is still at its index and is dropped where another row came. So a sort keeps the
+heights of the rows on screen (their elements are kept, and read where they now are), while a row
+off screen that moved counts at the estimate again until it renders and is measured. A
+[row move](/docs/concepts/row-reordering) is such a change: the rows between the two indexes
+shifted, so those off screen count at the estimate until they render again. Without a `rowKey`, a
+row is its index: give one when rows move.
+
+<Callout type="info" title="An estimate that is no size">
+`estimatedRowHeight` and `estimatedDetailHeight` must be sizes above 0. Another value is refused:
+`sizes.set` fails, and as an option or a prop it is left out (the last valid one, else the
+default, stays). `Root` sends each size that changed, the estimates on their own, so a refused
+estimate never holds the other sizes back.
+</Callout>
+
+## The view stays on what it shows
+
+When rows above the view are measured, everything below them moves. The grid keeps the first row
+in view whose height did not just change exactly where it was, as it does when a
+[detail](/docs/guides/master-detail) opens above the view. So a scroll up shows the rows it
+brought into view at their measured heights, and what you were reading stays where the scroll put
+it. Under [scroll scaling](/docs/concepts/scroll-scaling) the same holds: the wheel moves the
+content by its delta, measured rows or not.
+
+A cell the keyboard or `scroll-to-cell` moved to is scrolled to again once its row is measured,
+so it lands fully in view at its real height.
+
+<Callout type="info" title="The scrollbar is approximate until rows are measured">
+The scroll space is the measured rows plus the estimate for every other row. Until a row is
+measured its size is a guess, so the scrollbar's thumb may grow or shrink a little as you scroll
+through rows not seen yet, and a jump to a far position lands near, not exactly at, a fraction of
+the rows. Rows that are measured are placed exactly.
+</Callout>
+
+## Details
+
+`detailHeight="auto"` measures each expanded row's detail the same way, `estimatedDetailHeight`
+(300 by default) until it is measured. It works with rows of a given height, and with rows that
+are measured too: then the row's own height is its cells', its detail below them in the row's
+second area. See [Master-detail](/docs/guides/master-detail).
+
+## From code
+
+`model.run("sizes.set", { rowHeight: "auto", estimatedRowHeight: 48 })` switches a grid to
+measured rows, and a number gives it fixed ones again (every measured height is dropped).
+`model.get("row-height")` reads `"auto"`. The view's `measuredRows` and `measuredDetails` tell an
+adapter how to render: a measured row has no height of its own, its element registered as the
+engine's `row` element.

@@ -5,7 +5,13 @@ import type {
 } from "@fragiola/data-grid-react";
 import { cn } from "#/lib/cn";
 
-export const frame = "flex h-full min-h-0 flex-col p-3";
+export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";
+
+/** the app's own toolbar: how the details get their heights */
+export const toolbar =
+    "palette-surface flex flex-wrap items-center gap-4 text-xs text-palette-contrast font-(family-name:--dg-font)";
+
+export const option = "flex items-center gap-2";
 /** the scroll container: the theme's frame, font and size */
 export const root = cn(
     "palette-raised min-h-0 flex-1 bg-palette-base text-palette-contrast",

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COMMANDS } from "../../src/model/model";
@@ -7,12 +7,16 @@ import { COMMANDS } from "../../src/model/model";
 // dot, a read has none; a `get` key that takes a payload selecting one thing ends in `-by`, and its
 // payload's fields complete the sentence (`row-by { index }`, `column-by { key }`, `row-key-by
 // { rowIndex }`); an `is` key is `<entity>-<state>`; an index field is `index` (of what the key
-// returns) or `<entity>Index`.
+// returns) or `<entity>Index` (`rowIndex`, `columnIndex`, `summaryIndex`).
 
-const TYPES = readFileSync(
-    join(import.meta.dirname, "../../src/model/types.ts"),
-    "utf8",
-);
+const MODEL = join(import.meta.dirname, "../../src/model");
+
+const TYPES = readFileSync(join(MODEL, "types.ts"), "utf8");
+
+/** The source of every module of the model. */
+const MODEL_SOURCES = readdirSync(MODEL)
+    .filter((file) => file.endsWith(".ts"))
+    .map((file) => readFileSync(join(MODEL, file), "utf8"));
 
 /** The keys of an interface in types.ts, with the source of each key's entry. */
 function keysOf(name: string): { key: string; entry: string }[] {
@@ -62,12 +66,18 @@ describe("key names", () => {
     });
 
     it("index fields say whose index they are", () => {
-        const fields = [
-            ...TYPES.matchAll(/readonly ([a-zA-Z]+Index|index)\b/g),
-        ].map((match) => match[1]);
+        // every type the model declares, in types.ts or beside its feature (`model/*.ts`)
+        const fields = MODEL_SOURCES.flatMap((source) =>
+            [...source.matchAll(/readonly ([a-zA-Z]+Index|index)\b/g)].map(
+                (match) => match[1],
+            ),
+        );
         expect(fields.length).toBeGreaterThan(0);
         for (const field of fields) {
-            expect(field, field).toMatch(/^(index|row(Index)|column(Index))$/);
+            // a summary row's index among its position's rows (Epic #86) is `summaryIndex`
+            expect(field, field).toMatch(
+                /^(index|row(Index)|column(Index)|summary(Index))$/,
+            );
         }
     });
 });

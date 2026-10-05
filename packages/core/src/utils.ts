@@ -95,3 +95,35 @@ export function sameKeys(a: readonly RowKey[], b: readonly RowKey[]): boolean {
     const held = keySet(b);
     return a.every((key) => held.has(key));
 }
+
+/**
+ * `current` when it holds the same values as `next` in every field `next` has (a state worked out
+ * again unchanged: the same object, nothing to publish), else `next`.
+ */
+export function keptIfSame<T extends object>(current: T | null, next: T): T {
+    if (!current) return next;
+    for (const key in next) {
+        if (current[key] !== next[key]) return next;
+    }
+    return current;
+}
+
+/**
+ * Where an item at `index` is once the item at `fromIndex` moved to `toIndex` (its index once
+ * moved: the others without it, it inserted there; Epic #86, E2.3): the moved one at `toIndex`,
+ * the ones between one place toward `fromIndex`, the others where they are.
+ */
+export function indexAfterMove(
+    index: number,
+    fromIndex: number,
+    toIndex: number,
+): number {
+    if (index === fromIndex) return toIndex;
+    if (fromIndex < toIndex && index > fromIndex && index <= toIndex) {
+        return index - 1;
+    }
+    if (fromIndex > toIndex && index >= toIndex && index < fromIndex) {
+        return index + 1;
+    }
+    return index;
+}

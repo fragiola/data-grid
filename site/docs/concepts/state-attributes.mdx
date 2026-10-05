@@ -9,12 +9,14 @@ present (empty) or absent, never `"false"`.
 ## Parts
 
 Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
-`body`, `row`, `cell`, `row-detail` or `empty`, `column-resizer` on a resize handle you render
-with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), and `group-label` on a
+`body`, `row`, `cell`, `row-detail`, `empty`, or `summary`, `summary-row` and `summary-cell`
+([Summary rows](/docs/concepts/summary-rows)), `column-resizer` on a resize handle you render
+with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), `group-label` on a
 group's label you render with `useGroupLabel`
-([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)). Rows and cells carry
+([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)), and `row-drag-handle`
+on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)). Rows and cells carry
 their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
-its top one) and `data-column-index` (a header cell spanning columns is at its first). Tests
+its top one; the top summary rows are before the header's, the bottom ones after the body's) and `data-column-index` (a header cell spanning columns is at its first). Tests
 select by them, never by class names.
 
 ## States
@@ -22,7 +24,8 @@ select by them, never by class names.
 | attribute | on | when |
 | --- | --- | --- |
 | `data-active` | cell, header cell | it is the active cell |
-| `data-active` | row | it holds the active cell |
+| `data-active` | row, summary row | it holds the active cell |
+| `data-summary` | summary, summary row, summary cell | `top` or `bottom`: where its summary rows stay ([Summary rows](/docs/concepts/summary-rows)) |
 | `data-interacting` | cell, header cell | its controls have the keys ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)) |
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
@@ -41,15 +44,18 @@ select by them, never by class names.
 | `data-reorderable` | header cell | its column or group can be moved ([Column reordering](/docs/concepts/column-reordering)) |
 | `data-dragging` | header cell | a drag is moving its column or group |
 | `data-drop-target` | header cell | `before` or `after`: a drag would drop beside it, on that side |
+| `data-dragging` | row, row drag handle | a drag is moving the row ([Row reordering](/docs/concepts/row-reordering)) |
+| `data-drop-target` | row | `before` or `after`: a row's drag would drop beside it, on that side |
+| `data-reorderable` | row drag handle | a press on it drags its row (the rows move, the grid is not sorted, the row is loaded) |
 
 ## ARIA
 
 | attribute | on | value |
 | --- | --- | --- |
 | `role` | grid, rowgroup, row, columnheader, gridcell | the grid pattern |
-| `aria-rowcount` | grid | every row, header rows included, rendered or not |
+| `aria-rowcount` | grid | every row, header and summary rows included, rendered or not |
 | `aria-colcount` | grid | every column |
-| `aria-rowindex` | row | 1-based, the header rows first |
+| `aria-rowindex` | row, summary row | 1-based, as they show: the header rows, the top summary rows, the body rows, the bottom summary rows |
 | `aria-colindex` | cell, header cell | 1-based (a group's first column) |
 | `aria-colspan` | cell, header cell, row detail | the columns a group or a [spanning cell](/docs/concepts/column-spanning) covers, when more than one; a detail spans every column |
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |

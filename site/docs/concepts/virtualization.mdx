@@ -36,3 +36,5 @@ Row offsets come from `rowHeight`: one number costs nothing at any count, and a 
 summed once into an array of offsets and searched in O(log n). See the
 [`variable-row-height`](/examples/variable-row-height) and
 [`many-columns`](/examples/many-columns) examples.
+Rows measured from their content (`rowHeight="auto"`) keep the heights measured as a sorted list
+over the estimate, also searched in O(log n): see [Measured heights](/docs/concepts/measured-heights).

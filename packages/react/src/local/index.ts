@@ -4,12 +4,16 @@
 import type { SortColumn } from "@fragiola/data-grid";
 import {
     createLocalRows,
+    indexAfterMove,
     type LocalFilters,
     type LocalRowsOptions,
+    moveRow as moveRowIn,
+    shownRowMove,
 } from "@fragiola/data-grid/local";
 import {
     type ReactNode,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     useSyncExternalStore,
@@ -58,6 +62,17 @@ export interface LocalRowsResult<TRow> {
         readonly search: string;
         setSearch(text: string): void;
     };
+    /**
+     * The rows given, with a move of the rows the grid shows applied (Epic #86: `DataGrid.Root`'s
+     * `onRowMove`): the moved row placed beside the row it lands next to on screen, a filtered or
+     * paged grid's included. A new array to set as the rows (`rows` itself when nothing moves).
+     * The grid moves no row while it is sorted. Stable: it reads the latest rows, and moves told
+     * before the next render apply one after the other (each to the rows the last one returned).
+     */
+    moveRow(move: {
+        readonly fromIndex: number;
+        readonly toIndex: number;
+    }): readonly TRow[];
     readonly page: {
         /** the current page, from 0 */
         readonly index: number;
@@ -115,6 +130,40 @@ export function useLocalRows<TRow>(
         if (view.pageIndex !== state.pageIndex)
             local.setPageIndex(view.pageIndex);
     }, [local, view.pageIndex, state.pageIndex]);
+    // the rows and where the rows shown are among them, as of the last commit or as the last
+    // move left them: a next move before a render is one on screen after this one
+    const moved = useRef<{
+        rows: readonly TRow[];
+        view: { readonly rowIndexes: readonly number[] };
+    }>({ rows, view });
+    useLayoutEffect(() => {
+        moved.current = { rows, view };
+    });
+    const [moveRow] = useState(
+        () =>
+            ({
+                fromIndex,
+                toIndex,
+            }: {
+                fromIndex: number;
+                toIndex: number;
+            }) => {
+                const { rows: given, view: shown } = moved.current;
+                const move = shownRowMove(shown.rowIndexes, fromIndex, toIndex);
+                if (!move) return given;
+                const next = moveRowIn(given, move.fromIndex, move.toIndex);
+                // where the rows shown are now: each one where the move put it, in their new order
+                const rowIndexes = moveRowIn(
+                    shown.rowIndexes.map((index) =>
+                        indexAfterMove(index, move.fromIndex, move.toIndex),
+                    ),
+                    fromIndex,
+                    toIndex,
+                );
+                moved.current = { rows: next, view: { rowIndexes } };
+                return next;
+            },
+    );
     const last = view.pageCount - 1;
     return {
         props: {
@@ -141,6 +190,7 @@ export function useLocalRows<TRow>(
             search: state.search,
             setSearch: local.setSearch,
         },
+        moveRow,
         page: {
             index: view.pageIndex,
             size: view.pageSize,

@@ -138,3 +138,30 @@ for (const theme of THEMES) {
         await expect(detail(page, 0)).toBeVisible();
     });
 }
+
+test("measures the details once asked: each as tall as its content, the next order right after", async ({
+    page,
+}) => {
+    await openExample(page, "master-detail");
+    await page.getByRole("switch", { name: "Measure the details" }).click();
+    await settle(page);
+    await expander(page, 1003).click();
+    await settle(page);
+    for (const rowIndex of [0, 2]) {
+        const measured = await detail(page, rowIndex).evaluate((element) => {
+            const content = element.firstElementChild as HTMLElement | null;
+            const style = getComputedStyle(element);
+            return {
+                height: element.getBoundingClientRect().height,
+                content:
+                    (content?.getBoundingClientRect().height ?? 0) +
+                    Number.parseFloat(style.borderTopWidth) +
+                    Number.parseFloat(style.borderBottomWidth),
+                bottom: element.getBoundingClientRect().bottom,
+            };
+        });
+        expect(measured.height).toBeCloseTo(measured.content, 0);
+        const next = await order(page, rowIndex + 1, 1).boundingBox();
+        expect(Math.abs((next?.y ?? 0) - measured.bottom)).toBeLessThan(1);
+    }
+});

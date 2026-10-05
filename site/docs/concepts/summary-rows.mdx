@@ -1,0 +1,159 @@
+---
+title: Summary rows
+description: Rows of your own figures that stay under the header and at the bottom edge, with the keys, ARIA, pinned columns and spans following them.
+---
+
+A summary row holds figures about the rows: a total, a count, an average. The grid keeps them in
+view while the rows scroll, the top ones under the header and the bottom ones at the visible
+body's bottom edge, and treats their cells as cells: the keys reach them, ARIA counts them,
+pinned columns and spans apply.
+
+<Example id="summary-rows" />
+
+## Giving the grid summary rows
+
+`summaryRows` on the root says how many there are at each end. The figures are yours: the grid
+keeps no second row type and computes nothing. Compute them in your component, over the rows you
+show, and render them in the summary cells: the `DataGrid.SummaryCells` children function reads
+them as it renders, so they follow your state while the columns stay the same.
+
+```tsx title="people.tsx"
+import { type Column, DataGrid } from "@fragiola/data-grid-react";
+
+const columns: Column<Person>[] = [
+    { key: "name", name: "Name", width: 180 },
+    { key: "salary", name: "Salary", width: 120 },
+];
+
+function People({ people }: { people: Person[] }) {
+    const total = people.reduce((sum, person) => sum + person.salary, 0);
+    const figures: Record<string, Record<"top" | "bottom", string>> = {
+        name: { top: "Average", bottom: "Total" },
+        salary: {
+            top: String(Math.round(total / people.length)),
+            bottom: String(total),
+        },
+    };
+    const summary = (position: "top" | "bottom") => (
+        <DataGrid.Summary position={position}>
+            <DataGrid.SummaryRows>
+                {(row) => (
+                    <DataGrid.SummaryRow row={row}>
+                        <DataGrid.SummaryCells<Person>>
+                            {(cell) => (
+                                <DataGrid.SummaryCell cell={cell}>
+                                    {figures[cell.column.key]?.[cell.position]}
+                                </DataGrid.SummaryCell>
+                            )}
+                        </DataGrid.SummaryCells>
+                    </DataGrid.SummaryRow>
+                )}
+            </DataGrid.SummaryRows>
+        </DataGrid.Summary>
+    );
+    return (
+        <DataGrid.Root columns={columns} rows={people} summaryRows={{ top: 1, bottom: 1 }}>
+            <DataGrid.Grid aria-label="People">
+                <DataGrid.Header />
+                {summary("top")}
+                <DataGrid.Body />
+                {summary("bottom")}
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
+```
+
+A summary cell's state and its info tell which cell it is: its row's `position` (`"top"` or
+`"bottom"`) and `summaryIndex` (0 for the first row at that end, top to bottom), its `column` and
+`columnIndex`. A summary row is `summaryRowHeight` tall (35 by default). From code,
+`model.run("summary-rows.set", { top, bottom })` changes the counts (a count left out is 0), and
+`model.get("summary-rows")` reads them.
+
+### A column's own summary cells
+
+A column can draw its summary cells itself: `renderSummaryCell({ position, summaryIndex, column,
+columnIndex })` is what a `DataGrid.SummaryCell` given no children shows (nothing without it). It
+suits figures that live with the column. When the data it reads changes behind the same columns
+(a cache, a store), tell the grid with `model.run("summary-rows.changed")`, as `rows.changed`
+tells it of rows: the summary cells are drawn, and spanned, again. Figures held in your
+component's state need none of it: render them in the children function, as above.
+
+## The parts
+
+`DataGrid.Summary` holds one end's rows, sticky; it renders nothing while the grid has none
+there. Inside it, `DataGrid.SummaryRows` hands its children each row (by default a
+`DataGrid.SummaryRow`), a row's `DataGrid.SummaryCells` hands its children each cell (by default a
+`DataGrid.SummaryCell`), as the header's and the body's parts do. They follow the
+[primitive contract](/docs/concepts/primitive-contract): `render`, `className` and `style`
+functions of their state, forwarded props. The hooks are `useSummaryRows`, `useSummaryRow`,
+`useSummaryCells` and `useSummaryCell`.
+
+Their place in the grid is in its flow:
+
+- the top `Summary` right after the `Header`;
+- the bottom `Summary` last, after the `Body` and the `Empty` state.
+
+As a table, render the top one as a `<tbody>` and the bottom one as a `<tfoot>`, their rows as
+`<tr>` and their cells as `<td>`. Stacking is yours, as for the header: give each `Summary` a
+background and a `z-index` so the rows scroll under it. A row's cells are placed from its inner
+edge: a line above a bottom summary row is a shadow (or the body's last row's border), never a
+top border, which would push its cells past the view's bottom edge.
+
+## Where they stay
+
+The top rows stay under the header, the bottom rows at the visible body's bottom edge; in a grid
+shorter than the view, the bottom rows sit right after the last row. Both are the browser's
+sticky positioning (the bottom `Summary` sticks at `calc(100% - its height)`, a percentage of
+the view's height), so they are in place from the first paint and a resize renders nothing.
+They move sideways with the columns, as the header does: the engine writes their offset, and
+scrolling renders nothing more for them. The body's height is the view's less the header's and the summary rows', so
+`viewport-size`'s `bodyHeight`, the windows and a page of rows count without them, and
+[scroll scaling](/docs/concepts/scroll-scaling) leaves them where they are.
+
+## Row indexes
+
+Summary rows have row indexes of their own, beside the header's and the body's, which stay as
+they are:
+
+| rows | indexes |
+| --- | --- |
+| header rows | `-depth` … `-1` |
+| top summary rows | `-(depth + top)` … `-(depth + 1)`, the first one first |
+| body rows | `0` … `rowCount - 1` |
+| bottom summary rows | `rowCount` … `rowCount + bottom - 1` |
+
+`depth` is the header's (`model.get("header-depth")`), shown or not. The active position takes
+these indexes, and `model.get("summary-row-by", { rowIndex })` tells a summary row's `position`
+and `summaryIndex` (`undefined` for any other row). Summary rows are never in the row window: the
+grid always renders them.
+
+## Keys
+
+The keys move through the rows as they show, top to bottom: the header, the top summary rows, the
+body, the bottom summary rows. Up from the first body row reaches the last top summary row, Down
+from the last body row the first bottom one, and Ctrl+End the last bottom summary row's last cell.
+PageUp and PageDown stay in the body: the summary rows are reached with the arrows. A summary
+cell holding controls hands them its keys with Enter or F2, as any cell does
+([Controls in cells](/docs/concepts/keyboard#controls-in-cells)). The selection's keys are a body
+row's only.
+
+## ARIA
+
+A `Summary` is a `rowgroup`, a summary row a `row` and its cells `gridcell`s. `aria-rowcount`
+counts the summary rows, and `aria-rowindex` follows the order on screen: the header rows, the
+top summary rows, the body rows, the bottom summary rows. Summary rows and cells carry
+`data-summary` (`top` or `bottom`); `data-active` marks the active cell and its row.
+
+## Columns
+
+Summary cells follow the columns as body cells do:
+
+- **Pinned columns.** A pinned column's summary cells are pinned too, with `data-pinned`.
+- **Spans.** A column's `colSpan` is asked for its summary cells with
+  `{ type: "summary", position, summaryIndex, rowIndex }`, and spans them as it spans a row's
+  ([Column spanning](/docs/concepts/column-spanning)).
+- **Groups, order, widths, direction.** A collapsed group's hidden columns have no summary cells,
+  a reordered column takes its summary cells along, and right to left they mirror.
+- **Fitting.** A fit to content measures a column's summary cells too, as its rendered cells:
+  a total wider than the values widens its column.

@@ -87,6 +87,18 @@
                     "path": "concepts/row-selection"
                 },
                 {
+                    "label": "Row reordering",
+                    "path": "concepts/row-reordering"
+                },
+                {
+                    "label": "Summary rows",
+                    "path": "concepts/summary-rows"
+                },
+                {
+                    "label": "Measured heights",
+                    "path": "concepts/measured-heights"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

@@ -60,11 +60,65 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    engine reports the row and column windows (visible and rendered ranges) and the end being
    reached. Fetching, caching and placeholders are **app policy**: they live in the examples
    (`_kit/`), never in a package.
-7. **Sizes (D7).** `rowHeight: number | (index) => number`; columns `width: number` (px), the
+7. **Sizes (D7).** `rowHeight: number | (index) => number | "auto"` (`RowHeight`; `"auto"`:
+   measured, Epic #86, below); columns `width: number` (px), the
    width a column starts with and a reset gives back: the model keeps a resized column's width
    over it (`columnWidths`, Epic #70). The effective width, within the column's limits, is the
    override (`columnWidths`), else the engine's automatic width (`autoSize`), else its flex share
-   (`flex`), else `width` (Epic #80).
+   (`flex`), else `width` (Epic #80). **Measured heights (Epic #86, E2.2):** `rowHeight: "auto"`
+   with `estimatedRowHeight` (default `DEFAULT_ROW_HEIGHT`) and `detailHeight: "auto"` with
+   `estimatedDetailHeight` (default `DEFAULT_DETAIL_HEIGHT`): model state, options and
+   `sizes.set` (an estimate is a size above 0: `sizes.set` refuses another with
+   `invalid_payload`, an option leaves it out; `Root` sends `rowHeight`, `headerRowHeight` and
+   `detailHeight` together when one changed, exactly as before Epic #86, and `summaryRowHeight`
+   and each estimate in a command of its own, only when it changed, so a refused one never holds
+   the others back). The engine
+   measures: `measuring(state)` while either is
+   `"auto"`, nothing otherwise (a grid of given heights reads, observes and allocates nothing
+   more). A loaded measured row registers as the engine's `row` element (`EngineLayer`; React's
+   `Row` through `useRowPart`'s `ref`, `useRow`'s props carry it), a detail as before (`detail`).
+   Each element is read once, at the commit that first renders it (`takeMeasures`: border-box
+   height, `layoutScale` from the viewport as the fit; before the browser paints; not at the
+   commit of a view already replaced, as when an automatic width changed meanwhile: the next
+   commit reads), and from the
+   next frame on a `ResizeObserver` from the viewport's `defaultView` (created then, and only
+   while measuring: `observeLater`, one frame for all) tells its resizes (`heights`, a WeakMap
+   per element, forgotten when an element unregisters or measuring stops; a pass allocates
+   nothing while no height changed). Observing in the frame an element renders would report it again in the
+   observers' delivery at the same depth, which a browser defers with an error; a resize
+   reported lays out at once. A row's own height is its element's less its detail's; a row
+   measured 0 (hidden) keeps its height. `MeasuredHeights` (`engine/measure.ts`) keeps them by
+   index with the row's key (`rowKey` else index), in persistent sorted blocks (64 to 128
+   heights, never changed once made) with the heights and counts before each block: a batch of m
+   makes its few blocks and the block list again (O(m log k + m·B + k/B)), never the whole store;
+   `keep(start, end, keyAt)` drops the ones whose row left its index (a new source: every index,
+   or behind the same `getRow` from the old count; a `rows.changed` range: off screen too, so a
+   row that moved off screen counts at the estimate until it renders), `clear()` when no longer
+   `"auto"`. `axis(count, estimate)` is a `MeasuredAxis` over the version (O(1) to make, O(log k)
+   a question, old versions valid: a view's axis keeps its offsets; `resized` is itself, one
+   estimate for all, `withCount` O(1)), so 100M estimated rows allocate nothing per row. The row
+   axis is `withDetails(measuredRows.axis(…), state, measuredDetails)` (`rowAxisFor`). A change
+   relayouts once (`remeasured`), the view kept on the first row in view whose height did not
+   just change (`measureAnchor`; none, the first row in view), as far from the view's top (M2's
+   `anchoredOffset`, a row below the first one in view with a negative `within`), the offset
+   clamped to the rows before any window is worked out, then `followRowAnchor`: a scroll up
+   shows what it brought in at its measured height and what was in view stays where the scroll
+   put it; under scaling too (the virtual offset is exact). The row of the last `scroll-to-cell`
+   (`cellScroll`: its `rowIndex` and `align` only, never its column; kept until a scroll the
+   engine did not make on either axis, more than a pixel, the wheel, or `scroll-to`, which the
+   column drag's edge scroll uses) is scrolled to again after a change, so a key lands at the
+   row's measured height. A row expanding or collapsing is read again. Nothing is measured per
+   scroll frame: only elements rendered for the first time are read. The scrollbar is
+   approximate until rows are measured (documented). React: a measured row (`measuredRow(view,
+   loaded)`: `view.measuredRows` and loaded; a row not loaded keeps the estimate's height as
+   before) has no height and `display: grid`; its cells share the area `1 / 1`, each at
+   `cellBox`'s `left` as its inline start margin (`margin-left`, `margin-right` right to left),
+   `position: relative` (a pinned one `sticky`; both drop a consumer's `transform` and insets, as
+   a pinned cell), no height: as tall as the tallest (stretch); its
+   detail is the area `2 / 1` (no `margin-top`). A measured detail (`view.measuredDetails`) has no
+   height (in a row of pinned cells, a flex row of a given height, `align-self: flex-start`:
+   stretched to the row's height, it would measure what the axis gave it). The CSS consequences are the app's: wrap the text (no `nowrap`), padding and borders
+   count.
 8. **Scroll scaling (D8).** When an axis is larger than a physical cap (configurable, safe in
    Chromium, Firefox and WebKit by default), the engine maps physical scroll to virtual offset.
    Small moves stay pixel-exact relative to the content, the scrollbar reaches the whole dataset,
@@ -74,7 +128,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the scroll as it is first (`syncScroll`), so a scroll whose event has not run yet (a scroll and
    a click in one task) never has the layers written against the scroll the engine last knew.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
-    renderHeaderCell?, renderCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
+    renderHeaderCell?, renderCell?, renderSummaryCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
     flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
@@ -154,7 +208,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     transforms written again on the new side. The app's styles mirror with logical sides.
     **Column spans (Epic #85, E1.2):** `colSpan?: (args: ColSpanArgs<TRow>) => number | undefined`
     on a column (never a group), `args` `{ type: "header", rowIndex: -1 } | { type: "row", row,
-    rowIndex }` (summary rows join the union later). A cell covers the columns after it within its
+    rowIndex } | { type: "summary", position, summaryIndex, rowIndex }` (Epic #86: an app narrows
+    a row's by `type === "row"`, never by "not a header"). A cell covers the columns after it within its
     part and the columns (one clamp, `keptSpan`, the header's and the body's); a row's cells
     partition each part from its start (a covered column is never asked, nor, in `rowSpansOf`,
     one between the rendered columns and the next part: `spanPartStart`); a row not loaded spans
@@ -224,7 +279,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     model derives `expandedRows` (indexes) looking for a key where it was last seen, then only in
     the rows the app names (a `rows.changed` range, rows added behind the same `getRow`, a new
     source), so nothing is scanned without expanded keys. `detailHeight: number | (row, rowIndex)
-    => number` (default 300) adds to an expanded row's size in the row axis (`withExtraSizes`, a
+    => number | "auto"` (default 300; `"auto"` measured, D7) adds to an expanded row's size in the row axis (`withExtraSizes`, a
     sorted list over the base axis): no fake rows, indexes, windows and `getRow` unchanged; a row
     expanding above the view keeps the view where it is. `DataGrid.RowDetail` sits inside its
     `Row` after its cells, renders only while expanded, sticky (the engine's `detail` element,
@@ -232,7 +287,63 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     row is at least as wide as what holds it (`rowWidth`). ARIA: a detail is one `gridcell` of
     its row (`aria-colindex` 1, `aria-colspan` every column), so counts and row indexes never
     change. Keys: the arrows move between rows' cells and scroll by a row's own height; a detail
-    has no `data-column-index`, so its keys and focus are its content's (a grid in it is its own). **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
+    has no `data-column-index`, so its keys and focus are its content's (a grid in it is its own).
+    **Summary rows (Epic #86, E2.1):** one generic still: `Root`'s `summaryRows?: { top?, bottom? }`
+    (counts; the model's `summaryRows: SummaryRowCounts`, option, `summary-rows.set { top?,
+    bottom? }` (a count left out is 0, `invalid_payload` for one that is no whole number 0 or
+    more), `get("summary-rows")`, a prop removed gives none) and `summaryRowHeight` (default
+    `DEFAULT_ROW_HEIGHT`, `sizes.set`). The figures are the app's (no aggregates in the grid):
+    live ones are rendered in the `SummaryCells` children function (app state read at render,
+    the columns unchanged); a column's `renderSummaryCell({ position, summaryIndex, column,
+    columnIndex })` is what a `SummaryCell` without children shows (nothing without it), and
+    `summary-rows.changed` (like `rows.changed`; nothing without summary rows) bumps
+    `summaryRevision` (state and view, `VIEW_KEYS`) so their cells and spans are drawn again for
+    data behind the same columns. Their types are in `types.ts` (`SummaryPosition`,
+    `SummaryRowCounts`, `SummaryRowView`, `SummaryCellRenderProps`, `SummaryColSpanArgs`); the
+    naming guard scans every model module and allows `summaryIndex` (`<entity>Index`); the index
+    scheme is `model/summary.ts` (`summaryRowIndex`, `summaryRowAt`, `summaryRowsOf`, one
+    computation of where each position starts). Row indexes extend the grid's, the header's and
+    the body's untouched: header rows `-depth … -1`, top summary rows `-(depth + top) … -(depth +
+    1)` (the header's depth shown or not: `isHeaderRow` tells a header row from them), body rows
+    `0 … rowCount - 1`, bottom summary rows `rowCount … rowCount + bottom - 1`
+    (`get("summary-row-by", { rowIndex })`). An active summary row is followed as (position,
+    summaryIndex) through every change of shape (`reconcile(state, before)`, `keptActiveRow`:
+    `data.set`, `columns.set` and a new depth, `summary-rows.set`, `sizes.set`, a new layout): its
+    index rebuilt, the last one left at its position, none left the nearest row on its side; a
+    header row stays in the header, a body row past a shrunken `rowCount` lands on the last body
+    row (never a summary row); a new model's position is for its rows (`withSource(…, false)`).
+    The engine treats a summary row followed to a new index (the rows' count, the header's depth)
+    as the same cell (`followedActive`, as a column moved by an order: `interaction.cellMoved`,
+    no scroll, focus kept in its element: its interaction and its focused control stay).
+    On screen and to the keys the rows go by **line** (`rowLine`/`lineRow` in `navigation.ts`,
+    the identity without summary rows): header, top summary rows, body, bottom summary rows;
+    `nextPosition` moves by line (`linesOf`, `isRowOf` and `keptRow` for the model's `isCell` and
+    `reconcile`), a page stays in the body (from a bottom summary row PageDown stays, PageUp goes
+    into the body), Ctrl+End reaches the last bottom summary row; `aria-rowindex` is the line +
+    header rows + top + 1, `aria-rowcount` counts them. The engine takes their height from the
+    body's (`bodyHeight`: the view less the header and `summaryHeight` of both positions:
+    windows, pages, scaling follow), never renders an active summary row as a body row, scrolls
+    only to its column, measures their cells in a fit (span 1) and gives them no selection keys.
+    Spans: `rowSpanArgs` asks `type: "summary"`, `view.rowSpans` holds the summary rows' too
+    (`rowColumns`, `cellSpan`), the active cell snaps as in a body row (`coveringCell`). React:
+    `DataGrid.Summary position` (a `rowgroup`, `data-summary`, sticky in the grid's flow, pure CSS
+    so it is placed before the first measure and a resize renders nothing: the top one after
+    `Header` at `top: headerHeight`, the bottom one last, after `Body` and `Empty`, at `top:
+    calc(100% - its height)`: a sticky inset's percentage is the scroll container's height, so it
+    sticks at the view's bottom edge, and the grid's end (its containing block) keeps it right
+    after the last row; nothing while none; a `tbody`/`tfoot`; a border at the top of a summary
+    row pushes its cells, placed from the row's inner edge, past that edge: draw the line
+    otherwise),
+    `SummaryRows` (children function, the `Summary` around's position or its own),
+    `SummaryRow` (a `header` layer element: moved with the columns only; `rowStyle`; `data-summary`,
+    `data-row-index`, `data-active`), `SummaryCells`, `SummaryCell` (a body cell's part and element,
+    shared with `Cell`: `summaryCellPart` through `cellPartProps`/`cellBox` with the summary row's
+    height, `useCellElement`: roving tab stop, pinned, spans, interaction;
+    `data-grid-part="summary-cell"`, `data-summary`); `Body` starts below the top ones and `Grid`
+    holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells` (the body cells'
+    span-aware walk, `cellsOf` in `hooks.ts`, shared with `useCells`), `useSummaryCell`;
+    `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Stacking is the app's,
+    as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
     the main ones (their built files must not contain it): `@fragiola/data-grid/local` holds the
     framework-free pipeline (`createLocalRows` keeps the sort, filters, search and page;
     `derive(rows, columns)` filters, searches, sorts and pages in that order, each stage
@@ -240,7 +351,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `pageRows`), `@fragiola/data-grid-react/local` holds `useLocalRows(rows, columns, options)`,
     which keeps that state itself and returns `props` to spread onto `Root` (`rows`,
     `sortColumns`, a stable `onSortColumnsChange`) and `sort`/`filter`/`page` for the app's
-    controls. Filter and page are not model state (no grid behaviour); the sort is. Values
+    controls (and `moveRow(move)`, Epic #86: a row move applied to the rows given; stable, the
+    latest rows and `rowIndexes` written to a ref in a layout effect, moves before a render applied
+    one after the other). Filter and page are not model state (no grid behaviour); the sort is. Values
     compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
     `Column.filter` override; a text filter contains (case and accents aside), a list holds,
     anything else equals. A filter, the search or the sort changing goes to the first page.
@@ -378,6 +491,66 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    target; `useHeaderCell` reports `reorderable`, `dragging`, `dropTarget` (`engine/parts.ts`).
    The indicator, the cursor, `touch-action` and any announcement (a live region) are the
    app's; live reordering, pinning by drag, rows and touch gestures are not the grid's.
+   **Row reordering (Epic #86, E2.3):** the grid never orders the rows (D6, the sorting rules),
+   so a move is an **event**, never a command on rows: the engine's `row-move` event
+   `RowMove { fromIndex, toIndex, rowKey }` (`toIndex` the index once moved: the rows without it,
+   it inserted there; `landingIndex`, the columns' too), `Root`'s `onRowMove`, whose presence
+   turns it on (the engine option `reorderableRows`, `view.reorderableRows`; a grid without it
+   is unchanged: no attribute, part state `undefined`). The app moves its rows (`moveRow(rows,
+   fromIndex, toIndex)` and `moveShownRow(rows, rowIndexes, …)`/`shownRowMove` in
+   `@fragiola/data-grid/local`, the shown rows by their places among the rows given
+   (`LocalRowsView.rowIndexes`, built when first read: equal rows told apart), `indexAfterMove`
+   (`utils.ts`, the engine's too); `useLocalRows`'s `moveRow(move)` placing it beside the row it
+   lands next to on screen, filtered or paged). Measured heights are kept by index with their key:
+   after a move, the shifted rows off screen count at the estimate until they render again
+   (documented; the store is not remapped). Refused (`rowsMove(reorderableRows, sortColumns)`, parts): while sorted (the handle
+   does not drag, the keys move nothing, documented: clear the sort), a row not loaded (no
+   key: neither dragged nor a target), a drop beside itself (null target, nothing told). The
+   handle is the app's element with `useRowDragHandle(row)`'s props (a row's or a cell's info;
+   `RowDragHandlePart`: `aria-hidden` (a pointer's affordance: the keys move a row from its
+   cells), `data-grid-row-drag-handle` = the row index (`ROW_DRAG_HANDLE_ATTRIBUTE`),
+   `data-grid-part="row-drag-handle"`, `data-reorderable`, `data-dragging`, an empty `style`;
+   `state` `{ rowIndex, reorderable, dragging }`); a plain element, not a control. The drag
+   shares the column reorder's machinery (`PointerDrag` with both coordinates, `listen`,
+   `capture`, `askFrame`, `endDrag`, `markedOf`, one frame step for both axes (`reorderStep`:
+   the view coordinate read once, `edgeStep(at, start, length)` (`columnEdgeStep` for a header
+   cell, its siblings' reach), `edgeScrollBy(vertical, step)`, which tells whether anything moved
+   (none past the first or last row), the target, `askFrame`) and one target tail
+   (`dropTargetOf`: the side of the item's middle, `landingIndex`, `keptIfSame`, so a target
+   worked out again unchanged keeps its object)): a primary press on an own
+   handle (after the consumer's `onPointerDown`, a prevented one vetoes; not prevented: under
+   `CLICK_SLOP` a click, which focuses its cell), past it the row drags (the active cell left as
+   it is: `buildView` keeps `rowReorder.rowIndex` in `view.rows`, as the active row, so the
+   handle holding the pointer stays rendered through the edge scroll; selection and native drags
+   blocked); once a frame the target is the row under the pointer's y (`viewY`, the one layout
+   read, at the start, once a frame and on the release) kept over the
+   body (`bodyTop`, `bodyHeight`), from the row axis (off screen, measured, variable, details,
+   scaled alike), the side of its cells' middle (`cellsSizeOf`: over a detail, after); within
+   40 px of the body's top or bottom edge (or past it) the rows scroll up to 20 px a frame
+   (from the drag's start too); a scroll during the drag retargets once a frame. The dragged row
+   counts as rendered (`rendersRows`, `viewChanged`'s details): a `rows.changed` covering it
+   renders, and another key there ends the drag. After every
+   model change, laid out (`followRowDrag`, after `relayout`: the offset clamped), the target is
+   worked out again from the last `viewY` (no layout read) and, held in an edge zone, a frame is
+   asked (rows appended come into reach). The release emits one `row-move`; Escape (after the
+   app's handlers), `pointercancel`, a lost capture, a move with no button, rows no longer moving
+   or its row gone from its index (by key) end it telling nothing; the click ending it is the
+   drag's. State:
+   `engine.get("row-reorder")` → `RowReorder` `{ rowIndex, rowKey } & ({ targetIndex, side } |
+   { targetIndex: null, side: null })` or `null`, the `row-reorder` event, `view.rowReorder`;
+   `RowState.dragging` (`boolean | undefined`) and `dropTarget` (`ReorderSide | null |
+   undefined`), `undefined` while rows do not move (pre-existing `RowState` assertions hold),
+   `data-dragging`/`data-drop-target` on the row. The active cell stays on its row by key, only
+   with `rowKey` (an index key cannot tell rows apart: without one it stays at its index): a move
+   remembers the active cell and its row's key (`movedRow`); at a new source or `rows.changed`
+   that puts the moved key at `toIndex`, the active cell unchanged since, it goes to
+   `indexAfterMove` of its row (the moved row to `toIndex`, a row between one place toward
+   `fromIndex`) when its key is there, an `active-position.set` (queued after that change: no
+   render in between), focus going with it. Kept through rows changing otherwise (a server
+   answering in pieces); forgotten once followed, once the active cell changed (the person or the
+   app moved it), at the next move and when the viewport detaches.
+   The indicator, the cursor, `touch-action` and announcements are the app's; live moves,
+   between grids, several rows and touch gestures are not the grid's.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. Right to left
@@ -404,8 +577,15 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     header cell in navigation, Ctrl/⌘+Shift+←/→ run one `column-order.move` before the previous
     sibling or after the next (handled at an end or at the pinned edge too, moving nothing),
     after the consumer's handlers; the active cell follows and focus stays on it; on a body cell
-    or a fixed header cell they are plain arrows (Epic #75). A consumer can
-    cancel or replace any key, and middleware can refuse or redirect a move. ARIA: `role="grid"`,
+    or a fixed header cell they are plain arrows (Epic #75). While rows move (`onRowMove`, Epic
+    #86, E2.3), Ctrl/⌘+Shift+↑/↓ on a body cell in navigation (`bodyCellOf`, the selection keys'
+    guard too) emit one `row-move` by ∓1, once per press (a repeat moves nothing; handled at the
+    first or last row, next to a row not loaded and while sorted too, moving nothing; RTL the
+    same), after the consumer's handlers; with `rowKey` the active cell follows the row once the
+    app moved it; without `onRowMove` they are plain arrows. A consumer can
+    cancel or replace any key, and middleware can refuse or redirect a move. With summary rows
+    (Epic #86) the keys move by line through the header, the top summary rows, the body and the
+    bottom ones (see D10). ARIA: `role="grid"`,
     `aria-rowcount`/`aria-colcount` are totals, `aria-rowindex`/`aria-colindex` 1-based.
 12. **Versions (D12).** Exact versions published at least 7 days ago, checked against the registry
     (`npm view`) before pinning. **No virtualization library**: virtualization is the core's job.
@@ -520,18 +700,22 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   first, then the consumer's.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
-- **Structural inline style only**: `position` (`sticky` on the header, `Empty`, pinned
-  cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
+- **Structural inline style only**: `position` (`sticky` on the header, the summary rows'
+  `Summary`, `Empty`, pinned cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
   right to left: `inlineSide`), `transform` on the layers,
-  `display` (also to make table parts positionable, and `flex` on rows and header rows with
-  pinned columns), `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
+  `display` (also to make table parts positionable, `flex` on rows and header rows with
+  pinned columns, `grid` on a measured row, Epic #86), in a measured row `grid-area` on its
+  cells and detail and its cells' inline start margin (`margin-left`, `margin-right` right to
+  left: their place, in place of `left`), `align-self` on a measured detail in a row of pinned
+  cells, `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
   rows (with column groups, an upper row stays above the next, which a column spanning rows
   reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
   row of pinned cells, `margin-left` (`margin-right` right to left) and `flex-shrink: 0` (its box
   from the row's start, never shrunk). Nothing cosmetic. (The root's `dir`, when a direction is
   given, is structural: `Root` renders `view.givenDirection`.)
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`; a selectable
-  row's `aria-selected="false"` is ARIA's own "selectable, not selected"): `data-active`,
+  row's `aria-selected="false"` is ARIA's own "selectable, not selected"; a row's drag handle's
+  `aria-hidden="true"`): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
@@ -547,26 +731,32 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `{headerCellContent(cell)}<Resizer cell={cell} />`. A focusable `separator` on a `div` needs a
   documented `biome-ignore` of `useAriaPropsSupportedByRole` (the APG splitter; an `<hr>` cannot
   take focus).
+- **A row's drag handle is the app's element (Epic #86, E2.3).** `useRowDragHandle(row)` returns
+  `{ state, props }` (`state`: `rowIndex`, `reorderable`, `dragging`; `props`: `aria-hidden`,
+  `data-grid-row-drag-handle`, `data-grid-part="row-drag-handle"`, `data-reorderable`,
+  `data-dragging`, an empty `style`); its look, cursor and `touch-action: none` are the app's, and
+  it is a plain element, not a control (a press focuses its cell).
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
-  until a root holds it); a part hook (`useRow`, `useCell`, `useHeaderCell`,
-  `useColumnResizer`, `useGroupLabel`) returns `{ state, props }`, the structural style in
-  `props.style`.
+  until a root holds it; `useRow`'s props hold a measured row's `ref`); a part hook (`useRow`, `useCell`, `useHeaderCell`,
+  `useColumnResizer`, `useGroupLabel`, `useRowDragHandle`, `useSummaryRow`, `useSummaryCell`) returns
+  `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
   before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and
   Escape of interactive cells included. **Clicks too (Epic
   #27):** `Root` calls the engine's `click` (a header cell's sort) after the consumer's
-  `onClick`, the same way. **Presses on a resizer or a reorderable header cell too (Epics #70,
-  #75):** `Root` calls the engine's `pointerdown` (a resizer's drag; a header cell's once past
-  the click slop, the press not prevented so a click still focuses and sorts) after the
-  consumer's `onPointerDown`; during a drag, Escape goes to the engine's `keydown` the same way,
+  `onClick`, the same way. **Presses on a resizer, a reorderable header cell or a row's drag
+  handle too (Epics #70, #75, #86):** `Root` calls the engine's `pointerdown` (a resizer's drag;
+  a header cell's or a handle's once past the click slop, the press not prevented so a click
+  still focuses and sorts) after the consumer's `onPointerDown`; during a drag, Escape goes to the engine's `keydown` the same way,
   and from outside the grid to a listener on the document's bubble phase, after the app's own
   handlers (a prevented Escape keeps the drag); the click ending a drag is the drag's.
   Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
-- **The layers' `transform` is the engine's**: `Body` and `HeaderRow` drop a consumer's. The
-  header layer has an element per header row: the engine writes the same transform to each. A
+- **The layers' `transform` is the engine's**: `Body`, `HeaderRow` and `SummaryRow` drop a
+  consumer's. The header layer has an element per header row and per summary row: the engine
+  writes the same transform to each. A
   pinned column's `Cell`/`HeaderCell` drop a consumer's `transform` and insets (`top`, `left`,
   `right`, `bottom`, `inset*`): its inline start inset (`left`, `right` in RTL) is the engine's.
 - **Header rows render through `HeaderRows` (Epic #13, G6)**, a children function over the

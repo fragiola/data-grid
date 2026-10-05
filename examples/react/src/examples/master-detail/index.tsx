@@ -9,6 +9,8 @@ import {
 } from "@fragiola/data-grid-react";
 import { ChevronRight } from "lucide-react";
 import type * as React from "react";
+import { useId, useState } from "react";
+import { Switch } from "#/components/ui/switch";
 import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
 
@@ -350,15 +352,32 @@ function Orders() {
 }
 
 export default function MasterDetail() {
+    // the details' heights: computed from each order, or measured from what they render
+    const [measured, setMeasured] = useState(false);
+    const measuredLabel = useId();
     return (
         <div className={styles.frame}>
+            <div className={styles.toolbar}>
+                <span className={styles.option}>
+                    <Switch.Root
+                        aria-labelledby={measuredLabel}
+                        checked={measured}
+                        onCheckedChange={setMeasured}
+                    >
+                        <Switch.Thumb />
+                    </Switch.Root>
+                    <span id={measuredLabel}>Measure the details</span>
+                </span>
+            </div>
             <DataGrid.Root
                 columns={orderColumns}
                 rows={orders}
                 rowKey={(row) => row.id}
                 rowHeight={40}
-                // each order's detail is as tall as its items need
-                detailHeight={detailHeight}
+                // each order's detail is as tall as its items need: computed from the order, or
+                // measured once rendered ("auto", about 160px until then)
+                detailHeight={measured ? "auto" : detailHeight}
+                estimatedDetailHeight={160}
                 defaultExpandedRowKeys={[1001]}
                 className={styles.root}
             >

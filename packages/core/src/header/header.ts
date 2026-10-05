@@ -36,6 +36,17 @@ export function headerRowCount(state: {
     return state.headerRowHeight > 0 ? state.header.depth : 0;
 }
 
+/**
+ * Whether a row index is one of the header's rows (-depth … -1), shown or not: the rows before
+ * them are the top summary rows' (Epic #86, E2.1).
+ */
+export function isHeaderRow(
+    rowIndex: number,
+    header: Pick<HeaderLayout<unknown>, "depth">,
+): boolean {
+    return rowIndex < 0 && rowIndex >= -header.depth;
+}
+
 /** The grid's columns and its header, from the entries of `columns`. */
 export interface ColumnLayout<TRow, TNode> {
     readonly columns: readonly Column<TRow, TNode>[];

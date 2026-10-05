@@ -133,6 +133,12 @@ export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
 export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
 
 /**
+ * A row's drag handle (Epic #86, E2.3): an element the app renders in a row (a cell of it), its
+ * value the row's index. A press on it drags the row while rows move (`reorderableRows`).
+ */
+export const ROW_DRAG_HANDLE_ATTRIBUTE = "data-grid-row-drag-handle";
+
+/**
  * A group's label (Epic #85, E1.3): an element the app renders in a group's header cell, its value
  * the group's key. The engine keeps it in view while the group scrolls (the `label` layer).
  */
@@ -192,6 +198,16 @@ export function isPagelessControl(element: Element): boolean {
 }
 
 /**
+ * How much a transform above `reference` (the viewport) scales the boxes a page reads: a box's
+ * size over it is in layout pixels. 1 without one.
+ */
+export function layoutScale(reference: HTMLElement): number {
+    const layout = reference.offsetWidth;
+    const box = reference.getBoundingClientRect().width;
+    return layout > 0 && box > 0 ? box / layout : 1;
+}
+
+/**
  * Elements' widths at their content's widest (Epic #80, A3), in one layout: each one's inline
  * `width` set to `max-content` (and, for a pinned cell in its row's flex, `flex-shrink` to 0: it
  * could shrink), important so no style sheet holds it; then every box read; then every `style`
@@ -210,9 +226,7 @@ export function maxContentWidths(
             element.style.setProperty("flex-shrink", "0", "important");
         }
     }
-    const layout = reference.offsetWidth;
-    const box = reference.getBoundingClientRect().width;
-    const scale = layout > 0 && box > 0 ? box / layout : 1;
+    const scale = layoutScale(reference);
     const widths = elements.map(
         (element) => element.getBoundingClientRect().width / scale,
     );

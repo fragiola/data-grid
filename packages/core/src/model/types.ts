@@ -33,9 +33,11 @@ export interface CellRenderProps<TRow, TNode = unknown> {
 
 /**
  * What a column's `colSpan` is asked with (E1.2): which cell, by the kind of row it is in. Its
- * header cell (on the header's last row, -1), or a loaded body row's cell with its row.
+ * header cell (on the header's last row, -1), a loaded body row's cell with its row, or a summary
+ * row's cell (Epic #86, E2.1) with its position and index.
  */
 export type ColSpanArgs<TRow> =
+    | SummaryColSpanArgs
     | {
           readonly type: "header";
           readonly rowIndex: number;
@@ -70,6 +72,13 @@ export interface Column<TRow, TNode = unknown> {
     /** what a body cell of a loaded row shows when it is given no children */
     readonly renderCell?:
         | ((props: CellRenderProps<TRow, TNode>) => TNode)
+        | undefined;
+    /**
+     * what a summary row's cell shows when it is given no children (Epic #86, E2.1): the app's
+     * own value (a total, a count), computed in its closure; without it, nothing
+     */
+    readonly renderSummaryCell?:
+        | ((props: SummaryCellRenderProps<TRow, TNode>) => TNode)
         | undefined;
     /**
      * whether its header cell sorts the grid (a click, Enter or Space toggles it). The grid keeps
@@ -176,6 +185,7 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly width?: never;
     readonly getValue?: never;
     readonly renderCell?: never;
+    readonly renderSummaryCell?: never;
     /** a group is never sorted: its columns are */
     readonly sortable?: never;
     /** a group is pinned by its columns */
@@ -292,12 +302,20 @@ export type RowKey = string | number;
 export type RowKeyGetter<TRow> = (row: TRow, index: number) => RowKey;
 
 /**
- * An expanded row's detail height in pixels (M2): one for all, or one per loaded row. It adds to
- * the row's own height in the row axis.
+ * A body row's height in pixels (D7): one for all, or one per index; or `"auto"`, as tall as its
+ * content, measured once rendered (Epic #86, E2.2: `estimatedRowHeight` until then).
+ */
+export type RowHeight = Size | "auto";
+
+/**
+ * An expanded row's detail height in pixels (M2): one for all, or one per loaded row; or `"auto"`,
+ * as tall as its content, measured once rendered (Epic #86, E2.2: `estimatedDetailHeight` until
+ * then). It adds to the row's own height in the row axis.
  */
 export type DetailHeight<TRow> =
     | number
-    | ((row: TRow, rowIndex: number) => number);
+    | ((row: TRow, rowIndex: number) => number)
+    | "auto";
 
 /**
  * How rows are selected (R2): one at a time, or many. A grid without it selects nothing.
@@ -357,9 +375,23 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly source: RowSource<TRow>;
     readonly rowCount: number;
     readonly rowKey: RowKeyGetter<TRow> | undefined;
-    readonly rowHeight: Size;
+    readonly rowHeight: RowHeight;
+    /** a measured row's height until it is measured (`rowHeight: "auto"`) */
+    readonly estimatedRowHeight: number;
     /** a header row's height; 0 for a grid without a header */
     readonly headerRowHeight: number;
+    /**
+     * how many summary rows the grid has at the top (under the header) and at the bottom (at the
+     * view's bottom edge): their row indexes extend the grid's (Epic #86, E2.1)
+     */
+    readonly summaryRows: SummaryRowCounts;
+    /** a summary row's height */
+    readonly summaryRowHeight: number;
+    /**
+     * how many times `summary-rows.changed` said the figures behind the summary rows changed (0
+     * before the first): their cells are drawn again
+     */
+    readonly summaryRevision: number;
     readonly activePosition: CellPosition | null;
     /** the sorted columns, the first one first (the grid keeps them; the app orders the rows) */
     readonly sortColumns: readonly SortColumn[];
@@ -380,6 +412,8 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** an expanded row's detail height */
     readonly detailHeight: DetailHeight<TRow>;
+    /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
+    readonly estimatedDetailHeight: number;
     /** how rows are selected; `undefined`: they are not (R2) */
     readonly rowSelection: RowSelection | undefined;
     /**
@@ -415,17 +449,31 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     rowCount?: number;
     getRow?: (index: number) => TRow | undefined;
     rowKey?: RowKeyGetter<TRow>;
-    /** a row's height in pixels, or a function of its index (default 35) */
-    rowHeight?: Size;
+    /**
+     * a row's height in pixels, or a function of its index (default 35); `"auto"`: as tall as its
+     * content, measured by an engine once rendered
+     */
+    rowHeight?: RowHeight;
+    /** a measured row's height until it is measured, in pixels (default 35) */
+    estimatedRowHeight?: number;
     /** a header row's height in pixels (default 35); 0 for no header */
     headerRowHeight?: number;
+    /** how many summary rows the grid has at the top and at the bottom (default none) */
+    summaryRows?: { readonly top?: number; readonly bottom?: number };
+    /** a summary row's height in pixels (default 35) */
+    summaryRowHeight?: number;
     activePosition?: CellPosition | null;
     /** the sorted columns to start with (entries that are not a sortable column are dropped) */
     sortColumns?: readonly SortColumn[];
     /** the keys of the rows expanded to start with (a key given twice counts once) */
     expandedRowKeys?: readonly RowKey[];
-    /** an expanded row's detail height in pixels, or a function of the row (default 300) */
+    /**
+     * an expanded row's detail height in pixels, or a function of the row (default 300); `"auto"`:
+     * as tall as its content, measured by an engine once rendered
+     */
     detailHeight?: DetailHeight<TRow>;
+    /** a measured detail's height until it is measured, in pixels (default 300) */
+    estimatedDetailHeight?: number;
     /** how rows are selected: one at a time, or many (default: not at all) */
     rowSelection?: RowSelection | undefined;
     /** the keys of the rows selected to start with (a key given twice counts once) */
@@ -673,20 +721,45 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: GridDirection | undefined;
     };
     /**
-     * changes the row height (a number or a function of the index), the header row's, or an
-     * expanded row's detail height
+     * replaces how many summary rows the grid has at the top and at the bottom (a count left out
+     * is 0): whole numbers, 0 or more. Returns them
+     */
+    "summary-rows.set": {
+        payload: {
+            readonly top?: number | undefined;
+            readonly bottom?: number | undefined;
+        };
+        result: SummaryRowCounts;
+    };
+    /**
+     * tells that the figures behind the summary rows changed (the app's data a column's
+     * `renderSummaryCell` or `colSpan` reads, its columns the same): their cells are drawn and
+     * spanned again. Nothing to tell without summary rows. Returns the summary revision
+     */
+    "summary-rows.changed": {
+        payload: NoPayload;
+        result: number;
+    };
+    /**
+     * changes the row height (a number, a function of the index or `"auto"`), the header row's, a
+     * summary row's, or an expanded row's detail height, and the estimates measured heights start
+     * from (a size above 0)
      */
     "sizes.set": {
         payload: {
-            readonly rowHeight?: Size | undefined;
+            readonly rowHeight?: RowHeight | undefined;
+            readonly estimatedRowHeight?: number | undefined;
             readonly headerRowHeight?: number | undefined;
+            readonly summaryRowHeight?: number | undefined;
             readonly detailHeight?: DetailHeight<TRow> | undefined;
+            readonly estimatedDetailHeight?: number | undefined;
         };
         result: undefined;
     };
     /**
-     * makes a cell the active one (rows -1 and above are the header); a position inside a header
-     * cell's span activates that cell, at its own position
+     * makes a cell the active one (rows -1 and above are the header, the top summary rows before
+     * it, the bottom ones from `rowCount` on); a position inside a cell's span activates that
+     * cell, at its own position
      */
     "active-position.set": {
         payload: CellPosition;
@@ -866,8 +939,16 @@ export interface QueryMap<TRow, TNode = unknown> {
     "column-order": { payload: undefined; result: ColumnOrder };
     /** the collapsed groups' keys, in the order they were collapsed */
     "collapsed-group-keys": { payload: undefined; result: readonly string[] };
-    "row-height": { payload: undefined; result: Size };
+    "row-height": { payload: undefined; result: RowHeight };
     "header-row-height": { payload: undefined; result: number };
+    /** how many summary rows the grid has, at the top and at the bottom */
+    "summary-rows": { payload: undefined; result: SummaryRowCounts };
+    "summary-row-height": { payload: undefined; result: number };
+    /** the summary row at a row index (its position and index), or `undefined` for another row */
+    "summary-row-by": {
+        payload: { readonly rowIndex: number };
+        result: SummaryRowView | undefined;
+    };
     /** the grid's direction, `undefined` for the page's (an engine's view tells the one in effect) */
     direction: { payload: undefined; result: GridDirection | undefined };
     /** the expanded rows' keys, in the order they were expanded */
@@ -932,3 +1013,42 @@ export type CommandArgs<C extends CommandName, TRow, TNode> =
     true extends IsUnion<C>
         ? [payload: PayloadOf<C, TRow, TNode>]
         : PayloadArgs<PayloadOf<C, TRow, TNode>>;
+
+// ── summary rows (Epic #86, E2.1) ────────────────────────────────────────────
+
+/** Where a summary row stays: under the header, or at the view's bottom edge. */
+export type SummaryPosition = "top" | "bottom";
+
+/** How many summary rows a grid has, at the top and at the bottom. */
+export interface SummaryRowCounts {
+    readonly top: number;
+    readonly bottom: number;
+}
+
+/** A summary row: its row index, its position, and its index among its position's rows. */
+export interface SummaryRowView {
+    readonly rowIndex: number;
+    readonly position: SummaryPosition;
+    /** 0 for the first of its position's rows, top to bottom */
+    readonly summaryIndex: number;
+}
+
+/**
+ * What a column's `renderSummaryCell` receives: which summary row it draws a cell of. The values
+ * are the app's (it computes them in its own closure, over its own rows).
+ */
+export interface SummaryCellRenderProps<TRow, TNode = unknown> {
+    readonly position: SummaryPosition;
+    readonly summaryIndex: number;
+    readonly column: Column<TRow, TNode>;
+    readonly columnIndex: number;
+}
+
+/** What a column's `colSpan` is asked with for a summary row's cell (E2.1). */
+export interface SummaryColSpanArgs {
+    readonly type: "summary";
+    readonly rowIndex: number;
+    readonly position: SummaryPosition;
+    readonly summaryIndex: number;
+    readonly row?: undefined;
+}

@@ -15,29 +15,72 @@ import type { Row } from "./views";
 
 export type { Row };
 
-let observed: (() => void) | null = null;
+type ObserverCallback = (entries: ResizeObserverEntry[]) => void;
+
+/** the viewport's observer: its callback runs as a resize */
+let observed: ObserverCallback | null = null;
+/** the fake observers alive, and what each observes */
+const observers = new Map<ObserverCallback, Set<Element>>();
 
 afterEach(() => {
     document.body.innerHTML = "";
     observed = null;
+    observers.clear();
 });
 
 class FakeResizeObserver {
-    readonly #callback: () => void;
-    constructor(callback: () => void) {
+    readonly #callback: ObserverCallback;
+    readonly #targets = new Set<Element>();
+    constructor(callback: ObserverCallback) {
         this.#callback = callback;
-        observed = callback;
+        observers.set(callback, this.#targets);
     }
-    observe() {}
+    observe(target: Element) {
+        this.#targets.add(target);
+        // the viewport's: a measured row or detail carries its index (Epic #86)
+        if (!target.hasAttribute("data-row-index")) observed = this.#callback;
+    }
+    unobserve(target: Element) {
+        this.#targets.delete(target);
+    }
     disconnect() {
         if (observed === this.#callback) observed = null;
+        this.#targets.clear();
+        observers.delete(this.#callback);
     }
 }
 
-/** Fakes ResizeObserver; the function it returns runs the last observer's callback, a resize. */
+/**
+ * Fakes ResizeObserver; the function it returns runs the viewport's observer's callback (the last
+ * one to observe an element without `data-row-index`), a resize.
+ */
 export function fakeResizeObserver(): () => void {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    return () => observed?.();
+    return () => observed?.([]);
+}
+
+/** Whether an observer observes `element` (a measured row or detail, Epic #86). */
+export function isObserved(element: Element): boolean {
+    return [...observers.values()].some((targets) => targets.has(element));
+}
+
+/**
+ * Elements resized, as an observer reports them: each observer watching some of them gets their
+ * entries, with their new border-box heights.
+ */
+export function resizeElements(heights: ReadonlyMap<Element, number>): void {
+    for (const [callback, targets] of [...observers]) {
+        const entries = [...heights]
+            .filter(([target]) => targets.has(target))
+            .map(
+                ([target, height]) =>
+                    ({
+                        target,
+                        borderBoxSize: [{ blockSize: height, inlineSize: 0 }],
+                    }) as unknown as ResizeObserverEntry,
+            );
+        if (entries.length > 0) callback(entries);
+    }
 }
 
 export interface FakeViewportOptions {

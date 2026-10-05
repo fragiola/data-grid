@@ -82,6 +82,12 @@ export interface LocalRowsState {
 export interface LocalRowsView<TRow> {
     /** the current page's rows, filtered, searched and sorted */
     readonly rows: readonly TRow[];
+    /**
+     * where the current page's rows are among the rows given, in their order (`rows[i]` is the
+     * rows given's `rowIndexes[i]`): positions, so rows equal to each other are told apart (a
+     * move of the rows shown, `moveShownRow`). Built when first read
+     */
+    readonly rowIndexes: readonly number[];
     /** every row given */
     readonly total: number;
     /** the rows passing the filters and the search */
@@ -171,10 +177,14 @@ export function createLocalRows<TRow, TNode = unknown>(
             pageSize: number | undefined,
         ): LocalRowsView<TRow> => {
             const index = clampPageIndex(pageIndex, ordered.length, pageSize);
+            const page = pageOf(ordered, index, pageSize);
+            let rowIndexes: readonly number[] | undefined;
             return {
-                rows: pageOf(ordered, index, pageSize).map(
-                    (entry) => entry.row,
-                ),
+                rows: page.map((entry) => entry.row),
+                get rowIndexes() {
+                    rowIndexes ??= page.map((entry) => entry.index);
+                    return rowIndexes;
+                },
                 total,
                 filteredCount: ordered.length,
                 get filteredRows() {

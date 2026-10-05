@@ -13,6 +13,7 @@ import type {
     RowSelection,
     RowSource,
     SortColumn,
+    SummaryRowCounts,
 } from "../model/types";
 import type { ScrollAlign } from "../viewport/scroll-target";
 import type { AxisWindow, Range } from "../viewport/window";
@@ -28,6 +29,12 @@ export interface DataGridEngineOptions {
     maxScrollSize?: number;
     /** `rows-end-reached` fires when the view's last row is this close to the end (default 10) */
     endReachedThreshold?: number;
+    /**
+     * the rows move (Epic #86, E2.3): a press on a row's drag handle drags it, Ctrl/⌘+Shift+↑/↓
+     * on a body cell move its row, each drop or key a `row-move` event the app applies (the grid
+     * never orders the rows). Refused while the grid is sorted. Default off
+     */
+    reorderableRows?: boolean;
 }
 
 /** A header row a render shows: its index (-depth … -1) and its cells in the column window. */
@@ -90,10 +97,22 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * publishes a new view only while the grid has no rows
      */
     readonly viewportWidth: number;
-    /** the visible body's height, below the header (what an empty grid's placeholder fills); as above */
+    /**
+     * the visible body's height, below the header and the top summary rows, above the bottom
+     * ones (what an empty grid's placeholder fills); as above
+     */
     readonly viewportBodyHeight: number;
     /** the header rows: the header's depth, 0 without a header */
     readonly headerRowCount: number;
+    /**
+     * how many summary rows the grid has at the top (under the header) and at the bottom (at the
+     * view's bottom edge, Epic #86, E2.1): always rendered, outside the row window
+     */
+    readonly summaryRows: SummaryRowCounts;
+    /** a summary row's height */
+    readonly summaryRowHeight: number;
+    /** moves when `summary-rows.changed` says their figures changed: draw their cells again */
+    readonly summaryRevision: number;
     /** the header rows to render, the top one first (none without a header) */
     readonly headerRows: readonly HeaderRowView<TRow, TNode>[];
     /** the header's layout, for the whole grid */
@@ -133,6 +152,18 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * markup rendered before the grid attaches, or on a server, carries it
      */
     readonly givenDirection: GridDirection | undefined;
+    /**
+     * the loaded rows are as tall as their content (`rowHeight: "auto"`, Epic #86, E2.2): an
+     * adapter renders them without a height, their cells setting it (`measuredRow`), and
+     * registers them as the engine's `row` elements, which it measures; a row not loaded keeps
+     * its place's height, the estimate
+     */
+    readonly measuredRows: boolean;
+    /**
+     * the details are as tall as their content (`detailHeight: "auto"`): an adapter renders them
+     * without a height, and the engine measures its `detail` elements
+     */
+    readonly measuredDetails: boolean;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
@@ -155,6 +186,10 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly columnResize: ColumnResize | null;
     /** the column or group a drag is moving, and where it would land (O4), or `null` */
     readonly columnReorder: ColumnReorder | null;
+    /** the rows move by their drag handles and the keys (`reorderableRows`, E2.3) */
+    readonly reorderableRows: boolean;
+    /** the row a drag is moving, and where it would land (E2.3), or `null` */
+    readonly rowReorder: RowReorder | null;
 }
 
 /** A column (or a group) a person is resizing with the pointer, and its width on screen. */
@@ -181,6 +216,40 @@ export type ColumnReorder = {
     | { readonly targetKey: null; readonly side: null }
 );
 
+/**
+ * A row a person is dragging by its handle (Epic #86, E2.3), and where a drop would move it:
+ * before or after the row at `targetIndex` (the app draws the indicator there), or, while a drop
+ * would move nothing (it would land where it is, on a row not loaded, the grid sorted), nowhere
+ * (`targetIndex` and `side` both `null`).
+ */
+export type RowReorder = {
+    /** the dragged row's index */
+    readonly rowIndex: number;
+    /** its key: `rowKey`, else its index */
+    readonly rowKey: RowKey;
+} & (
+    | {
+          /** the row it would land beside */
+          readonly targetIndex: number;
+          readonly side: ReorderSide;
+      }
+    | { readonly targetIndex: null; readonly side: null }
+);
+
+/**
+ * A move of a row (`row-move`, E2.3), which the app applies to its rows: the grid never orders
+ * them. `toIndex` is the index the row takes once moved: its rows without it, it inserted there
+ * (`moveRow` in `@fragiola/data-grid/local` applies it to an array).
+ */
+export interface RowMove {
+    /** the row's index before the move */
+    readonly fromIndex: number;
+    /** its index once moved */
+    readonly toIndex: number;
+    /** its key: `rowKey`, else its index */
+    readonly rowKey: RowKey;
+}
+
 /** What `engine.get` reads. */
 export interface EngineQueryMap {
     "row-window": AxisWindow;
@@ -201,6 +270,8 @@ export interface EngineQueryMap {
     "column-resize": ColumnResize | null;
     /** the column or group a drag is moving, or `null` (see `GridView.columnReorder`) */
     "column-reorder": ColumnReorder | null;
+    /** the row a drag is moving, or `null` (see `GridView.rowReorder`) */
+    "row-reorder": RowReorder | null;
     /**
      * the widths the engine gives columns without an override, by key (Epic #80, A6): an
      * `autoSize` column's automatic width and the flex columns' shares of the view. Never
@@ -256,6 +327,13 @@ export interface EngineEventMap {
     "column-resize": ColumnResize | null;
     /** a drag started moving a column or a group, changed its target, or ended (`null`) */
     "column-reorder": ColumnReorder | null;
+    /** a drag started moving a row, changed its target, or ended (`null`) */
+    "row-reorder": RowReorder | null;
+    /**
+     * a row was dropped elsewhere, or moved by the keys (Ctrl/⌘+Shift+↑/↓): the app moves it in
+     * its rows; the active cell, in that row, follows it there
+     */
+    "row-move": RowMove;
     /** the automatic widths or the flex shares changed (see `column-auto-widths`) */
     "column-auto-widths": ColumnWidths;
 }
@@ -263,14 +341,18 @@ export interface EngineEventMap {
 export type EngineEventKey = keyof EngineEventMap;
 
 /**
- * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
+ * The elements whose geometry the engine writes: the layers (their `transform`; the header layer's
+ * elements are its rows, and the summary rows', Epic #86: moved with the columns only), and the cells of
  * pinned columns (`pinned`: `position: sticky` in their row's flow, whose inline start inset,
  * `left` or in RTL `right`, the engine writes so the browser's scrolling keeps them at the view's
  * start or end; their `data-column-index` says which column they are, a header cell's first),
  * expanded rows' details (`detail`: sticky the same way, at the view's start: as a column at
  * offset 0 would be), and group labels (`label`, Epic #85, E1.3: sticky the same way inside their
  * header cell, at the start of the columns that scroll, which the cell's box keeps them within;
- * their `data-grid-group-label` names the header cell's key).
+ * their `data-grid-group-label` names the header cell's key), and the loaded body rows of a grid
+ * whose rows are measured (`row`, Epic #86, E2.2: `GridView.measuredRows`; their
+ * `data-row-index` says which), whose heights, and the `detail` elements' while details or rows
+ * are measured, the engine reads (`ResizeObserver`) and writes nothing to.
  */
 export type EngineLayer =
     | "grid"
@@ -278,7 +360,8 @@ export type EngineLayer =
     | "body"
     | "pinned"
     | "detail"
-    | "label";
+    | "label"
+    | "row";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {
@@ -314,7 +397,8 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
      * Handles a press in the grid: a primary press on one of its column resizers starts a drag
      * (and is prevented: no focus, no text selection); one on a reorderable header cell (not on a
      * control inside it) drags the cell once it moves past a click's slop (and is not prevented:
-     * a click still focuses and sorts). Returns whether it did either. Like `click`, an adapter
+     * a click still focuses and sorts), and so does one on a row's drag handle while rows move
+     * (`reorderableRows`). Returns whether it did one. Like `click`, an adapter
      * calls it after the consumer's own handlers, so `preventDefault` cancels it.
      */
     pointerdown(event: PointerEvent): boolean;

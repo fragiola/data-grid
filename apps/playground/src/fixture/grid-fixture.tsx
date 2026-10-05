@@ -1,4 +1,6 @@
+import { moveRow } from "@fragiola/data-grid/local";
 import {
+    type CellInfo,
     type ColSpanArgs,
     type Column,
     type ColumnOrder,
@@ -10,6 +12,7 @@ import {
     type HeaderRowInfo,
     headerCellContent,
     type RowKey,
+    type RowMove,
     type SortColumn,
     useColumnResizer,
     useDataGrid,
@@ -17,8 +20,16 @@ import {
     useGridView,
     useGroupLabel,
     useHeaderCell,
+    useRowDragHandle,
 } from "@fragiola/data-grid-react";
-import { Profiler, StrictMode, useMemo, useState } from "react";
+import {
+    Profiler,
+    type ReactElement,
+    StrictMode,
+    useCallback,
+    useMemo,
+    useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
@@ -27,7 +38,9 @@ import { createRoot } from "react-dom/client";
 //   ?rows=1000000        the row count (rows are computed from their index, nothing is stored);
 //                        0 shows the empty state
 //   &columns=1000        the column count (100px each)
-//   &rowHeight=32        a row's height; &variable=1 makes it vary by index (24–48px)
+//   &rowHeight=32        a row's height; &variable=1 makes it vary by index (24–48px); `auto`
+//                        measures the rows (&estimate=35 until then): C1's cell holds 1 to 4
+//                        lines by index (`lines(index)`), a block each
 //   &maxScrollSize=…     the scroll scaling cap
 //   &width=800&height=600 the viewport's size
 //   &groups=1            column groups (two header rows): C0 spans both rows, then groups of 4
@@ -44,7 +57,9 @@ import { createRoot } from "react-dom/client";
 //                        instead (`<html dir>`), the grid given no direction
 //   &details=1           expandable rows: C0's cell holds an expander (`expand-<row>`); a
 //                        detail (&detailHeight=200 tall) holds a grid of its own
-//                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`)
+//                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`);
+//                        `auto` measures them (&detailEstimate=300 until then), a block 0, 40 or
+//                        80px tall by index (`detail-spacer-<row>`) after the button
 //   &controls=1          controls in cells: C2 a button (`edit-<row>`) and a link
 //                        (`open-<row>`), C3 a field (`field-<row>`) and a header button
 //                        (`header-menu`), C4 of row 0 an app's own tab stop (`kept`)
@@ -76,12 +91,20 @@ import { createRoot } from "react-dom/client";
 //   &stickyLabels=1      a group's name (and its toggle) in a label that stays in view while the
 //                        group scrolls (`useGroupLabel`, `label-<key>`), a block as wide as its
 //                        content
+//   &summaryTop=1        summary rows under the header (and &summaryBottom=1 at the bottom
+//                        edge): a cell shows `<position><index>:<column>` (`top0:3`); with
+//                        &span=1, C1's spans C1–C2 on every summary row; with &controls=1, C2's
+//                        holds a button (`summary-<position><index>`)
+//   &rowReorder=1        the rows move: C0's cell holds a drag handle (`handle-<id>`, the id
+//                        being the row's index before any move); the fixture keeps the rows'
+//                        order in its state and applies each move (`moveRow`), keyed by id; a
+//                        drop target is marked by the fixture's own CSS
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
-// `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups, and a
-// button before and after the grid take Tab.
+// `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups,
+// `window.rowMoves` the rows moved, and a button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -96,6 +119,7 @@ declare global {
         widthChanges: ColumnWidths[];
         orderChanges: ColumnOrder[];
         collapseChanges: (readonly string[])[];
+        rowMoves: RowMove[];
     }
 }
 
@@ -110,6 +134,50 @@ function Expose() {
 }
 
 const getRow = (index: number): FixtureRow => ({ index });
+
+/** A row's key with `&rowReorder=1`: its id, the index it had first. */
+const rowId = (row: FixtureRow) => row.index;
+
+/** How many lines C1's cell holds with `&rowHeight=auto`: 1 to 4, by index. */
+const lines = (index: number) => 1 + ((index * 7) % 4);
+
+/** What `&rowHeight=auto` puts in C1's cell: its lines, a block each (the row grows with them). */
+const linesColumn: Partial<Column<FixtureRow>> = {
+    renderCell: ({ row }) =>
+        Array.from(
+            { length: lines(row.index) },
+            (_, line) => `${row.index}:1 line ${line}`,
+        ).map((text) => <div key={text}>{text}</div>),
+};
+
+/** A row's drag handle, as an app writes it: the hook's props on an element of its own. */
+function RowHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
+    const { props } = useRowDragHandle(cell);
+    return (
+        <span
+            {...props}
+            data-testid={`handle-${cell.row?.index}`}
+            style={HANDLE_STYLE}
+        >
+            ≡
+        </span>
+    );
+}
+
+// a handle's look is the app's: a grip, with the browser's touch panning off
+const HANDLE_STYLE = {
+    cursor: "grab",
+    touchAction: "none",
+    userSelect: "none",
+    padding: "0 4px",
+} as const;
+
+// the row's drop indicator is the app's: a line above or below its target
+const ROW_DROP_CSS = `
+[data-grid-part="row"][data-drop-target="before"] { box-shadow: inset 0 3px 0 green; }
+[data-grid-part="row"][data-drop-target="after"] { box-shadow: inset 0 -3px 0 green; }
+[data-grid-part="row"][data-dragging] { opacity: 0.6; }
+`;
 
 /** What `&controls=1` puts in a column's cells (and header): controls of every kind. */
 function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
@@ -226,6 +294,10 @@ const TABLE = {
     cell: <td />,
     detail: <td />,
     empty: <tbody />,
+    summaryTop: <tbody />,
+    summaryBottom: <tfoot />,
+    summaryRow: <tr />,
+    summaryCell: <td />,
 };
 
 /** The `render` element of each part: a table's, or none (the parts' own divs). */
@@ -415,6 +487,36 @@ function spanColumn(
         : {};
 }
 
+/**
+ * What `&summaryTop`/`&summaryBottom` give a column: a summary cell's text (the app's own value,
+ * as a total would be), C2's a button with `&controls=1`; with `&span=1`, C1's spans C1–C2.
+ */
+function summaryColumn(
+    columnIndex: number,
+    controls: boolean,
+    span: boolean,
+): Partial<Column<FixtureRow>> {
+    return {
+        renderSummaryCell: ({ position, summaryIndex }) =>
+            controls && columnIndex === 2 ? (
+                <button
+                    type="button"
+                    data-testid={`summary-${position}${summaryIndex}`}
+                >
+                    sum
+                </button>
+            ) : (
+                `${position}${summaryIndex}:${columnIndex}`
+            ),
+        ...(span && columnIndex === 1
+            ? {
+                  colSpan: (args: ColSpanArgs<FixtureRow>) =>
+                      args.type === "summary" ? 2 : spansRow(args, 3),
+              }
+            : {}),
+    };
+}
+
 /** A cell's value: C1's wider with `&resize=1`, C3's wider still with `&autosize=1`. */
 function cellValue(
     columnIndex: number,
@@ -533,11 +635,52 @@ function HeaderRow({
     );
 }
 
+/**
+ * A position's summary rows, as an app writes them: after the header (top) or last (bottom),
+ * opaque and above the rows that scroll under them; nothing while the grid has none there.
+ */
+function SummaryRows({
+    position,
+    table,
+    render,
+}: {
+    position: "top" | "bottom";
+    table: boolean;
+    render: ReactElement | undefined;
+}) {
+    const tag = tags(table);
+    return (
+        <DataGrid.Summary
+            position={position}
+            render={render}
+            style={{ background: "white", zIndex: 1 }}
+        >
+            <DataGrid.SummaryRows>
+                {(row) => (
+                    <DataGrid.SummaryRow row={row} render={tag.summaryRow}>
+                        <DataGrid.SummaryCells<FixtureRow>>
+                            {(cell) => (
+                                <DataGrid.SummaryCell
+                                    cell={cell}
+                                    render={tag.summaryCell}
+                                    style={pinnedStyle}
+                                />
+                            )}
+                        </DataGrid.SummaryCells>
+                    </DataGrid.SummaryRow>
+                )}
+            </DataGrid.SummaryRows>
+        </DataGrid.Summary>
+    );
+}
+
 function Fixture({ kind }: { kind: "table" | "div" }) {
     const params = new URLSearchParams(location.search);
     const rowCount = numberParam(params, "rows", 1_000);
     const columnCount = numberParam(params, "columns", 20);
     const fixedHeight = numberParam(params, "rowHeight", 32);
+    const autoRows = params.get("rowHeight") === "auto";
+    const estimate = numberParam(params, "estimate", 35);
     const variable = params.get("variable") === "1";
     const maxScrollSize = params.has("maxScrollSize")
         ? numberParam(params, "maxScrollSize", 10_000_000)
@@ -559,6 +702,18 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const span = params.get("span") === "1";
     const collapsible = params.get("collapsible") === "1";
     const stickyLabels = params.get("stickyLabels") === "1";
+    const summaryTop = numberParam(params, "summaryTop", 0);
+    const summaryBottom = numberParam(params, "summaryBottom", 0);
+    const summary = summaryTop + summaryBottom > 0;
+    const rowReorder = params.get("rowReorder") === "1";
+    // the rows' order, by id (the index each row had first): the app's, moved on each move
+    const [rowOrder, setRowOrder] = useState<readonly number[]>(() =>
+        rowReorder ? Array.from({ length: rowCount }, (_, index) => index) : [],
+    );
+    const getOrderedRow = useCallback(
+        (index: number): FixtureRow => ({ index: rowOrder[index] ?? index }),
+        [rowOrder],
+    );
     const reorderParam = params.get("reorder");
     const reorder = reorderParam === "1" || reorderParam === "controlled";
     const controlledOrder = reorderParam === "controlled";
@@ -574,7 +729,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             locked >= 0 ? (row: FixtureRow) => row.index !== locked : undefined,
         [locked],
     );
-    const detailHeight = numberParam(params, "detailHeight", 200);
+    const autoDetails = params.get("detailHeight") === "auto";
+    const detailHeight = autoDetails
+        ? ("auto" as const)
+        : numberParam(params, "detailHeight", 200);
+    const detailEstimate = numberParam(params, "detailEstimate", 300);
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
 
@@ -599,6 +758,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     ...(flex ? flexColumn(columnIndex) : {}),
                     ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
                     ...(span ? spanColumn(columnIndex, columnCount) : {}),
+                    ...(summary
+                        ? summaryColumn(columnIndex, controls, span)
+                        : {}),
+                    ...(autoRows && columnIndex === 1 ? linesColumn : {}),
                     ...(reorder &&
                     reorderColumn(columnIndex, pinnedCount, pinnedEnd)
                         ? { reorderable: true }
@@ -640,11 +803,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         reorder,
         collapsible,
         rowSelection,
+        summary,
+        autoRows,
     ]);
     const rowHeight = useMemo(
         () =>
-            variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
-        [variable, fixedHeight],
+            autoRows
+                ? ("auto" as const)
+                : variable
+                  ? (index: number) => 24 + ((index * 7) % 25)
+                  : fixedHeight,
+        [autoRows, variable, fixedHeight],
     );
     const table = kind === "table";
     const tag = tags(table);
@@ -652,6 +821,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     return (
         <>
             {reorder ? <style>{DROP_TARGET_CSS}</style> : null}
+            {rowReorder ? <style>{ROW_DROP_CSS}</style> : null}
             <button type="button" data-testid="before">
                 before
             </button>
@@ -664,9 +834,33 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                 <DataGrid.Root<FixtureRow>
                     columns={columns}
                     rowCount={rowCount}
-                    getRow={getRow}
+                    getRow={rowReorder ? getOrderedRow : getRow}
+                    rowKey={rowReorder ? rowId : undefined}
+                    onRowMove={
+                        rowReorder
+                            ? (move) => {
+                                  window.rowMoves.push(move);
+                                  setRowOrder((order) =>
+                                      moveRow(
+                                          order,
+                                          move.fromIndex,
+                                          move.toIndex,
+                                      ),
+                                  );
+                              }
+                            : undefined
+                    }
                     rowHeight={rowHeight}
+                    estimatedRowHeight={autoRows ? estimate : undefined}
+                    summaryRows={
+                        summary
+                            ? { top: summaryTop, bottom: summaryBottom }
+                            : undefined
+                    }
                     detailHeight={details ? detailHeight : undefined}
+                    estimatedDetailHeight={
+                        autoDetails ? detailEstimate : undefined
+                    }
                     maxScrollSize={maxScrollSize}
                     onSortColumnsChange={(sortColumns) =>
                         window.sortChanges.push(sortColumns)
@@ -720,6 +914,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 <HeaderRow table={table} resize={resize} />
                             )}
                         </DataGrid.Header>
+                        <SummaryRows
+                            position="top"
+                            table={table}
+                            render={tag.summaryTop}
+                        />
                         <DataGrid.Body render={tag.body}>
                             <DataGrid.Rows<FixtureRow>>
                                 {(row) => (
@@ -731,15 +930,26 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                     render={tag.cell}
                                                     style={pinnedStyle}
                                                 >
-                                                    {details &&
+                                                    {(details || rowReorder) &&
                                                     cell.columnIndex === 0 ? (
                                                         <>
-                                                            {String(cell.value)}{" "}
-                                                            <Expander
-                                                                rowIndex={
-                                                                    cell.rowIndex
-                                                                }
-                                                            />
+                                                            {rowReorder &&
+                                                            cell.loaded ? (
+                                                                <RowHandle
+                                                                    cell={cell}
+                                                                />
+                                                            ) : null}
+                                                            {String(cell.value)}
+                                                            {details ? (
+                                                                <>
+                                                                    {" "}
+                                                                    <Expander
+                                                                        rowIndex={
+                                                                            cell.rowIndex
+                                                                        }
+                                                                    />
+                                                                </>
+                                                            ) : null}
                                                         </>
                                                     ) : undefined}
                                                 </DataGrid.Cell>
@@ -760,6 +970,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                 >
                                                     detail
                                                 </button>
+                                                {autoDetails ? (
+                                                    <div
+                                                        data-testid={`detail-spacer-${row.rowIndex}`}
+                                                        style={{
+                                                            height:
+                                                                (row.rowIndex %
+                                                                    3) *
+                                                                40,
+                                                        }}
+                                                    />
+                                                ) : null}
                                             </DataGrid.RowDetail>
                                         ) : null}
                                     </DataGrid.Row>
@@ -781,6 +1002,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 </div>
                             )}
                         </DataGrid.Empty>
+                        <SummaryRows
+                            position="bottom"
+                            table={table}
+                            render={tag.summaryBottom}
+                        />
                     </DataGrid.Grid>
                 </DataGrid.Root>
             </Profiler>
@@ -813,6 +1039,7 @@ export function mountGridFixture(kind: "table" | "div") {
     window.widthChanges = [];
     window.orderChanges = [];
     window.collapseChanges = [];
+    window.rowMoves = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

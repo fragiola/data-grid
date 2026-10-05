@@ -1,5 +1,10 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
-import { headerCellsIn, headerRowCount, pinnedEndFrom } from "../header/header";
+import {
+    headerCellsIn,
+    headerRowCount,
+    isHeaderRow,
+    pinnedEndFrom,
+} from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import { rowAt } from "../model/source";
 import {
@@ -12,6 +17,7 @@ import {
     spanAt,
     spanPartStart,
 } from "../model/spans";
+import { summaryRowIndexes } from "../model/summary";
 import type {
     CellPosition,
     ColumnWidths,
@@ -32,26 +38,38 @@ import type { GridView, HeaderRowView, RowSpans } from "./types";
 // the state, the windows and the sizes, and whether a new one differs from the last (scrolling
 // inside the overscan renders nothing). The header lookups the engine scrolls and focuses by too.
 
+/** The rows' own heights: measured ones (`"auto"`, E2.2) at their estimate, which an engine corrects. */
 export function rowAxisOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
 ): Axis {
-    return createAxis(state.rowCount, state.rowHeight);
+    const { rowHeight } = state;
+    return createAxis(
+        state.rowCount,
+        rowHeight === "auto" ? state.estimatedRowHeight : rowHeight,
+    );
 }
 
-/** The rows' axis with the expanded rows' details on top of their own heights (M2). */
+/**
+ * The rows' axis with the expanded rows' details on top of their own heights (M2): a measured
+ * detail (`"auto"`, E2.2) its height in `measured`, else its estimate.
+ */
 export function withDetails<TRow, TNode>(
     base: Axis,
     state: DataGridState<TRow, TNode>,
+    measured?: { heightAt(index: number): number | undefined },
 ): Axis {
     if (state.expandedRows.length === 0) return base;
     const { detailHeight, source } = state;
     const sizeOf =
         typeof detailHeight === "number"
             ? () => detailHeight
-            : (index: number) => {
-                  const row = rowAt(source, index);
-                  return row === undefined ? 0 : detailHeight(row, index);
-              };
+            : detailHeight === "auto"
+              ? (index: number) =>
+                    measured?.heightAt(index) ?? state.estimatedDetailHeight
+              : (index: number) => {
+                    const row = rowAt(source, index);
+                    return row === undefined ? 0 : detailHeight(row, index);
+                };
     return withExtraSizes(
         base,
         state.expandedRows.map((index) => ({ index, size: sizeOf(index) })),
@@ -134,10 +152,9 @@ export function activeColumn<TRow, TNode>(
     ) {
         return null;
     }
-    const cell =
-        active.rowIndex < 0
-            ? header.cellAt(active.rowIndex, active.columnIndex)
-            : activeSpan;
+    const cell = isHeaderRow(active.rowIndex, header)
+        ? header.cellAt(active.rowIndex, active.columnIndex)
+        : activeSpan;
     if (
         cell &&
         overlaps(
@@ -268,6 +285,8 @@ export interface ViewInputs<TRow, TNode>
         | "interaction"
         | "columnResize"
         | "columnReorder"
+        | "reorderableRows"
+        | "rowReorder"
         | "direction"
     > {
     readonly state: DataGridState<TRow, TNode>;
@@ -307,11 +326,24 @@ export function buildView<TRow, TNode>({
     );
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
+    // the active body row (a summary row is always rendered), and the row a drag is moving
+    // (E2.3): its handle holds the pointer while the edge scroll takes it out of the window
     const rows = indexes(
         rowWindow.rendered.start,
         rowWindow.rendered.end,
-        active && active.rowIndex >= 0 ? active.rowIndex : null,
+        active && active.rowIndex >= 0 && active.rowIndex < state.rowCount
+            ? active.rowIndex
+            : null,
     );
+    const dragged = measures.rowReorder?.rowIndex;
+    if (
+        dragged !== undefined &&
+        dragged < state.rowCount &&
+        !rows.includes(dragged)
+    ) {
+        const at = rows.findIndex((rowIndex) => rowIndex > dragged);
+        rows.splice(at < 0 ? rows.length : at, 0, dragged);
+    }
     // the pinned columns first and last, always rendered
     const columns = indexes(
         endFrom,
@@ -319,17 +351,29 @@ export function buildView<TRow, TNode>({
         null,
         indexes(start, end, extraColumn, indexes(0, pinnedCount, null)),
     );
+    const { summaryRows } = state;
     return {
         ...measures,
         rows,
         columns,
-        rowSpans: rowSpansOf(state, rows, columns),
+        // the summary rows' cells span too (E2.1)
+        rowSpans: rowSpansOf(
+            state,
+            summaryRows.top + summaryRows.bottom > 0 &&
+                hasColumnSpans(state.columns)
+                ? [...rows, ...summaryRowIndexes(state)]
+                : rows,
+            columns,
+        ),
         renderedRows: rowWindow.rendered,
         renderedColumns: columnWindow.rendered,
         rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
         columnBase: columnAxis.offsetOf(start),
         headerRowHeight: state.headerRowHeight,
         headerRowCount: rowsOfHeader,
+        summaryRows,
+        summaryRowHeight: state.summaryRowHeight,
+        summaryRevision: state.summaryRevision,
         headerRows: headerRowsFor(
             state.header,
             rowsOfHeader,
@@ -353,6 +397,8 @@ export function buildView<TRow, TNode>({
         isRowSelectable: state.isRowSelectable,
         collapsedGroupKeys: state.collapsedGroupKeys,
         givenDirection: state.direction,
+        measuredRows: state.rowHeight === "auto",
+        measuredDetails: state.detailHeight === "auto",
     };
 }
 
@@ -365,6 +411,9 @@ const VIEW_KEYS = [
     "height",
     "headerRowHeight",
     "header",
+    "summaryRows",
+    "summaryRowHeight",
+    "summaryRevision",
     "rowAxis",
     "columnAxis",
     "columnDefs",
@@ -383,8 +432,12 @@ const VIEW_KEYS = [
     "interaction",
     "columnResize",
     "columnReorder",
+    "reorderableRows",
+    "rowReorder",
     "direction",
     "givenDirection",
+    "measuredRows",
+    "measuredDetails",
 ] as const satisfies readonly (keyof GridView)[];
 
 /** Whether `next` renders anything `current` does not: a new view to publish. */
@@ -399,7 +452,7 @@ export function viewChanged<TRow, TNode>(
         return true;
     }
     if (VIEW_KEYS.some((key) => current[key] !== next[key])) return true;
-    const { expandedRows, renderedRows, active } = next;
+    const { expandedRows, renderedRows, active, rowReorder } = next;
     // the visible area matters only to an empty grid, and its width to the details on
     // screen (as wide as the view): a resize alone renders nothing else
     return (
@@ -407,9 +460,11 @@ export function viewChanged<TRow, TNode>(
             (current.viewportWidth !== next.viewportWidth ||
                 current.viewportBodyHeight !== next.viewportBodyHeight)) ||
         (current.viewportWidth !== next.viewportWidth &&
-            // an expanded row it renders (its rendered rows, or the active row)
+            // an expanded row it renders (its rendered rows, the active row, a dragged row)
             (holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
-                (active !== null && holdsRow(expandedRows, active.rowIndex))))
+                (active !== null && holdsRow(expandedRows, active.rowIndex)) ||
+                (rowReorder !== null &&
+                    holdsRow(expandedRows, rowReorder.rowIndex))))
     );
 }
 
@@ -429,8 +484,8 @@ export function elementPosition<TRow, TNode>(
 
 /**
  * The column to scroll to for a cell: its own, or for a cell spanning columns (a header cell's
- * span, `cellSpan` a body cell's under column spans), none while any of them is in view
- * (`visibleColumns`), else the one nearest to the view.
+ * span, `cellSpan` a body or summary row cell's under column spans), none while any of them is in
+ * view (`visibleColumns`), else the one nearest to the view.
  */
 export function columnToScrollTo<TRow, TNode>(
     position: CellPosition,
@@ -440,10 +495,9 @@ export function columnToScrollTo<TRow, TNode>(
     endFrom = Number.POSITIVE_INFINITY,
     cellSpan?: CellSpan,
 ): number | undefined {
-    const cell =
-        position.rowIndex >= 0
-            ? cellSpan
-            : header.cellAt(position.rowIndex, position.columnIndex);
+    const cell = isHeaderRow(position.rowIndex, header)
+        ? header.cellAt(position.rowIndex, position.columnIndex)
+        : cellSpan;
     if (!cell || cell.columnSpan <= 1) return position.columnIndex;
     // a pinned span is always in view
     if (

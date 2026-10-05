@@ -2,7 +2,9 @@
 // opt-in entry point: the grid itself never orders or filters rows, and an app that never imports
 // this never ships it.
 
+export { indexAfterMove } from "../utils";
 export type { LocalFilters } from "./filter";
+export { moveRow, moveShownRow, shownRowMove } from "./move";
 export { pageCount } from "./page";
 export {
     createLocalRows,
