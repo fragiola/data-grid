@@ -25,6 +25,12 @@ follows it as it changes.
 function is summed once into offsets, so positions stay exact at any scroll position. See the
 [`variable-row-height`](/examples/variable-row-height) example.
 
+`rowHeight="auto"` makes each row as tall as its content: the grid measures the rows as they
+render, counting the others at `estimatedRowHeight` (35 by default) until then. The cells set the
+height, so let their text wrap, and their padding counts. See
+[Measured heights](/docs/concepts/measured-heights) and the
+[`auto-row-heights`](/examples/auto-row-heights) example.
+
 <Callout type="warn" title="A function's identity is its version">
 A new `rowHeight` function means new sizes: every offset is computed again. Define it outside the
 component or memoise it (`useCallback`), and pass a new one only when heights change.
@@ -44,8 +50,3 @@ The grid can size columns itself ([Automatic widths](/docs/concepts/auto-widths)
 column takes its part of the width the others leave in the root, following the root as it
 changes, and an `autoSize` column fits its content once it renders. A column's width on screen is
 the width a person set, else its automatic width, else its flex share, else its `width`.
-
-<Callout type="warn" title="Measured heights come later">
-Row heights measured from the rendered content are not built yet. See
-[Limitations and roadmap](/docs/limitations).
-</Callout>

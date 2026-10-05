@@ -14,6 +14,7 @@ export type {
     PinnedSide,
     Range,
     ReorderSide,
+    RowHeight,
     RowKey,
     RowKeyGetter,
     RowSelectable,

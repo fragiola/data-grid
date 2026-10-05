@@ -146,6 +146,18 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * markup rendered before the grid attaches, or on a server, carries it
      */
     readonly givenDirection: GridDirection | undefined;
+    /**
+     * the loaded rows are as tall as their content (`rowHeight: "auto"`, Epic #86, E2.2): an
+     * adapter renders them without a height, their cells setting it (`measuredRow`), and
+     * registers them as the engine's `row` elements, which it measures; a row not loaded keeps
+     * its place's height, the estimate
+     */
+    readonly measuredRows: boolean;
+    /**
+     * the details are as tall as their content (`detailHeight: "auto"`): an adapter renders them
+     * without a height, and the engine measures its `detail` elements
+     */
+    readonly measuredDetails: boolean;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
@@ -284,7 +296,10 @@ export type EngineEventKey = keyof EngineEventMap;
  * expanded rows' details (`detail`: sticky the same way, at the view's start: as a column at
  * offset 0 would be), and group labels (`label`, Epic #85, E1.3: sticky the same way inside their
  * header cell, at the start of the columns that scroll, which the cell's box keeps them within;
- * their `data-grid-group-label` names the header cell's key).
+ * their `data-grid-group-label` names the header cell's key), and the loaded body rows of a grid
+ * whose rows are measured (`row`, Epic #86, E2.2: `GridView.measuredRows`; their
+ * `data-row-index` says which), whose heights, and the `detail` elements' while details or rows
+ * are measured, the engine reads (`ResizeObserver`) and writes nothing to.
  */
 export type EngineLayer =
     | "grid"
@@ -292,7 +307,8 @@ export type EngineLayer =
     | "body"
     | "pinned"
     | "detail"
-    | "label";
+    | "label"
+    | "row";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {

@@ -545,6 +545,19 @@ function validSize(size: unknown): boolean {
     );
 }
 
+/** A row's or a detail's height: a size, a function, or `"auto"` (measured, E2.2). */
+function validHeight(height: unknown): boolean {
+    return height === "auto" || validSize(height);
+}
+
+/**
+ * What a measured height starts from: a size above 0 (a window of rows of no height would hold
+ * them all).
+ */
+function validEstimate(size: unknown): size is number {
+    return typeof size === "number" && Number.isFinite(size) && size > 0;
+}
+
 /**
  * The commands' handlers. `hints` (where expanded keys were last seen) is a cache they share: a
  * dry run may fill it, and every use checks it first.
@@ -1042,10 +1055,19 @@ function createHandlers<TRow, TNode>(
         },
         "sizes.set": (
             state,
-            { rowHeight, headerRowHeight, summaryRowHeight, detailHeight },
+            {
+                rowHeight,
+                estimatedRowHeight,
+                headerRowHeight,
+                summaryRowHeight,
+                detailHeight,
+                estimatedDetailHeight,
+            },
         ) => {
-            if (rowHeight !== undefined && !validSize(rowHeight)) {
-                return invalid("rowHeight must be a size or a function");
+            if (rowHeight !== undefined && !validHeight(rowHeight)) {
+                return invalid(
+                    'rowHeight must be a size, a function or "auto"',
+                );
             }
             for (const [name, size] of [
                 ["headerRowHeight", headerRowHeight],
@@ -1058,17 +1080,31 @@ function createHandlers<TRow, TNode>(
                     return invalid(`${name} must be a size`);
                 }
             }
-            if (detailHeight !== undefined && !validSize(detailHeight)) {
-                return invalid("detailHeight must be a size or a function");
+            if (detailHeight !== undefined && !validHeight(detailHeight)) {
+                return invalid(
+                    'detailHeight must be a size, a function or "auto"',
+                );
+            }
+            for (const [name, size] of [
+                ["estimatedRowHeight", estimatedRowHeight],
+                ["estimatedDetailHeight", estimatedDetailHeight],
+            ] as const) {
+                if (size !== undefined && !validEstimate(size)) {
+                    return invalid(`${name} must be a size above 0`);
+                }
             }
             const next = reconcile(
                 {
                     ...state,
                     rowHeight: rowHeight ?? state.rowHeight,
+                    estimatedRowHeight:
+                        estimatedRowHeight ?? state.estimatedRowHeight,
                     headerRowHeight: headerRowHeight ?? state.headerRowHeight,
                     summaryRowHeight:
                         summaryRowHeight ?? state.summaryRowHeight,
                     detailHeight: detailHeight ?? state.detailHeight,
+                    estimatedDetailHeight:
+                        estimatedDetailHeight ?? state.estimatedDetailHeight,
                 },
                 state,
             );
@@ -1172,6 +1208,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         rowCount: 0,
         rowKey: undefined,
         rowHeight: options.rowHeight ?? DEFAULT_ROW_HEIGHT,
+        estimatedRowHeight: validEstimate(options.estimatedRowHeight)
+            ? options.estimatedRowHeight
+            : DEFAULT_ROW_HEIGHT,
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
         // counts that are not whole numbers start without summary rows
         summaryRows:
@@ -1187,6 +1226,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
         expandedRows: [],
         detailHeight: options.detailHeight ?? DEFAULT_DETAIL_HEIGHT,
+        estimatedDetailHeight: validEstimate(options.estimatedDetailHeight)
+            ? options.estimatedDetailHeight
+            : DEFAULT_DETAIL_HEIGHT,
         rowSelection: selectionMode,
         selectedRowKeys: keptRowKeys(
             uniqueRowKeys(options.selectedRowKeys ?? []) ?? [],

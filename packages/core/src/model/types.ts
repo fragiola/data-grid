@@ -302,12 +302,20 @@ export type RowKey = string | number;
 export type RowKeyGetter<TRow> = (row: TRow, index: number) => RowKey;
 
 /**
- * An expanded row's detail height in pixels (M2): one for all, or one per loaded row. It adds to
- * the row's own height in the row axis.
+ * A body row's height in pixels (D7): one for all, or one per index; or `"auto"`, as tall as its
+ * content, measured once rendered (Epic #86, E2.2: `estimatedRowHeight` until then).
+ */
+export type RowHeight = Size | "auto";
+
+/**
+ * An expanded row's detail height in pixels (M2): one for all, or one per loaded row; or `"auto"`,
+ * as tall as its content, measured once rendered (Epic #86, E2.2: `estimatedDetailHeight` until
+ * then). It adds to the row's own height in the row axis.
  */
 export type DetailHeight<TRow> =
     | number
-    | ((row: TRow, rowIndex: number) => number);
+    | ((row: TRow, rowIndex: number) => number)
+    | "auto";
 
 /**
  * How rows are selected (R2): one at a time, or many. A grid without it selects nothing.
@@ -367,7 +375,9 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly source: RowSource<TRow>;
     readonly rowCount: number;
     readonly rowKey: RowKeyGetter<TRow> | undefined;
-    readonly rowHeight: Size;
+    readonly rowHeight: RowHeight;
+    /** a measured row's height until it is measured (`rowHeight: "auto"`) */
+    readonly estimatedRowHeight: number;
     /** a header row's height; 0 for a grid without a header */
     readonly headerRowHeight: number;
     /**
@@ -402,6 +412,8 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** an expanded row's detail height */
     readonly detailHeight: DetailHeight<TRow>;
+    /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
+    readonly estimatedDetailHeight: number;
     /** how rows are selected; `undefined`: they are not (R2) */
     readonly rowSelection: RowSelection | undefined;
     /**
@@ -437,8 +449,13 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     rowCount?: number;
     getRow?: (index: number) => TRow | undefined;
     rowKey?: RowKeyGetter<TRow>;
-    /** a row's height in pixels, or a function of its index (default 35) */
-    rowHeight?: Size;
+    /**
+     * a row's height in pixels, or a function of its index (default 35); `"auto"`: as tall as its
+     * content, measured by an engine once rendered
+     */
+    rowHeight?: RowHeight;
+    /** a measured row's height until it is measured, in pixels (default 35) */
+    estimatedRowHeight?: number;
     /** a header row's height in pixels (default 35); 0 for no header */
     headerRowHeight?: number;
     /** how many summary rows the grid has at the top and at the bottom (default none) */
@@ -450,8 +467,13 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     sortColumns?: readonly SortColumn[];
     /** the keys of the rows expanded to start with (a key given twice counts once) */
     expandedRowKeys?: readonly RowKey[];
-    /** an expanded row's detail height in pixels, or a function of the row (default 300) */
+    /**
+     * an expanded row's detail height in pixels, or a function of the row (default 300); `"auto"`:
+     * as tall as its content, measured by an engine once rendered
+     */
     detailHeight?: DetailHeight<TRow>;
+    /** a measured detail's height until it is measured, in pixels (default 300) */
+    estimatedDetailHeight?: number;
     /** how rows are selected: one at a time, or many (default: not at all) */
     rowSelection?: RowSelection | undefined;
     /** the keys of the rows selected to start with (a key given twice counts once) */
@@ -719,15 +741,18 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: number;
     };
     /**
-     * changes the row height (a number or a function of the index), the header row's, a summary
-     * row's, or an expanded row's detail height
+     * changes the row height (a number, a function of the index or `"auto"`), the header row's, a
+     * summary row's, or an expanded row's detail height, and the estimates measured heights start
+     * from (a size above 0)
      */
     "sizes.set": {
         payload: {
-            readonly rowHeight?: Size | undefined;
+            readonly rowHeight?: RowHeight | undefined;
+            readonly estimatedRowHeight?: number | undefined;
             readonly headerRowHeight?: number | undefined;
             readonly summaryRowHeight?: number | undefined;
             readonly detailHeight?: DetailHeight<TRow> | undefined;
+            readonly estimatedDetailHeight?: number | undefined;
         };
         result: undefined;
     };
@@ -914,7 +939,7 @@ export interface QueryMap<TRow, TNode = unknown> {
     "column-order": { payload: undefined; result: ColumnOrder };
     /** the collapsed groups' keys, in the order they were collapsed */
     "collapsed-group-keys": { payload: undefined; result: readonly string[] };
-    "row-height": { payload: undefined; result: Size };
+    "row-height": { payload: undefined; result: RowHeight };
     "header-row-height": { payload: undefined; result: number };
     /** how many summary rows the grid has, at the top and at the bottom */
     "summary-rows": { payload: undefined; result: SummaryRowCounts };

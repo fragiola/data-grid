@@ -33,7 +33,9 @@ import { createRoot } from "react-dom/client";
 //   ?rows=1000000        the row count (rows are computed from their index, nothing is stored);
 //                        0 shows the empty state
 //   &columns=1000        the column count (100px each)
-//   &rowHeight=32        a row's height; &variable=1 makes it vary by index (24–48px)
+//   &rowHeight=32        a row's height; &variable=1 makes it vary by index (24–48px); `auto`
+//                        measures the rows (&estimate=35 until then): C1's cell holds 1 to 4
+//                        lines by index (`lines(index)`), a block each
 //   &maxScrollSize=…     the scroll scaling cap
 //   &width=800&height=600 the viewport's size
 //   &groups=1            column groups (two header rows): C0 spans both rows, then groups of 4
@@ -50,7 +52,9 @@ import { createRoot } from "react-dom/client";
 //                        instead (`<html dir>`), the grid given no direction
 //   &details=1           expandable rows: C0's cell holds an expander (`expand-<row>`); a
 //                        detail (&detailHeight=200 tall) holds a grid of its own
-//                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`)
+//                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`);
+//                        `auto` measures them (&detailEstimate=300 until then), a block 0, 40 or
+//                        80px tall by index (`detail-spacer-<row>`) after the button
 //   &controls=1          controls in cells: C2 a button (`edit-<row>`) and a link
 //                        (`open-<row>`), C3 a field (`field-<row>`) and a header button
 //                        (`header-menu`), C4 of row 0 an app's own tab stop (`kept`)
@@ -120,6 +124,18 @@ function Expose() {
 }
 
 const getRow = (index: number): FixtureRow => ({ index });
+
+/** How many lines C1's cell holds with `&rowHeight=auto`: 1 to 4, by index. */
+const lines = (index: number) => 1 + ((index * 7) % 4);
+
+/** What `&rowHeight=auto` puts in C1's cell: its lines, a block each (the row grows with them). */
+const linesColumn: Partial<Column<FixtureRow>> = {
+    renderCell: ({ row }) =>
+        Array.from(
+            { length: lines(row.index) },
+            (_, line) => `${row.index}:1 line ${line}`,
+        ).map((text) => <div key={text}>{text}</div>),
+};
 
 /** What `&controls=1` puts in a column's cells (and header): controls of every kind. */
 function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
@@ -621,6 +637,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const rowCount = numberParam(params, "rows", 1_000);
     const columnCount = numberParam(params, "columns", 20);
     const fixedHeight = numberParam(params, "rowHeight", 32);
+    const autoRows = params.get("rowHeight") === "auto";
+    const estimate = numberParam(params, "estimate", 35);
     const variable = params.get("variable") === "1";
     const maxScrollSize = params.has("maxScrollSize")
         ? numberParam(params, "maxScrollSize", 10_000_000)
@@ -660,7 +678,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             locked >= 0 ? (row: FixtureRow) => row.index !== locked : undefined,
         [locked],
     );
-    const detailHeight = numberParam(params, "detailHeight", 200);
+    const autoDetails = params.get("detailHeight") === "auto";
+    const detailHeight = autoDetails
+        ? ("auto" as const)
+        : numberParam(params, "detailHeight", 200);
+    const detailEstimate = numberParam(params, "detailEstimate", 300);
     const width = numberParam(params, "width", 800);
     const height = numberParam(params, "height", 600);
 
@@ -688,6 +710,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     ...(summary
                         ? summaryColumn(columnIndex, controls, span)
                         : {}),
+                    ...(autoRows && columnIndex === 1 ? linesColumn : {}),
                     ...(reorder &&
                     reorderColumn(columnIndex, pinnedCount, pinnedEnd)
                         ? { reorderable: true }
@@ -730,11 +753,16 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         collapsible,
         rowSelection,
         summary,
+        autoRows,
     ]);
     const rowHeight = useMemo(
         () =>
-            variable ? (index: number) => 24 + ((index * 7) % 25) : fixedHeight,
-        [variable, fixedHeight],
+            autoRows
+                ? ("auto" as const)
+                : variable
+                  ? (index: number) => 24 + ((index * 7) % 25)
+                  : fixedHeight,
+        [autoRows, variable, fixedHeight],
     );
     const table = kind === "table";
     const tag = tags(table);
@@ -756,12 +784,16 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     rowCount={rowCount}
                     getRow={getRow}
                     rowHeight={rowHeight}
+                    estimatedRowHeight={autoRows ? estimate : undefined}
                     summaryRows={
                         summary
                             ? { top: summaryTop, bottom: summaryBottom }
                             : undefined
                     }
                     detailHeight={details ? detailHeight : undefined}
+                    estimatedDetailHeight={
+                        autoDetails ? detailEstimate : undefined
+                    }
                     maxScrollSize={maxScrollSize}
                     onSortColumnsChange={(sortColumns) =>
                         window.sortChanges.push(sortColumns)
@@ -860,6 +892,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                 >
                                                     detail
                                                 </button>
+                                                {autoDetails ? (
+                                                    <div
+                                                        data-testid={`detail-spacer-${row.rowIndex}`}
+                                                        style={{
+                                                            height:
+                                                                (row.rowIndex %
+                                                                    3) *
+                                                                40,
+                                                        }}
+                                                    />
+                                                ) : null}
                                             </DataGrid.RowDetail>
                                         ) : null}
                                     </DataGrid.Row>

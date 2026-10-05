@@ -19,6 +19,7 @@ import {
     headerCellBox,
     headerCellPart,
     inlineStart,
+    measuredRow,
     type RowDetailState,
     type RowState,
     renderedWidth,
@@ -161,32 +162,50 @@ export function inlineSide(
 /**
  * A row's structural style (a header row's too, at `top`): in its layer, from `rowLeft`, as wide
  * as its rendered cells (an expanded row, as what holds its detail); with pinned columns, a flex
- * container their sticky cells stack in.
+ * container their sticky cells stack in. A `measured` body row (Epic #86) has no height: a grid
+ * whose one area its cells share, as tall as the tallest, its detail in the area below.
  */
 export function rowStyle<TRow>(
     view: GridView<TRow, ReactNode>,
     top: number,
     height: number,
     width: number = renderedWidth(view),
+    measured = false,
 ): React.CSSProperties {
-    const display = rowDisplay(view);
+    const display = measured ? "grid" : rowDisplay(view);
     return {
         position: "absolute",
         ...(display ? { display } : {}),
         top,
         [inlineSide(view.direction)]: rowLeft(view),
         width,
-        height,
+        ...(measured ? {} : { height }),
         boxSizing: "border-box",
     };
 }
 
-/** A body row's state, and the props for its element (ARIA, `data-*`, structural style). */
+/**
+ * A body row's state, and the props for its element (ARIA, `data-*`, structural style). A row
+ * measured (`rowHeight: "auto"`) has a `ref` among them too: the engine reads its height.
+ */
 export function useRow<TRow>(row: RowInfo<TRow>): PartHookResult<RowState> {
+    const { state, props, ref } = useRowPart(row);
+    return { state, props: ref ? { ...props, ref } : props };
+}
+
+/** `useRow`, its `ref` apart: a measured row's registration with the engine, else `undefined`. */
+export function useRowPart<TRow>(
+    row: RowInfo<TRow>,
+): PartHookResult<RowState> & {
+    ref: React.RefCallback<HTMLElement> | undefined;
+} {
     const view = useGridView<TRow>();
+    const { engine } = useRootGrid();
     const { state, ariaSelected } = rowPart(view, row.rowIndex, row.loaded);
+    const measured = measuredRow(view, row.loaded);
     return {
         state,
+        ref: measured ? layerRef(engine, "row") : undefined,
         props: {
             role: "row",
             "aria-rowindex": ariaRowIndex(view, row.rowIndex),
@@ -207,6 +226,7 @@ export function useRow<TRow>(row: RowInfo<TRow>): PartHookResult<RowState> {
                 rowTop(view, row.rowIndex),
                 view.rowAxis.sizeOf(row.rowIndex),
                 rowWidth(view, row.rowIndex),
+                measured,
             ),
         },
     };
@@ -242,7 +262,8 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
  * `data-*` and their structural style. A cell that scrolls is positioned in its row (from its
  * inline start); a pinned one is in the row's flow, `sticky`: the browser's scrolling keeps it in
  * place, at the inline start inset the engine writes (it is the engine's, like a layer's
- * transform).
+ * transform). In a `measured` row (Epic #86) every cell is in its row's one grid area, at its
+ * inline start margin, as tall as the row's tallest cell (no height of its own).
  */
 function cellProps<TRow>(
     view: GridView<TRow, ReactNode>,
@@ -252,6 +273,7 @@ function cellProps<TRow>(
         readonly width: number;
         readonly height: number;
     },
+    measured = false,
 ): PartHookResult<unknown>["props"] {
     const { state } = part;
     // a header cell's state is the one with a `group` (its sort comes with it), a summary row
@@ -295,18 +317,30 @@ function cellProps<TRow>(
             dragging: header?.dragging,
             "drop-target": header?.dropTarget ?? undefined,
         }),
-        style: pinned
-            ? { position: "sticky", width, height, boxSizing: "border-box" }
-            : {
-                  position: "absolute",
-                  top: 0,
-                  [inlineSide(view.direction)]: box.left,
+        style: measured
+            ? {
+                  position: pinned ? "sticky" : "relative",
+                  gridArea: CELLS_AREA,
+                  [inlineSide(view.direction, "margin")]: box.left,
                   width,
-                  height,
                   boxSizing: "border-box",
-              },
+              }
+            : pinned
+              ? { position: "sticky", width, height, boxSizing: "border-box" }
+              : {
+                    position: "absolute",
+                    top: 0,
+                    [inlineSide(view.direction)]: box.left,
+                    width,
+                    height,
+                    boxSizing: "border-box",
+                },
     };
 }
+
+/** A measured row's grid areas (Epic #86): its cells share the first, its detail the one below. */
+const CELLS_AREA = "1 / 1";
+const DETAIL_AREA = "2 / 1";
 
 /**
  * A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. A cell
@@ -320,21 +354,29 @@ export function useCell<TRow>(cell: CellInfo<TRow>): PartHookResult<CellState> {
 /** `useCell`, and how many columns the cell spans (a table cell's `colSpan`). */
 export function useCellPart<TRow>(
     cell: CellInfo<TRow>,
-): PartHookResult<CellState> & { columnSpan: number } {
+): PartHookResult<CellState> & { columnSpan: number; measured: boolean } {
     const view = useGridView<TRow>();
-    return cellPartProps(view, cellPart(view, cell), cell);
+    return cellPartProps(
+        view,
+        cellPart(view, cell),
+        cell,
+        undefined,
+        measuredRow(view, cell.loaded),
+    );
 }
 
 /**
  * A body or summary row cell's part as a hook returns it, with its span: its state, its props
- * (`cellProps`) on its box in its row, `height` tall (default: its row's own height).
+ * (`cellProps`) on its box in its row, `height` tall (default: its row's own height), or in a
+ * `measured` row as tall as its row's tallest cell.
  */
 function cellPartProps<TRow, P extends CellPart | SummaryCellPart>(
     view: GridView<TRow, ReactNode>,
     part: P,
     cell: { readonly rowIndex: number; readonly columnIndex: number },
     height?: number,
-): PartHookResult<P["state"]> & { columnSpan: number } {
+    measured = false,
+): PartHookResult<P["state"]> & { columnSpan: number; measured: boolean } {
     const columnSpan = part.ariaColSpan ?? 1;
     return {
         state: part.state,
@@ -342,8 +384,10 @@ function cellPartProps<TRow, P extends CellPart | SummaryCellPart>(
             view,
             part,
             cellBox(view, cell.rowIndex, cell.columnIndex, columnSpan, height),
+            measured,
         ),
         columnSpan,
+        measured,
     };
 }
 
@@ -360,6 +404,8 @@ export function useRowDetail<TRow>(
     const { state, box } = rowDetailPart(view, row.rowIndex);
     if (!box) return { state, props: { style: {} } };
     const flex = rowDisplay(view) === "flex";
+    // a measured detail is as tall as its content (Epic #86)
+    const height = view.measuredDetails ? {} : { height: box.height };
     return {
         state,
         props: {
@@ -369,21 +415,36 @@ export function useRowDetail<TRow>(
                 "grid-part": "row-detail",
                 "row-index": row.rowIndex,
             }),
-            style: {
-                position: "sticky",
-                display: "block",
-                marginTop: box.top,
-                // in a row of pinned cells (flex), from the row's start, never shrunk
-                ...(flex
-                    ? {
-                          [inlineSide(view.direction, "margin")]: box.start,
-                          flexShrink: 0,
-                      }
-                    : {}),
-                width: box.width,
-                height: box.height,
-                boxSizing: "border-box",
-            },
+            // in a measured row, the area below its cells'
+            style: measuredRow(view, row.loaded)
+                ? {
+                      position: "sticky",
+                      display: "block",
+                      gridArea: DETAIL_AREA,
+                      width: box.width,
+                      ...height,
+                      boxSizing: "border-box",
+                  }
+                : {
+                      position: "sticky",
+                      display: "block",
+                      marginTop: box.top,
+                      // in a row of pinned cells (flex), from the row's start, never shrunk,
+                      // and measured, never stretched to the row's height
+                      ...(flex
+                          ? {
+                                [inlineSide(view.direction, "margin")]:
+                                    box.start,
+                                flexShrink: 0,
+                                ...(view.measuredDetails
+                                    ? { alignSelf: "flex-start" }
+                                    : {}),
+                            }
+                          : {}),
+                      width: box.width,
+                      ...height,
+                      boxSizing: "border-box",
+                  },
         },
     };
 }
@@ -613,7 +674,10 @@ export function useSummaryCell<TRow>(
 /** `useSummaryCell`, and how many columns the cell spans (a table cell's `colSpan`). */
 export function useSummaryCellPart<TRow>(
     cell: SummaryCellInfo<TRow>,
-): PartHookResult<SummaryCellState> & { columnSpan: number } {
+): PartHookResult<SummaryCellState> & {
+    columnSpan: number;
+    measured: boolean;
+} {
     const view = useGridView<TRow>();
     return cellPartProps(
         view,

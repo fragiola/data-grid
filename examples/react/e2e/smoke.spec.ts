@@ -21,6 +21,7 @@ const REPRESENTATIVE: string[] = [
     "column-spanning", // cells and header cells spanning columns, a tint filling a span
     "collapsible-groups", // three header rows, the toggles and the labels that stay in view
     "summary-rows", // sticky rows under the header and at the bottom edge, a span among them
+    "auto-row-heights", // rows as tall as their wrapped text, measured: padding and lines counted
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

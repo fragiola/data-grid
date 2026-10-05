@@ -91,6 +91,10 @@
                     "path": "concepts/summary-rows"
                 },
                 {
+                    "label": "Measured heights",
+                    "path": "concepts/measured-heights"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

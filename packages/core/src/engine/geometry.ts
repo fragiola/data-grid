@@ -342,6 +342,19 @@ export function rowSelectable<TRow, TNode>(
     return isRowSelectable(view, rowIndex);
 }
 
+/**
+ * Whether a body row takes its height from its cells (Epic #86, E2.2): rows are measured
+ * (`rowHeight: "auto"`) and it is loaded (a row not loaded keeps its place's height, the
+ * estimate). Its cells are then in its flow, one grid area (`display: grid`), each at its
+ * inline start margin, as tall as the tallest; its detail in the area below them.
+ */
+export function measuredRow<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    loaded: boolean,
+): boolean {
+    return view.measuredRows && loaded;
+}
+
 /** A row's own height: its cells', without its detail. */
 export function rowCellsHeight<TRow, TNode>(
     view: GridView<TRow, TNode>,

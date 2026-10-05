@@ -82,8 +82,15 @@ meanwhile, and its box holds the detail, so a row's background covers both.
 The part is a block, so lay out its content inside your own element. As a table, render it as a
 `<td>` (`render={<td />}`), which then gets a `colSpan` over every column.
 
-Rows expanding or collapsing above the view keep the view where it is. A detail's height is the
-one you give: heights measured from the content are a later step.
+Rows expanding or collapsing above the view keep the view where it is.
+
+### A detail as tall as its content
+
+`detailHeight="auto"` measures each detail once it renders: no height to compute, the detail is as
+tall as what you put in it (its padding and borders included), and `estimatedDetailHeight` (300
+by default) until it is measured. A detail that grows later (content loading into it) lays the
+rows out again, the view kept where it is. It works with rows of a fixed height and with
+[measured rows](/docs/concepts/measured-heights). The example's switch measures its details.
 
 ## Keys and focus
 

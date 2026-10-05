@@ -50,10 +50,13 @@ The only inline style a part sets is what places it: `position` (`sticky` on the
 empty state, [pinned](/docs/concepts/pinned-columns) cells, a row's
 [detail](/docs/guides/master-detail) and a group's
 [label](/docs/concepts/collapsible-groups#sticky-labels)), `top`, `left`, `width`, `height`, the layers'
-`transform`, `display` (`flex` on rows with pinned columns), the root's `overflow`,
+`transform`, `display` (`flex` on rows with pinned columns, `grid` on
+[measured](/docs/concepts/measured-heights) rows), the root's `overflow`,
 `box-sizing`, with [column groups](/docs/concepts/column-groups) a `z-index` between header rows
 (an upper row stays above the next), and on a detail `margin-top` (below its row's cells) and,
-beside pinned cells, `margin-left` and `flex-shrink`. Your style is
+beside pinned cells, `margin-left` and `flex-shrink`. In a measured row, its cells and detail take
+a `grid-area` and the cells their place as an inline start margin, with no height; a measured
+detail beside pinned cells takes `align-self`. Your style is
 merged under these keys, which always win. Nothing cosmetic is ever set: see the
 [`unstyled`](/examples/unstyled) example.
 

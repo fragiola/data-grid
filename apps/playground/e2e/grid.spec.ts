@@ -4119,5 +4119,396 @@ for (const kind of KINDS) {
                 await expectSticky(page, viewport, 0, 100_000);
             });
         });
+
+        test.describe("measured heights", () => {
+            const AUTO = {
+                rows: 100_000,
+                columns: 8,
+                rowHeight: "auto",
+            } as const;
+
+            /** How many lines the fixture's C1 holds in a row (`lines` in the fixture). */
+            const lines = (index: number) => 1 + ((index * 7) % 4);
+
+            /**
+             * The rendered body rows, by index: their top from the viewport's top, their height,
+             * and their cells' (an inner grid's rows left out).
+             */
+            async function rowBoxes(viewport: Locator) {
+                return viewport.evaluate((element) => {
+                    const view = element.getBoundingClientRect();
+                    return [
+                        ...element.querySelectorAll<HTMLElement>(
+                            '[data-grid-part="row"]',
+                        ),
+                    ]
+                        .filter(
+                            (row) =>
+                                row.closest('[data-grid-part="root"]') ===
+                                element,
+                        )
+                        .map((row) => {
+                            const box = row.getBoundingClientRect();
+                            return {
+                                index: Number(
+                                    row.getAttribute("data-row-index"),
+                                ),
+                                top: box.top - view.top,
+                                height: box.height,
+                                cells: [
+                                    ...row.querySelectorAll(
+                                        ':scope > [data-grid-part="cell"]',
+                                    ),
+                                ].map((cell) => {
+                                    const own = cell.getBoundingClientRect();
+                                    return {
+                                        column: Number(
+                                            cell.getAttribute(
+                                                "data-column-index",
+                                            ),
+                                        ),
+                                        left: own.left - view.left,
+                                        right: view.right - own.right,
+                                        top: own.top - view.top,
+                                        height: own.height,
+                                    };
+                                }),
+                            };
+                        })
+                        .sort((a, b) => a.index - b.index);
+                });
+            }
+
+            /** A row's top from the viewport's top. */
+            async function rowTop(viewport: Locator, rowIndex: number) {
+                return viewport.evaluate((element, index) => {
+                    const row = element.querySelector(
+                        `[data-grid-part="row"][data-row-index="${index}"]`,
+                    );
+                    if (!row) throw new Error(`row ${index} is not rendered`);
+                    return (
+                        row.getBoundingClientRect().top -
+                        element.getBoundingClientRect().top
+                    );
+                }, rowIndex);
+            }
+
+            /** The first row whose top is in the middle of the body. */
+            async function rowInView(viewport: Locator) {
+                const boxes = await rowBoxes(viewport);
+                const row = boxes.find((box) => box.top > 180 && box.top < 360);
+                if (!row) throw new Error("no row in view");
+                return row;
+            }
+
+            /** Collects the page's errors (an observer's loop reported among them). */
+            function errorsOf(page: Page) {
+                const errors: string[] = [];
+                page.on("pageerror", (error) => errors.push(String(error)));
+                page.on("console", (message) => {
+                    if (message.type() === "error") errors.push(message.text());
+                });
+                return errors;
+            }
+
+            /** Every rendered row ends where the next one starts, its cells as tall as it. */
+            function expectEndToEnd(
+                boxes: Awaited<ReturnType<typeof rowBoxes>>,
+            ) {
+                for (const [at, box] of boxes.entries()) {
+                    const next = boxes[at + 1];
+                    if (next && next.index === box.index + 1) {
+                        expect(
+                            Math.abs(box.top + box.height - next.top),
+                            `row ${box.index}`,
+                        ).toBeLessThan(0.6);
+                    }
+                    for (const cell of box.cells) {
+                        expect(
+                            Math.abs(cell.top - box.top),
+                            `row ${box.index}`,
+                        ).toBeLessThan(0.6);
+                        expect(
+                            Math.abs(cell.height - box.height),
+                            `row ${box.index}, column ${cell.column}`,
+                        ).toBeLessThan(0.6);
+                    }
+                }
+            }
+
+            test("lays rows out at their content's height, end to end, the axis holding what was measured", async ({
+                page,
+            }) => {
+                const errors = errorsOf(page);
+                const viewport = await open(page, kind, AUTO);
+                const boxes = await rowBoxes(viewport);
+                expect(boxes.length).toBeGreaterThan(8);
+                expectEndToEnd(boxes);
+                // a row grows with its lines: four are taller than three, and so on
+                const byLines = new Map<number, number>();
+                for (const box of boxes) {
+                    byLines.set(lines(box.index), box.height);
+                    // the row's element carries no height of its own
+                    expect(
+                        await page
+                            .locator(
+                                `[data-grid-part="row"][data-row-index="${box.index}"]`,
+                            )
+                            .evaluate(
+                                (row) => (row as HTMLElement).style.height,
+                            ),
+                    ).toBe("");
+                }
+                for (let count = 2; count <= 4; count++) {
+                    expect(byLines.get(count)).toBeGreaterThan(
+                        byLines.get(count - 1) ?? 0,
+                    );
+                }
+                const sizes = await page.evaluate(
+                    (indexes) => {
+                        const axis =
+                            window.grid?.engine.adapter.getView().rowAxis;
+                        return indexes.map((index) => axis?.sizeOf(index));
+                    },
+                    [boxes[0]?.index ?? 0, 50_000],
+                );
+                // what was measured, and the estimate for a row never rendered
+                expect(sizes[0]).toBeCloseTo(boxes[0]?.height ?? 0, 1);
+                expect(sizes[1]).toBe(35);
+                expect(errors).toEqual([]);
+            });
+
+            test("keeps what a scroll shows where it put it while the rows it brings into view are measured", async ({
+                page,
+            }) => {
+                const errors = errorsOf(page);
+                const viewport = await open(page, kind, AUTO);
+                await scroll(page, viewport, 1_750_000);
+                expectEndToEnd(await rowBoxes(viewport));
+                for (const delta of [-250, -250, -150, 250, -200]) {
+                    const seen = await rowInView(viewport);
+                    await scroll(
+                        page,
+                        viewport,
+                        (await viewport.evaluate((e) => e.scrollTop)) + delta,
+                    );
+                    expect(
+                        Math.abs(
+                            (await rowTop(viewport, seen.index)) -
+                                (seen.top - delta),
+                        ),
+                        `row ${seen.index} after ${delta}`,
+                    ).toBeLessThan(1);
+                    expectEndToEnd(await rowBoxes(viewport));
+                }
+                expect(errors).toEqual([]);
+            });
+
+            test("keeps the view anchored under scroll scaling: the wheel moves what it shows by its delta", async ({
+                page,
+            }) => {
+                const errors = errorsOf(page);
+                const viewport = await open(page, kind, {
+                    ...AUTO,
+                    maxScrollSize: 500_000,
+                });
+                expect(
+                    await page.evaluate(
+                        () => window.grid?.engine.get("scroll-scaled").rows,
+                    ),
+                ).toBe(true);
+                await scroll(page, viewport, 250_000);
+                expectEndToEnd(await rowBoxes(viewport));
+                const box = await boxOf(viewport);
+                await page.mouse.move(box.x + 200, box.y + 300);
+                for (const delta of [-250, -250, 200, -150]) {
+                    const seen = await rowInView(viewport);
+                    await page.mouse.wheel(0, delta);
+                    await settle(page);
+                    await settle(page);
+                    expect(
+                        Math.abs(
+                            (await rowTop(viewport, seen.index)) -
+                                (seen.top - delta),
+                        ),
+                        `row ${seen.index} after ${delta}`,
+                    ).toBeLessThan(1);
+                    expectEndToEnd(await rowBoxes(viewport));
+                }
+                expect(errors).toEqual([]);
+            });
+
+            test("lands the keys and scroll-to-cell on rows as tall as their content", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, AUTO);
+                await cell(page, 2, 1).click();
+                for (let step = 1; step <= 20; step++) {
+                    await page.keyboard.press("ArrowDown");
+                    await settle(page);
+                    const target = cell(page, 2 + step, 1);
+                    await expect(target).toBeFocused();
+                    await expectFullyInBody(viewport, target);
+                }
+                await page.keyboard.press("PageDown");
+                await settle(page);
+                const paged = (await active(page))?.rowIndex ?? 0;
+                expect(paged).toBeGreaterThan(22);
+                await expectFullyInBody(viewport, cell(page, paged, 1));
+                await page.evaluate(() =>
+                    window.grid?.engine.run("scroll-to-cell", {
+                        rowIndex: 60_000,
+                        columnIndex: 1,
+                    }),
+                );
+                await settle(page);
+                await settle(page);
+                await expectFullyInBody(viewport, cell(page, 60_000, 1));
+                await page.keyboard.press("ControlOrMeta+End");
+                await settle(page);
+                await settle(page);
+                const last = cell(page, 99_999, 7);
+                await expect(last).toBeFocused();
+                await expectFullyInBody(viewport, last);
+            });
+
+            for (const [rowHeight, pinned] of [
+                [32, 0],
+                [32, 1],
+                ["auto", 0],
+                ["auto", 1],
+            ] as const) {
+                test(`measures a detail at its content's height (rows ${rowHeight}, ${pinned} pinned)`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        rows: 1_000,
+                        columns: 8,
+                        details: 1,
+                        detailHeight: "auto",
+                        rowHeight,
+                        pinned,
+                    });
+                    const measured = async (rowIndex: number) =>
+                        viewport.evaluate((element, index) => {
+                            const target = element.querySelector(
+                                `[data-grid-part="row-detail"][data-row-index="${index}"]`,
+                            );
+                            // the grid's own row: the inner grid's come first
+                            const next = [
+                                ...element.querySelectorAll(
+                                    `[data-grid-part="row"][data-row-index="${index + 1}"]`,
+                                ),
+                            ].find(
+                                (row) =>
+                                    row.closest('[data-grid-part="root"]') ===
+                                    element,
+                            );
+                            const spacer = element.querySelector(
+                                `[data-testid="detail-spacer-${index}"]`,
+                            );
+                            if (!target || !next || !spacer) {
+                                throw new Error("no detail");
+                            }
+                            const box = target.getBoundingClientRect();
+                            return {
+                                top: box.top,
+                                height: box.height,
+                                // its content: from its top to its last block's end
+                                content:
+                                    spacer.getBoundingClientRect().bottom -
+                                    box.top +
+                                    Number.parseFloat(
+                                        getComputedStyle(target).paddingBottom,
+                                    ),
+                                next: next.getBoundingClientRect().top,
+                                extra: window.grid?.engine.adapter
+                                    .getView()
+                                    .rowAxis.extraSizeOf(index),
+                            };
+                        }, rowIndex);
+                    await page.getByTestId("expand-2").click();
+                    await settle(page);
+                    await page.getByTestId("expand-4").click();
+                    await settle(page);
+                    const two = await measured(2);
+                    const four = await measured(4);
+                    for (const detail of [two, four]) {
+                        expect(detail.height).toBeCloseTo(detail.content, 0);
+                        expect(detail.extra).toBeCloseTo(detail.height, 1);
+                        // the next row right after it
+                        expect(
+                            Math.abs(detail.top + detail.height - detail.next),
+                        ).toBeLessThan(0.6);
+                    }
+                    // row 2's block is 80px tall, row 4's 40px
+                    expect(two.height - four.height).toBeCloseTo(40, 0);
+                    expectEndToEnd(
+                        (await rowBoxes(viewport)).filter(
+                            (box) => box.index !== 2 && box.index !== 4,
+                        ),
+                    );
+                });
+            }
+
+            for (const direction of ["ltr", "rtl"] as const) {
+                test(`keeps pinned and spanning cells aligned with measured rows (${direction})`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        ...AUTO,
+                        columns: 30,
+                        pinned: 1,
+                        pinnedEnd: 1,
+                        span: 1,
+                        ...(direction === "rtl" ? { dir: "rtl" } : {}),
+                    });
+                    // a spanning cell (every fifth row) is as tall as its row
+                    const spanning = page.locator(
+                        '[data-grid-part="cell"][aria-colspan="3"]',
+                    );
+                    expect(await spanning.count()).toBeGreaterThan(0);
+                    expectEndToEnd(await rowBoxes(viewport));
+                    await viewport.evaluate((element, rtl) => {
+                        element.scrollLeft = rtl ? -900 : 900;
+                    }, direction === "rtl");
+                    await settle(page);
+                    const boxes = await rowBoxes(viewport);
+                    expectEndToEnd(boxes);
+                    for (const box of boxes) {
+                        const first = box.cells.find((c) => c.column === 0);
+                        const last = box.cells.find((c) => c.column === 29);
+                        // the pinned ones at the view's start and end
+                        const start =
+                            direction === "rtl" ? first?.right : first?.left;
+                        const end =
+                            direction === "rtl" ? last?.left : last?.right;
+                        expect(
+                            Math.abs(start ?? 99),
+                            `row ${box.index}`,
+                        ).toBeLessThan(1);
+                        expect(
+                            Math.abs(end ?? 99),
+                            `row ${box.index}`,
+                        ).toBeLessThan(1);
+                    }
+                });
+            }
+
+            test("does not render React while scrolling inside the overscan", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, AUTO);
+                await scroll(page, viewport, 35 * 1_000);
+                await scroll(page, viewport, 35 * 1_000 + 10);
+                const before = await page.evaluate(() => window.commits);
+                await scroll(page, viewport, 35 * 1_000 + 40);
+                expect(await page.evaluate(() => window.commits)).toBe(before);
+                await scroll(page, viewport, 35 * 1_000 + 2_000);
+                expect(
+                    await page.evaluate(() => window.commits),
+                ).toBeGreaterThan(before);
+            });
+        });
     });
 }

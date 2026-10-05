@@ -43,8 +43,8 @@ import {
     useHeaderCells,
     useHeaderRowOf,
     useHeaderRows,
-    useRow,
     useRowDetail,
+    useRowPart,
     useRows,
     useSummaryCellPart,
     useSummaryCells,
@@ -433,7 +433,14 @@ export type RowProps<TRow> = DivPrimitiveProps<RowState> & {
  */
 export function Row<TRow>(props: RowProps<TRow>) {
     const { row, children = <Cells />, ...rest } = props;
-    const element = useRenderElement("div", rest, { ...useRow(row), children });
+    const own = useRowPart(row);
+    const element = useRenderElement("div", rest, {
+        state: own.state,
+        props: own.props,
+        // a measured row's height is read by the engine (Epic #86)
+        ref: own.ref,
+        children,
+    });
     return <RowContext value={row as RowInfo}>{element}</RowContext>;
 }
 
@@ -463,6 +470,8 @@ function useCellElement<State extends { readonly pinned: boolean }>(
         readonly state: State;
         readonly props: Record<string, unknown>;
         readonly columnSpan: number;
+        /** in a measured row (Epic #86): placed by the grid, its insets dropped as a pinned cell's */
+        readonly measured: boolean;
     },
     content: ReactNode,
 ) {
@@ -472,7 +481,7 @@ function useCellElement<State extends { readonly pinned: boolean }>(
         props: withTableSpans(own.props, rest.render, own.columnSpan),
         children: content,
         ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
-        drop: own.state.pinned ? PINNED_KEYS : undefined,
+        drop: own.state.pinned || own.measured ? PINNED_KEYS : undefined,
     });
 }
 

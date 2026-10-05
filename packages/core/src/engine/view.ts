@@ -38,26 +38,38 @@ import type { GridView, HeaderRowView, RowSpans } from "./types";
 // the state, the windows and the sizes, and whether a new one differs from the last (scrolling
 // inside the overscan renders nothing). The header lookups the engine scrolls and focuses by too.
 
+/** The rows' own heights: measured ones (`"auto"`, E2.2) at their estimate, which an engine corrects. */
 export function rowAxisOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
 ): Axis {
-    return createAxis(state.rowCount, state.rowHeight);
+    const { rowHeight } = state;
+    return createAxis(
+        state.rowCount,
+        rowHeight === "auto" ? state.estimatedRowHeight : rowHeight,
+    );
 }
 
-/** The rows' axis with the expanded rows' details on top of their own heights (M2). */
+/**
+ * The rows' axis with the expanded rows' details on top of their own heights (M2): a measured
+ * detail (`"auto"`, E2.2) its height in `measured`, else its estimate.
+ */
 export function withDetails<TRow, TNode>(
     base: Axis,
     state: DataGridState<TRow, TNode>,
+    measured?: { heightAt(index: number): number | undefined },
 ): Axis {
     if (state.expandedRows.length === 0) return base;
     const { detailHeight, source } = state;
     const sizeOf =
         typeof detailHeight === "number"
             ? () => detailHeight
-            : (index: number) => {
-                  const row = rowAt(source, index);
-                  return row === undefined ? 0 : detailHeight(row, index);
-              };
+            : detailHeight === "auto"
+              ? (index: number) =>
+                    measured?.heightAt(index) ?? state.estimatedDetailHeight
+              : (index: number) => {
+                    const row = rowAt(source, index);
+                    return row === undefined ? 0 : detailHeight(row, index);
+                };
     return withExtraSizes(
         base,
         state.expandedRows.map((index) => ({ index, size: sizeOf(index) })),
@@ -373,6 +385,8 @@ export function buildView<TRow, TNode>({
         isRowSelectable: state.isRowSelectable,
         collapsedGroupKeys: state.collapsedGroupKeys,
         givenDirection: state.direction,
+        measuredRows: state.rowHeight === "auto",
+        measuredDetails: state.detailHeight === "auto",
     };
 }
 
@@ -408,6 +422,8 @@ const VIEW_KEYS = [
     "columnReorder",
     "direction",
     "givenDirection",
+    "measuredRows",
+    "measuredDetails",
 ] as const satisfies readonly (keyof GridView)[];
 
 /** Whether `next` renders anything `current` does not: a new view to publish. */

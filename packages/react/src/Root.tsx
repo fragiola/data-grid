@@ -16,11 +16,11 @@ import {
     keptOrder,
     keptWidths,
     type ResultOf,
+    type RowHeight,
     type RowKey,
     type RowKeyGetter,
     type RowSelectable,
     type RowSelection,
-    type Size,
     type SortColumn,
     sameKeys,
     sameOrder,
@@ -93,8 +93,16 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         columns: readonly ColumnOrGroup<TRow>[];
         /** a row's key; without one, rows are keyed by their index */
         rowKey?: RowKeyGetter<TRow> | undefined;
-        /** a row's height in pixels, or a function of its index (default 35) */
-        rowHeight?: Size | undefined;
+        /**
+         * a row's height in pixels, or a function of its index (default 35); `"auto"`: as tall as
+         * its content, measured once rendered (`estimatedRowHeight` until then)
+         */
+        rowHeight?: RowHeight | undefined;
+        /**
+         * a measured row's height until it is measured, in pixels (default 35): the scrollbar is
+         * approximate until the rows are
+         */
+        estimatedRowHeight?: number | undefined;
         /** a header row's height in pixels (default 35); 0 for no header */
         headerRowHeight?: number | undefined;
         /**
@@ -139,9 +147,12 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
             | undefined;
         /**
          * an expanded row's detail height in pixels, or a function of the row (default 300): it
-         * adds to the row's own height
+         * adds to the row's own height. `"auto"`: as tall as its content, measured once rendered
+         * (`estimatedDetailHeight` until then)
          */
         detailHeight?: DetailHeight<TRow> | undefined;
+        /** a measured detail's height until it is measured, in pixels (default 300) */
+        estimatedDetailHeight?: number | undefined;
         /**
          * how rows are selected: one at a time or many (default: not at all). Selected rows carry
          * `data-selected` and `aria-selected`; Shift+Space, Shift+Up/Down and Ctrl/⌘+A select
@@ -303,6 +314,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         getRow,
         rowKey,
         rowHeight,
+        estimatedRowHeight,
         headerRowHeight,
         summaryRows,
         summaryRowHeight,
@@ -316,6 +328,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         defaultExpandedRowKeys,
         onExpandedRowKeysChange,
         detailHeight,
+        estimatedDetailHeight,
         rowSelection,
         isRowSelectable,
         selectedRowKeys,
@@ -352,6 +365,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 : { rowCount: rowCount ?? 0, getRow }),
             rowKey,
             rowHeight,
+            estimatedRowHeight,
             headerRowHeight,
             summaryRows,
             summaryRowHeight,
@@ -362,6 +376,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             sortColumns: sortColumns ?? defaultSortColumns,
             expandedRowKeys: expandedRowKeys ?? defaultExpandedRowKeys,
             detailHeight,
+            estimatedDetailHeight,
             rowSelection,
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
@@ -636,20 +651,36 @@ export function Root<TRow>(props: RootProps<TRow>) {
         const header = headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT;
         const summary = summaryRowHeight ?? DEFAULT_ROW_HEIGHT;
         const detail = detailHeight ?? DEFAULT_DETAIL_HEIGHT;
-        if (
-            rows !== state.rowHeight ||
-            header !== state.headerRowHeight ||
-            summary !== state.summaryRowHeight ||
-            detail !== state.detailHeight
-        ) {
-            model.run("sizes.set", {
-                rowHeight: rows,
-                headerRowHeight: header,
-                summaryRowHeight: summary,
-                detailHeight: detail,
-            });
+        // only the sizes that changed, the estimates on their own: one refused (an estimate
+        // that is no size above 0) never holds the others back
+        const sizes = {
+            ...(rows !== state.rowHeight ? { rowHeight: rows } : {}),
+            ...(header !== state.headerRowHeight
+                ? { headerRowHeight: header }
+                : {}),
+            ...(summary !== state.summaryRowHeight
+                ? { summaryRowHeight: summary }
+                : {}),
+            ...(detail !== state.detailHeight ? { detailHeight: detail } : {}),
+        };
+        if (Object.keys(sizes).length > 0) model.run("sizes.set", sizes);
+        const rowEstimate = estimatedRowHeight ?? DEFAULT_ROW_HEIGHT;
+        const detailEstimate = estimatedDetailHeight ?? DEFAULT_DETAIL_HEIGHT;
+        if (rowEstimate !== model.state.estimatedRowHeight) {
+            model.run("sizes.set", { estimatedRowHeight: rowEstimate });
         }
-    }, [model, rowHeight, headerRowHeight, summaryRowHeight, detailHeight]);
+        if (detailEstimate !== model.state.estimatedDetailHeight) {
+            model.run("sizes.set", { estimatedDetailHeight: detailEstimate });
+        }
+    }, [
+        model,
+        rowHeight,
+        headerRowHeight,
+        summaryRowHeight,
+        detailHeight,
+        estimatedRowHeight,
+        estimatedDetailHeight,
+    ]);
 
     const summaryTop = summaryRows?.top ?? 0;
     const summaryBottom = summaryRows?.bottom ?? 0;

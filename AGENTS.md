@@ -60,11 +60,63 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    engine reports the row and column windows (visible and rendered ranges) and the end being
    reached. Fetching, caching and placeholders are **app policy**: they live in the examples
    (`_kit/`), never in a package.
-7. **Sizes (D7).** `rowHeight: number | (index) => number`; columns `width: number` (px), the
+7. **Sizes (D7).** `rowHeight: number | (index) => number | "auto"` (`RowHeight`; `"auto"`:
+   measured, Epic #86, below); columns `width: number` (px), the
    width a column starts with and a reset gives back: the model keeps a resized column's width
    over it (`columnWidths`, Epic #70). The effective width, within the column's limits, is the
    override (`columnWidths`), else the engine's automatic width (`autoSize`), else its flex share
-   (`flex`), else `width` (Epic #80).
+   (`flex`), else `width` (Epic #80). **Measured heights (Epic #86, E2.2):** `rowHeight: "auto"`
+   with `estimatedRowHeight` (default `DEFAULT_ROW_HEIGHT`) and `detailHeight: "auto"` with
+   `estimatedDetailHeight` (default `DEFAULT_DETAIL_HEIGHT`): model state, options and
+   `sizes.set` (an estimate is a size above 0: `sizes.set` refuses another with
+   `invalid_payload`, an option leaves it out; `Root` sends only the sizes that changed, the
+   estimates in commands of their own, so a refused one never holds the others back). The engine
+   measures: `measuring(state)` while either is
+   `"auto"`, nothing otherwise (a grid of given heights reads, observes and allocates nothing
+   more). A loaded measured row registers as the engine's `row` element (`EngineLayer`; React's
+   `Row` through `useRowPart`'s `ref`, `useRow`'s props carry it), a detail as before (`detail`).
+   Each element is read once, at the commit that first renders it (`takeMeasures`: border-box
+   height, `layoutScale` from the viewport as the fit; before the browser paints; not at the
+   commit of a view already replaced, as when an automatic width changed meanwhile: the next
+   commit reads), and from the
+   next frame on a `ResizeObserver` from the viewport's `defaultView` (created then, and only
+   while measuring: `observeLater`, one frame for all) tells its resizes (`heights`, a WeakMap
+   per element, forgotten when an element unregisters or measuring stops; a pass allocates
+   nothing while no height changed). Observing in the frame an element renders would report it again in the
+   observers' delivery at the same depth, which a browser defers with an error; a resize
+   reported lays out at once. A row's own height is its element's less its detail's; a row
+   measured 0 (hidden) keeps its height. `MeasuredHeights` (`engine/measure.ts`) keeps them by
+   index with the row's key (`rowKey` else index), in persistent sorted blocks (64 to 128
+   heights, never changed once made) with the heights and counts before each block: a batch of m
+   makes its few blocks and the block list again (O(m log k + m·B + k/B)), never the whole store;
+   `keep(start, end, keyAt)` drops the ones whose row left its index (a new source: every index,
+   or behind the same `getRow` from the old count; a `rows.changed` range: off screen too, so a
+   row that moved off screen counts at the estimate until it renders), `clear()` when no longer
+   `"auto"`. `axis(count, estimate)` is a `MeasuredAxis` over the version (O(1) to make, O(log k)
+   a question, old versions valid: a view's axis keeps its offsets; `resized` is itself, one
+   estimate for all, `withCount` O(1)), so 100M estimated rows allocate nothing per row. The row
+   axis is `withDetails(measuredRows.axis(…), state, measuredDetails)` (`rowAxisFor`). A change
+   relayouts once (`remeasured`), the view kept on the first row in view whose height did not
+   just change (`measureAnchor`; none, the first row in view), as far from the view's top (M2's
+   `anchoredOffset`, a row below the first one in view with a negative `within`), the offset
+   clamped to the rows before any window is worked out, then `followRowAnchor`: a scroll up
+   shows what it brought in at its measured height and what was in view stays where the scroll
+   put it; under scaling too (the virtual offset is exact). The row of the last `scroll-to-cell`
+   (`cellScroll`: its `rowIndex` and `align` only, never its column; kept until a scroll the
+   engine did not make on either axis, more than a pixel, the wheel, or `scroll-to`, which the
+   column drag's edge scroll uses) is scrolled to again after a change, so a key lands at the
+   row's measured height. A row expanding or collapsing is read again. Nothing is measured per
+   scroll frame: only elements rendered for the first time are read. The scrollbar is
+   approximate until rows are measured (documented). React: a measured row (`measuredRow(view,
+   loaded)`: `view.measuredRows` and loaded; a row not loaded keeps the estimate's height as
+   before) has no height and `display: grid`; its cells share the area `1 / 1`, each at
+   `cellBox`'s `left` as its inline start margin (`margin-left`, `margin-right` right to left),
+   `position: relative` (a pinned one `sticky`; both drop a consumer's `transform` and insets, as
+   a pinned cell), no height: as tall as the tallest (stretch); its
+   detail is the area `2 / 1` (no `margin-top`). A measured detail (`view.measuredDetails`) has no
+   height (in a row of pinned cells, a flex row of a given height, `align-self: flex-start`:
+   stretched to the row's height, it would measure what the axis gave it). The CSS consequences are the app's: wrap the text (no `nowrap`), padding and borders
+   count.
 8. **Scroll scaling (D8).** When an axis is larger than a physical cap (configurable, safe in
    Chromium, Firefox and WebKit by default), the engine maps physical scroll to virtual offset.
    Small moves stay pixel-exact relative to the content, the scrollbar reaches the whole dataset,
@@ -225,7 +277,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     model derives `expandedRows` (indexes) looking for a key where it was last seen, then only in
     the rows the app names (a `rows.changed` range, rows added behind the same `getRow`, a new
     source), so nothing is scanned without expanded keys. `detailHeight: number | (row, rowIndex)
-    => number` (default 300) adds to an expanded row's size in the row axis (`withExtraSizes`, a
+    => number | "auto"` (default 300; `"auto"` measured, D7) adds to an expanded row's size in the row axis (`withExtraSizes`, a
     sorted list over the base axis): no fake rows, indexes, windows and `getRow` unchanged; a row
     expanding above the view keeps the view where it is. `DataGrid.RowDetail` sits inside its
     `Row` after its cells, renders only while expanded, sticky (the engine's `detail` element,
@@ -578,8 +630,11 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **Structural inline style only**: `position` (`sticky` on the header, the summary rows'
   `Summary`, `Empty`, pinned cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
   right to left: `inlineSide`), `transform` on the layers,
-  `display` (also to make table parts positionable, and `flex` on rows and header rows with
-  pinned columns), `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
+  `display` (also to make table parts positionable, `flex` on rows and header rows with
+  pinned columns, `grid` on a measured row, Epic #86), in a measured row `grid-area` on its
+  cells and detail and its cells' inline start margin (`margin-left`, `margin-right` right to
+  left: their place, in place of `left`), `align-self` on a measured detail in a row of pinned
+  cells, `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
   rows (with column groups, an upper row stays above the next, which a column spanning rows
   reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
   row of pinned cells, `margin-left` (`margin-right` right to left) and `flex-shrink: 0` (its box
@@ -603,7 +658,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   documented `biome-ignore` of `useAriaPropsSupportedByRole` (the APG splitter; an `<hr>` cannot
   take focus).
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
-  until a root holds it); a part hook (`useRow`, `useCell`, `useHeaderCell`,
+  until a root holds it; `useRow`'s props hold a measured row's `ref`); a part hook (`useRow`, `useCell`, `useHeaderCell`,
   `useColumnResizer`, `useGroupLabel`, `useSummaryRow`, `useSummaryCell`) returns
   `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the

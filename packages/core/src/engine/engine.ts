@@ -7,7 +7,7 @@ import {
     pinnedPartsOf,
 } from "../header/header";
 import { shownColumnOf } from "../model/collapse";
-import { detailsChanged } from "../model/expansion";
+import { detailsChanged, newRowsOf } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import {
     cellKeyAt,
@@ -17,7 +17,7 @@ import {
     type Siblings,
     siblingsOf,
 } from "../model/order";
-import { rowAt } from "../model/source";
+import { loadedRowKey, rowAt } from "../model/source";
 import { hasColumnSpans, spanAt } from "../model/spans";
 import { summaryRowAt } from "../model/summary";
 import type {
@@ -79,6 +79,7 @@ import {
     isResizer,
     KEYS,
     LINE_HEIGHT,
+    layoutScale,
     maxContentWidths,
     movesWithArrows,
     ownerViewport,
@@ -99,6 +100,7 @@ import {
     summaryHeight,
 } from "./geometry";
 import { createInteraction } from "./interaction";
+import { type HeightObserver, type Measure, MeasuredHeights } from "./measure";
 import type {
     ColumnReorder,
     ColumnResize,
@@ -246,6 +248,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         pinned: new Set(),
         detail: new Set(),
         label: new Set(),
+        row: new Set(),
     };
     /** the layers that hold rows: a key on one is the grid's (a detail's are its content's) */
     const rowLayers: readonly ReadonlySet<Element>[] = [
@@ -258,9 +261,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let state = model.state;
     /** the direction in effect: the model's, else the viewport's (`updateDirection`) */
     let direction: GridDirection = state.direction ?? "ltr";
-    /** the rows' own heights; `rowAxis` adds the details */
+    /** the heights measured of rows and of details (`"auto"`, Epic #86, E2.2) */
+    const measuredRows = new MeasuredHeights();
+    const measuredDetails = new MeasuredHeights();
+    /** the rows' own heights (measured ones at their estimate); `rowAxis` adds the details */
     let baseRowAxis = rowAxisOf(state);
-    let rowAxis = withDetails(baseRowAxis, state);
+    let rowAxis = rowAxisFor();
     let width = 0;
     /** the automatic widths measured for `autoSize` columns, by key (A5): kept across new columns */
     let automatic: ColumnWidths = NO_WIDTHS;
@@ -400,6 +406,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             direction,
             headerRowsFor,
         });
+    }
+
+    /**
+     * The rows' axis for the state: their own heights, measured ones over the estimate (E2.2),
+     * then the expanded rows' details (M2).
+     */
+    function rowAxisFor(): Axis {
+        return withDetails(
+            state.rowHeight === "auto"
+                ? measuredRows.axis(state.rowCount, state.estimatedRowHeight)
+                : baseRowAxis,
+            state,
+            measuredDetails,
+        );
     }
 
     /** Takes a new mapping into an axis; returns the physical scroll it needs when that moves. */
@@ -837,9 +857,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     // ── scroll and wheel ─────────────────────────────────────────────────────
 
     function onScroll() {
+        const top = rowsY.virtual;
+        const left = columnsX.virtual;
         // the scroll the engine made itself lands where it is: the layers only
-        if (syncScroll()) update();
-        else writeLayers();
+        if (syncScroll()) {
+            // one it did not make, on either axis, leaves the cell it scrolled to (E2.2)
+            if (
+                Math.abs(rowsY.virtual - top) > 1 ||
+                Math.abs(columnsX.virtual - left) > 1
+            ) {
+                cellScroll = null;
+            }
+            update();
+        } else {
+            writeLayers();
+        }
         retargetAfterScroll();
     }
 
@@ -894,6 +926,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             dy = 0;
         }
         event.preventDefault();
+        // a person's scroll: the cell it scrolled to is left (E2.2)
+        cellScroll = null;
         if (dy !== 0) {
             if (yScaled) viewport.scrollTop = rowsY.scrollBy(dy);
             else viewport.scrollTop += dy;
@@ -921,6 +955,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return;
         }
         const { rowIndex, columnIndex, align } = payload;
+        cellScroll = rowIndex === undefined ? null : { rowIndex, align };
         const moves: ScrollMoves = {};
         if (
             rowIndex !== undefined &&
@@ -965,6 +1000,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     function scrollTo({ top, left }: EngineActionMap["scroll-to"]) {
+        cellScroll = null;
         const moves: ScrollMoves = {};
         if (top !== undefined) moves.top = rowsY.scrollTo(top);
         if (left !== undefined) moves.left = columnsX.scrollTo(left);
@@ -2298,6 +2334,241 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return true;
     }
 
+    // ── measured heights (Epic #86, E2.2) ────────────────────────────────────
+
+    /** each measured element's border-box height, as last read or told by its observer */
+    let heights = new WeakMap<Element, number>();
+    /** the observer of the measured rows and details (the viewport's window's), while attached */
+    let measurer: HeightObserver | null = null;
+    /**
+     * the elements to observe from the next frame on: an observer's first report of an element
+     * rendered while observers report (a resize laid out again) would come in that same frame at
+     * the same depth, which a browser defers with an error. The engine reads it at its commit.
+     */
+    const unobserved = new Set<Element>();
+    let observeFrame: number | null = null;
+    /**
+     * the row of the last scroll to a cell, until a scroll the engine did not make (either axis):
+     * scrolled to again when heights change, so the cell lands where its measured height puts it;
+     * its row only, the columns left where they are
+     */
+    let cellScroll: Pick<
+        EngineActionMap["scroll-to-cell"],
+        "rowIndex" | "align"
+    > | null = null;
+    /** a pass of `takeMeasures`: the heights that changed (none: nothing allocated), the scale */
+    let rowChanges: Measure[] | null = null;
+    let detailChanges: Measure[] | null = null;
+    let scale = 0;
+    /** the height of the details inside the row `takeRow` reads */
+    let detailsInRow = 0;
+
+    /** Whether a state's rows or details are measured. */
+    function measuring(grid: DataGridModel<TRow, TNode>["state"]): boolean {
+        return grid.rowHeight === "auto" || grid.detailHeight === "auto";
+    }
+
+    /** Observes a row or a detail from the next frame on, while they are measured. */
+    function observeLater(element: Element) {
+        const win = viewport?.ownerDocument.defaultView;
+        if (!measuring(state) || !win || !("ResizeObserver" in win)) return;
+        unobserved.add(element);
+        if (observeFrame !== null) return;
+        observeFrame = win.requestAnimationFrame(() => {
+            observeFrame = null;
+            measurer ??= new win.ResizeObserver(onMeasured);
+            for (const waiting of unobserved) measurer.observe(waiting);
+            unobserved.clear();
+        });
+    }
+
+    /** Stops observing an element: its height is read again if it comes back. */
+    function unobserve(element: Element) {
+        unobserved.delete(element);
+        heights.delete(element);
+        measurer?.unobserve(element);
+    }
+
+    /** Observes the rows and details registered so far (attached, or measured from now on). */
+    function observeRegistered() {
+        for (const element of layers.row) observeLater(element);
+        for (const element of layers.detail) observeLater(element);
+    }
+
+    /** Observes nothing more, every height read forgotten (detached, or nothing measured). */
+    function stopMeasuring() {
+        measurer?.disconnect();
+        measurer = null;
+        unobserved.clear();
+        heights = new WeakMap();
+        if (observeFrame !== null) {
+            viewport?.ownerDocument.defaultView?.cancelAnimationFrame(
+                observeFrame,
+            );
+            observeFrame = null;
+        }
+    }
+
+    /** Elements resized (or observed for the first time): their heights, taken in. */
+    function onMeasured(entries: readonly ResizeObserverEntry[]) {
+        for (const { target, borderBoxSize } of entries) {
+            const height = borderBoxSize?.[0]?.blockSize;
+            // without a box size, read once more
+            if (height === undefined) heights.delete(target);
+            else heights.set(target, height);
+        }
+        takeMeasures();
+    }
+
+    /** An element's border-box height in layout pixels: as last told, else read once. */
+    function heightOf(element: Element): number {
+        let height = heights.get(element);
+        if (height === undefined) {
+            if (scale === 0 && viewport) scale = layoutScale(viewport);
+            height = element.getBoundingClientRect().height / (scale || 1);
+            heights.set(element, height);
+        }
+        return height;
+    }
+
+    /** The row index an element carries (NaN without one). */
+    function rowIndexOf(element: Element): number {
+        const attribute = element.getAttribute("data-row-index");
+        return attribute === null ? Number.NaN : Number(attribute);
+    }
+
+    /** A rendered detail's height, kept when it changed (a loaded row's only). */
+    function takeDetail(element: HTMLElement) {
+        const index = rowIndexOf(element);
+        const key = loadedRowKey(state, index);
+        if (key === undefined) return;
+        const height = heightOf(element);
+        if (measuredDetails.holds(index, height, key)) return;
+        if (!detailChanges) detailChanges = [];
+        detailChanges.push({ index, height, key });
+    }
+
+    /** Adds a detail's height when it is inside the row `this` (a row's own height leaves it out). */
+    function addDetailIn(this: Element, detail: HTMLElement) {
+        if (this.contains(detail)) detailsInRow += heightOf(detail);
+    }
+
+    /**
+     * A rendered row's own height, its element's less its details', kept when it changed (a loaded
+     * row's only; one measured 0, hidden, keeps the height it had).
+     */
+    function takeRow(element: HTMLElement) {
+        const index = rowIndexOf(element);
+        const key = loadedRowKey(state, index);
+        if (key === undefined) return;
+        detailsInRow = 0;
+        layers.detail.forEach(addDetailIn, element);
+        const height = heightOf(element) - detailsInRow;
+        if (height <= 0 || measuredRows.holds(index, height, key)) return;
+        if (!rowChanges) rowChanges = [];
+        rowChanges.push({ index, height, key });
+    }
+
+    /**
+     * Takes the heights of the rendered rows and details in: each element's as its observer last
+     * told, else read once (at a commit, before the browser paints). Nothing is allocated while
+     * none changed; when one did, the rows are laid out again (`remeasured`).
+     */
+    function takeMeasures() {
+        if (!viewport || !measuring(state)) return;
+        scale = 0;
+        if (state.detailHeight === "auto") layers.detail.forEach(takeDetail);
+        if (state.rowHeight === "auto") layers.row.forEach(takeRow);
+        const details = detailChanges;
+        const rows = rowChanges;
+        if (!details && !rows) return;
+        detailChanges = null;
+        rowChanges = null;
+        remeasured([
+            ...(details ? measuredDetails.set(details) : []),
+            ...(rows ? measuredRows.set(rows) : []),
+        ]);
+    }
+
+    /**
+     * Lays the rows out again for new heights (of the rows at `changed`): the view kept on the
+     * first row it shows whose height stayed, as far from the view's top (M2): what a person saw
+     * stays where a scroll put it, and the rows a scroll brought into view take the room they
+     * need (none stayed: the first row it shows). The offset stays inside the rows. The row a
+     * cell was just scrolled to is scrolled to again.
+     */
+    function remeasured(changed: readonly number[]) {
+        const anchor = measureAnchor(changed);
+        rowAxis = rowAxisFor();
+        if (anchor) {
+            rowsY.virtual = clamp(
+                anchoredOffset(rowAxis, anchor),
+                0,
+                Math.max(0, rowAxis.totalSize - bodyHeight()),
+            );
+        }
+        relayout(true);
+        if (anchor) followRowAnchor();
+        if (cellScroll) scrollToCell(cellScroll);
+    }
+
+    /** The row `remeasured` keeps the view on, and how far into it the view starts. */
+    function measureAnchor(
+        changed: readonly number[],
+    ): { index: number; within: number } | null {
+        const first = anchorOf(rowAxis, rowsY.virtual);
+        if (!first) return null;
+        const resized = new Set(changed);
+        for (let index = first.index; index < rowWindow.visible.end; index++) {
+            if (!resized.has(index)) {
+                return {
+                    index,
+                    within: rowsY.virtual - rowAxis.offsetOf(index),
+                };
+            }
+        }
+        return first;
+    }
+
+    /**
+     * Drops the heights measured for rows no longer at their index (a new source, rows changed),
+     * and every one once rows, or details, are no longer measured. Returns whether one was.
+     */
+    function forgetMeasures(
+        before: DataGridModel<TRow, TNode>["state"],
+        after: DataGridModel<TRow, TNode>["state"],
+    ): boolean {
+        const keyAt = (index: number) => loadedRowKey(after, index);
+        const newSource =
+            after.source !== before.source || after.rowKey !== before.rowKey;
+        const changed = after.rowsChanged !== before.rowsChanged;
+        let dropped = false;
+        for (const [store, measured] of [
+            [measuredRows, after.rowHeight === "auto"],
+            [measuredDetails, after.detailHeight === "auto"],
+        ] as const) {
+            if (!measured) {
+                dropped = store.clear() || dropped;
+                continue;
+            }
+            if (newSource) {
+                // behind the same `getRow`, only rows added or gone (D6)
+                const { start } = newRowsOf(before, after);
+                dropped =
+                    store.keep(
+                        Math.min(start, after.rowCount),
+                        Number.POSITIVE_INFINITY,
+                        keyAt,
+                    ) || dropped;
+            }
+            if (changed) {
+                const { start, end } = after.rowsChanged;
+                dropped = store.keep(start, end, keyAt) || dropped;
+            }
+        }
+        return dropped;
+    }
+
     // ── the model ────────────────────────────────────────────────────────────
 
     /** Whether the view renders a row of the range: in the rendered rows, or the active row. */
@@ -2330,6 +2601,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             axis.offsetOf(anchor.index) +
             Math.min(anchor.within, axis.sizeOf(anchor.index))
         );
+    }
+
+    /** The physical scroll follows a kept row anchor, even when the total did not change. */
+    function followRowAnchor() {
+        const top = rowsY.scrollTo(rowsY.virtual);
+        if (Math.abs(top - (viewport?.scrollTop ?? 0)) > 0.5) {
+            scrollWhenReady({ top });
+        }
     }
 
     /**
@@ -2382,27 +2661,39 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         state = after;
         if (before.direction !== after.direction) directionPending = true;
         const changedDetails = detailsChanged(before, after);
+        // measured heights follow their rows (E2.2)
+        const remeasure = forgetMeasures(before, after);
         if (after.rowsChanged !== before.rowsChanged) {
             const rendered = rendersRows(after.rowsChanged);
             // rows' data changed, and nothing else did: off screen, there is nothing to do
-            if (!rendered && !changedDetails) return;
+            if (!rendered && !changedDetails && !remeasure) return;
             if (rendered) rowsRevision += 1;
         }
-        const rowsResized =
-            after.rowCount !== before.rowCount ||
-            after.rowHeight !== before.rowHeight;
+        const sameHeights =
+            after.rowHeight === before.rowHeight &&
+            after.estimatedRowHeight === before.estimatedRowHeight;
+        const rowsResized = after.rowCount !== before.rowCount || !sameHeights;
         if (rowsResized) {
-            baseRowAxis =
-                after.rowHeight === before.rowHeight
-                    ? baseRowAxis.withCount(after.rowCount)
-                    : rowAxisOf(after);
+            baseRowAxis = sameHeights
+                ? baseRowAxis.withCount(after.rowCount)
+                : rowAxisOf(after);
+        }
+        // measuring starts or stops with "auto" (E2.2)
+        const wasMeasuring = measuring(before);
+        if (measuring(after) !== wasMeasuring) {
+            if (wasMeasuring) stopMeasuring();
+            else observeRegistered();
+        }
+        // a row expanding or collapsing grows or shrinks its element: read it again
+        if (changedDetails && after.rowHeight === "auto") {
+            for (const element of layers.row) heights.delete(element);
         }
         let anchored = false;
-        if (rowsResized || changedDetails) {
+        if (rowsResized || changedDetails || remeasure) {
             const anchor = rowsResized
                 ? null
                 : anchorOf(rowAxis, rowsY.virtual);
-            rowAxis = withDetails(baseRowAxis, after);
+            rowAxis = rowAxisFor();
             // a row expanding or collapsing above the view keeps the view where it is (M2)
             if (anchor) {
                 rowsY.virtual = anchoredOffset(rowAxis, anchor);
@@ -2448,6 +2739,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         relayout(
             rowsResized ||
                 changedDetails ||
+                remeasure ||
                 columnsChanged ||
                 after.headerRowHeight !== before.headerRowHeight ||
                 after.header !== before.header ||
@@ -2462,12 +2754,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             emit("column-reorder", columnReorder);
         }
         // the physical scroll follows even when the total did not change (no remap moved it)
-        if (anchored) {
-            const top = rowsY.scrollTo(rowsY.virtual);
-            if (Math.abs(top - (viewport?.scrollTop ?? 0)) > 0.5) {
-                scrollWhenReady({ top });
-            }
-        }
+        if (anchored) followRowAnchor();
         if (anchor) followColumnAnchor();
         if (followed) {
             // focus goes to its element once the cells render in their new order (the commit)
@@ -2541,6 +2828,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 ],
             });
             interaction.manageCellsUnder(element);
+            // the rows and details measured (E2.2), from the next frame on
+            observeRegistered();
             // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("focusin", onFocusIn);
@@ -2585,6 +2874,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 element.removeEventListener("focusout", onFocusOut);
                 // a drag ends where it is (a reorder moves nothing), its frame cancelled
                 endDrag("lost");
+                stopMeasuring();
                 pointerDown = false;
                 pendingFocus = false;
                 if (viewport === element) {
@@ -2600,6 +2890,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         },
         registerLayer(layer, element) {
             layers[layer].add(element);
+            // a measured row is only read (E2.2)
+            if (layer === "row") {
+                observeLater(element);
+                return () => {
+                    layers.row.delete(element);
+                    unobserve(element);
+                };
+            }
+            if (layer === "detail") observeLater(element);
             written.delete(element);
             // only this element: a row of pinned cells mounting does not rewrite every other one
             if (!isInsetLayer(layer)) {
@@ -2633,6 +2932,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
+                if (layer === "detail") unobserve(element);
                 // a cell no longer pinned keeps no inset of the engine's, on either side: its
                 // adapter places it
                 if (isInsetLayer(layer)) {
@@ -2679,6 +2979,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             interaction.committed();
             flushFocus();
             autoSize(rendered);
+            // the rows and details rendered for the first time, read before the browser paints;
+            // not while a new view waits (widths an automatic width changed): its commit reads
+            if (view === committed) takeMeasures();
         },
         keydown,
         click,

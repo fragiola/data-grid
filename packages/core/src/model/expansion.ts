@@ -171,6 +171,10 @@ export function detailsChanged<TRow, TNode>(
         after.expandedRows !== before.expandedRows ||
         (after.expandedRows.length > 0 &&
             (after.detailHeight !== before.detailHeight ||
+                // a measured detail's estimate (E2.2)
+                (after.detailHeight === "auto" &&
+                    after.estimatedDetailHeight !==
+                        before.estimatedDetailHeight) ||
                 // a detail's height may be a function of its row, whose data changed
                 (typeof after.detailHeight === "function" &&
                     (after.source !== before.source ||
