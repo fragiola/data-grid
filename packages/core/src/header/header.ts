@@ -278,6 +278,76 @@ export function pinnedEndColumnCount<TRow, TNode>(
 }
 
 /**
+ * The parts the columns are pinned in as declared: how many lead pinned at the start, and the
+ * first pinned at the end (`pinnedEndFrom`: the column count without one).
+ */
+export function pinnedPartsOf<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+): { readonly startCount: number; readonly endFrom: number } {
+    return {
+        startCount: pinnedColumnCount(columns),
+        endFrom: pinnedEndFrom(columns.length, pinnedEndColumnCount(columns)),
+    };
+}
+
+/**
+ * The part a column is in (P1, E1.1), of parts ending at `startCount` (the columns pinned at the
+ * start) and starting at `endFrom` (the first pinned at the end, `pinnedEndFrom`): `"start"`,
+ * `"end"`, or `undefined` for the columns that scroll. The one rule every part question asks.
+ */
+export function columnPart(
+    columnIndex: number,
+    startCount: number,
+    endFrom: number,
+): PinnedSide | undefined {
+    if (columnIndex < startCount) return "start";
+    return columnIndex >= endFrom ? "end" : undefined;
+}
+
+/** The first column of the part holding `columnIndex` (`columnPart`). */
+export function partStart(
+    columnIndex: number,
+    startCount: number,
+    endFrom: number,
+): number {
+    const part = columnPart(columnIndex, startCount, endFrom);
+    return part === "start" ? 0 : part === "end" ? endFrom : startCount;
+}
+
+/** The end of the part holding `columnIndex` (`columnPart`), of `columnCount` columns. */
+export function partEnd(
+    columnIndex: number,
+    startCount: number,
+    endFrom: number,
+    columnCount: number,
+): number {
+    const part = columnPart(columnIndex, startCount, endFrom);
+    return part === "start"
+        ? startCount
+        : part === "end"
+          ? columnCount
+          : endFrom;
+}
+
+/**
+ * A span `wanted` from the item at `at` (E1.2), never across its part: kept before `end` (its
+ * part's end) and, with `inside`, to the items after it `inside` keeps in its run (a header cell's
+ * column siblings). At least 1. The one clamp a body cell's and a header cell's spans share.
+ */
+export function keptSpan(
+    wanted: unknown,
+    at: number,
+    end: number,
+    inside?: (index: number) => boolean,
+): number {
+    const most = Math.min(spanValue(wanted), end - at);
+    if (!inside) return Math.max(1, most);
+    let span = 1;
+    while (span < most && inside(at + span)) span += 1;
+    return span;
+}
+
+/**
  * How many columns a column's header cell spans (E1.2): its `colSpan` for the header, kept to
  * the columns right after it among its siblings, in its part. 1 for a group, or without one.
  */
@@ -287,15 +357,19 @@ function headerSpan<TRow, TNode>(
 ): number {
     const column = siblings[at];
     if (!column || isColumnGroup(column) || !column.colSpan) return 1;
-    const wanted = spanValue(column.colSpan({ type: "header", rowIndex: -1 }));
-    let span = 1;
-    for (; span < wanted; span++) {
-        const next = siblings[at + span];
-        if (!next || isColumnGroup(next) || next.pinned !== column.pinned) {
-            break;
-        }
-    }
-    return span;
+    return keptSpan(
+        column.colSpan({ type: "header", rowIndex: -1 }),
+        at,
+        siblings.length,
+        (index) => {
+            const next = siblings[index];
+            return (
+                next !== undefined &&
+                !isColumnGroup(next) &&
+                next.pinned === column.pinned
+            );
+        },
+    );
 }
 
 /** A header of one row: a cell per column. */

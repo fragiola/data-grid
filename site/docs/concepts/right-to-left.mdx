@@ -18,13 +18,13 @@ the left, and the columns pinned at the start stay on the right. Give `DataGrid.
 ```
 
 `direction` is `"ltr"` or `"rtl"`, and it can change while the grid is on screen: the view stays
-as far from the start as it was. Given, the grid writes it on its root as `dir`, so the page lays
-the grid out in it, and your styles inside the grid follow it too. Without one, the grid takes
-the page's: a grid under `<html dir="rtl">` (or any element laid out right to left) reads right
-to left with no prop, and adds no `dir`. It reads the page's direction from its scroll container
-when it attaches and when its size changes, never per key or scroll; a page whose direction
-changes later without a resize is picked up at the next attach or resize, so give the grid
-`direction` when your app switches it. A `direction` you give wins. The model keeps the one given (`model.get("direction")`, `undefined` for the page's,
+as far from the start as it was. Given, the root renders it as `dir` (in server-rendered markup
+too), so the page lays the grid out in it, and your styles inside the grid follow it too.
+Without one, the grid takes the page's: a grid under `<html dir="rtl">` (or any element laid out
+right to left) reads right to left with no prop, and has no `dir`. It reads the page's direction
+from its scroll container when it attaches and when a direction you gave is taken back, never
+per key, scroll or resize; a page whose direction changes later is picked up at the next attach,
+so give the grid `direction` when your app switches it. A `direction` you give wins. The model keeps the one given (`model.get("direction")`, `undefined` for the page's,
 and `direction.set { direction }`, `null` to give it back to the page); the view tells the one in
 effect (`useGridView().direction`).
 

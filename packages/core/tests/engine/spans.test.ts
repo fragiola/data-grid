@@ -702,3 +702,64 @@ describe("a grid with groups and spans", () => {
         expect(header.cellAt(-2, 1)?.key).toBe("g");
     });
 });
+
+describe("the epic review", () => {
+    it("never asks the columns between the rendered ones and the end part for a span", () => {
+        const asked = new Set<string>();
+        const columns: Column<Row>[] = Array.from({ length: 50 }, (_, i) =>
+            column(`c${i}`, {
+                colSpan: ({ type }) => {
+                    if (type === "row") asked.add(`c${i}`);
+                    return undefined;
+                },
+                ...(i >= 48 ? { pinned: "end" as const } : {}),
+            }),
+        );
+        // the columns 2–4 rendered (`viewOf`), and the two pinned at the end
+        viewOf(stateOf({ columns }), {
+            pinnedEndColumnCount: 2,
+            pinnedEndWidth: 200,
+        });
+        // the part that scrolls from its start to the rendered ones, then the end part's own:
+        // none of the 43 between
+        expect([...asked]).toEqual([
+            "c0",
+            "c1",
+            "c2",
+            "c3",
+            "c4",
+            "c48",
+            "c49",
+        ]);
+    });
+
+    it("puts aria-sort on the first sorted column with a header cell of its own", () => {
+        const columns: Column<Row>[] = [
+            column("a", {
+                colSpan: ({ type }) => (type === "header" ? 2 : undefined),
+            }),
+            column("b", { sortable: true }),
+            column("c", { sortable: true }),
+            ...Array.from({ length: 7 }, (_, i) => column(`d${i}`)),
+        ];
+        const view = viewOf(
+            stateOf({
+                columns,
+                sortColumns: [
+                    { columnKey: "b", direction: "ascending" },
+                    { columnKey: "c", direction: "descending" },
+                ],
+            }),
+            { columnWindow: windowOf(0, 5) },
+        );
+        const part = (key: string) => {
+            const cell = view.header.cellByKey(key);
+            if (!cell) throw new Error(`no cell ${key}`);
+            return headerCellPart(view, cell);
+        };
+        // b is covered by a's header span: it sorts first, with no header cell to say so
+        expect(part("b").ariaSort).toBeUndefined();
+        expect(part("c").ariaSort).toBe("descending");
+        expect(part("c").state.sortPriority).toBe(2);
+    });
+});

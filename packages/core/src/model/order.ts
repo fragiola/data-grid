@@ -1,8 +1,9 @@
 import {
-    pinnedColumnCount,
-    pinnedEndColumnCount,
-    pinnedEndFrom,
+    columnPart,
+    partEnd,
+    partStart,
     pinnedPart,
+    pinnedPartsOf,
 } from "../header/header";
 import { lowerBound, sameList } from "../utils";
 import type {
@@ -156,38 +157,22 @@ export function siblingsOf<TRow, TNode>(
         if (!sibling || sibling.columnIndex >= to) break;
         cells.push(sibling);
     }
-    // pinned columns lead and trail: the pinned cells too
-    const startCount = pinnedColumnCount(columns);
-    const endFrom = pinnedEndFrom(
-        columns.length,
-        pinnedEndColumnCount(columns),
-    );
+    // pinned columns lead and trail: the pinned cells too, among their part's
+    const { startCount, endFrom } = pinnedPartsOf(columns);
     /** the index of the first of `cells` from column `columnIndex` on */
     const firstFrom = (columnIndex: number) =>
         lowerBound(
             cells.length,
             (i) => (cells[i]?.columnIndex ?? columnIndex) < columnIndex,
         );
-    const startEnd = firstFrom(startCount);
-    const endStart = firstFrom(endFrom);
-    const pinned =
-        cell.columnIndex < startCount
-            ? "start"
-            : cell.columnIndex >= endFrom
-              ? "end"
-              : undefined;
+    const at = cell.columnIndex;
     return {
         cell,
         cells,
         index: cells.indexOf(cell),
-        start: pinned === "start" ? 0 : pinned === "end" ? endStart : startEnd,
-        end:
-            pinned === "start"
-                ? startEnd
-                : pinned === "end"
-                  ? cells.length
-                  : endStart,
-        pinned,
+        start: firstFrom(partStart(at, startCount, endFrom)),
+        end: firstFrom(partEnd(at, startCount, endFrom, columns.length)),
+        pinned: columnPart(at, startCount, endFrom),
     };
 }
 

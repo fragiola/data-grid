@@ -1,6 +1,7 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { type Column, DataGrid, type GridDirection } from "../src";
+import { type Column, DataGrid, type GridDirection, useDataGrid } from "../src";
 import { cellAt, root, rowAt, stubViewportSize, tags } from "./helpers";
 
 // Pinned end columns and right to left (Epic #85, E1.1): a column pinned at the end is sticky in
@@ -225,5 +226,55 @@ describe("right to left", () => {
         expect(root(container)).not.toHaveAttribute("dir");
         expect(cellAt(container, 1, 0).style.right).toBe("");
         expect(cellAt(container, 1, 0).style.left).toBe(inset);
+    });
+});
+
+describe("the root's dir (the epic review)", () => {
+    it("is rendered from the direction given, on the server too", () => {
+        const html = (direction?: GridDirection) =>
+            renderToString(
+                <DataGrid.Root
+                    columns={columns}
+                    rows={[]}
+                    direction={direction}
+                    data-testid="root"
+                />,
+            );
+        expect(html("rtl")).toMatch(/dir="rtl"/);
+        expect(html()).not.toMatch(/dir=/);
+    });
+
+    it("follows a direction set by command, and drops it taken back", () => {
+        function Commands() {
+            const { model } = useDataGrid();
+            return (
+                <>
+                    <button
+                        type="button"
+                        data-testid="rtl"
+                        onClick={() =>
+                            model.run("direction.set", { direction: "rtl" })
+                        }
+                    />
+                    <button
+                        type="button"
+                        data-testid="page"
+                        onClick={() =>
+                            model.run("direction.set", { direction: null })
+                        }
+                    />
+                </>
+            );
+        }
+        const { container, getByTestId } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <Commands />
+            </DataGrid.Root>,
+        );
+        expect(root(container)).not.toHaveAttribute("dir");
+        fireEvent.click(getByTestId("rtl"));
+        expect(root(container)).toHaveAttribute("dir", "rtl");
+        fireEvent.click(getByTestId("page"));
+        expect(root(container)).not.toHaveAttribute("dir");
     });
 });

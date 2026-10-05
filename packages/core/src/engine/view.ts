@@ -5,10 +5,12 @@ import { rowAt } from "../model/source";
 import {
     type CellSpan,
     cellCovering,
+    coveringCell,
     hasColumnSpans,
     rowSpanArgs,
     type SpansState,
     spanAt,
+    spanPartStart,
 } from "../model/spans";
 import type {
     CellPosition,
@@ -223,7 +225,13 @@ export function rowSpansOf<TRow, TNode>(
         for (let at = 0; at < columns.length; at++) {
             const columnIndex = columns[at] ?? 0;
             if (columnIndex < reach) continue;
-            cellCovering(state.columns, args, reach, columnIndex, cell);
+            // a new part starts its cells again: nothing between it and the last part is asked
+            // (the columns between the rendered ones and the end part)
+            const from = Math.max(
+                reach,
+                spanPartStart(state.columns, columnIndex),
+            );
+            cellCovering(state.columns, args, from, columnIndex, cell);
             if (cell.columnSpan > 1) {
                 // every column before the first span is a cell of its own
                 starts ??= columns.slice(0, at);
@@ -344,6 +352,7 @@ export function buildView<TRow, TNode>({
         selectedRowKeys: state.selectedRowKeys,
         isRowSelectable: state.isRowSelectable,
         collapsedGroupKeys: state.collapsedGroupKeys,
+        givenDirection: state.direction,
     };
 }
 
@@ -375,6 +384,7 @@ const VIEW_KEYS = [
     "columnResize",
     "columnReorder",
     "direction",
+    "givenDirection",
 ] as const satisfies readonly (keyof GridView)[];
 
 /** Whether `next` renders anything `current` does not: a new view to publish. */
@@ -411,21 +421,10 @@ export function elementPosition<TRow, TNode>(
     position: CellPosition,
     state: SpansState<TRow, TNode> & Pick<DataGridState<TRow, TNode>, "header">,
 ): CellPosition {
-    if (position.rowIndex >= 0) {
-        if (!hasColumnSpans(state.columns)) return position;
-        const { columnIndex } = spanAt(
-            state,
-            position.rowIndex,
-            position.columnIndex,
-        );
-        return columnIndex === position.columnIndex
-            ? position
-            : { rowIndex: position.rowIndex, columnIndex };
-    }
-    const cell = state.header.cellAt(position.rowIndex, position.columnIndex);
-    return cell
-        ? { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex }
-        : position;
+    const cell = coveringCell(state, position);
+    return !cell || cell === position
+        ? position
+        : { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex };
 }
 
 /**

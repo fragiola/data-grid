@@ -92,7 +92,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `onSortColumnsChange`, one helper for both). A click, Enter or Space on a sortable column's
     header cell toggles it (ascending, descending, none; Ctrl/⌘ adds it); a control inside the
     cell (or a widget holding controls), a drag and a held key's repeats are not a sort. `aria-sort` on the first
-    sorted column only; `data-sortable`, `data-sort`, `data-sort-priority`. The grid never orders
+    sorted column with a header cell of its own only (one a collapsed group hides or a header
+    span covers still sorts, its priority kept); `data-sortable`, `data-sort`, `data-sort-priority`. The grid never orders
     the rows: the app does. **Pinned columns (Epic #31, P1–P7; at the end, Epic #85, E1.1):**
     `pinned: "start"` on the leading columns, `pinned: "end"` on the trailing ones (`PinnedSide`;
     `columnsError` refuses a start after a column not pinned at the start, a column after one
@@ -121,18 +122,23 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     wider. A column reorders only within its part; flex and fit work in either part; a column
     pinned at the end resizes from its start edge (its boundary with the columns that scroll:
     dragged, or its arrow, toward the start grows it; `useColumnResizer`'s `state.edge`
-    `"start"`, else `"end"`: where the app places the handle). The first column pinned at the
-    end is one helper, `pinnedEndFrom(columnCount, pinnedEndCount)` (`header.ts`), everywhere.
+    `"start"`, else `"end"`: where the app places the handle; `resizeEdge`, the engine's drag and
+    keys reading it too). The parts are a few helpers in `header.ts`, everywhere: the first column
+    pinned at the end `pinnedEndFrom(columnCount, pinnedEndCount)` (a view's `endPartFrom`, the
+    engine's `endFrom()`), the declared parts `pinnedPartsOf(columns)`, a column's part
+    `columnPart(columnIndex, startCount, endFrom)` and its part's bounds `partStart`/`partEnd`.
     **Direction (Epic #85, E1.1):** the model keeps the direction given (`GridDirection`, or
     `undefined`: the page's; option, `get("direction")`, `direction.set { direction }`, `null`
-    gives it back), `Root` takes it as a prop (a prop removed gives it back). The engine's
-    direction in effect (`view.direction`) is the given one, which it writes on the viewport as
-    `dir` (removing only its own), else the viewport's computed `direction` (its window's
-    `getComputedStyle`, read on attach, when the view's size changes and when a given direction
-    is taken back; never per command or frame: a page direction changed later without a resize
-    is picked up at the next attach or resize, or through the prop): a grid under
-    `<html dir="rtl">` needs no prop, and LTR markup without one has no `dir`. A change applies
-    before anything is written for it (`updateDirection` at the top of `relayout`). Right to left, the start is the right edge: everything stays inline
+    gives it back), `Root` takes it as a prop (a prop removed gives it back). The given one is the
+    view's `givenDirection`, which `Root` renders as its `dir` (on the server and before attach
+    too; none without one): the engine never writes or removes `dir`. The engine's direction in
+    effect (`view.direction`) is the given one, else the viewport's computed `direction` (its
+    window's `getComputedStyle`, read on attach and when a given direction is taken back; never
+    per command, frame or resize: a page direction changed later is picked up at the next attach,
+    or through the prop): a grid under `<html dir="rtl">` needs no prop, and LTR markup without
+    one has no `dir`. A direction given or taken back is taken at the commit of the render that
+    renders (or removes) its `dir` (`directionPending`; the page's read then), and applies before
+    anything is written for it (`updateDirection` at the top of `relayout`). Right to left, the start is the right edge: everything stays inline
     offsets from the start (indexes, windows, `scroll-position`, the axes, scroll scaling, ARIA
     unchanged) and the mirroring lives where the grid meets the DOM, in a few helpers: the engine
     reads and sets `scrollLeft` through `inlineSign` (geometry, beside `inlineStart`; negative
@@ -149,8 +155,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     **Column spans (Epic #85, E1.2):** `colSpan?: (args: ColSpanArgs<TRow>) => number | undefined`
     on a column (never a group), `args` `{ type: "header", rowIndex: -1 } | { type: "row", row,
     rowIndex }` (summary rows join the union later). A cell covers the columns after it within its
-    part and the columns; a row's cells partition each part from its start (a covered column is
-    never asked); a row not loaded spans nothing. Header spans are laid out with the header
+    part and the columns (one clamp, `keptSpan`, the header's and the body's); a row's cells
+    partition each part from its start (a covered column is never asked, nor, in `rowSpansOf`,
+    one between the rendered columns and the next part: `spanPartStart`); a row not loaded spans
+    nothing. Header spans are laid out with the header
     (`layoutColumns`, over sibling leaves only): `columnSpan` and `cellAt` carry them, a covered
     leaf keeps a one-column cell in `cellByKey` only; a spanning header cell's key resizes and fits
     its whole span, as a group's. Body spans depend on the row: `spanAt(state, rowIndex,
@@ -159,10 +167,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     without one, a row without a span allocating nothing; `rowColumns`, `cellSpan`), never per
     scroll frame (D9); a span starting left of the window is rendered, and an active span reaching
     into it needs no extra column. The spanning cell is as wide as its columns, `aria-colspan`
-    (`colSpan` as a `td`), active on any of them; an arrow into a covered column lands on it and
+    (`colSpan` as a `td`; a render function reads its props' `aria-colspan`), active on any of
+    them (`activeInCell`, the `cell-active` question's and a cell part's); an arrow into a covered column lands on it and
     leaves from its edge (`cellSpanAt` bound); the model snaps the active position to its first
     column (`active-position.*`, `reconcile`, a new order, `rows.changed` holding the active row),
-    `is("cell-active")` holds on any of its columns, and `elementPosition` finds its element. A fit
+    `is("cell-active")` holds on any of its columns, and `elementPosition` finds its element (the
+    model's snap and it share `coveringCell`). A fit
     never measures a spanning cell; a header span reorders with the columns it covers, a covered
     column cannot move.
     **Collapsible groups and sticky labels (Epic #85, E1.3):** `collapsible: true` on a group;
@@ -171,7 +181,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     no child in either state, and `collapsible` on a column). The model keeps
     `collapsedGroupKeys`, a set (in the order collapsed; compared by membership, `sameKeys`, in
     the model and `Root`: the same keys reordered change nothing; a key that is no collapsible
-    group is kept: it may come back), controlled or not on `Root` through
+    group is kept: it may come back, and only the keys of collapsible groups lay the columns out
+    again: `collapsingKeys`), controlled or not on `Root` through
     the controlled factory (`collapsedGroupKeys`/`defaultCollapsedGroupKeys`/
     `onCollapsedGroupKeysChange`, a layout input followed and settled with the widths and the
     order); `column-groups.toggle { groupKey }` (`not_found` for no group, `refused` for one not
@@ -185,7 +196,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     windows, `aria-colcount` or the keys. By key it keeps its width (`columnWidths`), its place
     and its sort (sort validity reads every leaf: `entryByKey`, one walk for a column or a group
     at any depth; `sortableColumn` and `validSortColumns` take the entries); `aria-sort` is on
-    the first sorted column shown, a hidden one keeping its `data-sort-priority`. `/local` reads
+    the first sorted column with a header cell of its own, a hidden one keeping its
+    `data-sort-priority`. `/local` reads
     every leaf, hidden ones included (`leafColumns`): a sort, a filter or a search on one is data.
     `withLayout` (`model.ts`) lays out a new order or new collapsed keys alike: the active cell
     follows its column or header cell by key (`followedColumn`), else `shownColumnOf`
@@ -517,7 +529,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
   row of pinned cells, `margin-left` (`margin-right` right to left) and `flex-shrink: 0` (its box
   from the row's start, never shrunk). Nothing cosmetic. (The root's `dir`, when a direction is
-  given, is the engine's, like the layers' transforms.)
+  given, is structural: `Root` renders `view.givenDirection`.)
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`; a selectable
   row's `aria-selected="false"` is ARIA's own "selectable, not selected"): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,

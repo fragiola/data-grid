@@ -362,25 +362,37 @@ describe("the page's direction", () => {
             getRow: (id) => ({ id }),
         });
         const engine = createDataGridEngine(model);
+        const commit = () => engine.adapter.commit(engine.adapter.getView());
         engine.adapter.attach(viewport);
         expect(engine.adapter.getView().direction).toBe("rtl");
-        // no `dir` of the grid's: the page's stays
+        // the engine writes no `dir`: the adapter renders the given one
         expect(viewport.hasAttribute("dir")).toBe(false);
-        // one given wins, and the viewport carries it
+        expect(engine.adapter.getView().givenDirection).toBeUndefined();
+        // one given wins, at the commit that renders it (its `dir`)
         model.run("direction.set", { direction: "ltr" });
-        expect(engine.adapter.getView().direction).toBe("ltr");
-        expect(viewport.getAttribute("dir")).toBe("ltr");
-        // taken back: the page's again
-        model.run("direction.set", { direction: null });
+        expect(engine.adapter.getView().givenDirection).toBe("ltr");
         expect(viewport.hasAttribute("dir")).toBe(false);
+        viewport.setAttribute("dir", "ltr");
+        commit();
+        expect(engine.adapter.getView().direction).toBe("ltr");
+        // taken back: the page's again, read at the commit after the adapter removed its `dir`
+        model.run("direction.set", { direction: null });
+        expect(engine.adapter.getView().givenDirection).toBeUndefined();
+        expect(engine.adapter.getView().direction).toBe("ltr");
+        viewport.removeAttribute("dir");
+        commit();
         expect(engine.adapter.getView().direction).toBe("rtl");
     });
 
-    it("follows the page when it changes, at the next layout", () => {
-        const { engine, viewport, resize, commit } = underRtlPage();
-        // attached before it was moved under the page: left to right, until a resize reads it
+    it("follows the page when it changes, at the next attach", () => {
+        const { engine, viewport, resize, commit, detach } = underRtlPage();
+        // attached before it was moved under the page: left to right, until it attaches again
         expect(engine.adapter.getView().direction).toBe("ltr");
         resize();
+        commit();
+        expect(engine.adapter.getView().direction).toBe("ltr");
+        detach();
+        engine.adapter.attach(viewport);
         commit();
         expect(engine.adapter.getView().direction).toBe("rtl");
         viewport.scrollLeft = -700;
@@ -388,24 +400,32 @@ describe("the page's direction", () => {
         expect(engine.get("scroll-position").left).toBe(700);
     });
 
-    it("is read on attach and when the view's size changes, never per command", () => {
+    it("is read on attach and when a given direction is taken back, never per command or resize", () => {
         const { model, resize, commit } = mountEngine(
             { columns: COLUMNS, rowCount: 1_000 },
             { width: 600, layers: ["body"] },
         );
         const reads = vi.spyOn(window, "getComputedStyle");
-        // commands in view (no scroll to clamp): nothing read
+        // commands in view (no scroll to clamp), a resize: nothing read
         model.run("active-position.set", { rowIndex: 3, columnIndex: 4 });
         model.run("column-widths.resize", { columnKey: "c0", width: 150 });
         commit();
-        expect(reads).not.toHaveBeenCalled();
         resize();
+        commit();
+        expect(reads).not.toHaveBeenCalled();
+        model.run("direction.set", { direction: "rtl" });
+        commit();
+        // (the fake viewport reads its own direction to set a scroll)
+        reads.mockClear();
+        model.run("direction.set", { direction: null });
+        expect(reads).not.toHaveBeenCalled();
+        commit();
         expect(reads).toHaveBeenCalled();
         reads.mockRestore();
     });
 
-    it("mirrors the transforms and the insets together, in the task the direction changes", () => {
-        const { model, body, scrollLeft, pinnedCell } = setup({
+    it("mirrors the transforms and the insets together, at the commit rendering the direction", () => {
+        const { model, body, scrollLeft, pinnedCell, commit } = setup({
             direction: "ltr",
         });
         const cell = pinnedCell(0);
@@ -413,7 +433,11 @@ describe("the page's direction", () => {
         const x = translateX(body);
         const inset = cell.style.left;
         model.run("direction.set", { direction: "rtl" });
-        // before the new view commits: everything written is for the new side already
+        // nothing is written for it before the commit that renders its `dir`
+        expect(translateX(body)).toBe(x);
+        expect(cell.style.left).toBe(inset);
+        // at that commit, in one task: everything written is for the new side
+        commit();
         expect(translateX(body)).toBe(-x);
         expect(cell.style.left).toBe("");
         expect(cell.style.right).toBe(inset);

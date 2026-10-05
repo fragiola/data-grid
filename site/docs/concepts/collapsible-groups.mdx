@@ -111,7 +111,7 @@ again when it shows:
 - **Order**: a hidden column keeps its place among its siblings in `columnOrder`; a move among
   the columns in view leaves it there.
 - **Sort**: a sorted column stays sorted while hidden (the rows are yours to order), and a sort
-  can name it. `aria-sort` goes to the first sorted column shown; `data-sort-priority` keeps the
+  can name it. `aria-sort` goes to the first sorted column with a header cell of its own; `data-sort-priority` keeps the
   sort's own order, so a column shown can hold priority 2 while a hidden one holds 1.
 - **Rows in memory**: [`useLocalRows`](/docs/concepts/rows-in-memory) sorts, filters and searches
   by every column, a hidden one too (a total shown only while its group is closed is data all

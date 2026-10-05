@@ -201,9 +201,10 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         /** the cap on an axis's scroll size before scroll scaling takes over (default 10M px) */
         maxScrollSize?: number | undefined;
         /**
-         * the grid's direction (default `"ltr"`): in `"rtl"` its start is the right edge, the
-         * columns, pinned ones and scroll mirrored, and ArrowLeft moves to the next column. Given,
-         * the root carries it as `dir`
+         * the grid's direction (default: the page's, as the browser computes it for the root): in
+         * `"rtl"` its start is the right edge, the columns, pinned ones and scroll mirrored, and
+         * ArrowLeft moves to the next column. Given, the root renders it as `dir` (on the server
+         * too); without it, the root has none
          */
         direction?: GridDirection | undefined;
         /**
@@ -701,6 +702,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
             }),
             // a scroll container is a tab stop in some browsers: the grid has its own
             tabIndex: -1,
+            // the direction given (the prop, `direction.set`): rendered, never the engine's
+            ...(view.givenDirection ? { dir: view.givenDirection } : {}),
             style: { position: "relative", overflow: "auto" },
         },
     });

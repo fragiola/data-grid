@@ -1,9 +1,9 @@
 import type { Axis } from "../axis/axis";
 import {
+    columnPart,
     headerRowCount,
-    pinnedColumnCount,
-    pinnedEndColumnCount,
     pinnedEndFrom,
+    pinnedPartsOf,
 } from "../header/header";
 import { shownColumnOf } from "../model/collapse";
 import { detailsChanged } from "../model/expansion";
@@ -88,10 +88,12 @@ import {
     cellSpan,
     cellsSizeOf,
     columnPinning,
+    endPartFrom,
     inlineSign,
     inlineStart,
     pinnedEndShift,
     pinnedInset,
+    resizeEdge,
 } from "./geometry";
 import { createInteraction } from "./interaction";
 import type {
@@ -403,38 +405,40 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return element ? inlineSign(direction) * element.scrollLeft : 0;
     }
 
-    /** the `dir` the engine gave the viewport: the model's direction, while it has one */
-    let dirWritten: GridDirection | null = null;
-    /** the viewport's own direction as the page lays it out, last read (`updateDirection`) */
+    /** the viewport's own direction as the page lays it out, last read (`readPageDirection`) */
     let pageDirection: GridDirection = "ltr";
+    /**
+     * the model's direction changed: the adapter renders it as `dir` (`givenDirection`), and the
+     * engine takes it at the commit of that render, the page's read then when it was taken back
+     */
+    let directionPending = false;
 
     /**
-     * Takes the direction in effect: the model's, which the viewport carries as `dir` (so the page
-     * lays the grid out in it), else the viewport's own as the page lays it out. That one is read
-     * (a computed style, from its window) only with `readPage` (on attach, when the view's size
-     * changes) or when the model's is taken back (its `dir` removed first): never per command or
-     * frame. A change mirrors whatever the engine writes from now on (the layers' transforms, the
-     * insets' side), before anything is written for it, and, with `follow`, sets the scroll at the
-     * same distance from the start on the new side. Returns whether it changed.
+     * Reads the viewport's own direction as the page lays it out (a computed style, from its
+     * window), while the model gives none: on attach, and at the commit after a given direction
+     * is taken back (the adapter has removed the `dir` it rendered by then). Never per command,
+     * frame or resize: a page direction changed later is the next attach's.
      */
-    function updateDirection(follow: boolean, readPage = false): boolean {
-        const given = state.direction ?? null;
-        let read = readPage;
-        if (viewport && given !== dirWritten) {
-            if (given) viewport.setAttribute("dir", given);
-            else viewport.removeAttribute("dir");
-            // taken back: the page's, as it is now
-            read ||= given === null;
-            dirWritten = given;
-        }
-        if (viewport && read && given === null) {
-            pageDirection =
-                viewport.ownerDocument.defaultView?.getComputedStyle(viewport)
-                    .direction === "rtl"
-                    ? "rtl"
-                    : "ltr";
-        }
-        const next = given ?? pageDirection;
+    function readPageDirection() {
+        if (!viewport || state.direction !== undefined) return;
+        pageDirection =
+            viewport.ownerDocument.defaultView?.getComputedStyle(viewport)
+                .direction === "rtl"
+                ? "rtl"
+                : "ltr";
+    }
+
+    /**
+     * Takes the direction in effect: the model's (which the adapter renders as the viewport's
+     * `dir`, the engine writing none), else the page's as last read; a new one given or taken back
+     * waits for the commit that renders it (`directionPending`). A change mirrors whatever the
+     * engine writes from now on (the layers' transforms, the insets' side), before anything is
+     * written for it, and, with `follow`, sets the scroll at the same distance from the start on
+     * the new side. Returns whether it changed.
+     */
+    function updateDirection(follow: boolean): boolean {
+        if (directionPending) return false;
+        const next = state.direction ?? pageDirection;
         if (next === direction) return false;
         direction = next;
         layerX = Number.NaN;
@@ -477,7 +481,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 fresh ? undefined : columnWindow,
             ),
             pinnedCount,
-            pinnedEndFrom(columnAxis.count, pinnedEndCount),
+            endFrom(),
         );
         const rowsMoved = !sameWindow(rowWindow, nextRows);
         const columnsMoved = !sameWindow(columnWindow, nextColumns);
@@ -568,7 +572,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * Writes a pinned cell's sticky inset on `side` for the layers' `x`: its column's offset less
-     * `x`, and for a column pinned at the end (from `endFrom`) `endShift` to the view's end.
+     * `x`, and for a column pinned at the end (from `shownEndFrom`) `endShift` to the view's end.
      * Sticky is resolved in layout, before the layer's transform moves it by `x`, so it shows at
      * its offset from the view's start, on every frame the browser paints while it scrolls. An
      * element without its column (`data-column-index`) is left alone. A group's label (E1.3) is
@@ -582,7 +586,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         x: number,
         side: "left" | "right",
         shown: GridView<TRow, TNode>,
-        endFrom: number,
+        shownEndFrom: number,
         endShift: number,
     ) {
         if (layer === "detail") {
@@ -608,7 +612,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             shown.columnAxis,
             columnIndex,
             x,
-            columnIndex >= endFrom ? endShift : 0,
+            columnPart(columnIndex, shown.pinnedColumnCount, shownEndFrom) ===
+                "end"
+                ? endShift
+                : 0,
         )}px`;
     }
 
@@ -636,15 +643,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                   ? "right"
                   : "left";
         insetsFor = { x, columnAxis, width, side };
-        const endFrom = pinnedEndFrom(
-            shown.columnCount,
-            shown.pinnedEndColumnCount,
-        );
+        const shownEndFrom = endPartFrom(shown);
         const endShift = pinnedEndShift(columnAxis, width);
         for (const layer of INSET_LAYERS) {
             for (const element of layers[layer]) {
                 if (other) element.style[other] = "";
-                writeInset(layer, element, x, side, shown, endFrom, endShift);
+                writeInset(
+                    layer,
+                    element,
+                    x,
+                    side,
+                    shown,
+                    shownEndFrom,
+                    endShift,
+                );
             }
         }
     }
@@ -704,17 +716,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * or wider (a narrow screen), they would hide every other column: they scroll with the rest
      * until the view is wider again.
      */
+    /** The first column pinned at the end in effect (`pinnedEndFrom`): the count without one. */
+    function endFrom(): number {
+        return pinnedEndFrom(columnAxis.count, pinnedEndCount);
+    }
+
     function updatePinning() {
-        const count = pinnedColumnCount(state.columns);
-        const endCount = pinnedEndColumnCount(state.columns);
-        const pinned = columnAxis.offsetOf(count);
+        const { startCount, endFrom: declaredEndFrom } = pinnedPartsOf(
+            state.columns,
+        );
+        const pinned = columnAxis.offsetOf(startCount);
         const pinnedEnd =
-            columnAxis.totalSize -
-            columnAxis.offsetOf(pinnedEndFrom(columnAxis.count, endCount));
+            columnAxis.totalSize - columnAxis.offsetOf(declaredEndFrom);
         const fits = width === 0 || pinned + pinnedEnd < width;
-        pinnedCount = fits ? count : 0;
+        pinnedCount = fits ? startCount : 0;
         pinnedWidth = fits ? pinned : 0;
-        pinnedEndCount = fits ? endCount : 0;
+        pinnedEndCount = fits ? columnAxis.count - declaredEndFrom : 0;
         pinnedEndWidth = fits ? pinnedEnd : 0;
     }
 
@@ -911,8 +928,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (
             columnIndex !== undefined &&
-            columnIndex >= pinnedCount &&
-            columnIndex < pinnedEndFrom(columnAxis.count, pinnedEndCount)
+            columnPart(columnIndex, pinnedCount, endFrom()) === undefined
         ) {
             // into the view between the pinned columns; a pinned one is always in view
             const from = columnsX.virtual + pinnedWidth;
@@ -955,7 +971,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 state.header,
                 pinnedCount,
                 columnWindow.visible,
-                pinnedEndFrom(columnAxis.count, pinnedEndCount),
+                endFrom(),
                 // a body cell spanning columns (E1.2) is in view while any of them is
                 body && hasColumnSpans(state.columns)
                     ? spanAt(state, position.rowIndex, position.columnIndex)
@@ -1346,10 +1362,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function resizeSign(columnKey: string): number {
         const cell = state.header.cellByKey(columnKey);
-        const fromStart =
-            cell !== undefined &&
-            cell.columnIndex >= pinnedEndFrom(columnAxis.count, pinnedEndCount);
-        return fromStart ? -inlineSign(direction) : inlineSign(direction);
+        const edge = resizeEdge(
+            cell && columnPart(cell.columnIndex, pinnedCount, endFrom()),
+        );
+        return edge === "start"
+            ? -inlineSign(direction)
+            : inlineSign(direction);
     }
 
     /** Resizes a drag's column to its pointer, growing the way `resizeSign` says. */
@@ -2332,6 +2350,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
+        if (before.direction !== after.direction) directionPending = true;
         const changedDetails = detailsChanged(before, after);
         if (after.rowsChanged !== before.rowsChanged) {
             const rendered = rendersRows(after.rowsChanged);
@@ -2446,17 +2465,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const doc = element.ownerDocument;
             const defaultView = doc.defaultView;
             readSize();
-            // the direction first: the scroll already set is read on its side
-            // a new element: the model's direction is written on it
-            dirWritten = null;
-            updateDirection(false, true);
+            // the direction first: the scroll already set is read on its side (the adapter has
+            // rendered the `dir` of a given one by now)
+            directionPending = false;
+            readPageDirection();
+            updateDirection(false);
             const observer =
                 defaultView && "ResizeObserver" in defaultView
                     ? new defaultView.ResizeObserver(() => {
                           const before = width;
                           readSize();
-                          // the page's direction, read again with the view's size
-                          updateDirection(true, true);
                           // the flex columns follow the view's width (A1), and only they
                           if (
                               width === before ||
@@ -2572,10 +2590,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     offsetX(committed, viewport),
                     inlineStart(direction),
                     committed,
-                    pinnedEndFrom(
-                        committed.columnCount,
-                        committed.pinnedEndColumnCount,
-                    ),
+                    endPartFrom(committed),
                     pinnedEndShift(committed.columnAxis, width),
                 );
             } else {
@@ -2603,6 +2618,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         },
         commit(rendered) {
             committed = rendered;
+            // a direction given or taken back, now that the adapter rendered its `dir` (or removed
+            // it: the page's is read)
+            if (directionPending) {
+                directionPending = false;
+                readPageDirection();
+                if ((state.direction ?? pageDirection) !== direction) {
+                    relayout(false);
+                }
+            }
             if (focusBeforeRender && state.activePosition) {
                 const focused = viewport?.ownerDocument.activeElement;
                 // the focused cell was removed by the render: focus fell to the document

@@ -1,5 +1,5 @@
 import { isReorderable } from "../model/order";
-import { spanHolds } from "../model/spans";
+import { activeInCell } from "../model/spans";
 import type {
     CellPosition,
     HeaderCellLayout,
@@ -21,6 +21,7 @@ import {
     columnLeft,
     columnPinning,
     headerCellSort,
+    resizeEdge,
     rowCellsHeight,
     rowDetailBox,
     rowExpanded,
@@ -171,7 +172,7 @@ export interface HeaderCellPart {
     readonly state: HeaderCellState;
     /** the roving tab stop, as a body cell's */
     readonly tabIndex: 0 | -1;
-    /** on the first sorted column shown, its header cell only (ARIA 1.2: one header at a time) */
+    /** on the first sorted column with a header cell of its own (ARIA 1.2: one header at a time) */
     readonly ariaSort: SortDirection | undefined;
 }
 
@@ -249,16 +250,12 @@ export function cellPart<TRow, TNode>(
         cell.columnIndex,
         span,
     );
-    const { active: position } = view;
-    const active =
-        position !== null &&
-        (span === 1
-            ? sameCell(position, cell)
-            : position.rowIndex === cell.rowIndex &&
-              spanHolds(
-                  { columnIndex: cell.columnIndex, columnSpan: span },
-                  position.columnIndex,
-              ));
+    const active = activeInCell(
+        view.active,
+        cell.rowIndex,
+        cell.columnIndex,
+        span,
+    );
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -376,7 +373,7 @@ export function columnResizerPart<TRow, TNode>(
             width,
             minWidth,
             maxWidth,
-            edge: pinnedSide === "end" ? "start" : "end",
+            edge: resizeEdge(pinnedSide),
         },
         tabIndex: 0,
         attributes: {

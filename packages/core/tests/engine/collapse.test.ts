@@ -377,6 +377,23 @@ describe("the model's set of keys", () => {
         });
         expect(m.state).toBe(before);
     });
+
+    it("keeps keys of no collapsible group without laying the columns out again", () => {
+        const m = createDataGridModel<Row>({ columns: COLUMNS, rows });
+        const { columns, header } = m.state;
+        // "h" does not collapse, "gone" is no group: kept, collapsing nothing
+        expect(
+            m.run("column-groups.set", { groupKeys: ["h", "gone"] }),
+        ).toEqual({ ok: true, value: ["h", "gone"] });
+        expect(m.state.columns).toBe(columns);
+        expect(m.state.header).toBe(header);
+        m.run("column-groups.toggle", { groupKey: "g" });
+        const collapsed = m.state.columns;
+        expect(collapsed).not.toBe(columns);
+        m.run("column-groups.set", { groupKeys: ["g"] });
+        expect(m.state.columns).toBe(collapsed);
+        expect(m.get("collapsed-group-keys")).toEqual(["g"]);
+    });
 });
 
 describe("the engine", () => {

@@ -127,6 +127,12 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * `left` otherwise)
      */
     readonly direction: GridDirection;
+    /**
+     * the direction the model is given (`direction.set`, a root's prop), `undefined` for the
+     * page's: what an adapter renders as the viewport's `dir` (the engine writes none), so
+     * markup rendered before the grid attaches, or on a server, carries it
+     */
+    readonly givenDirection: GridDirection | undefined;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */

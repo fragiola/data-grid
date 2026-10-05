@@ -78,8 +78,8 @@ const PINNED_KEYS = [
 
 /**
  * A cell's props with its table spans: a `render` element that is a `th` or a `td` takes `colSpan`
- * and `rowSpan`, each only over 1 (a render function finds them in the state). The same props
- * without.
+ * and `rowSpan`, each only over 1 (a render function finds them in its props' `aria-colspan` and
+ * `aria-rowspan`, a header cell's in its state too). The same props without.
  */
 function withTableSpans(
     props: Record<string, unknown>,
@@ -300,7 +300,8 @@ export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
 
 /**
  * A header cell (`role="columnheader"`), a group's or a column's. A `<th>` through `render`, which
- * then gets `colSpan`/`rowSpan` too (a render function finds them in the state).
+ * then gets `colSpan`/`rowSpan` too (a render function finds them in the state, and in its props'
+ * `aria-colspan`/`aria-rowspan`).
  */
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
     const { cell, children, ...rest } = props;
@@ -457,8 +458,10 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
 
 /**
  * A body cell (`role="gridcell"`), positioned in its row. A `<td>` through `render`, which then
- * gets `colSpan` when it spans columns (`aria-colspan`, a column's `colSpan`). The active cell is
- * the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on click.
+ * gets `colSpan` when it spans columns (`aria-colspan`, a column's `colSpan`); a render function
+ * finds the span in its props' `aria-colspan` (`<td {...props} colSpan={props["aria-colspan"]} />`).
+ * The active cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on
+ * click.
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
     const { cell, children, ...rest } = props;

@@ -1,5 +1,5 @@
 import type { Axis } from "../axis/axis";
-import { pinnedEndFrom } from "../header/header";
+import { columnPart, pinnedEndFrom } from "../header/header";
 import { holdsRow } from "../model/expansion";
 import { isRowSelectable, isRowSelected } from "../model/selection";
 import type {
@@ -101,23 +101,31 @@ export function columnPinning<TRow, TNode>(
     readonly pinnedEdge: boolean;
     readonly pinnedSide: PinnedSide | undefined;
 } {
-    const end = columnIndex + columnSpan;
-    if (end <= view.pinnedColumnCount) {
-        return {
-            pinned: true,
-            pinnedEdge: end === view.pinnedColumnCount,
-            pinnedSide: "start",
-        };
-    }
-    const endFrom = pinnedEndFrom(view.columnCount, view.pinnedEndColumnCount);
-    if (columnIndex >= endFrom) {
-        return {
-            pinned: true,
-            pinnedEdge: columnIndex === endFrom,
-            pinnedSide: "end",
-        };
-    }
-    return { pinned: false, pinnedEdge: false, pinnedSide: undefined };
+    const endFrom = endPartFrom(view);
+    // a span never crosses its part (E1.2): its first column tells it
+    const pinnedSide = columnPart(columnIndex, view.pinnedColumnCount, endFrom);
+    return {
+        pinned: pinnedSide !== undefined,
+        pinnedEdge:
+            pinnedSide === "start"
+                ? columnIndex + columnSpan === view.pinnedColumnCount
+                : pinnedSide === "end" && columnIndex === endFrom,
+        pinnedSide,
+    };
+}
+
+/** The first column pinned at the end in effect in a view (`pinnedEndFrom`): its column count without. */
+export function endPartFrom<TRow, TNode>(view: GridView<TRow, TNode>): number {
+    return pinnedEndFrom(view.columnCount, view.pinnedEndColumnCount);
+}
+
+/**
+ * The edge of a header cell a resize moves (E1.1), by its column's part (`columnPart`): a column
+ * pinned at the end grows from its start edge (toward the start), every other one from its end.
+ * What the engine's drag and keys and a resizer's state both read.
+ */
+export function resizeEdge(part: PinnedSide | undefined): "start" | "end" {
+    return part === "end" ? "start" : "end";
 }
 
 /**
@@ -164,9 +172,7 @@ function leftInRow<TRow, TNode>(
         return (
             view.pinnedWidth +
             offset -
-            view.columnAxis.offsetOf(
-                pinnedEndFrom(view.columnCount, view.pinnedEndColumnCount),
-            )
+            view.columnAxis.offsetOf(endPartFrom(view))
         );
     }
     return offset - view.columnBase - rowLeft(view);
@@ -416,8 +422,9 @@ export interface HeaderCellSort {
     /** its column's place among the sorted columns, 1-based, when it is sorted */
     readonly priority: number | undefined;
     /**
-     * `aria-sort`, on the first sorted column shown, its header cell only (ARIA 1.2: one header
-     * at a time; a column a collapsed group hides holds none, and may hold priority 1)
+     * `aria-sort`, on the first sorted column with a header cell of its own (ARIA 1.2: one header
+     * at a time; a column a collapsed group hides or a header span covers holds none, and may
+     * hold priority 1)
      */
     readonly ariaSort: SortDirection | undefined;
 }
@@ -432,13 +439,17 @@ export function headerCellSort<TRow, TNode>(
         ? view.sortColumns.findIndex((entry) => entry.columnKey === column.key)
         : -1;
     const sorted = view.sortColumns[index];
-    // `aria-sort` on the first sorted column shown: a column a collapsed group hides (E1.3)
-    // still sorts, and keeps its priority
+    // `aria-sort` on the first sorted column with a header cell of its own: one a collapsed
+    // group hides (E1.3) or a header span covers (E1.2) still sorts, and keeps its priority
     const first =
         sorted &&
-        view.sortColumns.find(
-            (entry) => view.header.cellByKey(entry.columnKey) !== undefined,
-        );
+        view.sortColumns.find((entry) => {
+            const own = view.header.cellByKey(entry.columnKey);
+            return (
+                own !== undefined &&
+                view.header.cellAt(own.rowIndex, own.columnIndex) === own
+            );
+        });
     return {
         sortable: column?.sortable === true,
         direction: sorted?.direction,

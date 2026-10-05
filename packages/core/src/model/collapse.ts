@@ -28,6 +28,17 @@ export function isGroupCollapsed<TRow, TNode>(
     );
 }
 
+/**
+ * The keys that collapse a group: the ones of the entries' collapsible groups (the others are
+ * kept, and collapse nothing).
+ */
+export function collapsingKeys<TRow, TNode>(
+    entries: readonly ColumnOrGroup<TRow, TNode>[],
+    keys: readonly string[],
+): readonly string[] {
+    return keys.filter((key) => groupByKey(entries, key)?.collapsible === true);
+}
+
 /** The group with this key among the entries (`entryByKey`), or `undefined` for a column or none. */
 export function groupByKey<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],

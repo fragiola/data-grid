@@ -129,3 +129,40 @@ describe("column spans", () => {
         expect([...new Set(seen)]).toEqual(["a", "d", "e"]);
     });
 });
+
+describe("a render function (the epic review)", () => {
+    it("finds a body cell's span in its props' aria-colspan", () => {
+        const seen = new Map<string, unknown>();
+        render(
+            <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+                <DataGrid.Grid>
+                    <DataGrid.Body>
+                        <DataGrid.Rows<Row>>
+                            {(row) => (
+                                <DataGrid.Row row={row}>
+                                    <DataGrid.Cells<Row>>
+                                        {(cell) => (
+                                            <DataGrid.Cell
+                                                cell={cell}
+                                                render={(props) => {
+                                                    seen.set(
+                                                        `${cell.rowIndex}:${cell.columnIndex}`,
+                                                        props["aria-colspan"],
+                                                    );
+                                                    return <div {...props} />;
+                                                }}
+                                            />
+                                        )}
+                                    </DataGrid.Cells>
+                                </DataGrid.Row>
+                            )}
+                        </DataGrid.Rows>
+                    </DataGrid.Body>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        // row 0 is even: "a" spans 3
+        expect(seen.get("0:0")).toBe(3);
+        expect(seen.get("1:0")).toBeUndefined();
+    });
+});

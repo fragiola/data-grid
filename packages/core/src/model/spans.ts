@@ -1,11 +1,7 @@
-import {
-    pinnedColumnCount,
-    pinnedEndColumnCount,
-    pinnedEndFrom,
-} from "../header/header";
-import { lowerBound, spanValue } from "../utils";
+import { keptSpan, partEnd, partStart, pinnedPartsOf } from "../header/header";
+import { lowerBound } from "../utils";
 import { rowAt } from "./source";
-import type { ColSpanArgs, Column, DataGridState } from "./types";
+import type { CellPosition, ColSpanArgs, Column, DataGridState } from "./types";
 
 // Column spans (Epic #85, E1.2): a column's `colSpan` makes one of its cells cover the columns
 // after it, within its part (pinned at the start, at the end, or not). Pure, and asked only for
@@ -40,14 +36,7 @@ function spanColumnsOf<TRow, TNode>(
         columns.forEach((column, index) => {
             if (column.colSpan) indexes.push(index);
         });
-        found = {
-            indexes,
-            startCount: pinnedColumnCount(columns),
-            endFrom: pinnedEndFrom(
-                columns.length,
-                pinnedEndColumnCount(columns),
-            ),
-        };
+        found = { indexes, ...pinnedPartsOf(columns) };
         spanColumns.set(columns, found);
     }
     return found;
@@ -60,15 +49,16 @@ export function hasColumnSpans<TRow, TNode>(
     return spanColumnsOf(columns).indexes.length > 0;
 }
 
-/** The first column of the part holding `columnIndex`, and the end of that part. */
-function partOf(
-    { startCount, endFrom }: SpanColumns,
+/**
+ * The first column of the part holding `columnIndex` among the grid's columns (`partStart` over
+ * their pinned parts): where a row's cells start again.
+ */
+export function spanPartStart<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
     columnIndex: number,
-    columnCount: number,
-): { readonly start: number; readonly end: number } {
-    if (columnIndex < startCount) return { start: 0, end: startCount };
-    if (columnIndex >= endFrom) return { start: endFrom, end: columnCount };
-    return { start: startCount, end: endFrom };
+): number {
+    const { startCount, endFrom } = spanColumnsOf(columns);
+    return partStart(columnIndex, startCount, endFrom);
 }
 
 /**
@@ -82,10 +72,12 @@ export function columnSpanOf<TRow, TNode>(
 ): number {
     const colSpan = columns[columnIndex]?.colSpan;
     if (!colSpan) return 1;
-    const wanted = spanValue(colSpan(args));
-    if (wanted === 1) return 1;
-    const { end } = partOf(spanColumnsOf(columns), columnIndex, columns.length);
-    return Math.min(wanted, end - columnIndex);
+    const { startCount, endFrom } = spanColumnsOf(columns);
+    return keptSpan(
+        colSpan(args),
+        columnIndex,
+        partEnd(columnIndex, startCount, endFrom, columns.length),
+    );
 }
 
 /** What a body cell's span is read from: the columns and the rows. */
@@ -94,11 +86,22 @@ export type SpansState<TRow, TNode = unknown> = Pick<
     "columns" | "source"
 >;
 
-/** Whether a cell's span holds a column. */
-export function spanHolds(span: CellSpan, columnIndex: number): boolean {
+/**
+ * Whether the active position is in a body cell (E1.2): on its row, its column one the cell's
+ * span (from `columnIndex`, `columnSpan` columns) holds. What `is("cell-active")` and a cell's
+ * part both ask.
+ */
+export function activeInCell(
+    active: CellPosition | null,
+    rowIndex: number,
+    columnIndex: number,
+    columnSpan: number,
+): boolean {
     return (
-        columnIndex >= span.columnIndex &&
-        columnIndex < span.columnIndex + span.columnSpan
+        active !== null &&
+        active.rowIndex === rowIndex &&
+        active.columnIndex >= columnIndex &&
+        active.columnIndex < columnIndex + columnSpan
     );
 }
 
@@ -165,10 +168,26 @@ export function spanAt<TRow, TNode>(
     const args = rowSpanArgs(state, rowIndex);
     if (!args) return { columnIndex, columnSpan: 1 };
     const { columns } = state;
-    const { start } = partOf(
-        spanColumnsOf(columns),
+    return cellCovering(
+        columns,
+        args,
+        spanPartStart(columns, columnIndex),
         columnIndex,
-        columns.length,
     );
-    return cellCovering(columns, args, start, columnIndex);
+}
+
+/**
+ * The cell covering a position, at its own position (G4, E1.2): a header cell's top row and
+ * first column (`header.cellAt`), a body cell's first column under a span (`spanAt`) on its row;
+ * `undefined` for a header position no cell covers. What the model snaps an active position to
+ * and the engine finds a cell's element by.
+ */
+export function coveringCell<TRow, TNode>(
+    state: SpansState<TRow, TNode> & Pick<DataGridState<TRow, TNode>, "header">,
+    position: CellPosition,
+): CellPosition | undefined {
+    const { rowIndex, columnIndex } = position;
+    if (rowIndex < 0) return state.header.cellAt(rowIndex, columnIndex);
+    const start = spanAt(state, rowIndex, columnIndex).columnIndex;
+    return start === columnIndex ? position : { rowIndex, columnIndex: start };
 }

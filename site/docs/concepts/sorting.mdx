@@ -77,10 +77,13 @@ A middleware can refuse or rewrite them.
 | `data-sortable` | its column is sortable |
 | `data-sort` | `ascending` or `descending`, while its column is sorted |
 | `data-sort-priority` | its column's place in the sort, 1-based |
-| `aria-sort` | on the first sorted column only |
+| `aria-sort` | on the first sorted column with a header cell of its own only |
 
 ARIA 1.2 asks for `aria-sort` on one header at a time, so a sort on several columns announces
-its first one; the others are in `data-sort`. Indicators are yours: draw an arrow from
+its first one; the others are in `data-sort`. A sorted column with no header cell of its own (a
+[collapsed group](/docs/concepts/collapsible-groups) hides it, or a header cell
+[spans](/docs/concepts/column-spanning) over it) still sorts and keeps its priority: the next
+one carries `aria-sort`. Indicators are yours: draw an arrow from
 `data-sort` in CSS, or from the header cell's state (`sortable`, `sortDirection`,
 `sortPriority`) in a `render` function, as the example does.
 

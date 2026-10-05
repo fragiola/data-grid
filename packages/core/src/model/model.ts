@@ -7,7 +7,12 @@ import {
 } from "../navigation/navigation";
 import { clamp, isIndex, keySet, sameKeys, toggledKey } from "../utils";
 import { overlaps } from "../viewport/window";
-import { followedColumn, groupByKey, isGroupCollapsed } from "./collapse";
+import {
+    collapsingKeys,
+    followedColumn,
+    groupByKey,
+    isGroupCollapsed,
+} from "./collapse";
 import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
@@ -51,7 +56,7 @@ import {
     validSortColumns,
 } from "./sort";
 import { cellValue, loadedRowKey, type RowsState, rowAt } from "./source";
-import { hasColumnSpans, spanAt, spanHolds } from "./spans";
+import { activeInCell, coveringCell, hasColumnSpans, spanAt } from "./spans";
 import type {
     CellPosition,
     Column,
@@ -210,11 +215,7 @@ function cellPosition<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     position: CellPosition,
 ): CellPosition {
-    const columnIndex =
-        position.rowIndex >= 0
-            ? spanAt(state, position.rowIndex, position.columnIndex).columnIndex
-            : state.header.cellAt(position.rowIndex, position.columnIndex)
-                  ?.columnIndex;
+    const columnIndex = coveringCell(state, position)?.columnIndex;
     return columnIndex !== undefined && columnIndex !== position.columnIndex
         ? { rowIndex: position.rowIndex, columnIndex }
         : position;
@@ -408,11 +409,19 @@ function withLayout<TRow, TNode>(
         !sameKeys(next.collapsedGroupKeys, state.collapsedGroupKeys)
             ? next.collapsedGroupKeys
             : state.collapsedGroupKeys;
-    if (
-        sameOrder(columnOrder, state.columnOrder) &&
-        collapsedGroupKeys === state.collapsedGroupKeys
-    ) {
+    const sameColumnOrder = sameOrder(columnOrder, state.columnOrder);
+    if (sameColumnOrder && collapsedGroupKeys === state.collapsedGroupKeys) {
         return state;
+    }
+    // keys of no collapsible group (kept: it may come back) collapse nothing: no new layout
+    if (
+        sameColumnOrder &&
+        sameKeys(
+            collapsingKeys(state.columnEntries, collapsedGroupKeys),
+            collapsingKeys(state.columnEntries, state.collapsedGroupKeys),
+        )
+    ) {
+        return { ...state, collapsedGroupKeys };
     }
     const { columns, header } = layoutOf(
         state.columnEntries,
@@ -1285,15 +1294,15 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "cell-active": (position) => {
             const active = state.activePosition;
             if (!active) return false;
-            if (
-                position.rowIndex < 0 ||
-                active.rowIndex !== position.rowIndex
-            ) {
+            if (position.rowIndex < 0) {
                 return sameCell(active, position, state.header.cellAt);
             }
-            return spanHolds(
-                spanAt(state, position.rowIndex, position.columnIndex),
-                active.columnIndex,
+            const span = spanAt(state, position.rowIndex, position.columnIndex);
+            return activeInCell(
+                active,
+                position.rowIndex,
+                span.columnIndex,
+                span.columnSpan,
             );
         },
         "row-active": ({ rowIndex }) =>

@@ -52,7 +52,8 @@ A span is kept within the columns it may cover:
 Nothing changes in your markup. `DataGrid.Cells` hands its children one cell per rendered
 column, a spanning cell standing for the ones it covers (`useCells` is the same list), and
 `DataGrid.HeaderCells` does the same in the header. A spanning cell is as wide as its columns
-and carries `aria-colspan`; rendered as a `<td>` or a `<th>`, it gets `colSpan` too. Style it
+and carries `aria-colspan`; rendered as a `<td>` or a `<th>`, it gets `colSpan` too (a render
+function finds the span in its props' `aria-colspan`). Style it
 with the attribute: `[aria-colspan]`, or `[&[aria-colspan]]:` in Tailwind. A header cell's state
 also tells its span (`state.columnSpan`).
 
