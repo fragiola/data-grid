@@ -20,6 +20,7 @@ const REPRESENTATIVE: string[] = [
     "rtl", // the grid mirrored: logical sides, both pinned parts, the handles at the left edge
     "column-spanning", // cells and header cells spanning columns, a tint filling a span
     "collapsible-groups", // three header rows, the toggles and the labels that stay in view
+    "summary-rows", // sticky rows under the header and at the bottom edge, a span among them
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

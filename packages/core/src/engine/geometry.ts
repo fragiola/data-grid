@@ -7,7 +7,10 @@ import type {
     HeaderCellLayout,
     PinnedSide,
     SortDirection,
+    SummaryPosition,
+    SummaryRowCounts,
 } from "../model/types";
+import { rowLine } from "../navigation/navigation";
 import { overlaps } from "../viewport/window";
 import type { GridView } from "./types";
 
@@ -400,17 +403,41 @@ export function ariaRowDetail<TRow, TNode>(
     };
 }
 
-/** The grid's `aria-rowcount`: the header rows and every body row. */
+/** The grid's `aria-rowcount`: the header rows, every body row and the summary rows. */
 export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
-    return view.rowCount + view.headerRowCount;
+    const { top, bottom } = view.summaryRows;
+    return view.rowCount + view.headerRowCount + top + bottom;
 }
 
-/** A row's `aria-rowindex`: 1-based, the header rows first (they are -depth … -1). */
+/**
+ * A row's `aria-rowindex`: 1-based, top to bottom (`rowLine`): the header rows first (they are
+ * -depth … -1), then the top summary rows, the body rows and the bottom summary rows (E2.1).
+ */
 export function ariaRowIndex<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
 ): number {
-    return rowIndex + view.headerRowCount + 1;
+    const { top } = view.summaryRows;
+    return (
+        rowLine(rowIndex, view.header.depth, top) +
+        view.headerRowCount +
+        top +
+        1
+    );
+}
+
+/**
+ * How tall a position's summary rows are together (0 without): a view's, or a state's (the
+ * engine's body is the view less them).
+ */
+export function summaryHeight(
+    grid: {
+        readonly summaryRows: SummaryRowCounts;
+        readonly summaryRowHeight: number;
+    },
+    position: SummaryPosition,
+): number {
+    return grid.summaryRows[position] * grid.summaryRowHeight;
 }
 
 /** A header cell's sort, as the adapters show it (S6). */

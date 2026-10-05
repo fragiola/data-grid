@@ -1,6 +1,13 @@
-import { keptSpan, partEnd, partStart, pinnedPartsOf } from "../header/header";
+import {
+    isHeaderRow,
+    keptSpan,
+    partEnd,
+    partStart,
+    pinnedPartsOf,
+} from "../header/header";
 import { lowerBound } from "../utils";
 import { rowAt } from "./source";
+import { summaryRowAt } from "./summary";
 import type { CellPosition, ColSpanArgs, Column, DataGridState } from "./types";
 
 // Column spans (Epic #85, E1.2): a column's `colSpan` makes one of its cells cover the columns
@@ -80,10 +87,13 @@ export function columnSpanOf<TRow, TNode>(
     );
 }
 
-/** What a body cell's span is read from: the columns and the rows. */
+/**
+ * What a body cell's span is read from: the columns and the rows (the summary rows', E2.1, with
+ * the header's depth and the row count their indexes follow).
+ */
 export type SpansState<TRow, TNode = unknown> = Pick<
     DataGridState<TRow, TNode>,
-    "columns" | "source"
+    "columns" | "source" | "rowCount" | "header" | "summaryRows"
 >;
 
 /**
@@ -145,12 +155,18 @@ export function cellCovering<TRow, TNode>(
     return cell;
 }
 
-/** What a loaded row's cells are asked with, or `null` while it is not loaded (or no column spans). */
+/**
+ * What a loaded row's cells are asked with, or a summary row's (E2.1), or `null` for a row not
+ * loaded (or no column spans).
+ */
 export function rowSpanArgs<TRow, TNode>(
     state: SpansState<TRow, TNode>,
     rowIndex: number,
 ): ColSpanArgs<TRow> | null {
-    if (rowIndex < 0 || !hasColumnSpans(state.columns)) return null;
+    if (!hasColumnSpans(state.columns)) return null;
+    const summary = summaryRowAt(state, rowIndex);
+    if (summary) return { type: "summary", ...summary };
+    if (rowIndex < 0) return null;
     const row = rowAt(state.source, rowIndex);
     return row === undefined ? null : { type: "row", row, rowIndex };
 }
@@ -178,16 +194,18 @@ export function spanAt<TRow, TNode>(
 
 /**
  * The cell covering a position, at its own position (G4, E1.2): a header cell's top row and
- * first column (`header.cellAt`), a body cell's first column under a span (`spanAt`) on its row;
- * `undefined` for a header position no cell covers. What the model snaps an active position to
- * and the engine finds a cell's element by.
+ * first column (`header.cellAt`), a body or summary row cell's first column under a span
+ * (`spanAt`) on its row; `undefined` for a header position no cell covers. What the model snaps
+ * an active position to and the engine finds a cell's element by.
  */
 export function coveringCell<TRow, TNode>(
     state: SpansState<TRow, TNode> & Pick<DataGridState<TRow, TNode>, "header">,
     position: CellPosition,
 ): CellPosition | undefined {
     const { rowIndex, columnIndex } = position;
-    if (rowIndex < 0) return state.header.cellAt(rowIndex, columnIndex);
+    if (isHeaderRow(rowIndex, state.header)) {
+        return state.header.cellAt(rowIndex, columnIndex);
+    }
     const start = spanAt(state, rowIndex, columnIndex).columnIndex;
     return start === columnIndex ? position : { rowIndex, columnIndex: start };
 }

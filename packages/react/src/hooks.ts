@@ -30,6 +30,13 @@ import {
     rowPart,
     rowTop,
     rowWidth,
+    type SummaryCellPart,
+    type SummaryCellState,
+    type SummaryPosition,
+    type SummaryRowState,
+    summaryCellPart,
+    summaryRowPart,
+    summaryRowsOf,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -44,6 +51,10 @@ import {
     HeaderRowContext,
     type HeaderRowInfo,
     type RowInfo,
+    type SummaryCellInfo,
+    SummaryContext,
+    SummaryRowContext,
+    type SummaryRowInfo,
     useGrid,
     useRootGrid,
     ViewContext,
@@ -58,6 +69,8 @@ export type {
     HeaderCellState,
     RowDetailState,
     RowState,
+    SummaryCellState,
+    SummaryRowState,
 } from "@fragiola/data-grid";
 export { useDataGrid } from "./context";
 
@@ -233,7 +246,7 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
  */
 function cellProps<TRow>(
     view: GridView<TRow, ReactNode>,
-    part: CellPart | HeaderCellPart,
+    part: CellPart | HeaderCellPart | SummaryCellPart,
     box: {
         readonly left: number;
         readonly width: number;
@@ -241,8 +254,10 @@ function cellProps<TRow>(
     },
 ): PartHookResult<unknown>["props"] {
     const { state } = part;
-    // a header cell's state is the one with a `group` (its sort comes with it)
+    // a header cell's state is the one with a `group` (its sort comes with it), a summary row
+    // cell's the one with a `position`
     const header = "group" in state ? state : undefined;
+    const summary = "position" in state ? state.position : undefined;
     const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
     const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
     const { pinned } = state;
@@ -255,7 +270,12 @@ function cellProps<TRow>(
         ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
         tabIndex: part.tabIndex,
         ...dataAttributes({
-            "grid-part": header ? "header-cell" : "cell",
+            "grid-part": header
+                ? "header-cell"
+                : summary
+                  ? "summary-cell"
+                  : "cell",
+            summary,
             "row-index": state.rowIndex,
             "column-index": state.columnIndex,
             loading: "loaded" in state && !state.loaded,
@@ -302,14 +322,26 @@ export function useCellPart<TRow>(
     cell: CellInfo<TRow>,
 ): PartHookResult<CellState> & { columnSpan: number } {
     const view = useGridView<TRow>();
-    const part = cellPart(view, cell);
+    return cellPartProps(view, cellPart(view, cell), cell);
+}
+
+/**
+ * A body or summary row cell's part as a hook returns it, with its span: its state, its props
+ * (`cellProps`) on its box in its row, `height` tall (default: its row's own height).
+ */
+function cellPartProps<TRow, P extends CellPart | SummaryCellPart>(
+    view: GridView<TRow, ReactNode>,
+    part: P,
+    cell: { readonly rowIndex: number; readonly columnIndex: number },
+    height?: number,
+): PartHookResult<P["state"]> & { columnSpan: number } {
     const columnSpan = part.ariaColSpan ?? 1;
     return {
         state: part.state,
         props: cellProps(
             view,
             part,
-            cellBox(view, cell.rowIndex, cell.columnIndex, columnSpan),
+            cellBox(view, cell.rowIndex, cell.columnIndex, columnSpan, height),
         ),
         columnSpan,
     };
@@ -480,4 +512,113 @@ export function useGroupLabel<TRow>(
             style: { position: "sticky" },
         },
     };
+}
+
+/**
+ * A position's summary rows (Epic #86), the first one first: `position`'s, else the ones of the
+ * `DataGrid.Summary` around. None while the grid has none there.
+ */
+export function useSummaryRows(
+    position?: SummaryPosition,
+): readonly SummaryRowInfo[] {
+    const view = useGridView();
+    const around = useContext(SummaryContext);
+    const at = position ?? around;
+    const { summaryRows, rowCount, header } = view;
+    const rows = useMemo(
+        () => at && summaryRowsOf({ summaryRows, rowCount, header }, at),
+        [summaryRows, rowCount, header, at],
+    );
+    if (!rows) {
+        throw new Error(
+            "useSummaryRows() must be given a position, or be used inside <DataGrid.Summary>",
+        );
+    }
+    return rows;
+}
+
+/**
+ * A summary row's state, and the props for its element (Epic #86): ARIA (`role="row"`, its
+ * `aria-rowindex` after the header's or the body's rows), `data-summary`, and its structural
+ * style in its `DataGrid.Summary` (from `rowLeft`, a summary row tall; a flex container with pinned
+ * columns, as a body row).
+ */
+export function useSummaryRow<TRow>(
+    row: SummaryRowInfo,
+): PartHookResult<SummaryRowState> {
+    const view = useGridView<TRow>();
+    const { state } = summaryRowPart(view, row);
+    return {
+        state,
+        props: {
+            role: "row",
+            "aria-rowindex": ariaRowIndex(view, row.rowIndex),
+            ...dataAttributes({
+                "grid-part": "summary-row",
+                summary: row.position,
+                "row-index": row.rowIndex,
+                active: state.active,
+            }),
+            style: rowStyle(
+                view,
+                row.summaryIndex * view.summaryRowHeight,
+                view.summaryRowHeight,
+            ),
+        },
+    };
+}
+
+/**
+ * The cells a summary row renders, with their columns: one per rendered column, but a cell
+ * spanning columns (a column's `colSpan` asked with `type: "summary"`) stands for the ones it
+ * covers. The given row, else the one rendering (inside `DataGrid.SummaryRow`).
+ */
+export function useSummaryCells<TRow = unknown>(
+    row?: SummaryRowInfo,
+): SummaryCellInfo<TRow>[] {
+    const view = useGridView<TRow>();
+    const rendering = useContext(SummaryRowContext);
+    const at = row ?? rendering;
+    if (!at) {
+        throw new Error(
+            "useSummaryCells() must be given a row, or be used inside <DataGrid.SummaryRow>",
+        );
+    }
+    return rowColumns(view, at.rowIndex).flatMap((columnIndex) => {
+        const column = view.columnDefs[columnIndex];
+        if (!column) return [];
+        return [
+            {
+                rowIndex: at.rowIndex,
+                columnIndex,
+                column,
+                position: at.position,
+                summaryIndex: at.summaryIndex,
+            },
+        ];
+    });
+}
+
+/**
+ * A summary row's cell's state, and the props for its element (Epic #86): a body cell's (the
+ * roving tab stop, ARIA, pinned and spanning as one), `data-summary`, a summary row tall.
+ */
+export function useSummaryCell<TRow>(
+    cell: SummaryCellInfo<TRow>,
+): PartHookResult<SummaryCellState> {
+    const { state, props } = useSummaryCellPart(cell);
+    return { state, props };
+}
+
+/** `useSummaryCell`, and how many columns the cell spans (a table cell's `colSpan`). */
+export function useSummaryCellPart<TRow>(
+    cell: SummaryCellInfo<TRow>,
+): PartHookResult<SummaryCellState> & { columnSpan: number } {
+    const view = useGridView<TRow>();
+    return cellPartProps(
+        view,
+        summaryCellPart(view, cell),
+        cell,
+        view.summaryRowHeight,
+    );
 }

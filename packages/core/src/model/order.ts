@@ -1,5 +1,6 @@
 import {
     columnPart,
+    isHeaderRow,
     partEnd,
     partStart,
     pinnedPart,
@@ -177,8 +178,8 @@ export function siblingsOf<TRow, TNode>(
 }
 
 /**
- * The key of a cell's column or group: a header cell's own, a body cell's column's. What an order
- * change keeps the active cell on.
+ * The key of a cell's column or group: a header cell's own, a body (or summary row) cell's
+ * column's. What an order change keeps the active cell on.
  */
 export function cellKeyAt<TRow, TNode>(
     state: {
@@ -187,9 +188,9 @@ export function cellKeyAt<TRow, TNode>(
     },
     position: { readonly rowIndex: number; readonly columnIndex: number },
 ): string | undefined {
-    return position.rowIndex >= 0
-        ? state.columns[position.columnIndex]?.key
-        : state.header.cellAt(position.rowIndex, position.columnIndex)?.key;
+    return isHeaderRow(position.rowIndex, state.header)
+        ? state.header.cellAt(position.rowIndex, position.columnIndex)?.key
+        : state.columns[position.columnIndex]?.key;
 }
 
 /**

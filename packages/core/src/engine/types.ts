@@ -13,6 +13,7 @@ import type {
     RowSelection,
     RowSource,
     SortColumn,
+    SummaryRowCounts,
 } from "../model/types";
 import type { ScrollAlign } from "../viewport/scroll-target";
 import type { AxisWindow, Range } from "../viewport/window";
@@ -90,10 +91,22 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * publishes a new view only while the grid has no rows
      */
     readonly viewportWidth: number;
-    /** the visible body's height, below the header (what an empty grid's placeholder fills); as above */
+    /**
+     * the visible body's height, below the header and the top summary rows, above the bottom
+     * ones (what an empty grid's placeholder fills); as above
+     */
     readonly viewportBodyHeight: number;
     /** the header rows: the header's depth, 0 without a header */
     readonly headerRowCount: number;
+    /**
+     * how many summary rows the grid has at the top (under the header) and at the bottom (at the
+     * view's bottom edge, Epic #86, E2.1): always rendered, outside the row window
+     */
+    readonly summaryRows: SummaryRowCounts;
+    /** a summary row's height */
+    readonly summaryRowHeight: number;
+    /** moves when `summary-rows.changed` says their figures changed: draw their cells again */
+    readonly summaryRevision: number;
     /** the header rows to render, the top one first (none without a header) */
     readonly headerRows: readonly HeaderRowView<TRow, TNode>[];
     /** the header's layout, for the whole grid */
@@ -263,7 +276,8 @@ export interface EngineEventMap {
 export type EngineEventKey = keyof EngineEventMap;
 
 /**
- * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
+ * The elements whose geometry the engine writes: the layers (their `transform`; the header layer's
+ * elements are its rows, and the summary rows', Epic #86: moved with the columns only), and the cells of
  * pinned columns (`pinned`: `position: sticky` in their row's flow, whose inline start inset,
  * `left` or in RTL `right`, the engine writes so the browser's scrolling keeps them at the view's
  * start or end; their `data-column-index` says which column they are, a header cell's first),

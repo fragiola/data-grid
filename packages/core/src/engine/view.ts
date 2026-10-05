@@ -1,5 +1,10 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
-import { headerCellsIn, headerRowCount, pinnedEndFrom } from "../header/header";
+import {
+    headerCellsIn,
+    headerRowCount,
+    isHeaderRow,
+    pinnedEndFrom,
+} from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import { rowAt } from "../model/source";
 import {
@@ -12,6 +17,7 @@ import {
     spanAt,
     spanPartStart,
 } from "../model/spans";
+import { summaryRowIndexes } from "../model/summary";
 import type {
     CellPosition,
     ColumnWidths,
@@ -134,10 +140,9 @@ export function activeColumn<TRow, TNode>(
     ) {
         return null;
     }
-    const cell =
-        active.rowIndex < 0
-            ? header.cellAt(active.rowIndex, active.columnIndex)
-            : activeSpan;
+    const cell = isHeaderRow(active.rowIndex, header)
+        ? header.cellAt(active.rowIndex, active.columnIndex)
+        : activeSpan;
     if (
         cell &&
         overlaps(
@@ -307,10 +312,13 @@ export function buildView<TRow, TNode>({
     );
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
+    // the active body row (a summary row is always rendered)
     const rows = indexes(
         rowWindow.rendered.start,
         rowWindow.rendered.end,
-        active && active.rowIndex >= 0 ? active.rowIndex : null,
+        active && active.rowIndex >= 0 && active.rowIndex < state.rowCount
+            ? active.rowIndex
+            : null,
     );
     // the pinned columns first and last, always rendered
     const columns = indexes(
@@ -319,17 +327,29 @@ export function buildView<TRow, TNode>({
         null,
         indexes(start, end, extraColumn, indexes(0, pinnedCount, null)),
     );
+    const { summaryRows } = state;
     return {
         ...measures,
         rows,
         columns,
-        rowSpans: rowSpansOf(state, rows, columns),
+        // the summary rows' cells span too (E2.1)
+        rowSpans: rowSpansOf(
+            state,
+            summaryRows.top + summaryRows.bottom > 0 &&
+                hasColumnSpans(state.columns)
+                ? [...rows, ...summaryRowIndexes(state)]
+                : rows,
+            columns,
+        ),
         renderedRows: rowWindow.rendered,
         renderedColumns: columnWindow.rendered,
         rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
         columnBase: columnAxis.offsetOf(start),
         headerRowHeight: state.headerRowHeight,
         headerRowCount: rowsOfHeader,
+        summaryRows,
+        summaryRowHeight: state.summaryRowHeight,
+        summaryRevision: state.summaryRevision,
         headerRows: headerRowsFor(
             state.header,
             rowsOfHeader,
@@ -365,6 +385,9 @@ const VIEW_KEYS = [
     "height",
     "headerRowHeight",
     "header",
+    "summaryRows",
+    "summaryRowHeight",
+    "summaryRevision",
     "rowAxis",
     "columnAxis",
     "columnDefs",
@@ -429,8 +452,8 @@ export function elementPosition<TRow, TNode>(
 
 /**
  * The column to scroll to for a cell: its own, or for a cell spanning columns (a header cell's
- * span, `cellSpan` a body cell's under column spans), none while any of them is in view
- * (`visibleColumns`), else the one nearest to the view.
+ * span, `cellSpan` a body or summary row cell's under column spans), none while any of them is in
+ * view (`visibleColumns`), else the one nearest to the view.
  */
 export function columnToScrollTo<TRow, TNode>(
     position: CellPosition,
@@ -440,10 +463,9 @@ export function columnToScrollTo<TRow, TNode>(
     endFrom = Number.POSITIVE_INFINITY,
     cellSpan?: CellSpan,
 ): number | undefined {
-    const cell =
-        position.rowIndex >= 0
-            ? cellSpan
-            : header.cellAt(position.rowIndex, position.columnIndex);
+    const cell = isHeaderRow(position.rowIndex, header)
+        ? header.cellAt(position.rowIndex, position.columnIndex)
+        : cellSpan;
     if (!cell || cell.columnSpan <= 1) return position.columnIndex;
     // a pinned span is always in view
     if (

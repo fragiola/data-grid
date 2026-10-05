@@ -3683,5 +3683,441 @@ for (const kind of KINDS) {
                 });
             }
         });
+
+        test.describe("summary rows", () => {
+            // a 35px header, a 35px summary row above the body and one at the bottom edge
+            const SUMMARY = {
+                rows: 1_000,
+                columns: 60,
+                summaryTop: 1,
+                summaryBottom: 1,
+            } as const;
+            /** the top summary row's index: before the header's row (-1) */
+            const TOP = -2;
+
+            function summaryCell(
+                page: Page,
+                rowIndex: number,
+                columnIndex: number,
+            ) {
+                return page.locator(
+                    `[data-grid-part="summary-cell"][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
+                );
+            }
+
+            /** An element's box from the viewport's top left, inside its border. */
+            async function boxInView(viewport: Locator, target: Locator) {
+                const view = await viewport.evaluate((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        x: rect.left + element.clientLeft,
+                        y: rect.top + element.clientTop,
+                        height: element.clientHeight,
+                    };
+                });
+                const box = await boxOf(target);
+                return {
+                    x: box.x - view.x,
+                    y: box.y - view.y,
+                    width: box.width,
+                    height: box.height,
+                    viewHeight: view.height,
+                };
+            }
+
+            /** The top summary row under the header, the bottom one at the view's bottom edge. */
+            async function expectSticky(
+                page: Page,
+                viewport: Locator,
+                columnIndex: number,
+                rowCount: number = SUMMARY.rows,
+            ) {
+                const top = await boxInView(
+                    viewport,
+                    summaryCell(page, TOP, columnIndex),
+                );
+                expect(top.y).toBeCloseTo(35, 0);
+                expect(top.height).toBeCloseTo(35, 0);
+                const bottom = await boxInView(
+                    viewport,
+                    summaryCell(page, rowCount, columnIndex),
+                );
+                expect(bottom.y + bottom.height).toBeCloseTo(
+                    bottom.viewHeight,
+                    0,
+                );
+            }
+
+            /** A summary cell sits over its column's body cells. */
+            async function expectOverColumn(
+                page: Page,
+                viewport: Locator,
+                rowIndex: number,
+                columnIndex: number,
+            ) {
+                const { rows } = await windows(page);
+                const body = await boxInView(
+                    viewport,
+                    cell(page, rows.visible.start + 1, columnIndex),
+                );
+                const summary = await boxInView(
+                    viewport,
+                    summaryCell(page, rowIndex, columnIndex),
+                );
+                expect(summary.x).toBeCloseTo(body.x, 0);
+                expect(summary.width).toBeCloseTo(body.width, 0);
+            }
+
+            test("stays under the header and at the bottom edge through vertical and horizontal scrolls", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, SUMMARY);
+                await expect(summaryCell(page, TOP, 3)).toHaveText("top0:3");
+                await expect(summaryCell(page, 1_000, 3)).toHaveText(
+                    "bottom0:3",
+                );
+                await expectSticky(page, viewport, 3);
+                await scroll(page, viewport, 32 * 400, 1_234);
+                const { columns } = await windows(page);
+                const columnIndex = columns.visible.start + 2;
+                await expectSticky(page, viewport, columnIndex);
+                await expectOverColumn(page, viewport, TOP, columnIndex);
+                await expectOverColumn(page, viewport, 1_000, columnIndex);
+                // the last row scrolls above the bottom summary row, never under it
+                await scroll(page, viewport, "end");
+                const last = await boxInView(
+                    viewport,
+                    cell(page, 999, columnIndex),
+                );
+                const bottom = await boxInView(
+                    viewport,
+                    summaryCell(page, 1_000, columnIndex),
+                );
+                expect(last.y + last.height).toBeCloseTo(bottom.y, 0);
+            });
+
+            test("stays in place under scroll scaling on both axes", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...SUMMARY,
+                    rows: 100_000_000,
+                    columns: 1_000_000,
+                    maxScrollSize: 1_000_000,
+                });
+                for (const at of [0.5, "end"] as const) {
+                    await viewport.evaluate((element, to) => {
+                        const y = element.scrollHeight - element.clientHeight;
+                        const x = element.scrollWidth - element.clientWidth;
+                        element.scrollTop = to === "end" ? y : y * to;
+                        element.scrollLeft = to === "end" ? x : x * to;
+                    }, at);
+                    await settle(page);
+                    const { columns } = await windows(page);
+                    const columnIndex = columns.visible.start + 1;
+                    await expectSticky(
+                        page,
+                        viewport,
+                        columnIndex,
+                        100_000_000,
+                    );
+                    await expectOverColumn(page, viewport, TOP, columnIndex);
+                    await expectOverColumn(
+                        page,
+                        viewport,
+                        100_000_000,
+                        columnIndex,
+                    );
+                }
+            });
+
+            test("sits right after the last row in a grid shorter than the view", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...SUMMARY,
+                    rows: 3,
+                });
+                const last = await boxInView(viewport, cell(page, 2, 0));
+                const bottom = await boxInView(
+                    viewport,
+                    summaryCell(page, 3, 0),
+                );
+                expect(bottom.y).toBeCloseTo(last.y + last.height, 0);
+                const top = await boxInView(
+                    viewport,
+                    summaryCell(page, TOP, 0),
+                );
+                expect(top.y).toBeCloseTo(35, 0);
+                expect(
+                    (await boxInView(viewport, cell(page, 0, 0))).y,
+                ).toBeCloseTo(70, 0);
+            });
+
+            for (const dir of ["ltr", "rtl"] as const) {
+                test(`pins its cells with the body's, at both ends${dir === "rtl" ? ", right to left" : ""}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(page, kind, {
+                        ...SUMMARY,
+                        pinned: 2,
+                        pinnedEnd: 1,
+                        dir,
+                    });
+                    for (const left of [0, 1_000, "end"] as const) {
+                        if (left !== 0) {
+                            // from the inline start: negative right to left
+                            await viewport.evaluate(
+                                (element, [x, mirrored]) => {
+                                    const to =
+                                        x === "end" ? element.scrollWidth : x;
+                                    element.scrollTop = 32 * 3;
+                                    element.scrollLeft = mirrored ? -to : to;
+                                },
+                                [left, dir === "rtl"] as const,
+                            );
+                            await settle(page);
+                        }
+                        const { columns } = await windows(page);
+                        for (const columnIndex of [
+                            0,
+                            1,
+                            columns.visible.start + 1,
+                            59,
+                        ]) {
+                            for (const rowIndex of [TOP, 1_000]) {
+                                if (columnIndex < 2 || columnIndex === 59) {
+                                    await expect(
+                                        summaryCell(
+                                            page,
+                                            rowIndex,
+                                            columnIndex,
+                                        ),
+                                    ).toHaveAttribute(
+                                        "data-pinned",
+                                        columnIndex === 59 ? "end" : "start",
+                                    );
+                                }
+                                await expectOverColumn(
+                                    page,
+                                    viewport,
+                                    rowIndex,
+                                    columnIndex,
+                                );
+                            }
+                        }
+                    }
+                    await expect(summaryCell(page, TOP, 1)).toHaveAttribute(
+                        "data-pinned-edge",
+                        "",
+                    );
+                });
+            }
+
+            test("follows the columns a collapsed group shows", async ({
+                page,
+            }) => {
+                await open(page, kind, {
+                    ...SUMMARY,
+                    groups: 1,
+                    collapsible: 1,
+                });
+                // with groups, the header has two rows: the top summary row is before them
+                const top = -3;
+                const keys = () =>
+                    page
+                        .locator(
+                            `[data-grid-part="summary-cell"][data-row-index="${top}"]`,
+                        )
+                        .allTextContents();
+                expect(await keys()).toContain("top0:6");
+                await page.getByTestId("toggle-G1").click();
+                await settle(page);
+                // collapsed, G1 shows its first and last columns (C5 and C16): C6 is gone
+                const shown = await keys();
+                expect(shown).not.toContain("top0:6");
+                expect(shown).toContain("top0:5");
+                await expect(
+                    page.locator(
+                        `[data-grid-part="summary-row"][data-row-index="${top}"]`,
+                    ),
+                ).toHaveAttribute("aria-rowindex", "3");
+            });
+
+            test("spans its cells with the columns' colSpan", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...SUMMARY,
+                    span: 1,
+                });
+                for (const rowIndex of [TOP, 1_000]) {
+                    const span = summaryCell(page, rowIndex, 1);
+                    await expect(span).toHaveAttribute("aria-colspan", "2");
+                    if (kind === "table") {
+                        await expect(span).toHaveAttribute("colspan", "2");
+                    }
+                    expect((await boxInView(viewport, span)).width).toBeCloseTo(
+                        200,
+                        0,
+                    );
+                    await expect(summaryCell(page, rowIndex, 2)).toHaveCount(0);
+                }
+                // an arrow into the covered column lands on the span
+                await summaryCell(page, TOP, 3).click();
+                await page.keyboard.press("ArrowLeft");
+                expect(await active(page)).toEqual({
+                    rowIndex: TOP,
+                    columnIndex: 1,
+                });
+            });
+
+            test("moves the keys through the header, the summary rows and the body", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, SUMMARY);
+                await cell(page, 0, 3).click();
+                await page.keyboard.press("ArrowUp");
+                expect(await active(page)).toEqual({
+                    rowIndex: TOP,
+                    columnIndex: 3,
+                });
+                await expect(summaryCell(page, TOP, 3)).toBeFocused();
+                await expect(
+                    page.locator(
+                        `[data-grid-part="summary-row"][data-row-index="${TOP}"]`,
+                    ),
+                ).toHaveAttribute("data-active", "");
+                await page.keyboard.press("ArrowUp");
+                expect(await active(page)).toEqual({
+                    rowIndex: -1,
+                    columnIndex: 3,
+                });
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("ArrowDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 0,
+                    columnIndex: 3,
+                });
+                // Ctrl+End: the last bottom summary row's last cell
+                await page.keyboard.press("Control+End");
+                await settle(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 1_000,
+                    columnIndex: 59,
+                });
+                await expect(summaryCell(page, 1_000, 59)).toBeFocused();
+                // up into the body, its last row in view above the summary row
+                await page.keyboard.press("ArrowUp");
+                await settle(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 999,
+                    columnIndex: 59,
+                });
+                const last = await boxInView(viewport, cell(page, 999, 59));
+                const bottom = await boxInView(
+                    viewport,
+                    summaryCell(page, 1_000, 59),
+                );
+                expect(last.y + last.height).toBeLessThanOrEqual(
+                    bottom.y + 0.5,
+                );
+                // a page stays in the body: the summary rows are the arrows'
+                await page.keyboard.press("PageDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 999,
+                    columnIndex: 59,
+                });
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("PageUp");
+                await settle(page);
+                const moved = await active(page);
+                expect(moved?.rowIndex).toBeLessThan(999);
+                expect(moved?.rowIndex).toBeGreaterThanOrEqual(0);
+            });
+
+            test("hands a summary cell's keys to its controls", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...SUMMARY, controls: 1 });
+                await summaryCell(page, 1_000, 3).click();
+                await page.keyboard.press("ArrowLeft");
+                await expect(summaryCell(page, 1_000, 2)).toBeFocused();
+                await page.keyboard.press("Enter");
+                await expect(page.getByTestId("summary-bottom0")).toBeFocused();
+                await expect(summaryCell(page, 1_000, 2)).toHaveAttribute(
+                    "data-interacting",
+                    "",
+                );
+                await page.keyboard.press("Escape");
+                await expect(summaryCell(page, 1_000, 2)).toBeFocused();
+            });
+
+            test("counts the summary rows in ARIA, after the header and after the body", async ({
+                page,
+            }) => {
+                await open(page, kind, SUMMARY);
+                const grid = page.locator('[data-grid-part="grid"]');
+                await expect(grid).toHaveAttribute("aria-rowcount", "1003");
+                await expect(
+                    page.locator('[data-grid-part="header-row"]'),
+                ).toHaveAttribute("aria-rowindex", "1");
+                for (const [position, rowIndex, ariaRowIndex] of [
+                    ["top", TOP, "2"],
+                    ["bottom", 1_000, "1003"],
+                ] as const) {
+                    const row = page.locator(
+                        `[data-grid-part="summary-row"][data-row-index="${rowIndex}"]`,
+                    );
+                    await expect(row).toHaveAttribute("role", "row");
+                    await expect(row).toHaveAttribute(
+                        "aria-rowindex",
+                        ariaRowIndex,
+                    );
+                    await expect(row).toHaveAttribute("data-summary", position);
+                    const own = summaryCell(page, rowIndex, 4);
+                    await expect(own).toHaveAttribute("role", "gridcell");
+                    await expect(own).toHaveAttribute("aria-colindex", "5");
+                    await expect(own).toHaveAttribute("data-summary", position);
+                    await expect(
+                        page.locator(
+                            `[data-grid-part="summary"][data-summary="${position}"]`,
+                        ),
+                    ).toHaveAttribute("role", "rowgroup");
+                }
+                await expect(
+                    page.locator('[data-grid-part="row"][data-row-index="0"]'),
+                ).toHaveAttribute("aria-rowindex", "3");
+            });
+
+            test("follows a resize of the view without rendering React", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, SUMMARY);
+                await scroll(page, viewport, 32 * 100);
+                const before = await page.evaluate(() => window.commits);
+                await viewport.evaluate((element) => {
+                    element.style.height = "590px";
+                });
+                await settle(page);
+                expect(await page.evaluate(() => window.commits)).toBe(before);
+                await expectSticky(page, viewport, 0);
+            });
+
+            test("does not render React while scrolling inside the overscan", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...SUMMARY,
+                    rows: 100_000,
+                    columns: 20,
+                });
+                await scroll(page, viewport, 32 * 1_000);
+                const before = await page.evaluate(() => window.commits);
+                await scroll(page, viewport, 32 * 1_002);
+                expect(await page.evaluate(() => window.commits)).toBe(before);
+                await expectSticky(page, viewport, 0, 100_000);
+            });
+        });
     });
 }

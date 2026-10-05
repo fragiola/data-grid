@@ -6,6 +6,8 @@ import type {
     PinnedSide,
     ReorderSide,
     SortDirection,
+    SummaryPosition,
+    SummaryRowView,
 } from "../model/types";
 import {
     resizeMaximum,
@@ -65,6 +67,26 @@ export interface CellState {
     readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
+}
+
+/** The state of a summary row (Epic #86, E2.1). */
+export interface SummaryRowState {
+    readonly rowIndex: number;
+    /** under the header (`"top"`), or at the view's bottom edge (`"bottom"`) */
+    readonly position: SummaryPosition;
+    /** its index among its position's rows, the first one 0 */
+    readonly summaryIndex: number;
+    /** it holds the active cell */
+    readonly active: boolean;
+}
+
+/**
+ * The state of a summary row's cell: a body cell's (`loaded` always true: a summary row has no
+ * data to wait for), and its row's position and index.
+ */
+export interface SummaryCellState extends CellState {
+    readonly position: SummaryPosition;
+    readonly summaryIndex: number;
 }
 
 /** The state of a header cell. */
@@ -165,6 +187,11 @@ export interface CellPart {
      * `aria-colspan` (and a table cell's `colSpan`); `undefined` for a cell of one column
      */
     readonly ariaColSpan: number | undefined;
+}
+
+/** A summary row's cell's state, its `tabIndex` and its `aria-colspan` (as a body cell's). */
+export interface SummaryCellPart extends Omit<CellPart, "state"> {
+    readonly state: SummaryCellState;
 }
 
 /** A header cell's state, its `tabIndex` and its `aria-sort`. */
@@ -275,16 +302,17 @@ export function cellPart<TRow, TNode>(
 /**
  * A body cell's box in its row: its column's left, as wide as its column (a span's columns, E1.2:
  * cut to the rendered ones under scaling, as a header cell's) and as tall as its row's own height
- * (a detail below the cells is not theirs). As `headerCellBox` for a header cell. `span`, when
- * the caller has it (`CellPart.ariaColSpan`), saves its lookup.
+ * (a detail below the cells is not theirs; a summary row's cell passes its row's, `height`). As
+ * `headerCellBox` for a header cell. `span`, when the caller has it (`CellPart.ariaColSpan`),
+ * saves its lookup.
  */
 export function cellBox<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
     columnIndex: number,
     span = cellSpan(view, rowIndex, columnIndex),
+    height = rowCellsHeight(view, rowIndex),
 ): { readonly left: number; readonly width: number; readonly height: number } {
-    const height = rowCellsHeight(view, rowIndex);
     if (span > 1) {
         return { ...spanInRow(view, columnIndex, columnIndex + span), height };
     }
@@ -292,6 +320,47 @@ export function cellBox<TRow, TNode>(
         left: columnLeft(view, columnIndex),
         width: view.columnAxis.sizeOf(columnIndex),
         height,
+    };
+}
+
+/** A summary row's state (E2.1). */
+export function summaryRowPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    row: SummaryRowView,
+): { readonly state: SummaryRowState } {
+    return {
+        state: {
+            rowIndex: row.rowIndex,
+            position: row.position,
+            summaryIndex: row.summaryIndex,
+            active: view.active?.rowIndex === row.rowIndex,
+        },
+    };
+}
+
+/**
+ * A summary row's cell's state, its `tabIndex` and its `aria-colspan` (E2.1): a body cell's
+ * (`cellPart`), on its summary row.
+ */
+export function summaryCellPart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: CellPosition & {
+        readonly position: SummaryPosition;
+        readonly summaryIndex: number;
+    },
+): SummaryCellPart {
+    const part = cellPart(view, {
+        rowIndex: cell.rowIndex,
+        columnIndex: cell.columnIndex,
+        loaded: true,
+    });
+    return {
+        ...part,
+        state: {
+            ...part.state,
+            position: cell.position,
+            summaryIndex: cell.summaryIndex,
+        },
     };
 }
 

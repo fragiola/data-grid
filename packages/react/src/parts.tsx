@@ -2,6 +2,8 @@ import {
     ariaRowCount,
     ariaRowIndex,
     type EngineLayer,
+    type SummaryPosition,
+    summaryHeight,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -17,6 +19,10 @@ import {
     type HeaderRowInfo,
     RowContext,
     type RowInfo,
+    type SummaryCellInfo,
+    SummaryContext,
+    SummaryRowContext,
+    type SummaryRowInfo,
     useRootGrid,
     useRowContext,
 } from "./context";
@@ -28,6 +34,8 @@ import {
     type RowDetailState,
     type RowState,
     rowStyle,
+    type SummaryCellState,
+    type SummaryRowState,
     useCellPart,
     useCells,
     useGridView,
@@ -38,6 +46,10 @@ import {
     useRow,
     useRowDetail,
     useRows,
+    useSummaryCellPart,
+    useSummaryCells,
+    useSummaryRow,
+    useSummaryRows,
 } from "./hooks";
 import { layerRef } from "./utils/layerRef";
 import {
@@ -152,6 +164,8 @@ export function Grid(props: GridProps) {
                     : view.width,
                 height:
                     view.headerHeight +
+                    summaryHeight(view, "top") +
+                    summaryHeight(view, "bottom") +
                     (empty
                         ? Math.max(view.height, view.viewportBodyHeight)
                         : view.height),
@@ -361,7 +375,10 @@ export type BodyProps = DivPrimitiveProps<Record<string, never>> & {
     children?: ReactNode;
 };
 
-/** The body (`role="rowgroup"`), the layer the engine moves with the rows. A `<tbody>`. */
+/**
+ * The body (`role="rowgroup"`), the layer the engine moves with the rows, below the header and the
+ * top summary rows. A `<tbody>`.
+ */
 export function Body(props: BodyProps) {
     const { children = <Rows />, ...rest } = props;
     const view = useGridView();
@@ -375,7 +392,7 @@ export function Body(props: BodyProps) {
             ...dataAttributes({ "grid-part": "body" }),
             style: {
                 position: "absolute",
-                top: view.headerHeight,
+                top: view.headerHeight + summaryHeight(view, "top"),
                 [inlineSide(view.direction)]: 0,
                 boxSizing: "border-box",
             },
@@ -436,6 +453,29 @@ export function Cells<TRow = unknown>({ children }: CellsProps<TRow>) {
     ));
 }
 
+/**
+ * A body or summary row cell's element: its part's props with its table span, its content, and,
+ * pinned, the engine's inset (sticky, it stays in view sideways).
+ */
+function useCellElement<State extends { readonly pinned: boolean }>(
+    rest: DivPrimitiveProps<State>,
+    own: {
+        readonly state: State;
+        readonly props: Record<string, unknown>;
+        readonly columnSpan: number;
+    },
+    content: ReactNode,
+) {
+    const { engine } = useRootGrid();
+    return useRenderElement("div", rest, {
+        state: own.state,
+        props: withTableSpans(own.props, rest.render, own.columnSpan),
+        children: content,
+        ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
+        drop: own.state.pinned ? PINNED_KEYS : undefined,
+    });
+}
+
 /** A value rendered as text when the cell has no children and its column no `renderCell`. */
 function plain(value: unknown): ReactNode {
     const type = typeof value;
@@ -466,7 +506,6 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
 export function Cell<TRow>(props: CellProps<TRow>) {
     const { cell, children, ...rest } = props;
     const own = useCellPart(cell);
-    const { engine } = useRootGrid();
     let content: ReactNode = null;
     if (children !== undefined) {
         content = children;
@@ -481,14 +520,7 @@ export function Cell<TRow>(props: CellProps<TRow>) {
               })
             : plain(cell.value);
     }
-    return useRenderElement("div", rest, {
-        state: own.state,
-        props: withTableSpans(own.props, rest.render, own.columnSpan),
-        children: content,
-        // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
-        ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
-        drop: own.state.pinned ? PINNED_KEYS : undefined,
-    });
+    return useCellElement(rest, own, content);
 }
 
 export type RowDetailProps = DivPrimitiveProps<RowDetailState> & {
@@ -517,4 +549,137 @@ export function RowDetail(props: RowDetailProps) {
         drop: PINNED_KEYS,
     });
     return own.state.expanded ? element : null;
+}
+
+// ── summary rows (Epic #86) ──────────────────────────────────────────────────
+
+/** The state of a position's summary rows. */
+export interface SummaryState {
+    readonly position: SummaryPosition;
+}
+
+export type SummaryProps = DivPrimitiveProps<SummaryState> & {
+    /** under the header (`"top"`), or at the view's bottom edge (`"bottom"`) */
+    position: SummaryPosition;
+    /** without children, a summary row per row of its position (`DataGrid.SummaryRows`) */
+    children?: ReactNode;
+};
+
+/**
+ * A position's summary rows (`role="rowgroup"`, `data-summary`), sticky: the top ones under the
+ * header, the bottom ones at the visible body's bottom edge (right after the last row in a grid
+ * shorter than the view). Nothing renders while the grid has none there (`summaryRows` on the
+ * root). Its place in the flow is the grid's: the top one after the `Header`, the bottom one last
+ * (after `Body` and `Empty`). A `<tbody>` for the top, a `<tfoot>` for the bottom, through
+ * `render`. Stacking is the consumer's: give it a background and a `z-index` so rows scroll under
+ * it, as the header.
+ */
+export function Summary(props: SummaryProps) {
+    const { position, children = <SummaryRows />, ...rest } = props;
+    const view = useGridView();
+    const height = summaryHeight(view, position);
+    const element = useRenderElement("div", rest, {
+        state: { position },
+        children: <SummaryContext value={position}>{children}</SummaryContext>,
+        props: {
+            role: "rowgroup",
+            ...dataAttributes({ "grid-part": "summary", summary: position }),
+            // the top ones stick under the header, the bottom ones as far down as the view's
+            // bottom edge: a sticky inset's percentage is the scroll container's height, so no
+            // measure places them, and the grid's end keeps them right after its last row
+            style: {
+                position: "sticky",
+                top:
+                    position === "top"
+                        ? view.headerHeight
+                        : `calc(100% - ${height}px)`,
+                display: "block",
+                height,
+                boxSizing: "border-box",
+            },
+        },
+    });
+    return view.summaryRows[position] > 0 ? element : null;
+}
+
+export interface SummaryRowsProps {
+    /** renders a summary row; without it, `<DataGrid.SummaryRow row={row} />` */
+    children?: (row: SummaryRowInfo) => ReactNode;
+    /** whose rows: without it, the `DataGrid.Summary` around's */
+    position?: SummaryPosition | undefined;
+}
+
+/** A position's summary rows, the first one first. */
+export function SummaryRows({ children, position }: SummaryRowsProps) {
+    const rows = useSummaryRows(position);
+    return rows.map((row) => (
+        <Fragment key={row.summaryIndex}>
+            {children ? children(row) : <SummaryRow row={row} />}
+        </Fragment>
+    ));
+}
+
+export type SummaryRowProps = DivPrimitiveProps<SummaryRowState> & {
+    row: SummaryRowInfo;
+    /** without children, `<DataGrid.SummaryCells />` */
+    children?: ReactNode;
+};
+
+/**
+ * A summary row (`role="row"`, `data-summary`), one of the layers the engine moves with the
+ * columns, as a header row. A `<tr>`. `data-active` while it holds the active cell.
+ */
+export function SummaryRow(props: SummaryRowProps) {
+    const { row, children = <SummaryCells />, ...rest } = props;
+    return useRenderElement("div", rest, {
+        ...useSummaryRow(row),
+        ref: useLayer("header"),
+        drop: LAYER_KEYS,
+        children: <SummaryRowContext value={row}>{children}</SummaryRowContext>,
+    });
+}
+
+export interface SummaryCellsProps<TRow> {
+    /** renders a cell; without it, `<DataGrid.SummaryCell cell={cell} />` */
+    children?: (cell: SummaryCellInfo<TRow>) => ReactNode;
+}
+
+/** The cells of the summary row it is in, for the rendered columns. */
+export function SummaryCells<TRow = unknown>({
+    children,
+}: SummaryCellsProps<TRow>) {
+    const cells = useSummaryCells<TRow>();
+    return cells.map((cell) => (
+        <Fragment key={cell.column.key}>
+            {children ? children(cell) : <SummaryCell cell={cell} />}
+        </Fragment>
+    ));
+}
+
+export type SummaryCellProps<TRow> = DivPrimitiveProps<SummaryCellState> & {
+    cell: SummaryCellInfo<TRow>;
+    /** without children: the column's `renderSummaryCell`, else nothing */
+    children?: ReactNode;
+};
+
+/**
+ * A summary row's cell (`role="gridcell"`, `data-summary`), positioned in its row as a body cell:
+ * pinned, spanning (`aria-colspan`, a `td`'s `colSpan`), active and in interaction alike. A
+ * `<td>` through `render`. Its content is the app's: the column's `renderSummaryCell`, computed
+ * in the app's closure.
+ */
+export function SummaryCell<TRow>(props: SummaryCellProps<TRow>) {
+    const { cell, children, ...rest } = props;
+    const own = useSummaryCellPart(cell);
+    const { column } = cell;
+    const content =
+        children !== undefined
+            ? children
+            : (column.renderSummaryCell?.({
+                  position: cell.position,
+                  summaryIndex: cell.summaryIndex,
+                  column,
+                  columnIndex: cell.columnIndex,
+              }) ?? null);
+    return useCellElement(rest, own, content);
 }

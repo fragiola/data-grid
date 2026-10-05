@@ -10,10 +10,10 @@ it, the grid scrolls it into view and focuses it.
 
 | key | moves to |
 | --- | --- |
-| Arrows | the next cell in that direction (header rows are -1 and above) |
+| Arrows | the next cell in that direction (header rows are -1 and above), through the [summary rows](/docs/concepts/summary-rows) as they show |
 | Home, End | the row's first or last cell |
-| Ctrl+Home, Ctrl+End | the grid's first or last cell |
-| PageUp, PageDown | a page of rows up or down |
+| Ctrl+Home, Ctrl+End | the grid's first or last cell (a bottom summary row's, with some) |
+| PageUp, PageDown | a page of rows up or down, in the body |
 | Tab | leaves the grid |
 | Shift+Space | selects the active row, or clears it ([row selection](/docs/concepts/row-selection) on) |
 | Shift+↑, Shift+↓ | the next row, selecting from the anchor (many rows selectable) |
@@ -35,7 +35,8 @@ With [column groups](/docs/concepts/column-groups), the header has several rows:
 reaches the group above it, Down from a group its first column in view, and Left and Right move
 across the cells of a header row. A cell [spanning columns](/docs/concepts/column-spanning) is one
 cell to the keys: an arrow into a column it covers lands on it, and the arrows leaving it go to
-the column past its span.
+the column past its span. The [summary rows](/docs/concepts/summary-rows) are rows to the keys:
+Up from the first body row reaches the top ones, Down from the last the bottom ones.
 
 ## One tab stop
 

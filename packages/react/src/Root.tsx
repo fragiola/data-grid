@@ -45,6 +45,8 @@ import {
     type DataGridContextValue,
     HeaderRowContext,
     RowContext,
+    SummaryContext,
+    SummaryRowContext,
     ViewContext,
 } from "./context";
 import { attachGridRef, type DataGridRef } from "./gridRef";
@@ -95,6 +97,16 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         rowHeight?: Size | undefined;
         /** a header row's height in pixels (default 35); 0 for no header */
         headerRowHeight?: number | undefined;
+        /**
+         * how many summary rows the grid has: at the top, under the header, and at the bottom, at
+         * the view's bottom edge (default none). Each column's `renderSummaryCell` draws their
+         * cells from the app's own values; `DataGrid.Summary` renders them
+         */
+        summaryRows?:
+            | { readonly top?: number; readonly bottom?: number }
+            | undefined;
+        /** a summary row's height in pixels (default 35) */
+        summaryRowHeight?: number | undefined;
         /** the active cell, controlled (`null` for none); pair it with `onActivePositionChange` */
         activePosition?: CellPosition | null | undefined;
         /** the active cell to start with, uncontrolled */
@@ -292,6 +304,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
         rowKey,
         rowHeight,
         headerRowHeight,
+        summaryRows,
+        summaryRowHeight,
         activePosition,
         defaultActivePosition,
         onActivePositionChange,
@@ -339,6 +353,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
             rowKey,
             rowHeight,
             headerRowHeight,
+            summaryRows,
+            summaryRowHeight,
             activePosition:
                 activePosition !== undefined
                     ? activePosition
@@ -618,19 +634,35 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // a prop removed goes back to the default
         const rows = rowHeight ?? DEFAULT_ROW_HEIGHT;
         const header = headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT;
+        const summary = summaryRowHeight ?? DEFAULT_ROW_HEIGHT;
         const detail = detailHeight ?? DEFAULT_DETAIL_HEIGHT;
         if (
             rows !== state.rowHeight ||
             header !== state.headerRowHeight ||
+            summary !== state.summaryRowHeight ||
             detail !== state.detailHeight
         ) {
             model.run("sizes.set", {
                 rowHeight: rows,
                 headerRowHeight: header,
+                summaryRowHeight: summary,
                 detailHeight: detail,
             });
         }
-    }, [model, rowHeight, headerRowHeight, detailHeight]);
+    }, [model, rowHeight, headerRowHeight, summaryRowHeight, detailHeight]);
+
+    const summaryTop = summaryRows?.top ?? 0;
+    const summaryBottom = summaryRows?.bottom ?? 0;
+    useLayoutEffect(() => {
+        const { top, bottom } = model.state.summaryRows;
+        // a count left out (the prop removed) is 0
+        if (summaryTop !== top || summaryBottom !== bottom) {
+            model.run("summary-rows.set", {
+                top: summaryTop,
+                bottom: summaryBottom,
+            });
+        }
+    }, [model, summaryTop, summaryBottom]);
 
     useLayoutEffect(() => {
         const { state } = model;
@@ -715,7 +747,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
             >
                 {/* a grid nested in a cell of another one is not inside the outer one's rows */}
                 <RowContext value={null}>
-                    <HeaderRowContext value={null}>{element}</HeaderRowContext>
+                    <HeaderRowContext value={null}>
+                        <SummaryContext value={null}>
+                            <SummaryRowContext value={null}>
+                                {element}
+                            </SummaryRowContext>
+                        </SummaryContext>
+                    </HeaderRowContext>
                 </RowContext>
             </ViewContext>
         </DataGridContext>

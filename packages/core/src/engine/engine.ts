@@ -2,6 +2,7 @@ import type { Axis } from "../axis/axis";
 import {
     columnPart,
     headerRowCount,
+    isHeaderRow,
     pinnedEndFrom,
     pinnedPartsOf,
 } from "../header/header";
@@ -18,6 +19,7 @@ import {
 } from "../model/order";
 import { rowAt } from "../model/source";
 import { hasColumnSpans, spanAt } from "../model/spans";
+import { summaryRowAt } from "../model/summary";
 import type {
     CellPosition,
     Column,
@@ -94,6 +96,7 @@ import {
     pinnedEndShift,
     pinnedInset,
     resizeEdge,
+    summaryHeight,
 } from "./geometry";
 import { createInteraction } from "./interaction";
 import type {
@@ -130,9 +133,11 @@ import {
 // The DOM it expects, whatever the elements (a `<table>` or `<div>`s):
 //
 //   viewport (the scroll container: overflow auto, sized by the app)
-//     grid    (the sizer: header height + physical body height, physical width)
+//     grid    (the sizer: header height + summary rows' + physical body height, physical width)
 //       header layer   (sticky at the top; translated on x)
-//       body layer     (below the header; translated on x and y)
+//       top summary rows (sticky under the header; translated on x, as the header's rows)
+//       body layer     (below them; translated on x and y)
+//       bottom summary rows (sticky at the view's bottom edge; translated on x)
 //
 // Every DOM access goes through the viewport's ownerDocument/defaultView, never the globals.
 //
@@ -277,7 +282,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     const maxScroll = () => options.maxScrollSize ?? DEFAULT_MAX_SCROLL_SIZE;
     const headerHeight = () => headerRowCount(state) * state.headerRowHeight;
-    const bodyHeight = () => Math.max(0, height - headerHeight());
+    // the summary rows (E2.1) are always in view: the body is what they leave
+    const bodyHeight = () =>
+        Math.max(
+            0,
+            height -
+                headerHeight() -
+                summaryHeight(state, "top") -
+                summaryHeight(state, "bottom"),
+        );
     const rowMapping = () =>
         createScrollMapping(rowAxis.totalSize, bodyHeight(), maxScroll());
     const columnMapping = () =>
@@ -959,22 +972,30 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         scrollWhenReady(moves);
     }
 
-    /** What scrolls a cell into view: its row (a body row), its column. */
+    /**
+     * What scrolls a cell into view: its row (a body row; the header's and the summary rows are
+     * always in view), its column.
+     */
     function scrollPayloadFor(
         position: CellPosition,
     ): EngineActionMap["scroll-to-cell"] {
-        const body = position.rowIndex >= 0;
+        const { rowIndex } = position;
         return {
-            rowIndex: body ? position.rowIndex : undefined,
+            rowIndex:
+                rowIndex >= 0 && rowIndex < state.rowCount
+                    ? rowIndex
+                    : undefined,
             columnIndex: columnToScrollTo(
                 position,
                 state.header,
                 pinnedCount,
                 columnWindow.visible,
                 endFrom(),
-                // a body cell spanning columns (E1.2) is in view while any of them is
-                body && hasColumnSpans(state.columns)
-                    ? spanAt(state, position.rowIndex, position.columnIndex)
+                // a body or summary row cell spanning columns (E1.2) is in view while any of
+                // them is
+                !isHeaderRow(rowIndex, state.header) &&
+                    hasColumnSpans(state.columns)
+                    ? spanAt(state, rowIndex, position.columnIndex)
                     : undefined,
             ),
         };
@@ -1509,8 +1530,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /**
      * The columns' content widths (A3), measured in one layout: for each column index (in
      * `shown`, the view on screen), the widest of this grid's own rendered header cell of the
-     * column and its body cells of loaded rows, at `max-content`. A column with none rendered has
-     * none.
+     * column, its body cells of loaded rows and its summary rows' cells (E2.1), at `max-content`.
+     * A column with none rendered has none.
      */
     function measureColumns(
         shown: GridView<TRow, TNode>,
@@ -1526,20 +1547,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 `[data-row-index][data-column-index="${columnIndex}"]`,
             )) {
                 const rowIndex = Number(element.getAttribute("data-row-index"));
-                const header =
-                    rowIndex < 0
-                        ? shown.header.cellAt(rowIndex, columnIndex)
-                        : undefined;
+                const header = isHeaderRow(rowIndex, shown.header)
+                    ? shown.header.cellAt(rowIndex, columnIndex)
+                    : undefined;
                 if (
                     Number.isInteger(rowIndex) &&
                     ownerViewport(element) === viewport &&
-                    // a body cell of a loaded row, or the column's own header cell (not a
-                    // group's starting at it); never a cell spanning columns (E1.2): wider
-                    // than its column
-                    (rowIndex >= 0
-                        ? rowAt(shown.source, rowIndex) !== undefined &&
-                          cellSpan(shown, rowIndex, columnIndex) === 1
-                        : header?.key === key && header?.columnSpan === 1)
+                    // a body cell of a loaded row, a summary row's cell, or the column's own
+                    // header cell (not a group's starting at it); never a cell spanning columns
+                    // (E1.2): wider than its column
+                    (header
+                        ? header.key === key && header.columnSpan === 1
+                        : (summaryRowAt(shown, rowIndex) !== undefined ||
+                              (rowIndex >= 0 &&
+                                  rowAt(shown.source, rowIndex) !==
+                                      undefined)) &&
+                          cellSpan(shown, rowIndex, columnIndex) === 1)
                 ) {
                     elements.push(element);
                     columnOf.push(columnIndex);
@@ -2083,7 +2106,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const mode = state.rowSelection;
         if (!mode || !isCellElement(target)) return false;
         const position = cellOf(target);
-        if (!position || position.rowIndex < 0) return false;
+        // a body row's cell: not a header's, nor a summary row's
+        if (
+            !position ||
+            position.rowIndex < 0 ||
+            position.rowIndex >= state.rowCount
+        ) {
+            return false;
+        }
         const rowIndex = position.rowIndex;
         const ctrl = event.ctrlKey || event.metaKey;
         if (event.key === " " && event.shiftKey && !ctrl) {
@@ -2420,7 +2450,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 changedDetails ||
                 columnsChanged ||
                 after.headerRowHeight !== before.headerRowHeight ||
-                after.header !== before.header,
+                after.header !== before.header ||
+                after.summaryRows !== before.summaryRows ||
+                after.summaryRowHeight !== before.summaryRowHeight,
         );
         if (columnResize !== resizing) emit("column-resize", columnResize);
         if (autoWidths !== engineWidths) {

@@ -21,6 +21,9 @@ export type {
     Size,
     SortColumn,
     SortDirection,
+    SummaryCellRenderProps,
+    SummaryPosition,
+    SummaryRowCounts,
 } from "@fragiola/data-grid";
 export {
     type CellInfo,
@@ -31,6 +34,8 @@ export {
     type HeaderCellInfo,
     type HeaderRowInfo,
     type RowInfo,
+    type SummaryCellInfo,
+    type SummaryRowInfo,
     useDataGrid,
 } from "./context";
 export {
@@ -46,6 +51,8 @@ export {
     headerCellContent,
     type RowDetailState,
     type RowState,
+    type SummaryCellState,
+    type SummaryRowState,
     useCell,
     useCells,
     useColumnResizer,
@@ -59,6 +66,10 @@ export {
     useRowDetail,
     useRows,
     useRowWindow,
+    useSummaryCell,
+    useSummaryCells,
+    useSummaryRow,
+    useSummaryRows,
 } from "./hooks";
 export type {
     BodyProps,
@@ -78,6 +89,12 @@ export type {
     RowDetailProps,
     RowProps,
     RowsProps,
+    SummaryCellProps,
+    SummaryCellsProps,
+    SummaryProps,
+    SummaryRowProps,
+    SummaryRowsProps,
+    SummaryState,
 } from "./parts";
 export * as DataGrid from "./parts";
 export type {

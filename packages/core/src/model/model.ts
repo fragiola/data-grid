@@ -1,7 +1,14 @@
-import { columnsError, headerRowCount, layoutColumns } from "../header/header";
+import {
+    columnsError,
+    headerRowCount,
+    isHeaderRow,
+    layoutColumns,
+} from "../header/header";
 import {
     DIRECTIONS,
     type GridBounds,
+    isRowOf,
+    keptRow,
     nextPosition,
     sameCell,
 } from "../navigation/navigation";
@@ -57,6 +64,12 @@ import {
 } from "./sort";
 import { cellValue, loadedRowKey, type RowsState, rowAt } from "./source";
 import { activeInCell, coveringCell, hasColumnSpans, spanAt } from "./spans";
+import {
+    NO_SUMMARY_ROWS,
+    summaryRowAt,
+    summaryRowCounts,
+    summaryRowIndex,
+} from "./summary";
 import type {
     CellPosition,
     Column,
@@ -191,14 +204,16 @@ function rowCountOf<TRow>(source: RowSource<TRow>): number {
 }
 
 /**
- * What moves in the grid are bounded by: its rows, its columns, its header's cells and, with
- * column spans, its body cells' (E1.2).
+ * What moves in the grid are bounded by: its rows, its columns, its header's cells, its summary
+ * rows (E2.1) and, with column spans, its body and summary rows' cells (E1.2).
  */
 function boundsOf<TRow, TNode>(state: DataGridState<TRow, TNode>): GridBounds {
     return {
         rowCount: state.rowCount,
         columnCount: state.columns.length,
         headerRowCount: headerRowCount(state),
+        headerDepth: state.header.depth,
+        summaryRows: state.summaryRows,
         headerCellAt: state.header.cellAt,
         cellSpanAt: hasColumnSpans(state.columns)
             ? (rowIndex, columnIndex) => spanAt(state, rowIndex, columnIndex)
@@ -221,36 +236,74 @@ function cellPosition<TRow, TNode>(
         : position;
 }
 
+/** Whether a position is a cell: a header row shown, a summary row or a body row, and a column. */
 function isCell<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     { rowIndex, columnIndex }: CellPosition,
 ): boolean {
     return (
-        Number.isInteger(rowIndex) &&
-        rowIndex >= 0 - headerRowCount(state) &&
-        rowIndex < state.rowCount &&
+        isRowOf(rowIndex, boundsOf(state)) &&
         isIndex(columnIndex, state.columns.length)
     );
 }
 
-/** The active position kept inside the grid after its shape changed (or none left). */
+/**
+ * The active row kept in the grid after its shape changed from `before`'s (Epic #86, E2.1): a
+ * summary row as the same row of its position (the last one left there), its index following
+ * the header's depth, the counts and the rows; with none left there, the nearest row on its side.
+ * A header row stays in the header, a body row in the body (the last one, when the rows shrank
+ * below it); any other row, or one with no such row left, goes to the nearest row (`keptRow`).
+ */
+function keptActiveRow<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    before: DataGridState<TRow, TNode>,
+    rowIndex: number,
+): number | null {
+    const bounds = boundsOf(state);
+    const summary = summaryRowAt(before, rowIndex);
+    if (summary) {
+        const { position, summaryIndex } = summary;
+        const count = state.summaryRows[position];
+        if (count > 0) {
+            return summaryRowIndex(
+                state,
+                position,
+                Math.min(summaryIndex, count - 1),
+            );
+        }
+        return keptRow(position === "top" ? -1 : state.rowCount - 1, bounds);
+    }
+    if (isHeaderRow(rowIndex, before.header)) {
+        return keptRow(Math.max(rowIndex, -state.header.depth), bounds);
+    }
+    if (rowIndex >= 0 && rowIndex < before.rowCount && state.rowCount > 0) {
+        return Math.min(rowIndex, state.rowCount - 1);
+    }
+    return keptRow(rowIndex, bounds);
+}
+
+/**
+ * The active position kept inside the grid after its shape changed from `before`'s (or none
+ * left): on the same row where it can be (`keptActiveRow`), and column.
+ */
 function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
+    before: DataGridState<TRow, TNode> = state,
 ): DataGridState<TRow, TNode> {
     const active = state.activePosition;
     if (!active) return state;
-    const firstRow = 0 - headerRowCount(state);
-    const lastRow = state.rowCount - 1;
+    const rowIndex = Number.isInteger(active.rowIndex)
+        ? keptActiveRow(state, before, active.rowIndex)
+        : null;
     if (
         state.columns.length === 0 ||
-        lastRow < firstRow ||
-        !Number.isInteger(active.rowIndex) ||
+        rowIndex === null ||
         !Number.isInteger(active.columnIndex)
     ) {
         return { ...state, activePosition: null };
     }
     const position = cellPosition(state, {
-        rowIndex: clamp(active.rowIndex, firstRow, lastRow),
+        rowIndex,
         columnIndex: clamp(active.columnIndex, 0, state.columns.length - 1),
     });
     return sameCell(position, active)
@@ -268,20 +321,23 @@ function copied(sortColumns: readonly SortColumn[]): readonly SortColumn[] {
 
 /**
  * The state with its rows from `source` (`data.set`, and a new model): the active cell kept
- * inside them, the expanded rows looked for where the new source may hold them.
+ * inside them (following its row from `state`'s, unless `follow` is false: a new model's position
+ * is given for its rows), the expanded rows looked for where the new source may hold them.
  */
 function withSource<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     source: RowSource<TRow>,
     rowKey: RowKeyGetter<TRow> | undefined,
     hints: RowKeyHints,
+    follow = true,
 ): DataGridState<TRow, TNode> {
-    const next = reconcile({
+    const sourced = {
         ...state,
         source,
         rowCount: rowCountOf(source),
         rowKey,
-    });
+    };
+    const next = reconcile(sourced, follow ? state : sourced);
     return withExpandedRows(next, hints, newRowsOf(state, next));
 }
 
@@ -439,14 +495,17 @@ function withLayout<TRow, TNode>(
             ? { rowIndex: active.rowIndex, columnIndex }
             : active;
     // in its new place, a span may cover it (E1.2)
-    return reconcile({
-        ...state,
-        columnOrder,
-        collapsedGroupKeys,
-        columns,
-        header,
-        activePosition,
-    });
+    return reconcile(
+        {
+            ...state,
+            columnOrder,
+            collapsedGroupKeys,
+            columns,
+            header,
+            activePosition,
+        },
+        state,
+    );
 }
 
 /** The state in a new column order (`withLayout`), and the order. */
@@ -502,15 +561,18 @@ function createHandlers<TRow, TNode>(
                 state.columnOrder,
                 state.collapsedGroupKeys,
             );
-            const next = reconcile({
-                ...state,
-                columns,
-                columnEntries: entries,
-                header,
-                // a sorted column gone, or no longer sortable, leaves the sort (one a collapsed
-                // group hides keeps it)
-                sortColumns: validSortColumns(entries, state.sortColumns),
-            });
+            const next = reconcile(
+                {
+                    ...state,
+                    columns,
+                    columnEntries: entries,
+                    header,
+                    // a sorted column gone, or no longer sortable, leaves the sort (one a
+                    // collapsed group hides keeps it)
+                    sortColumns: validSortColumns(entries, state.sortColumns),
+                },
+                state,
+            );
             return done(next, { columnCount: columns.length });
         },
         "data.set": (state, payload) => {
@@ -956,26 +1018,60 @@ function createHandlers<TRow, TNode>(
                 next,
             );
         },
-        "sizes.set": (state, { rowHeight, headerRowHeight, detailHeight }) => {
+        "summary-rows.set": (state, payload) => {
+            const counts = summaryRowCounts(payload, state.summaryRows);
+            if (!counts) {
+                return invalid(
+                    "top and bottom must be whole numbers, 0 or more",
+                );
+            }
+            const next =
+                counts === state.summaryRows
+                    ? state
+                    : reconcile({ ...state, summaryRows: counts }, state);
+            return done(next, next.summaryRows);
+        },
+        "summary-rows.changed": (state) => {
+            const { top, bottom } = state.summaryRows;
+            // no summary row: nothing to draw again
+            const next =
+                top + bottom > 0
+                    ? { ...state, summaryRevision: state.summaryRevision + 1 }
+                    : state;
+            return done(next, next.summaryRevision);
+        },
+        "sizes.set": (
+            state,
+            { rowHeight, headerRowHeight, summaryRowHeight, detailHeight },
+        ) => {
             if (rowHeight !== undefined && !validSize(rowHeight)) {
                 return invalid("rowHeight must be a size or a function");
             }
-            if (
-                headerRowHeight !== undefined &&
-                (typeof headerRowHeight !== "number" ||
-                    !validSize(headerRowHeight))
-            ) {
-                return invalid("headerRowHeight must be a size");
+            for (const [name, size] of [
+                ["headerRowHeight", headerRowHeight],
+                ["summaryRowHeight", summaryRowHeight],
+            ] as const) {
+                if (
+                    size !== undefined &&
+                    (typeof size !== "number" || !validSize(size))
+                ) {
+                    return invalid(`${name} must be a size`);
+                }
             }
             if (detailHeight !== undefined && !validSize(detailHeight)) {
                 return invalid("detailHeight must be a size or a function");
             }
-            const next = reconcile({
-                ...state,
-                rowHeight: rowHeight ?? state.rowHeight,
-                headerRowHeight: headerRowHeight ?? state.headerRowHeight,
-                detailHeight: detailHeight ?? state.detailHeight,
-            });
+            const next = reconcile(
+                {
+                    ...state,
+                    rowHeight: rowHeight ?? state.rowHeight,
+                    headerRowHeight: headerRowHeight ?? state.headerRowHeight,
+                    summaryRowHeight:
+                        summaryRowHeight ?? state.summaryRowHeight,
+                    detailHeight: detailHeight ?? state.detailHeight,
+                },
+                state,
+            );
             return done(next, undefined);
         },
         "active-position.set": (state, payload) => {
@@ -1077,6 +1173,12 @@ export function createDataGridModel<TRow, TNode = unknown>(
         rowKey: undefined,
         rowHeight: options.rowHeight ?? DEFAULT_ROW_HEIGHT,
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
+        // counts that are not whole numbers start without summary rows
+        summaryRows:
+            summaryRowCounts(options.summaryRows, NO_SUMMARY_ROWS) ??
+            NO_SUMMARY_ROWS,
+        summaryRowHeight: options.summaryRowHeight ?? DEFAULT_ROW_HEIGHT,
+        summaryRevision: 0,
         activePosition: options.activePosition ?? null,
         sortColumns: copied(
             validSortColumns(entries, options.sortColumns ?? []),
@@ -1107,6 +1209,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
             : { rowCount: options.rowCount ?? 0, getRow: options.getRow },
         options.rowKey,
         hints,
+        // the position given is for these rows
+        false,
     );
     const middlewares: Middleware<TRow, TNode>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
@@ -1277,6 +1381,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "collapsed-group-keys": () => state.collapsedGroupKeys,
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
+        "summary-rows": () => state.summaryRows,
+        "summary-row-height": () => state.summaryRowHeight,
+        "summary-row-by": ({ rowIndex }) => summaryRowAt(state, rowIndex),
         direction: () => state.direction,
         "expanded-row-keys": () => state.expandedRowKeys,
         "expanded-rows": () => state.expandedRows,
@@ -1294,7 +1401,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "cell-active": (position) => {
             const active = state.activePosition;
             if (!active) return false;
-            if (position.rowIndex < 0) {
+            if (isHeaderRow(position.rowIndex, state.header)) {
                 return sameCell(active, position, state.header.cellAt);
             }
             const span = spanAt(state, position.rowIndex, position.columnIndex);
@@ -1386,6 +1493,8 @@ export const COMMANDS = [
     "column-groups.set",
     "column-groups.toggle",
     "direction.set",
+    "summary-rows.set",
+    "summary-rows.changed",
     "sizes.set",
     "active-position.set",
     "active-position.clear",

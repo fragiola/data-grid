@@ -87,6 +87,10 @@
                     "path": "concepts/row-selection"
                 },
                 {
+                    "label": "Summary rows",
+                    "path": "concepts/summary-rows"
+                },
+                {
                     "label": "Scroll scaling",
                     "path": "concepts/scroll-scaling"
                 },

@@ -30,6 +30,7 @@ export {
     rowSelected,
     rowTop,
     rowWidth,
+    summaryHeight,
 } from "./engine/geometry";
 export {
     type CellPart,
@@ -48,6 +49,11 @@ export {
     type RowState,
     rowDetailPart,
     rowPart,
+    type SummaryCellPart,
+    type SummaryCellState,
+    type SummaryRowState,
+    summaryCellPart,
+    summaryRowPart,
 } from "./engine/parts";
 export type {
     ColumnReorder,
@@ -77,6 +83,11 @@ export { keptOrder, sameOrder } from "./model/order";
 export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
 export { cellValue, rowAt } from "./model/source";
+export {
+    summaryRowAt,
+    summaryRowIndex,
+    summaryRowsOf,
+} from "./model/summary";
 export type {
     CellPosition,
     CellRenderProps,
@@ -125,6 +136,11 @@ export type {
     SelectionAnchor,
     SortColumn,
     SortDirection,
+    SummaryCellRenderProps,
+    SummaryColSpanArgs,
+    SummaryPosition,
+    SummaryRowCounts,
+    SummaryRowView,
 } from "./model/types";
 export { DEFAULT_MIN_WIDTH, keptWidths, sameWidths } from "./model/widths";
 export {

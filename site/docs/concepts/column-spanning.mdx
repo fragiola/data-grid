@@ -13,7 +13,10 @@ them.
 ## Spanning a cell
 
 `colSpan` is a function on a column. The grid asks it for the cells it renders: a loaded row's
-cell (`type: "row"`, with the row and its index) and the column's header cell (`type: "header"`).
+cell (`type: "row"`, with the row and its index), the column's header cell (`type: "header"`) and
+its [summary rows'](/docs/concepts/summary-rows) cells (`type: "summary"`, with their `position`
+and `summaryIndex`). Tell a row's cell by `args.type === "row"`, not by "not the header": a
+summary cell has no row.
 It answers how many columns the cell covers, itself included; `undefined` or 1 is no span.
 
 ```tsx title="columns.tsx"

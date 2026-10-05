@@ -20,12 +20,14 @@ function hourColumn(hour: number): Column<Room> {
         key: `h${hour}`,
         name: `${time(hour)}–${time(hour + 2)}`,
         width: 96,
-        colSpan: (args) =>
-            args.type === "header"
-                ? (hour - FIRST_HOUR) % 2 === 0
-                    ? 2
-                    : undefined
-                : bookingAt(args.row, hour)?.hours,
+        colSpan: (args) => {
+            if (args.type === "header") {
+                return (hour - FIRST_HOUR) % 2 === 0 ? 2 : undefined;
+            }
+            return args.type === "row"
+                ? bookingAt(args.row, hour)?.hours
+                : undefined;
+        },
         renderCell: ({ row }) => {
             const booking = bookingAt(row, hour);
             return booking ? (
