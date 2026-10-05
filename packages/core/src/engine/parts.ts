@@ -5,6 +5,7 @@ import type {
     HeaderCellLayout,
     PinnedSide,
     ReorderSide,
+    SortColumn,
     SortDirection,
     SummaryPosition,
     SummaryRowView,
@@ -17,7 +18,7 @@ import {
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
 import { keySet } from "../utils";
-import { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
+import { COLUMN_RESIZER_ATTRIBUTE, ROW_DRAG_HANDLE_ATTRIBUTE } from "./dom";
 import {
     cellSpan,
     columnLeft,
@@ -47,6 +48,16 @@ export interface RowState {
     readonly expanded: boolean;
     /** it is selected: rows are selectable, it is loaded and its key selected */
     readonly selected: boolean;
+    /**
+     * a drag is moving it (its handle's, Epic #86, E2.3); `undefined` while the grid's rows do not
+     * move (`reorderableRows` off)
+     */
+    readonly dragging: boolean | undefined;
+    /**
+     * a drag would drop its row beside it, on this side (the app draws the indicator); else
+     * `null`; `undefined` while the grid's rows do not move
+     */
+    readonly dropTarget: ReorderSide | null | undefined;
 }
 
 /** The state of a body cell. */
@@ -158,6 +169,18 @@ export interface ColumnResizerState {
     readonly edge: "start" | "end";
 }
 
+/** The state of a row's drag handle (Epic #86, E2.3): the element the app renders in its row. */
+export interface RowDragHandleState {
+    readonly rowIndex: number;
+    /**
+     * a press on it drags its row: the grid's rows move (`reorderableRows`), the grid is not
+     * sorted and the row is loaded; else it does nothing (render it disabled, or none)
+     */
+    readonly reorderable: boolean;
+    /** a drag on it is moving its row */
+    readonly dragging: boolean;
+}
+
 /** The state of a row's detail. */
 export interface RowDetailState {
     readonly rowIndex: number;
@@ -229,6 +252,19 @@ export interface ColumnResizerPart {
     };
 }
 
+/**
+ * A row's drag handle's state and its attributes: marked with its row's index for the engine, and
+ * hidden from assistive technologies (a pointer's way to move the row: the keys move it from its
+ * cells, Ctrl/⌘+Shift+↑/↓).
+ */
+export interface RowDragHandlePart {
+    readonly state: RowDragHandleState;
+    readonly attributes: {
+        readonly "aria-hidden": true;
+        readonly [ROW_DRAG_HANDLE_ATTRIBUTE]: number;
+    };
+}
+
 /** A row's detail's state, and its box while its row is expanded (`rowDetailBox`). */
 export interface RowDetailPart {
     readonly state: RowDetailState;
@@ -250,6 +286,8 @@ export function rowPart<TRow, TNode>(
     loaded: boolean,
 ): RowPart {
     const selected = rowSelected(view, rowIndex);
+    const reorder = view.rowReorder;
+    const moves = view.reorderableRows;
     return {
         state: {
             rowIndex,
@@ -257,6 +295,12 @@ export function rowPart<TRow, TNode>(
             active: view.active?.rowIndex === rowIndex,
             expanded: rowExpanded(view, rowIndex),
             selected,
+            dragging: moves ? reorder?.rowIndex === rowIndex : undefined,
+            dropTarget: moves
+                ? reorder?.targetIndex === rowIndex
+                    ? reorder.side
+                    : null
+                : undefined,
         },
         ariaSelected:
             selected || rowSelectable(view, rowIndex) ? selected : undefined,
@@ -452,6 +496,40 @@ export function columnResizerPart<TRow, TNode>(
             "aria-valuemin": minWidth,
             "aria-valuemax": resizeMaximum(span, view.viewportWidth),
             [COLUMN_RESIZER_ATTRIBUTE]: cell.key,
+        },
+    };
+}
+
+/**
+ * Whether a grid's rows move now (E2.3): they move (`reorderableRows`) and the grid is not sorted
+ * (sorted, the app orders them its own way: a move would not stay where it was dropped).
+ */
+export function rowsMove(
+    reorderableRows: boolean | undefined,
+    sortColumns: readonly SortColumn[],
+): boolean {
+    return reorderableRows === true && sortColumns.length === 0;
+}
+
+/**
+ * A row's drag handle's state and attributes (E2.3): it drags its row while rows move
+ * (`rowsMove`) and the row is loaded.
+ */
+export function rowDragHandlePart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+    loaded: boolean,
+): RowDragHandlePart {
+    return {
+        state: {
+            rowIndex,
+            reorderable:
+                loaded && rowsMove(view.reorderableRows, view.sortColumns),
+            dragging: view.rowReorder?.rowIndex === rowIndex,
+        },
+        attributes: {
+            "aria-hidden": true,
+            [ROW_DRAG_HANDLE_ATTRIBUTE]: rowIndex,
         },
     };
 }

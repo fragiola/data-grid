@@ -26,11 +26,13 @@ into it; or a function, which receives the props and the part's state.
 - `ref` is a plain prop, merged with the part's own.
 - A handler you pass runs after the part's own, with three exceptions: `Root` runs the grid's keys
   **after** your `onKeyDown`, its header clicks (sorting) **after** your `onClick`, and a press
-  on a column resizer or a reorderable header cell (a drag) **after** your `onPointerDown`, on
-  `Root` or on its `render` element; a cell's handlers run before them, so `preventDefault`
-  cancels a key, a sort or a drag. See [Keyboard and accessibility](/docs/concepts/keyboard),
-  [Sorting](/docs/concepts/sorting), [Column resizing](/docs/concepts/column-resizing) and
-  [Column reordering](/docs/concepts/column-reordering).
+  on a column resizer, a reorderable header cell or a row's drag handle (a drag) **after** your
+  `onPointerDown`, on `Root` or on its `render` element; a cell's handlers run before them, so
+  `preventDefault` cancels a key, a sort or a drag. See
+  [Keyboard and accessibility](/docs/concepts/keyboard), [Sorting](/docs/concepts/sorting),
+  [Column resizing](/docs/concepts/column-resizing),
+  [Column reordering](/docs/concepts/column-reordering) and
+  [Row reordering](/docs/concepts/row-reordering).
 - `Body` and `HeaderRow` drop a `transform` from your style: the grid moves them with it. A
   pinned column's cells drop a `transform` and the insets (`top`, `left`, `right`, `bottom`,
   `inset`): they are sticky, the grid writes their `left`. A row's detail drops them too, for the
@@ -66,7 +68,9 @@ Parts render their children, or the column's renderer. They set no `aria-label` 
 name the grid yourself (`<DataGrid.Grid aria-label="People">`). A
 [column's resize handle](/docs/concepts/column-resizing) is an element of yours too:
 `useColumnResizer` gives it its props (ARIA, `data-*`, the marker the grid finds it by), never a
-name, a place or a look.
+name, a place or a look, and so does `useRowDragHandle` for a
+[row's drag handle](/docs/concepts/row-reordering) (hidden from screen readers: the keys move a
+row from its cells).
 
 ## The recursion is yours
 

@@ -345,7 +345,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `pageRows`), `@fragiola/data-grid-react/local` holds `useLocalRows(rows, columns, options)`,
     which keeps that state itself and returns `props` to spread onto `Root` (`rows`,
     `sortColumns`, a stable `onSortColumnsChange`) and `sort`/`filter`/`page` for the app's
-    controls. Filter and page are not model state (no grid behaviour); the sort is. Values
+    controls (and `moveRow(move)`, Epic #86: a row move applied to the rows given; stable, the
+    latest rows read through a ref, moves before a render applied one after the other). Filter and page are not model state (no grid behaviour); the sort is. Values
     compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
     `Column.filter` override; a text filter contains (case and accents aside), a list holds,
     anything else equals. A filter, the search or the sort changing goes to the first page.
@@ -483,6 +484,56 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    target; `useHeaderCell` reports `reorderable`, `dragging`, `dropTarget` (`engine/parts.ts`).
    The indicator, the cursor, `touch-action` and any announcement (a live region) are the
    app's; live reordering, pinning by drag, rows and touch gestures are not the grid's.
+   **Row reordering (Epic #86, E2.3):** the grid never orders the rows (D6, the sorting rules),
+   so a move is an **event**, never a command on rows: the engine's `row-move` event
+   `RowMove { fromIndex, toIndex, rowKey }` (`toIndex` the index once moved: the rows without it,
+   it inserted there; `landingIndex`, the columns' too), `Root`'s `onRowMove`, whose presence
+   turns it on (the engine option `reorderableRows`, `view.reorderableRows`; a grid without it
+   is unchanged: no attribute, part state `undefined`). The app moves its rows (`moveRow(rows,
+   fromIndex, toIndex)` and `moveShownRow(rows, shown, …)` in `@fragiola/data-grid/local`,
+   `useLocalRows`'s `moveRow(move)` placing it beside the row it lands next to on screen, filtered
+   or paged). Refused (`rowsMove(reorderableRows, sortColumns)`, parts): while sorted (the handle
+   does not drag, the keys move nothing, documented: clear the sort), a row not loaded (no
+   key: neither dragged nor a target), a drop beside itself (null target, nothing told). The
+   handle is the app's element with `useRowDragHandle(row)`'s props (a row's or a cell's info;
+   `RowDragHandlePart`: `aria-hidden` (a pointer's affordance: the keys move a row from its
+   cells), `data-grid-row-drag-handle` = the row index (`ROW_DRAG_HANDLE_ATTRIBUTE`),
+   `data-grid-part="row-drag-handle"`, `data-reorderable`, `data-dragging`, an empty `style`;
+   `state` `{ rowIndex, reorderable, dragging }`); a plain element, not a control. The drag
+   shares the column reorder's machinery (`PointerDrag` with both coordinates, `listen`,
+   `capture`, `askFrame`, `endDrag`, `markedOf`, `keptIfSame` (a target worked out again
+   unchanged keeps its object, the columns' too), the edge scroll split into
+   `edgeStep(at, start, length)` and `edgeScrollBy(vertical, step)`, which tells whether the
+   rows moved: none past the first or last row): a primary press on an own
+   handle (after the consumer's `onPointerDown`, a prevented one vetoes; not prevented: under
+   `CLICK_SLOP` a click, which focuses its cell), past it the row drags (the active cell left as
+   it is: `buildView` keeps `rowReorder.rowIndex` in `view.rows`, as the active row, so the
+   handle holding the pointer stays rendered through the edge scroll; selection and native drags
+   blocked); once a frame the target is the row under the pointer's y (`viewY`, the one layout
+   read, at the start, once a frame and on the release) kept over the
+   body (`bodyTop`, `bodyHeight`), from the row axis (off screen, measured, variable, details,
+   scaled alike), the side of its cells' middle (`cellsSizeOf`: over a detail, after); within
+   40 px of the body's top or bottom edge (or past it) the rows scroll up to 20 px a frame
+   (from the drag's start too); a scroll during the drag retargets once a frame. After every
+   model change, laid out (`followRowDrag`, after `relayout`: the offset clamped), the target is
+   worked out again from the last `viewY` (no layout read) and, held in an edge zone, a frame is
+   asked (rows appended come into reach). The release emits one `row-move`; Escape (after the
+   app's handlers), `pointercancel`, a lost capture, a move with no button, rows no longer moving
+   or its row gone from its index (by key) end it telling nothing; the click ending it is the
+   drag's. State:
+   `engine.get("row-reorder")` → `RowReorder` `{ rowIndex, rowKey } & ({ targetIndex, side } |
+   { targetIndex: null, side: null })` or `null`, the `row-reorder` event, `view.rowReorder`;
+   `RowState.dragging` (`boolean | undefined`) and `dropTarget` (`ReorderSide | null |
+   undefined`), `undefined` while rows do not move (pre-existing `RowState` assertions hold),
+   `data-dragging`/`data-drop-target` on the row. The active cell follows its row by key, only
+   with `rowKey` (an index key cannot tell rows apart: without one it stays at its index): a move
+   from the active row remembers it (`movedRow`); at a new source or `rows.changed` that puts the
+   key at `toIndex`, the active cell still on `fromIndex`, an `active-position.set` runs (queued
+   after that change: no render in between), focus going with it. Kept through rows changing
+   otherwise (a server answering in pieces); forgotten once followed, once the active cell is on
+   another row (the person or the app moved it), at the next move and when the viewport detaches.
+   The indicator, the cursor, `touch-action` and announcements are the app's; live moves,
+   between grids, several rows and touch gestures are not the grid's.
 11. **Navigation is core behaviour (D11).** The active position lives in the model; the engine maps
     arrows, Home/End, Ctrl+Home/End and PageUp/PageDown onto it (APG grid pattern), scrolls the
     target into view and moves focus with a roving tabindex. Tab leaves the grid. Right to left
@@ -509,7 +560,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     header cell in navigation, Ctrl/⌘+Shift+←/→ run one `column-order.move` before the previous
     sibling or after the next (handled at an end or at the pinned edge too, moving nothing),
     after the consumer's handlers; the active cell follows and focus stays on it; on a body cell
-    or a fixed header cell they are plain arrows (Epic #75). A consumer can
+    or a fixed header cell they are plain arrows (Epic #75). While rows move (`onRowMove`, Epic
+    #86, E2.3), Ctrl/⌘+Shift+↑/↓ on a body cell in navigation (`bodyCellOf`, the selection keys'
+    guard too) emit one `row-move` by ∓1, once per press (a repeat moves nothing; handled at the
+    first or last row, next to a row not loaded and while sorted too, moving nothing; RTL the
+    same), after the consumer's handlers; with `rowKey` the active cell follows the row once the
+    app moved it; without `onRowMove` they are plain arrows. A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. With summary rows
     (Epic #86) the keys move by line through the header, the top summary rows, the body and the
     bottom ones (see D10). ARIA: `role="grid"`,
@@ -641,7 +697,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   from the row's start, never shrunk). Nothing cosmetic. (The root's `dir`, when a direction is
   given, is structural: `Root` renders `view.givenDirection`.)
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`; a selectable
-  row's `aria-selected="false"` is ARIA's own "selectable, not selected"): `data-active`,
+  row's `aria-selected="false"` is ARIA's own "selectable, not selected"; a row's drag handle's
+  `aria-hidden="true"`): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
@@ -657,19 +714,24 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `{headerCellContent(cell)}<Resizer cell={cell} />`. A focusable `separator` on a `div` needs a
   documented `biome-ignore` of `useAriaPropsSupportedByRole` (the APG splitter; an `<hr>` cannot
   take focus).
+- **A row's drag handle is the app's element (Epic #86, E2.3).** `useRowDragHandle(row)` returns
+  `{ state, props }` (`state`: `rowIndex`, `reorderable`, `dragging`; `props`: `aria-hidden`,
+  `data-grid-row-drag-handle`, `data-grid-part="row-drag-handle"`, `data-reorderable`,
+  `data-dragging`, an empty `style`); its look, cursor and `touch-action: none` are the app's, and
+  it is a plain element, not a control (a press focuses its cell).
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
   until a root holds it; `useRow`'s props hold a measured row's `ref`); a part hook (`useRow`, `useCell`, `useHeaderCell`,
-  `useColumnResizer`, `useGroupLabel`, `useSummaryRow`, `useSummaryCell`) returns
+  `useColumnResizer`, `useGroupLabel`, `useRowDragHandle`, `useSummaryRow`, `useSummaryCell`) returns
   `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
   before both (bubbling): `preventDefault` in either cancels a grid key, Enter, F2, Tab and
   Escape of interactive cells included. **Clicks too (Epic
   #27):** `Root` calls the engine's `click` (a header cell's sort) after the consumer's
-  `onClick`, the same way. **Presses on a resizer or a reorderable header cell too (Epics #70,
-  #75):** `Root` calls the engine's `pointerdown` (a resizer's drag; a header cell's once past
-  the click slop, the press not prevented so a click still focuses and sorts) after the
-  consumer's `onPointerDown`; during a drag, Escape goes to the engine's `keydown` the same way,
+  `onClick`, the same way. **Presses on a resizer, a reorderable header cell or a row's drag
+  handle too (Epics #70, #75, #86):** `Root` calls the engine's `pointerdown` (a resizer's drag;
+  a header cell's or a handle's once past the click slop, the press not prevented so a click
+  still focuses and sorts) after the consumer's `onPointerDown`; during a drag, Escape goes to the engine's `keydown` the same way,
   and from outside the grid to a listener on the document's bubble phase, after the app's own
   handlers (a prevented Escape keeps the drag); the click ending a drag is the drag's.
   Keys from outside the

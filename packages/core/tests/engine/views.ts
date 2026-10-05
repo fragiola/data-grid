@@ -70,6 +70,8 @@ export function inputsOf(
         interaction: null,
         columnResize: null,
         columnReorder: null,
+        reorderableRows: false,
+        rowReorder: null,
         direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),
         ...overrides,

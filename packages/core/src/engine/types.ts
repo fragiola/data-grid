@@ -29,6 +29,12 @@ export interface DataGridEngineOptions {
     maxScrollSize?: number;
     /** `rows-end-reached` fires when the view's last row is this close to the end (default 10) */
     endReachedThreshold?: number;
+    /**
+     * the rows move (Epic #86, E2.3): a press on a row's drag handle drags it, Ctrl/⌘+Shift+↑/↓
+     * on a body cell move its row, each drop or key a `row-move` event the app applies (the grid
+     * never orders the rows). Refused while the grid is sorted. Default off
+     */
+    reorderableRows?: boolean;
 }
 
 /** A header row a render shows: its index (-depth … -1) and its cells in the column window. */
@@ -180,6 +186,10 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly columnResize: ColumnResize | null;
     /** the column or group a drag is moving, and where it would land (O4), or `null` */
     readonly columnReorder: ColumnReorder | null;
+    /** the rows move by their drag handles and the keys (`reorderableRows`, E2.3) */
+    readonly reorderableRows: boolean;
+    /** the row a drag is moving, and where it would land (E2.3), or `null` */
+    readonly rowReorder: RowReorder | null;
 }
 
 /** A column (or a group) a person is resizing with the pointer, and its width on screen. */
@@ -206,6 +216,40 @@ export type ColumnReorder = {
     | { readonly targetKey: null; readonly side: null }
 );
 
+/**
+ * A row a person is dragging by its handle (Epic #86, E2.3), and where a drop would move it:
+ * before or after the row at `targetIndex` (the app draws the indicator there), or, while a drop
+ * would move nothing (it would land where it is, on a row not loaded, the grid sorted), nowhere
+ * (`targetIndex` and `side` both `null`).
+ */
+export type RowReorder = {
+    /** the dragged row's index */
+    readonly rowIndex: number;
+    /** its key: `rowKey`, else its index */
+    readonly rowKey: RowKey;
+} & (
+    | {
+          /** the row it would land beside */
+          readonly targetIndex: number;
+          readonly side: ReorderSide;
+      }
+    | { readonly targetIndex: null; readonly side: null }
+);
+
+/**
+ * A move of a row (`row-move`, E2.3), which the app applies to its rows: the grid never orders
+ * them. `toIndex` is the index the row takes once moved: its rows without it, it inserted there
+ * (`moveRow` in `@fragiola/data-grid/local` applies it to an array).
+ */
+export interface RowMove {
+    /** the row's index before the move */
+    readonly fromIndex: number;
+    /** its index once moved */
+    readonly toIndex: number;
+    /** its key: `rowKey`, else its index */
+    readonly rowKey: RowKey;
+}
+
 /** What `engine.get` reads. */
 export interface EngineQueryMap {
     "row-window": AxisWindow;
@@ -226,6 +270,8 @@ export interface EngineQueryMap {
     "column-resize": ColumnResize | null;
     /** the column or group a drag is moving, or `null` (see `GridView.columnReorder`) */
     "column-reorder": ColumnReorder | null;
+    /** the row a drag is moving, or `null` (see `GridView.rowReorder`) */
+    "row-reorder": RowReorder | null;
     /**
      * the widths the engine gives columns without an override, by key (Epic #80, A6): an
      * `autoSize` column's automatic width and the flex columns' shares of the view. Never
@@ -281,6 +327,13 @@ export interface EngineEventMap {
     "column-resize": ColumnResize | null;
     /** a drag started moving a column or a group, changed its target, or ended (`null`) */
     "column-reorder": ColumnReorder | null;
+    /** a drag started moving a row, changed its target, or ended (`null`) */
+    "row-reorder": RowReorder | null;
+    /**
+     * a row was dropped elsewhere, or moved by the keys (Ctrl/⌘+Shift+↑/↓): the app moves it in
+     * its rows; the active cell, in that row, follows it there
+     */
+    "row-move": RowMove;
     /** the automatic widths or the flex shares changed (see `column-auto-widths`) */
     "column-auto-widths": ColumnWidths;
 }
@@ -344,7 +397,8 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
      * Handles a press in the grid: a primary press on one of its column resizers starts a drag
      * (and is prevented: no focus, no text selection); one on a reorderable header cell (not on a
      * control inside it) drags the cell once it moves past a click's slop (and is not prevented:
-     * a click still focuses and sorts). Returns whether it did either. Like `click`, an adapter
+     * a click still focuses and sorts), and so does one on a row's drag handle while rows move
+     * (`reorderableRows`). Returns whether it did one. Like `click`, an adapter
      * calls it after the consumer's own handlers, so `preventDefault` cancels it.
      */
     pointerdown(event: PointerEvent): boolean;

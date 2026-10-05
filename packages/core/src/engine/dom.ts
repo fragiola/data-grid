@@ -133,6 +133,12 @@ export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
 export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
 
 /**
+ * A row's drag handle (Epic #86, E2.3): an element the app renders in a row (a cell of it), its
+ * value the row's index. A press on it drags the row while rows move (`reorderableRows`).
+ */
+export const ROW_DRAG_HANDLE_ATTRIBUTE = "data-grid-row-drag-handle";
+
+/**
  * A group's label (Epic #85, E1.3): an element the app renders in a group's header cell, its value
  * the group's key. The engine keeps it in view while the group scrolls (the `label` layer).
  */

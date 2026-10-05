@@ -11,9 +11,10 @@ present (empty) or absent, never `"false"`.
 Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `header-cell`,
 `body`, `row`, `cell`, `row-detail`, `empty`, or `summary`, `summary-row` and `summary-cell`
 ([Summary rows](/docs/concepts/summary-rows)), `column-resizer` on a resize handle you render
-with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), and `group-label` on a
+with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), `group-label` on a
 group's label you render with `useGroupLabel`
-([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)). Rows and cells carry
+([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)), and `row-drag-handle`
+on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)). Rows and cells carry
 their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
 its top one; the top summary rows are before the header's, the bottom ones after the body's) and `data-column-index` (a header cell spanning columns is at its first). Tests
 select by them, never by class names.
@@ -43,6 +44,9 @@ select by them, never by class names.
 | `data-reorderable` | header cell | its column or group can be moved ([Column reordering](/docs/concepts/column-reordering)) |
 | `data-dragging` | header cell | a drag is moving its column or group |
 | `data-drop-target` | header cell | `before` or `after`: a drag would drop beside it, on that side |
+| `data-dragging` | row, row drag handle | a drag is moving the row ([Row reordering](/docs/concepts/row-reordering)) |
+| `data-drop-target` | row | `before` or `after`: a row's drag would drop beside it, on that side |
+| `data-reorderable` | row drag handle | a press on it drags its row (the rows move, the grid is not sorted, the row is loaded) |
 
 ## ARIA
 

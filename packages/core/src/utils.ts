@@ -95,3 +95,15 @@ export function sameKeys(a: readonly RowKey[], b: readonly RowKey[]): boolean {
     const held = keySet(b);
     return a.every((key) => held.has(key));
 }
+
+/**
+ * `current` when it holds the same values as `next` in every field `next` has (a state worked out
+ * again unchanged: the same object, nothing to publish), else `next`.
+ */
+export function keptIfSame<T extends object>(current: T | null, next: T): T {
+    if (!current) return next;
+    for (const key in next) {
+        if (current[key] !== next[key]) return next;
+    }
+    return current;
+}

@@ -19,6 +19,7 @@ it, the grid scrolls it into view and focuses it.
 | Shift+↑, Shift+↓ | the next row, selecting from the anchor (many rows selectable) |
 | Ctrl+A, ⌘+A | selects every row (many rows selectable) |
 | Ctrl+Shift+←, Ctrl+Shift+→ | moves a reorderable header cell's column or group, the active cell following it (⌘ on a Mac) |
+| Ctrl+Shift+↑, Ctrl+Shift+↓ | moves the active cell's row up or down, the active cell following it ([row reordering](/docs/concepts/row-reordering) on; ⌘ on a Mac) |
 
 Moves stop at the edges. In a [right-to-left](/docs/concepts/right-to-left) grid the arrows
 mirror: ← moves to the next column and → to the previous one, as they point; Home and End stay the
@@ -27,7 +28,10 @@ handle ← moves it to the left, which widens its column. A click or a Tab into 
 header cell, Enter and Space toggle its [sort](/docs/concepts/sorting) (Ctrl adds the column).
 On a [reorderable](/docs/concepts/column-reordering) header cell, Ctrl+Shift+← and Ctrl+Shift+→
 move its column (or group) before the previous sibling or after the next one, focus staying on
-it; elsewhere they move the active cell as the arrows do.
+it; elsewhere they move the active cell as the arrows do. While the rows
+[move](/docs/concepts/row-reordering), Ctrl+Shift+↑ and Ctrl+Shift+↓ on a body cell move its row
+by one, once per press, focus following it once you have moved it (with a `rowKey`; nothing moves
+while the grid is sorted); the same right to left.
 
 <Example id="keyboard-navigation" />
 

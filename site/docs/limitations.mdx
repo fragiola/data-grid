@@ -16,6 +16,7 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 | **Cells and ranges of cells** cannot be selected yet, only rows. | Nothing yet: a later step of Selection and editing. |
 | Sorting, filtering and pages **in memory need every row**: `useLocalRows` takes an array, not `getRow`. | Past what the browser should hold, a server does it ([`server-side`](/examples/server-side)). |
 | Every **nested grid** is a tab stop by default. | The inner grid's tab stops only while the outer cell or row holding it is active ([Nested grids](/docs/guides/nested-grids), [`master-detail`](/examples/master-detail)). |
+| **Sorted rows do not move**: a row dropped in a sorted grid would not stay where it was dropped, so the grid refuses the move. | A status that says so and a button that clears the sort ([Row reordering](/docs/concepts/row-reordering), [`row-reordering`](/examples/row-reordering)). |
 | **Measured heights** make the scrollbar approximate until the rows are measured: a jump to a far position lands near it. | An `estimatedRowHeight` near the typical row ([Measured heights](/docs/concepts/measured-heights)). |
 | A wheel over a nested grid that has reached its end chains to the outer grid natively: under the outer grid's **scroll scaling**, that step is a scaled jump. | Nothing: nested grids in the examples are not scaled. |
 | `DataGrid.Empty` has **no structure of its own**: inside a grid, its content needs a row and a cell. | `role="row"` and `role="gridcell"` wrappers, or `tr` and `td` in a table ([Empty state](/docs/guides/empty-state)). |
@@ -69,9 +70,10 @@ grid's keys. Next: cell-range selection, editing, copy and paste, fill.
 
 Started: [master-detail](/docs/guides/master-detail), rows that expand into an area holding
 another grid or any component, [summary rows](/docs/concepts/summary-rows) under the header
-and at the bottom edge, and rows and details as tall as their content
-([measured heights](/docs/concepts/measured-heights)). Next: grouping rows by a column's value
-(with aggregates), tree data, row reordering.
+and at the bottom edge, rows and details as tall as their content
+([measured heights](/docs/concepts/measured-heights)), and
+[row reordering](/docs/concepts/row-reordering) by a handle and the keys. Next: grouping rows by a
+column's value (with aggregates), tree data.
 
 </Step>
 

@@ -4,6 +4,7 @@ export type { Axis, Size } from "./axis/axis";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
+    ROW_DRAG_HANDLE_ATTRIBUTE,
     TAB_STOP_ATTRIBUTE,
 } from "./engine/dom";
 export { createDataGridEngine } from "./engine/engine";
@@ -46,9 +47,12 @@ export {
     headerCellPart,
     type RowDetailPart,
     type RowDetailState,
+    type RowDragHandlePart,
+    type RowDragHandleState,
     type RowPart,
     type RowState,
     rowDetailPart,
+    rowDragHandlePart,
     rowPart,
     type SummaryCellPart,
     type SummaryCellState,
@@ -71,6 +75,8 @@ export type {
     EngineQueryMap,
     GridView,
     HeaderRowView,
+    RowMove,
+    RowReorder,
     RowSpans,
 } from "./engine/types";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";

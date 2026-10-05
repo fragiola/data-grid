@@ -4510,5 +4510,282 @@ for (const kind of KINDS) {
                 ).toBeGreaterThan(before);
             });
         });
+
+        test.describe("row reordering", () => {
+            const ROWS = { rows: 100, columns: 8, rowReorder: 1 };
+
+            /** A row's drag handle, by the row's id (its index before any move). */
+            const handle = (page: Page, id: number) =>
+                page.getByTestId(`handle-${id}`);
+
+            /** A rendered body row of the grid at an index (a grid in a detail's left out). */
+            const row = (page: Page, rowIndex: number) =>
+                page.locator(
+                    `[data-testid="viewport"] > [data-grid-part="grid"] > [data-grid-part="body"] > [data-grid-part="row"][data-row-index="${rowIndex}"]`,
+                );
+
+            /** A body cell of the grid's own (`cell`, a grid in a detail's left out). */
+            const own = (page: Page, rowIndex: number, columnIndex: number) =>
+                row(page, rowIndex).locator(
+                    `:scope > [data-grid-part="cell"][data-column-index="${columnIndex}"]`,
+                );
+
+            /** The ids of the rows at the first `count` indexes, from C1's values. */
+            async function ids(page: Page, count: number) {
+                const values = await Promise.all(
+                    Array.from({ length: count }, (_, rowIndex) =>
+                        own(page, rowIndex, 1).textContent(),
+                    ),
+                );
+                return values.map((value) => Number(value?.split(":")[0]));
+            }
+
+            const rowMoves = (page: Page) =>
+                page.evaluate(() => window.rowMoves);
+
+            /**
+             * Presses a handle, moves the pointer to `y` (a page y) through the slop and, unless
+             * told to hold it, releases it there.
+             */
+            async function dragTo(
+                page: Page,
+                target: Locator,
+                y: number,
+                { hold = false } = {},
+            ) {
+                const box = await boxOf(target);
+                const x = box.x + box.width / 2;
+                await page.mouse.move(x, box.y + box.height / 2);
+                await page.mouse.down();
+                await page.mouse.move(x, y, { steps: 6 });
+                await settle(page);
+                if (!hold) {
+                    await page.mouse.up();
+                    await settle(page);
+                }
+            }
+
+            /** A page y at `fraction` of a row's cells' height (its first cell's box). */
+            async function yIn(page: Page, rowIndex: number, fraction: number) {
+                const box = await boxOf(own(page, rowIndex, 1));
+                return box.y + box.height * fraction;
+            }
+
+            test("moves a row dropped on another, the drop target marked meanwhile, once per drop", async ({
+                page,
+            }) => {
+                await open(page, kind, ROWS);
+                await expect(handle(page, 1)).toHaveAttribute(
+                    "data-reorderable",
+                    "",
+                );
+                await expect(handle(page, 1)).toHaveAttribute(
+                    "aria-hidden",
+                    "true",
+                );
+                // row 3's lower half: after it
+                await dragTo(page, handle(page, 1), await yIn(page, 3, 0.75), {
+                    hold: true,
+                });
+                await expect(row(page, 1)).toHaveAttribute("data-dragging", "");
+                await expect(row(page, 3)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                // the fixture's own CSS draws it
+                await expect(row(page, 3)).toHaveCSS("box-shadow", /inset/);
+                // nothing moves before the release
+                expect(await ids(page, 5)).toEqual([0, 1, 2, 3, 4]);
+                await page.mouse.up();
+                await settle(page);
+                expect(await ids(page, 5)).toEqual([0, 2, 3, 1, 4]);
+                expect(await rowMoves(page)).toEqual([
+                    { fromIndex: 1, toIndex: 3, rowKey: 1 },
+                ]);
+                expect(
+                    await page
+                        .locator(
+                            '[data-grid-part="row"][data-dragging], [data-grid-part="row"][data-drop-target]',
+                        )
+                        .count(),
+                ).toBe(0);
+                // its cell, pressed, is the active one, at its new index; the click sorted nothing
+                expect(await active(page)).toEqual({
+                    rowIndex: 3,
+                    columnIndex: 0,
+                });
+                await expect(own(page, 3, 0)).toBeFocused();
+                // up again, before row 0
+                await dragTo(page, handle(page, 1), await yIn(page, 0, 0.25));
+                expect(await ids(page, 5)).toEqual([1, 0, 2, 3, 4]);
+                expect(await rowMoves(page)).toHaveLength(2);
+            });
+
+            test("cancels a drag on Escape, and moves nothing dropped where it is", async ({
+                page,
+            }) => {
+                await open(page, kind, ROWS);
+                await dragTo(page, handle(page, 1), await yIn(page, 4, 0.75), {
+                    hold: true,
+                });
+                await expect(row(page, 4)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                await page.keyboard.press("Escape");
+                await settle(page);
+                await expect(row(page, 1)).not.toHaveAttribute("data-dragging");
+                await page.mouse.up();
+                await settle(page);
+                // beside itself: nowhere
+                await dragTo(page, handle(page, 1), await yIn(page, 2, 0.25));
+                expect(await ids(page, 5)).toEqual([0, 1, 2, 3, 4]);
+                expect(await rowMoves(page)).toEqual([]);
+            });
+
+            test("scrolls near the body's bottom edge to a far row", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, ROWS);
+                const view = await boxOf(viewport);
+                // held just inside the bottom edge: the rows scroll to the last one
+                await dragTo(page, handle(page, 1), view.y + view.height - 5, {
+                    hold: true,
+                });
+                await expect
+                    .poll(() =>
+                        viewport.evaluate(
+                            (element) =>
+                                element.scrollHeight -
+                                element.clientHeight -
+                                element.scrollTop,
+                        ),
+                    )
+                    .toBeLessThan(1);
+                await expect(row(page, 99)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                // the dragged row is still rendered (the active one)
+                await expect(row(page, 1)).toHaveAttribute("data-dragging", "");
+                await page.mouse.up();
+                await settle(page);
+                expect(await rowMoves(page)).toEqual([
+                    { fromIndex: 1, toIndex: 99, rowKey: 1 },
+                ]);
+                await expect(own(page, 99, 1)).toHaveText("1:1");
+            });
+
+            test("moves the active cell's row with Ctrl+Shift+arrows, focus following it", async ({
+                page,
+            }) => {
+                await open(page, kind, ROWS);
+                await own(page, 2, 1).click();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+                await settle(page);
+                expect(await ids(page, 5)).toEqual([0, 1, 3, 2, 4]);
+                expect(await active(page)).toEqual({
+                    rowIndex: 3,
+                    columnIndex: 1,
+                });
+                await expect(own(page, 3, 1)).toBeFocused();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+                await settle(page);
+                expect(await ids(page, 5)).toEqual([0, 2, 1, 3, 4]);
+                await expect(own(page, 1, 1)).toBeFocused();
+                expect(await rowMoves(page)).toHaveLength(5);
+                // the first row up: handled, nothing moves, the page does not scroll
+                await own(page, 0, 1).click();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+                await settle(page);
+                expect(await rowMoves(page)).toHaveLength(5);
+                await expect(own(page, 0, 1)).toBeFocused();
+            });
+
+            test("refuses a move while the grid is sorted", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...ROWS, sort: 1 });
+                await page
+                    .locator(
+                        '[data-grid-part="header-cell"][data-column-index="0"]',
+                    )
+                    .click({ position: { x: 5, y: 5 } });
+                await expect(handle(page, 1)).not.toHaveAttribute(
+                    "data-reorderable",
+                );
+                await dragTo(page, handle(page, 1), await yIn(page, 4, 0.75));
+                await expect(
+                    page.locator('[data-grid-part="row"][data-drop-target]'),
+                ).toHaveCount(0);
+                await own(page, 2, 1).click();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+                await settle(page);
+                expect(await rowMoves(page)).toEqual([]);
+                await expect(own(page, 2, 1)).toBeFocused();
+            });
+
+            test("targets measured rows and details by their heights", async ({
+                page,
+            }) => {
+                await open(page, kind, {
+                    ...ROWS,
+                    rowHeight: "auto",
+                    details: 1,
+                    detailHeight: 120,
+                });
+                // (the rows after it hold a grid of their own in its detail: none is read)
+                await page.getByTestId("expand-2").click();
+                await settle(page);
+                const detail = await boxOf(
+                    page
+                        .locator('[data-grid-part="row-detail"]')
+                        .filter({ has: page.getByTestId("detail-button-2") }),
+                );
+                const x = (await boxOf(handle(page, 0))).x + 2;
+                // over row 2's detail: after row 2
+                await dragTo(page, handle(page, 0), detail.y + 60, {
+                    hold: true,
+                });
+                await expect(row(page, 2)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                // row 1 is two lines tall (`lines(1)`): its lower half, after it
+                await page.mouse.move(x, await yIn(page, 1, 0.8), { steps: 3 });
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "data-drop-target",
+                    "after",
+                );
+                // row 0's lower half: beside itself, nowhere
+                await page.mouse.move(x, await yIn(page, 0, 0.8), { steps: 3 });
+                await settle(page);
+                await expect(
+                    page.locator('[data-grid-part="row"][data-drop-target]'),
+                ).toHaveCount(0);
+                await page.mouse.move(x, detail.y + 60, { steps: 3 });
+                await page.mouse.up();
+                await settle(page);
+                expect(await rowMoves(page)).toEqual([
+                    { fromIndex: 0, toIndex: 2, rowKey: 0 },
+                ]);
+                expect(await ids(page, 3)).toEqual([1, 2, 0]);
+            });
+
+            test("drags the same right to left", async ({ page }) => {
+                await open(page, kind, { ...ROWS, dir: "rtl" });
+                await dragTo(page, handle(page, 1), await yIn(page, 3, 0.75));
+                expect(await ids(page, 5)).toEqual([0, 2, 3, 1, 4]);
+                await own(page, 3, 1).click();
+                await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+                await settle(page);
+                expect(await ids(page, 5)).toEqual([0, 2, 1, 3, 4]);
+                await expect(own(page, 2, 1)).toBeFocused();
+            });
+        });
     });
 }

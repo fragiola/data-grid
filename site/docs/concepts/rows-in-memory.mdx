@@ -107,11 +107,31 @@ give it `filter`: it receives the cell's value, the filter value and the row.
 
 `filter.setSearch(text)` keeps the rows where any column's value, as text, contains it.
 
+## Moving rows
+
+The hook never changes the rows you give it. When people [move rows](/docs/concepts/row-reordering),
+`moveRow(move)` returns your rows with a move the grid told (`onRowMove`) applied: the moved row
+goes beside the row it lands next to on screen, a filtered or paged grid's included. Set it as your
+rows. It is stable (a function that never changes, reading your latest rows), and two moves told
+before a render apply one after the other. The grid moves no row while it is sorted.
+
+```tsx title="backlog.tsx"
+const [tasks, setTasks] = useState(initialTasks);
+const local = useLocalRows(tasks, columns);
+
+<DataGrid.Root
+    {...local.props}
+    columns={columns}
+    onRowMove={(move) => setTasks(local.moveRow(move))}
+/>
+```
+
 ## Without React
 
 The same pipeline is framework-free in `@fragiola/data-grid/local`: `createLocalRows(options)`
 keeps the state and `derive(rows, columns)` returns the page and the counts, and `sortRows`,
-`filterRows`, `searchRows` and `pageRows` work on any array.
+`filterRows`, `searchRows` and `pageRows` work on any array, as `moveRow(rows, fromIndex,
+toIndex)` and `moveShownRow(rows, shown, fromIndex, toIndex)` do for a move.
 
 ## On a server
 

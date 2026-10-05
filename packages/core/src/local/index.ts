@@ -3,6 +3,7 @@
 // this never ships it.
 
 export type { LocalFilters } from "./filter";
+export { moveRow, moveShownRow } from "./move";
 export { pageCount } from "./page";
 export {
     createLocalRows,

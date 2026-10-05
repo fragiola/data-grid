@@ -19,6 +19,7 @@ import {
     type RowHeight,
     type RowKey,
     type RowKeyGetter,
+    type RowMove,
     type RowSelectable,
     type RowSelection,
     type SortColumn,
@@ -211,6 +212,14 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onCollapsedGroupKeysChange?:
             | ((collapsedGroupKeys: readonly string[]) => void)
             | undefined;
+        /**
+         * a row was moved (Epic #86): dropped elsewhere by its drag handle (`useRowDragHandle`),
+         * or by Ctrl/⌘+Shift+↑/↓ on one of its cells. Given, the rows move: the app moves the row
+         * in its own rows, from `fromIndex` to `toIndex` (its index once moved: `moveRow` in
+         * `@fragiola/data-grid/local`), and the active cell follows it. Never while the grid is
+         * sorted, nor for rows not loaded
+         */
+        onRowMove?: ((move: RowMove) => void) | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -343,6 +352,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         collapsedGroupKeys,
         defaultCollapsedGroupKeys,
         onCollapsedGroupKeysChange,
+        onRowMove,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
@@ -543,6 +553,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             overscan,
             maxScrollSize,
             endReachedThreshold,
+            reorderableRows: onRowMove !== undefined,
         });
         // subscribed before the viewport attaches, so the first windows are reported too
         engine.subscribe("row-window", (window) =>
@@ -553,6 +564,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         );
         engine.subscribe("rows-end-reached", (info) =>
             latest.current.onRowsEndReached?.(info),
+        );
+        engine.subscribe("row-move", (move) =>
+            latest.current.onRowMove?.(move),
         );
         const context: DataGridContextValue<TRow> = { model, engine };
         // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
@@ -733,11 +747,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
 
     const overscanRows = overscan?.rows;
     const overscanColumns = overscan?.columns;
+    // the rows move while the app takes their moves
+    const reorderableRows = onRowMove !== undefined;
     useLayoutEffect(() => {
         engine.adapter.setOptions({
             overscan: { rows: overscanRows, columns: overscanColumns },
             maxScrollSize,
             endReachedThreshold,
+            reorderableRows,
         });
     }, [
         engine,
@@ -745,6 +762,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         overscanColumns,
         maxScrollSize,
         endReachedThreshold,
+        reorderableRows,
     ]);
 
     const ref = useCallback(

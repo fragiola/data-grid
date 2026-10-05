@@ -285,6 +285,8 @@ export interface ViewInputs<TRow, TNode>
         | "interaction"
         | "columnResize"
         | "columnReorder"
+        | "reorderableRows"
+        | "rowReorder"
         | "direction"
     > {
     readonly state: DataGridState<TRow, TNode>;
@@ -324,7 +326,8 @@ export function buildView<TRow, TNode>({
     );
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
-    // the active body row (a summary row is always rendered)
+    // the active body row (a summary row is always rendered), and the row a drag is moving
+    // (E2.3): its handle holds the pointer while the edge scroll takes it out of the window
     const rows = indexes(
         rowWindow.rendered.start,
         rowWindow.rendered.end,
@@ -332,6 +335,15 @@ export function buildView<TRow, TNode>({
             ? active.rowIndex
             : null,
     );
+    const dragged = measures.rowReorder?.rowIndex;
+    if (
+        dragged !== undefined &&
+        dragged < state.rowCount &&
+        !rows.includes(dragged)
+    ) {
+        const at = rows.findIndex((rowIndex) => rowIndex > dragged);
+        rows.splice(at < 0 ? rows.length : at, 0, dragged);
+    }
     // the pinned columns first and last, always rendered
     const columns = indexes(
         endFrom,
@@ -420,6 +432,8 @@ const VIEW_KEYS = [
     "interaction",
     "columnResize",
     "columnReorder",
+    "reorderableRows",
+    "rowReorder",
     "direction",
     "givenDirection",
     "measuredRows",

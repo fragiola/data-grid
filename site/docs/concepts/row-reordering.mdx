@@ -1,0 +1,196 @@
+---
+title: Row reordering
+description: Rows a person moves by dragging a handle or with the keys, each move told to you, who moves the row in your own data.
+---
+
+The grid never orders your rows: they come in the order you pass them. So a row moved by a person
+is an event, not a change the grid makes. The grid drags the row by your handle, takes the keys,
+tells where a drop would land and, on the drop, tells you the move. You move the row in your data,
+and the active cell follows it. The handle's look, the drop indicator and any words a screen
+reader hears are yours.
+
+<Example id="row-reordering" />
+
+## Turning it on
+
+Give `DataGrid.Root` an `onRowMove`: while it has one, the rows move. Each move is
+`{ fromIndex, toIndex, rowKey }`: the row's index before the move, the index it takes once moved
+(your rows without it, it put back there), and its key (`rowKey`, else its index). Apply it to
+your rows: `moveRow` from `@fragiola/data-grid/local` does it for an array.
+
+```tsx title="backlog.tsx"
+import { moveRow } from "@fragiola/data-grid/local";
+
+const [tasks, setTasks] = useState(initialTasks);
+
+<DataGrid.Root
+    columns={columns}
+    rows={tasks}
+    rowKey={(task) => task.id}
+    onRowMove={({ fromIndex, toIndex }) =>
+        setTasks((rows) => moveRow(rows, fromIndex, toIndex))
+    }
+>
+    {/* … */}
+</DataGrid.Root>
+```
+
+Your rows, with the move applied, come back as a new `rows` (or a new `getRow`, or
+`rows.changed` for rows behind the same one). Give the rows a `rowKey`: the active cell follows
+a moved row by its key, once the key is where the move put it (a server answering in pieces
+included), and without one it stays at its index. The
+[expanded rows](/docs/guides/master-detail), the [selection](/docs/concepts/row-selection) and
+the [measured heights](/docs/concepts/measured-heights) are kept by key too, so they go with the
+row. Saving the order (to storage, to a server) is yours.
+
+## The handle
+
+A row moves by a handle you render in it, usually in its first cell: an element with
+`useRowDragHandle`'s props. They mark it for the grid (`data-grid-row-drag-handle`, the row's
+index) and hide it from screen readers with `aria-hidden`: a pointer takes the handle, and the keys
+move a row from any of its cells. `state.reorderable` says whether a press on it drags its row;
+`state.dragging` whether it is dragging.
+
+```tsx title="handle.tsx"
+import { type CellInfo, useRowDragHandle } from "@fragiola/data-grid-react";
+
+function Handle({ cell }: { cell: CellInfo<Task> }) {
+    const { state, props } = useRowDragHandle(cell);
+    return (
+        <span {...props} className={state.reorderable ? "grip" : "grip off"}>
+            <GripVertical aria-hidden />
+        </span>
+    );
+}
+
+<DataGrid.Cell cell={cell}>
+    <Handle cell={cell} />
+    {String(cell.value)}
+</DataGrid.Cell>
+```
+
+The handle has no style of its own. Its look, its cursor and `touch-action: none` (a touch then
+drags the row instead of panning the grid) are yours. Keep it a plain element, not a button: a
+press on it focuses its cell, as a press anywhere in the cell does.
+
+## Dragging
+
+A press with the primary button on a handle reaches the grid after your own `onPointerDown` (so
+`preventDefault` there keeps it from dragging). Until the pointer moves past a click's few pixels
+it is a click (which focuses its cell); past them, the row drags, holding the pointer. The
+dragged row stays rendered however far the rows scroll, and the active cell is left as it is. The
+page's text selection and native drags stay out of it meanwhile.
+
+While the row drags, at most once a frame, the grid works out where it would land: beside the row
+under the pointer, before or after it by the side of the middle of its cells (over a row's
+[detail](/docs/guides/master-detail), after the row). It reads the rows' positions, not the
+elements, so rows scrolled out of the rendered ones count, and so do
+[measured](/docs/concepts/measured-heights) and variable heights, details and
+[scroll scaling](/docs/concepts/scroll-scaling). Near the top or bottom edge of the body (or past
+it), the grid scrolls the rows, faster nearer the edge, until the first or the last row, so a far
+row comes into reach; rows added at the end while the pointer is held there come into reach too.
+A scroll during the drag (the wheel, the scrollbar) works the target out again from where the
+pointer is.
+
+The rows do not move during the drag: only the state changes. The release tells one move.
+Escape, a cancelled pointer or a lost capture end the drag and tell nothing. Escape reaches the
+grid after your handlers, wherever focus is: one you prevent keeps the drag going. The click that
+ends a drag is the drag's.
+
+## Where a drop is refused
+
+- **Sorted.** While the grid is [sorted](/docs/concepts/sorting), the rows are in the sort's
+  order: a row dropped somewhere would not stay there. The handles do not drag
+  (`state.reorderable` is false) and the keys move nothing. Clear the sort to reorder, or put the
+  sort into your order first (sort your rows, then clear the sort), as the
+  [example](/examples/row-reordering) says in its status.
+- **Rows not loaded.** With `getRow`, a row not loaded yet has no key: its handle does not drag,
+  and a drop over it, or a key toward it, moves nothing.
+- **Where it is.** Dropped beside itself, a row would not move: no row is a drop target, and
+  nothing is told.
+
+Filtered or paged rows move among the rows shown. `useLocalRows` gives `moveRow(move)`, the rows
+you gave it with a move of the rows shown applied: the moved row goes beside the row it lands next
+to on screen ([rows in memory](/docs/concepts/rows-in-memory)). It is stable, and two moves told
+before a render apply one after the other.
+
+```tsx title="local.tsx"
+const [tasks, setTasks] = useState(initialTasks);
+const local = useLocalRows(tasks, columns);
+
+<DataGrid.Root
+    {...local.props}
+    columns={columns}
+    rowKey={(task) => task.id}
+    onRowMove={(move) => setTasks(local.moveRow(move))}
+/>
+```
+
+## The indicator
+
+The grid tells where a drop would land and leaves the drawing to you:
+
+- the dragged row carries `data-dragging` (and so does its handle);
+- the row it would land beside carries `data-drop-target`, `before` or `after`;
+- a handle that drags its row carries `data-reorderable`.
+
+```css title="grid.css"
+[data-grid-part="row"][data-dragging] {
+    opacity: 0.5;
+}
+
+[data-grid-part="row"][data-drop-target="before"] {
+    box-shadow: inset 0 3px 0 var(--accent);
+}
+
+[data-grid-part="row"][data-drop-target="after"] {
+    box-shadow: inset 0 -3px 0 var(--accent);
+}
+```
+
+`useRow` reports `dragging` and `dropTarget`, as does the state a row's `className` and `style`
+functions receive (both `undefined` while the rows do not move). For a guide line of your own,
+`engine.get("row-reorder")` is `{ rowIndex, rowKey, targetIndex, side }` during a drag
+(`targetIndex` and `side` both `null` while a release would move nothing), else `null`, and the
+engine's `row-reorder` event tells each change. The `row-move` event is the move itself, for code
+outside the root.
+
+## Keys
+
+On a body cell in navigation, Ctrl+Shift+↑ and Ctrl+Shift+↓ (⌘ on a Mac) move its row up or down
+by one, once per press: a key held down does not repeat the move. With a `rowKey`, the active
+cell follows the row once you have moved it, and focus stays on it. On the first or last row,
+next to a row not loaded, or sorted, nothing moves, and the page does not get the keys either. They run after your handlers, so `preventDefault` cancels them. Right to left,
+they are the same. See [Keyboard and accessibility](/docs/concepts/keyboard).
+
+## Announcements
+
+The grid announces nothing: what a screen reader hears after a move is your text, in a live region
+of yours. The move tells you which row and where, in your rows' own words:
+
+```tsx title="backlog.tsx"
+const [message, setMessage] = useState("");
+
+<span role="status">{message}</span>
+<DataGrid.Root
+    columns={columns}
+    rows={tasks}
+    onRowMove={(move) => {
+        const task = tasks[move.fromIndex];
+        setMessage(`Moved ${task?.name} to position ${move.toIndex + 1}.`);
+        setTasks(moveRow(tasks, move.fromIndex, move.toIndex));
+    }}
+/>
+```
+
+## What it shows
+
+| on | attribute | when |
+| --- | --- | --- |
+| row | `data-dragging` | a drag is moving it |
+| row | `data-drop-target` | `before` or `after`: a drop would land on that side of it |
+| handle | `data-reorderable` | a press on it drags its row |
+| handle | `data-dragging` | a drag on it is moving its row |
+
+Rows moving live during the drag, a drag between grids, moving several rows at once and touch
+gestures of the grid's own are not part of it.
