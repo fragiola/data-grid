@@ -1,9 +1,16 @@
-import { pinnedColumnCount, pinnedIn } from "../header/header";
+import {
+    columnPart,
+    partEnd,
+    partStart,
+    pinnedPart,
+    pinnedPartsOf,
+} from "../header/header";
 import { lowerBound, sameList } from "../utils";
 import type {
     Column,
     HeaderCellLayout,
     HeaderLayout,
+    PinnedSide,
     ReorderSide,
 } from "./types";
 
@@ -12,10 +19,13 @@ import type {
 // (a group's children, or the top level), so an entry moves only among its siblings and a group
 // moves whole. Pure: the model lays the columns out with it, the engine drags and moves by it.
 
-/** What orders an entry among its siblings: its key (`pinnedIn` tells it pinned). */
+/** What orders an entry among its siblings: its key (`pinnedPart` tells its part). */
 interface Entry {
     readonly key: string;
 }
+
+/** The parts a sibling list is ordered in, each apart. */
+const PARTS = ["start", undefined, "end"] as const;
 
 /** What tells an entry reorderable: its own flag, or for a group one below it. */
 interface ReorderableEntry {
@@ -25,9 +35,9 @@ interface ReorderableEntry {
 
 /**
  * How the layout orders a sibling list (`layoutColumns`): the entries the order lists take the
- * places of the listed ones, in its order; the others keep theirs. Pinned and unpinned entries
- * are ordered apart, so the pinned ones lead whatever the order says (P1). `undefined` for an
- * empty order: the entries as declared.
+ * places of the listed ones, in its order; the others keep theirs. Each part (pinned at the
+ * start, not pinned, pinned at the end) is ordered apart, so the pinned ones lead and trail
+ * whatever the order says (P1). `undefined` for an empty order: the entries as declared.
  */
 export function siblingOrder(
     columnOrder: readonly string[],
@@ -36,13 +46,13 @@ export function siblingOrder(
     const rank = new Map(columnOrder.map((key, index) => [key, index]));
     return (list) => {
         const ordered = [...list];
-        for (const pinned of [true, false]) {
+        for (const part of PARTS) {
             const slots: number[] = [];
             const listed: { entry: (typeof list)[number]; at: number }[] = [];
             list.forEach((entry, index) => {
                 const at = rank.get(entry.key);
-                // a group is pinned by its columns, all or none
-                if (at !== undefined && pinnedIn([entry]) === pinned) {
+                // a group is pinned by its columns, all in one part
+                if (at !== undefined && pinnedPart(entry) === part) {
                     slots.push(index);
                     listed.push({ entry, at });
                 }
@@ -102,8 +112,9 @@ export function hasReorderable(entries: readonly ReorderableEntry[]): boolean {
 
 /**
  * A header cell among its siblings (O2): the cells of the same parent group (or of the top level)
- * in order, where it is among them, and the part it may move within, the pinned ones or the
- * others (`[start, end)`).
+ * in order, where it is among them (-1 for a column a header span covers, E1.2: it has no cell
+ * there), and the part it may move within, the ones pinned at the start, the ones pinned at the
+ * end or the others (`[start, end)`).
  */
 export interface Siblings<TRow, TNode> {
     readonly cell: HeaderCellLayout<TRow, TNode>;
@@ -111,8 +122,8 @@ export interface Siblings<TRow, TNode> {
     readonly index: number;
     readonly start: number;
     readonly end: number;
-    /** it is pinned: it moves among the pinned cells */
-    readonly pinned: boolean;
+    /** where it is pinned: it moves among the cells pinned there; `undefined`, among the others */
+    readonly pinned: PinnedSide | undefined;
 }
 
 /**
@@ -146,33 +157,39 @@ export function siblingsOf<TRow, TNode>(
         if (!sibling || sibling.columnIndex >= to) break;
         cells.push(sibling);
     }
-    // pinned columns lead: the pinned cells too
-    const pinnedCount = pinnedColumnCount(columns);
-    const pinnedEnd = lowerBound(
-        cells.length,
-        (i) => (cells[i]?.columnIndex ?? pinnedCount) < pinnedCount,
-    );
-    const pinned = cell.columnIndex < pinnedCount;
+    // pinned columns lead and trail: the pinned cells too, among their part's
+    const { startCount, endFrom } = pinnedPartsOf(columns);
+    /** the index of the first of `cells` from column `columnIndex` on */
+    const firstFrom = (columnIndex: number) =>
+        lowerBound(
+            cells.length,
+            (i) => (cells[i]?.columnIndex ?? columnIndex) < columnIndex,
+        );
+    const at = cell.columnIndex;
     return {
         cell,
         cells,
         index: cells.indexOf(cell),
-        start: pinned ? 0 : pinnedEnd,
-        end: pinned ? pinnedEnd : cells.length,
-        pinned,
+        start: firstFrom(partStart(at, startCount, endFrom)),
+        end: firstFrom(partEnd(at, startCount, endFrom, columns.length)),
+        pinned: columnPart(at, startCount, endFrom),
     };
 }
 
 /**
- * The key of a cell's column or group: a header cell's own, a body cell's column's (the leaf
- * covering the header's last row). What an order change keeps the active cell on.
+ * The key of a cell's column or group: a header cell's own, a body cell's column's. What an order
+ * change keeps the active cell on.
  */
 export function cellKeyAt<TRow, TNode>(
-    header: HeaderLayout<TRow, TNode>,
+    state: {
+        readonly header: HeaderLayout<TRow, TNode>;
+        readonly columns: readonly Column<TRow, TNode>[];
+    },
     position: { readonly rowIndex: number; readonly columnIndex: number },
 ): string | undefined {
-    return header.cellAt(Math.min(position.rowIndex, -1), position.columnIndex)
-        ?.key;
+    return position.rowIndex >= 0
+        ? state.columns[position.columnIndex]?.key
+        : state.header.cellAt(position.rowIndex, position.columnIndex)?.key;
 }
 
 /**

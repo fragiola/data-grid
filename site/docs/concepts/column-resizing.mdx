@@ -94,7 +94,11 @@ The props make the element a vertical `separator` whose values are widths in pix
 
 - **a name**: `aria-label`, such as "Resize Email";
 - **a place**: a header cell is positioned (absolute, or sticky when pinned), so
-  `position: absolute; inset-block: 0; right: 0` puts a strip on its right edge;
+  `position: absolute; inset-block: 0; inset-inline-end: 0` puts a strip on its end edge (the
+  right one, the left one [right to left](/docs/concepts/right-to-left)). `state.edge` says which
+  edge the handle moves: `"end"`, or `"start"` for a column
+  [pinned at the end](/docs/concepts/pinned-columns), whose boundary with the columns that
+  scroll is its start edge (`inset-inline-start: 0` there);
 - **`touch-action: none`**, so a touch drags the handle instead of scrolling the page;
 - **a look and a cursor**: `cursor: col-resize`, a line shown on hover, on `:focus-visible` and
   while `data-resizing` is present.
@@ -118,8 +122,11 @@ The props make the element a vertical `separator` whose values are widths in pix
 
 ## Dragging
 
-A press with the primary button on a handle captures the pointer; the column follows it, right
-growing, one resize per frame, within its limits. The press reaches the grid after your own
+A press with the primary button on a handle captures the pointer; the column follows it, its
+edge under the pointer: a move toward the end grows it (to the right, or to the left in a
+[right-to-left](/docs/concepts/right-to-left) grid, where a handle sits at the cell's left edge),
+and for a column pinned at the end, whose handle is at its start edge, a move toward the start
+does. One resize per frame, within its limits. The press reaches the grid after your own
 `onPointerDown` (so `preventDefault` there keeps it from dragging), and the grid prevents it: the
 handle takes no focus and no text is selected. The release keeps the width (as does a pointer the
 handle loses), and Escape (or a cancelled pointer) resizes the column back to the width the drag

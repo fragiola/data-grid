@@ -498,3 +498,39 @@ describe("filteredRows (Epic #57)", () => {
         );
     });
 });
+
+describe("columns a collapsed group hides (Epic #85, E1.3)", () => {
+    // "total" shows only while "g" is collapsed: data all the same, sorted, filtered, searched by
+    const grouped: ColumnOrGroup<Person>[] = [
+        {
+            key: "g",
+            collapsible: true,
+            children: [
+                { key: "name", width: 100 },
+                {
+                    key: "total",
+                    width: 100,
+                    groupShow: "collapsed",
+                    getValue: (row) => row.age * 2,
+                },
+            ],
+        },
+    ];
+
+    it("sorts, filters and searches by a column shown only collapsed", () => {
+        expect(
+            sortRows(
+                people,
+                [{ columnKey: "total", direction: "descending" }],
+                grouped,
+            ).map((row) => row.age),
+        ).toEqual([...people].map((row) => row.age).sort((a, b) => b - a));
+        const age = people[0]?.age ?? 0;
+        expect(filterRows(people, { total: age * 2 }, grouped)).toEqual(
+            people.filter((row) => row.age === age),
+        );
+        expect(searchRows(people, String(age * 2), grouped)).toContain(
+            people[0],
+        );
+    });
+});

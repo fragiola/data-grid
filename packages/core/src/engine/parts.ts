@@ -1,7 +1,9 @@
 import { isReorderable } from "../model/order";
+import { activeInCell } from "../model/spans";
 import type {
     CellPosition,
     HeaderCellLayout,
+    PinnedSide,
     ReorderSide,
     SortDirection,
 } from "../model/types";
@@ -12,16 +14,20 @@ import {
     spanWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
+import { keySet } from "../utils";
 import { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
 import {
+    cellSpan,
     columnLeft,
     columnPinning,
     headerCellSort,
+    resizeEdge,
     rowCellsHeight,
     rowDetailBox,
     rowExpanded,
     rowSelectable,
     rowSelected,
+    spanInRow,
 } from "./geometry";
 import type { GridView } from "./types";
 
@@ -48,10 +54,15 @@ export interface CellState {
     readonly loaded: boolean;
     /** it is the active cell (the one the keyboard moves) */
     readonly active: boolean;
-    /** its column is pinned at the start: sticky, it stays in view sideways */
+    /** its column is pinned, at the start or at the end: sticky, it stays in view sideways */
     readonly pinned: boolean;
-    /** its column is the last pinned one (for a divider or a shadow) */
+    /**
+     * its column is its pinned part's edge, the last pinned at the start or the first pinned at
+     * the end (for a divider or a shadow)
+     */
     readonly pinnedEdge: boolean;
+    /** where its column is pinned, `undefined` when it scrolls */
+    readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
 }
@@ -74,10 +85,15 @@ export interface HeaderCellState {
     readonly sortDirection: SortDirection | undefined;
     /** its column's place among the sorted columns, 1-based, when it is sorted */
     readonly sortPriority: number | undefined;
-    /** its columns are pinned at the start: sticky, it stays in view sideways */
+    /** its columns are pinned, at the start or at the end: sticky, it stays in view sideways */
     readonly pinned: boolean;
-    /** it ends at the last pinned column (for a divider or a shadow) */
+    /**
+     * it is its pinned part's edge: it ends at the last column pinned at the start, or starts at
+     * the first pinned at the end (for a divider or a shadow)
+     */
     readonly pinnedEdge: boolean;
+    /** where its columns are pinned, `undefined` when they scroll */
+    readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
     /** its column is resizable, or for a group one of its columns (a resizer can resize it) */
@@ -90,6 +106,11 @@ export interface HeaderCellState {
     readonly dragging: boolean;
     /** a drag would drop beside it, on this side (the app draws the indicator); else `null` */
     readonly dropTarget: ReorderSide | null;
+    /**
+     * a collapsible group's (Epic #85, E1.3): whether it is collapsed (`column-groups.toggle`
+     * opens and closes it); `undefined` for a header cell that does not collapse
+     */
+    readonly collapsed: boolean | undefined;
 }
 
 /** The state of a column resizer: the handle the app renders in a resizable header cell. */
@@ -106,6 +127,13 @@ export interface ColumnResizerState {
     readonly minWidth: number;
     /** the widest it resizes to, or `undefined` when a resizable column has no maximum */
     readonly maxWidth: number | undefined;
+    /**
+     * the edge of its header cell it moves (Epic #85): `"end"`, the column growing toward the end;
+     * `"start"` for columns pinned at the end, whose boundary with the columns that scroll is
+     * their start edge, growing toward the start. Place the handle there (`inset-inline-start` or
+     * `inset-inline-end`): it follows the pointer
+     */
+    readonly edge: "start" | "end";
 }
 
 /** The state of a row's detail. */
@@ -127,11 +155,16 @@ export interface RowPart {
     readonly ariaSelected: boolean | undefined;
 }
 
-/** A body cell's state, and its `tabIndex`. */
+/** A body cell's state, its `tabIndex` and its `aria-colspan`. */
 export interface CellPart {
     readonly state: CellState;
     /** the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others */
     readonly tabIndex: 0 | -1;
+    /**
+     * how many columns it spans, when more than one (a column's `colSpan`, E1.2): its
+     * `aria-colspan` (and a table cell's `colSpan`); `undefined` for a cell of one column
+     */
+    readonly ariaColSpan: number | undefined;
 }
 
 /** A header cell's state, its `tabIndex` and its `aria-sort`. */
@@ -139,7 +172,7 @@ export interface HeaderCellPart {
     readonly state: HeaderCellState;
     /** the roving tab stop, as a body cell's */
     readonly tabIndex: 0 | -1;
-    /** on the first sorted column's header cell only (ARIA 1.2: one header at a time) */
+    /** on the first sorted column with a header cell of its own (ARIA 1.2: one header at a time) */
     readonly ariaSort: SortDirection | undefined;
 }
 
@@ -203,13 +236,26 @@ export function rowPart<TRow, TNode>(
     };
 }
 
-/** A body cell's state, and its `tabIndex`. */
+/**
+ * A body cell's state, its `tabIndex` and its `aria-colspan`: a cell spanning columns (E1.2) is
+ * active on any of them.
+ */
 export function cellPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     cell: CellPosition & { readonly loaded: boolean },
 ): CellPart {
-    const { pinned, pinnedEdge } = columnPinning(view, cell.columnIndex);
-    const active = view.active !== null && sameCell(view.active, cell);
+    const span = cellSpan(view, cell.rowIndex, cell.columnIndex);
+    const { pinned, pinnedEdge, pinnedSide } = columnPinning(
+        view,
+        cell.columnIndex,
+        span,
+    );
+    const active = activeInCell(
+        view.active,
+        cell.rowIndex,
+        cell.columnIndex,
+        span,
+    );
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -218,25 +264,34 @@ export function cellPart<TRow, TNode>(
             active,
             pinned,
             pinnedEdge,
+            pinnedSide,
             interacting: interacting(view, cell),
         },
         tabIndex: active ? 0 : -1,
+        ariaColSpan: span > 1 ? span : undefined,
     };
 }
 
 /**
- * A body cell's box in its row: its column's left, as wide as its column and as tall as its row's
- * own height (a detail below the cells is not theirs). As `headerCellBox` for a header cell.
+ * A body cell's box in its row: its column's left, as wide as its column (a span's columns, E1.2:
+ * cut to the rendered ones under scaling, as a header cell's) and as tall as its row's own height
+ * (a detail below the cells is not theirs). As `headerCellBox` for a header cell. `span`, when
+ * the caller has it (`CellPart.ariaColSpan`), saves its lookup.
  */
 export function cellBox<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
     columnIndex: number,
+    span = cellSpan(view, rowIndex, columnIndex),
 ): { readonly left: number; readonly width: number; readonly height: number } {
+    const height = rowCellsHeight(view, rowIndex);
+    if (span > 1) {
+        return { ...spanInRow(view, columnIndex, columnIndex + span), height };
+    }
     return {
         left: columnLeft(view, columnIndex),
         width: view.columnAxis.sizeOf(columnIndex),
-        height: rowCellsHeight(view, rowIndex),
+        height,
     };
 }
 
@@ -249,7 +304,7 @@ export function headerCellPart<TRow, TNode>(
     cell: HeaderCellLayout<TRow, TNode>,
 ): HeaderCellPart {
     const sort = headerCellSort(view, cell);
-    const { pinned, pinnedEdge } = columnPinning(
+    const { pinned, pinnedEdge, pinnedSide } = columnPinning(
         view,
         cell.columnIndex,
         cell.columnSpan,
@@ -259,6 +314,10 @@ export function headerCellPart<TRow, TNode>(
     const reorder = view.columnReorder;
     return {
         state: {
+            collapsed:
+                cell.group?.collapsible === true
+                    ? keySet(view.collapsedGroupKeys).has(cell.key)
+                    : undefined,
             resizable: spanResizable(view.columnDefs, cell),
             resizing: view.columnResize?.columnKey === cell.key,
             reorderable: isReorderable(cell),
@@ -275,6 +334,7 @@ export function headerCellPart<TRow, TNode>(
             sortPriority: sort.priority,
             pinned,
             pinnedEdge,
+            pinnedSide,
             interacting: interacting(view, cell),
         },
         tabIndex: active ? 0 : -1,
@@ -300,6 +360,11 @@ export function columnResizerPart<TRow, TNode>(
         ? spanWidths(view.columnDefs, axis, cell)
         : { width: fixed, minWidth: fixed, maxWidth: fixed };
     const { width, minWidth, maxWidth } = span;
+    const { pinnedSide } = columnPinning(
+        view,
+        cell.columnIndex,
+        cell.columnSpan,
+    );
     return {
         state: {
             columnKey: cell.key,
@@ -308,6 +373,7 @@ export function columnResizerPart<TRow, TNode>(
             width,
             minWidth,
             maxWidth,
+            edge: resizeEdge(pinnedSide),
         },
         tabIndex: 0,
         attributes: {

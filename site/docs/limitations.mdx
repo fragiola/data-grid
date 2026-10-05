@@ -10,7 +10,6 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 
 | missing | what the examples do meanwhile |
 | --- | --- |
-| Columns pin only at the **start**: none at the end yet. | Pinned columns first ([Pinned columns](/docs/concepts/pinned-columns)). |
 | The header needs a **background and a `z-index`** to cover the rows that scroll under it. | `z-10` and an opaque background on `Header`. |
 | **Selecting every row** of a server's data: with `getRow`, a row not loaded has no key, and "select every row" refuses. | A middleware answers `selected-rows.select-all` with the server's own ([Row selection](/docs/concepts/row-selection)). |
 | **Cells and ranges of cells** cannot be selected yet, only rows. | Nothing yet: a later step of Selection and editing. |
@@ -19,9 +18,7 @@ windows, the keyboard, any structure), and much of a full grid is still to come.
 | A **row's detail** is as tall as the `detailHeight` you give: heights measured from its content are not there yet. | A height per row from its data (`detailHeight` as a function of the row: [Master-detail](/docs/guides/master-detail)). |
 | A wheel over a nested grid that has reached its end chains to the outer grid natively: under the outer grid's **scroll scaling**, that step is a scaled jump. | Nothing: nested grids in the examples are not scaled. |
 | `DataGrid.Empty` has **no structure of its own**: inside a grid, its content needs a row and a cell. | `role="row"` and `role="gridcell"` wrappers, or `tr` and `td` in a table ([Empty state](/docs/guides/empty-state)). |
-| A **group's label** scrolls with its group: in a group wider than the view, it can be out of sight (no sticky labels yet). Under scaled column scroll, a group's cell is cut to the rendered columns, so its label moves with the column window. | A label centred on the group, groups no wider than a few views ([`grouped-headers`](/examples/grouped-headers)). |
-| Groups cannot be **collapsed**, and the body has no **column spans**. | Nothing yet: both are later steps of the Columns roadmap. |
-| A **fit to content** measures the rendered rows only: rows scrolled into view later may be wider. | Your own width for every row, set with `column-widths.set` ([Automatic widths](/docs/concepts/auto-widths)). |
+| A **fit to content** measures the rendered rows only: rows scrolled into view later may be wider. A cell spanning columns is never measured. | Your own width for every row, set with `column-widths.set` ([Automatic widths](/docs/concepts/auto-widths)). |
 | A group's handle cannot move a **flex column that does not resize**: the group ends off the pointer. | Make such a column `resizable`, or keep it out of a resizable group ([Automatic widths](/docs/concepts/auto-widths#a-group-with-a-column-that-flexes-and-does-not-resize)). |
 
 ## The roadmap
@@ -44,13 +41,15 @@ opt-in hook, which a server-driven grid never loads.
 
 ## Columns
 
-Started: [column groups](/docs/concepts/column-groups) with multi-row headers,
-[pinned columns](/docs/concepts/pinned-columns) at the start,
+Done: [column groups](/docs/concepts/column-groups) with multi-row headers,
+[pinned columns](/docs/concepts/pinned-columns) at the start and at the end, a
+[right-to-left](/docs/concepts/right-to-left) direction mirroring every column feature,
 [column resizing](/docs/concepts/column-resizing) by drag and keyboard, within minimum and maximum
 widths, [column reordering](/docs/concepts/column-reordering) of columns and whole groups by
-drag and keyboard, and [automatic widths](/docs/concepts/auto-widths): flex columns and columns
-fitted to their content. Next: pinned columns at the end, column spans in the body, sticky group
-labels, collapsing and expanding column groups.
+drag and keyboard, [automatic widths](/docs/concepts/auto-widths): flex columns and columns
+fitted to their content, [column spanning](/docs/concepts/column-spanning) in the body and
+the header, and [collapsible groups](/docs/concepts/collapsible-groups) with labels that stay in
+view.
 
 </Step>
 

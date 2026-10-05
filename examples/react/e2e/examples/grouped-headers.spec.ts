@@ -60,6 +60,25 @@ test("a group stays over its columns while they scroll sideways", async ({
     expect(cut).toBeGreaterThan(0);
 });
 
+test("keeps a group's name in view while its group scrolls out", async ({
+    page,
+}) => {
+    await openExample(page, "grouped-headers");
+    // Work (504–1,004px) is scrolled out at the start: its name at the view's start
+    await scrollTo(page, { left: 900 });
+    const label = page.locator(
+        '[data-grid-part="group-label"][data-grid-group-label="work"]',
+    );
+    const start = await page
+        .locator('[data-grid-part="root"]')
+        .evaluate(
+            (element) =>
+                element.getBoundingClientRect().left + element.clientLeft,
+        );
+    const box = await label.boundingBox();
+    expect((box?.x ?? 0) - start).toBeCloseTo(0, 0);
+});
+
 test("ArrowUp from a column reaches its group, and ArrowDown comes back", async ({
     page,
 }) => {

@@ -2,10 +2,12 @@ import type {
     Column,
     ColumnGroup,
     ColumnOrGroup,
+    GroupShow,
     HeaderCellLayout,
     HeaderLayout,
+    PinnedSide,
 } from "../model/types";
-import { isWidth, lowerBound } from "../utils";
+import { isWidth, keySet, lowerBound, spanValue } from "../utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,
@@ -43,17 +45,22 @@ export interface ColumnLayout<TRow, TNode> {
 /**
  * Why the entries are not a valid `columns`, or `null`: every key unique across groups and
  * columns (so no group inside itself), every width finite and not negative (limits and `flex`
- * too, the minimum not above the maximum), `flex` and `autoSize` on columns only, and at least
- * one column under every group.
+ * too, the minimum not above the maximum), `flex`, `autoSize` and `colSpan` (a function) on
+ * columns only, at least one column under every group, the columns pinned at the start first and
+ * the ones pinned at the end last, and a group's columns in one part; `groupShow` only under a
+ * collapsible group, which shows a column in each of its states (E1.3).
  */
 export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
     // a group inside itself repeats its own key: refused as a duplicate before it is entered again
     const keys = new Set<string>();
-    /** an unpinned column was met: a pinned one after it would not be at the start */
-    let unpinnedSeen = false;
-    /** the columns below `list`, or an error */
-    const visit = (list: readonly unknown[]): number | string => {
+    /** each column's part, in order: pinned at the start (0), not pinned (1), at the end (2) */
+    const parts: number[] = [];
+    /** the columns below `list` (the children of a collapsible group or not), or an error */
+    const visit = (
+        list: readonly unknown[],
+        collapsible: boolean,
+    ): number | string => {
         let leaves = 0;
         for (const entry of list) {
             if (typeof entry !== "object" || entry === null) {
@@ -64,6 +71,15 @@ export function columnsError(entries: unknown): string | null {
             if (keys.has(key))
                 return `two columns or groups have the key "${key}"`;
             keys.add(key);
+            const show: unknown = Reflect.get(entry, "groupShow");
+            if (show !== undefined) {
+                if (show !== "expanded" && show !== "collapsed") {
+                    return `"${key}" has an invalid groupShow`;
+                }
+                if (!collapsible) {
+                    return `"${key}" has a groupShow, and its group is not collapsible`;
+                }
+            }
             const children: unknown = Reflect.get(entry, "children");
             if (children === undefined) {
                 if (!isWidth(Reflect.get(entry, "width"))) {
@@ -79,14 +95,29 @@ export function columnsError(entries: unknown): string | null {
                 if (autoSize !== undefined && typeof autoSize !== "boolean") {
                     return `column "${key}" has an invalid autoSize`;
                 }
+                const colSpan: unknown = Reflect.get(entry, "colSpan");
+                if (colSpan !== undefined && typeof colSpan !== "function") {
+                    return `column "${key}" has a colSpan that is not a function`;
+                }
+                if (Reflect.get(entry, "collapsible") !== undefined) {
+                    return `column "${key}" is collapsible: a group collapses`;
+                }
                 const pinned: unknown = Reflect.get(entry, "pinned");
-                if (pinned !== undefined && pinned !== "start") {
+                if (
+                    pinned !== undefined &&
+                    pinned !== "start" &&
+                    pinned !== "end"
+                ) {
                     return `column "${key}" has an invalid pin`;
                 }
-                if (pinned === "start" && unpinnedSeen) {
-                    return `pinned column "${key}" comes after an unpinned one: pinned columns come first`;
+                const part = pinned === "start" ? 0 : pinned === "end" ? 2 : 1;
+                const previous = parts[parts.length - 1] ?? 0;
+                if (part < previous) {
+                    return part === 0
+                        ? `pinned column "${key}" comes after one that is not pinned at the start: pinned columns come first`
+                        : `column "${key}" comes after one pinned at the end: those come last`;
                 }
-                if (pinned !== "start") unpinnedSeen = true;
+                parts.push(part);
                 leaves += 1;
                 continue;
             }
@@ -102,20 +133,95 @@ export function columnsError(entries: unknown): string | null {
             ) {
                 return `group "${key}" flexes or fits itself: a group is sized by its columns`;
             }
-            const before = unpinnedSeen;
-            const below = visit(children);
+            if (Reflect.get(entry, "colSpan") !== undefined) {
+                return `group "${key}" has a colSpan: a group spans its columns`;
+            }
+            const collapses: unknown = Reflect.get(entry, "collapsible");
+            if (collapses !== undefined && typeof collapses !== "boolean") {
+                return `group "${key}" has an invalid collapsible`;
+            }
+            const from = parts.length;
+            const below = visit(children, collapses === true);
             if (typeof below === "string") return below;
             if (below === 0) return `group "${key}" has no column`;
-            // its columns all pinned, or none: one pinned column first then one that is not
-            if (!before && unpinnedSeen && pinnedIn(children)) {
-                return `group "${key}" mixes pinned and unpinned columns`;
+            if (collapses === true) {
+                // each state shows a child, and every child shows a column (a collapsible one too)
+                for (const state of GROUP_SHOWS) {
+                    if (!children.some((child) => showsIn(child, state))) {
+                        return `group "${key}" shows no column ${state}`;
+                    }
+                }
+            }
+            // the parts come in order: its columns are in one part when its first and last are
+            const first = parts[from];
+            const last = parts[parts.length - 1];
+            if (first !== last) {
+                return first === 1 || last === 1
+                    ? `group "${key}" mixes pinned and unpinned columns`
+                    : `group "${key}" mixes columns pinned at the start and at the end`;
             }
             leaves += below;
         }
         return leaves;
     };
-    const result = visit(entries);
+    const result = visit(entries, false);
     return typeof result === "string" ? result : null;
+}
+
+/** The states a collapsible group is in. */
+const GROUP_SHOWS: readonly GroupShow[] = ["expanded", "collapsed"];
+
+/** Whether a child of a collapsible group shows while it is in `state` (its `groupShow`, E1.3). */
+function showsIn(child: unknown, state: GroupShow): boolean {
+    const show: unknown =
+        typeof child === "object" && child !== null
+            ? Reflect.get(child, "groupShow")
+            : undefined;
+    return show === undefined || show === state;
+}
+
+/**
+ * The column or group with this key among the entries, at any depth, the ones a collapsed group
+ * hides included (E1.3): what a sort and a toggle find their entry by.
+ */
+export function entryByKey<TRow, TNode>(
+    entries: readonly ColumnOrGroup<TRow, TNode>[],
+    key: unknown,
+): ColumnOrGroup<TRow, TNode> | undefined {
+    for (const entry of entries) {
+        if (entry.key === key) return entry;
+        if (isColumnGroup(entry)) {
+            const found = entryByKey(childrenOf(entry), key);
+            if (found) return found;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Every leaf of the entries, in declared order, the ones a collapsed group hides included (E1.3):
+ * the data a pipeline over rows reads (`/local`), not the grid's layout. The same array without
+ * a group.
+ */
+export function leafColumns<TRow, TNode>(
+    entries: readonly ColumnOrGroup<TRow, TNode>[],
+): readonly Column<TRow, TNode>[] {
+    if (
+        entries.every(
+            (entry): entry is Column<TRow, TNode> => !isColumnGroup(entry),
+        )
+    ) {
+        return entries;
+    }
+    const leaves: Column<TRow, TNode>[] = [];
+    const walk = (list: readonly ColumnOrGroup<TRow, TNode>[]) => {
+        for (const entry of list) {
+            if (isColumnGroup(entry)) walk(childrenOf(entry));
+            else leaves.push(entry);
+        }
+    };
+    walk(entries);
+    return leaves;
 }
 
 /** Why a column's limits are invalid (W2), or `null`: each a width, the minimum not above the maximum. */
@@ -130,15 +236,16 @@ function limitsError(column: object): string | null {
     return null;
 }
 
-/** Whether a column below `list` is pinned (a group's columns are all pinned, or none). */
-export function pinnedIn(list: readonly unknown[]): boolean {
-    return list.some((entry) => {
-        if (typeof entry !== "object" || entry === null) return false;
-        const children: unknown = Reflect.get(entry, "children");
-        return Array.isArray(children)
-            ? pinnedIn(children)
-            : Reflect.get(entry, "pinned") === "start";
-    });
+/**
+ * The part an entry is pinned in: a column's `pinned`, a group's its first column's (a group's
+ * columns are all in one part); `undefined` when it is not pinned.
+ */
+export function pinnedPart(entry: unknown): PinnedSide | undefined {
+    if (typeof entry !== "object" || entry === null) return undefined;
+    const children: unknown = Reflect.get(entry, "children");
+    if (Array.isArray(children)) return pinnedPart(children[0]);
+    const pinned: unknown = Reflect.get(entry, "pinned");
+    return pinned === "start" || pinned === "end" ? pinned : undefined;
 }
 
 /** How many columns are pinned at the start: the leading ones with `pinned: "start"`. */
@@ -148,6 +255,121 @@ export function pinnedColumnCount<TRow, TNode>(
     let count = 0;
     while (columns[count]?.pinned === "start") count += 1;
     return count;
+}
+
+/**
+ * The first column pinned at the end, of `columnCount` columns with `pinnedEndCount` pinned there:
+ * the column count without one. What tells a column of the end part (`index >= pinnedEndFrom`).
+ */
+export function pinnedEndFrom(
+    columnCount: number,
+    pinnedEndCount: number,
+): number {
+    return columnCount - pinnedEndCount;
+}
+
+/** How many columns are pinned at the end: the trailing ones with `pinned: "end"`. */
+export function pinnedEndColumnCount<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+): number {
+    let count = 0;
+    while (columns[columns.length - 1 - count]?.pinned === "end") count += 1;
+    return count;
+}
+
+/**
+ * The parts the columns are pinned in as declared: how many lead pinned at the start, and the
+ * first pinned at the end (`pinnedEndFrom`: the column count without one).
+ */
+export function pinnedPartsOf<TRow, TNode>(
+    columns: readonly Column<TRow, TNode>[],
+): { readonly startCount: number; readonly endFrom: number } {
+    return {
+        startCount: pinnedColumnCount(columns),
+        endFrom: pinnedEndFrom(columns.length, pinnedEndColumnCount(columns)),
+    };
+}
+
+/**
+ * The part a column is in (P1, E1.1), of parts ending at `startCount` (the columns pinned at the
+ * start) and starting at `endFrom` (the first pinned at the end, `pinnedEndFrom`): `"start"`,
+ * `"end"`, or `undefined` for the columns that scroll. The one rule every part question asks.
+ */
+export function columnPart(
+    columnIndex: number,
+    startCount: number,
+    endFrom: number,
+): PinnedSide | undefined {
+    if (columnIndex < startCount) return "start";
+    return columnIndex >= endFrom ? "end" : undefined;
+}
+
+/** The first column of the part holding `columnIndex` (`columnPart`). */
+export function partStart(
+    columnIndex: number,
+    startCount: number,
+    endFrom: number,
+): number {
+    const part = columnPart(columnIndex, startCount, endFrom);
+    return part === "start" ? 0 : part === "end" ? endFrom : startCount;
+}
+
+/** The end of the part holding `columnIndex` (`columnPart`), of `columnCount` columns. */
+export function partEnd(
+    columnIndex: number,
+    startCount: number,
+    endFrom: number,
+    columnCount: number,
+): number {
+    const part = columnPart(columnIndex, startCount, endFrom);
+    return part === "start"
+        ? startCount
+        : part === "end"
+          ? columnCount
+          : endFrom;
+}
+
+/**
+ * A span `wanted` from the item at `at` (E1.2), never across its part: kept before `end` (its
+ * part's end) and, with `inside`, to the items after it `inside` keeps in its run (a header cell's
+ * column siblings). At least 1. The one clamp a body cell's and a header cell's spans share.
+ */
+export function keptSpan(
+    wanted: unknown,
+    at: number,
+    end: number,
+    inside?: (index: number) => boolean,
+): number {
+    const most = Math.min(spanValue(wanted), end - at);
+    if (!inside) return Math.max(1, most);
+    let span = 1;
+    while (span < most && inside(at + span)) span += 1;
+    return span;
+}
+
+/**
+ * How many columns a column's header cell spans (E1.2): its `colSpan` for the header, kept to
+ * the columns right after it among its siblings, in its part. 1 for a group, or without one.
+ */
+function headerSpan<TRow, TNode>(
+    siblings: readonly ColumnOrGroup<TRow, TNode>[],
+    at: number,
+): number {
+    const column = siblings[at];
+    if (!column || isColumnGroup(column) || !column.colSpan) return 1;
+    return keptSpan(
+        column.colSpan({ type: "header", rowIndex: -1 }),
+        at,
+        siblings.length,
+        (index) => {
+            const next = siblings[index];
+            return (
+                next !== undefined &&
+                !isColumnGroup(next) &&
+                next.pinned === column.pinned
+            );
+        },
+    );
 }
 
 /** A header of one row: a cell per column. */
@@ -194,17 +416,25 @@ function cellsByKey<TRow, TNode>(
 
 /**
  * Lays the entries of `columns` out: their leaves, and the header's rows and cells, each sibling
- * list in the order `order` gives it (the column order, Epic #75). Without a group and an order,
- * the columns are the entries themselves (the same array). It never throws: a group inside itself
- * is not entered again, and a group without columns has no cell (`columnsError` refuses both).
+ * list in the order `order` gives it (the column order, Epic #75), and a collapsible group's
+ * children shown by its state (`collapsed`, the collapsed groups' keys, E1.3: the ones it hides
+ * are no columns, but keep their places in the order; the header keeps the rows every entry
+ * needs, so a toggle never changes its height). Without a group, a `colSpan` and an order, the
+ * columns are the entries themselves (the same array). It never throws: a group inside itself is
+ * not entered again, and a group without columns has no cell (`columnsError` refuses both).
  */
 export function layoutColumns<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],
     order?: <E extends ColumnOrGroup<TRow, TNode>>(
         list: readonly E[],
     ) => readonly E[],
+    collapsed: readonly string[] = [],
 ): ColumnLayout<TRow, TNode> {
-    if (entries.every((entry) => !isColumnGroup(entry))) {
+    // a header span (E1.2) is laid out as a group is
+    if (
+        entries.every((entry) => !isColumnGroup(entry)) &&
+        !entries.some((entry) => entry.colSpan)
+    ) {
         const columns = order ? order(entries) : entries;
         return { columns, header: flatHeader(columns) };
     }
@@ -230,22 +460,41 @@ export function layoutColumns<TRow, TNode>(
         () => [],
     );
     const columns: Column<TRow, TNode>[] = [];
+    /** the columns' cells a header span covers: no cell on screen, kept for `cellByKey` */
+    const covered: HeaderCellLayout<TRow, TNode>[] = [];
+    const collapsedKeys = keySet(collapsed);
+    /** places `list`, the children of a collapsible group in `state` showing only that state's */
     const place = (
         list: readonly ColumnOrGroup<TRow, TNode>[],
         level: number,
+        state?: GroupShow,
     ) => {
-        for (const entry of order ? order(list) : list) {
+        const ordered = order ? order(list) : list;
+        const siblings = state
+            ? ordered.filter((entry) => showsIn(entry, state))
+            : ordered;
+        /** the siblings after a header span it covers */
+        let skip = 0;
+        for (const [index, entry] of siblings.entries()) {
             const row = rows[level];
             if (!row) return;
             if (!isColumnGroup(entry)) {
-                row.push({
+                const columnSpan = skip > 0 ? 1 : headerSpan(siblings, index);
+                const cell: HeaderCellLayout<TRow, TNode> = {
                     key: entry.key,
                     rowIndex: level - depth,
                     columnIndex: columns.length,
-                    columnSpan: 1,
+                    columnSpan,
                     rowSpan: depth - level,
                     column: entry,
-                });
+                };
+                if (skip > 0) {
+                    skip -= 1;
+                    covered.push(cell);
+                } else {
+                    skip = columnSpan - 1;
+                    row.push(cell);
+                }
                 columns.push(entry);
                 continue;
             }
@@ -254,7 +503,15 @@ export function layoutColumns<TRow, TNode>(
             const at = row.length;
             const columnIndex = columns.length;
             path.add(entry);
-            place(childrenOf(entry), level + 1);
+            place(
+                childrenOf(entry),
+                level + 1,
+                entry.collapsible !== true
+                    ? undefined
+                    : collapsedKeys.has(entry.key)
+                      ? "collapsed"
+                      : "expanded",
+            );
             path.delete(entry);
             const columnSpan = columns.length - columnIndex;
             if (columnSpan === 0) continue;
@@ -295,7 +552,9 @@ export function layoutColumns<TRow, TNode>(
             rows,
             cellAt: (rowIndex, columnIndex) =>
                 cover[rowIndex + depth]?.[columnIndex],
-            cellByKey: cellsByKey(rows),
+            cellByKey: cellsByKey(
+                covered.length > 0 ? [...rows, covered] : rows,
+            ),
         },
     };
 }

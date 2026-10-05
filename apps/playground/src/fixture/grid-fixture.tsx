@@ -1,4 +1,5 @@
 import {
+    type ColSpanArgs,
     type Column,
     type ColumnOrder,
     type ColumnOrGroup,
@@ -14,6 +15,8 @@ import {
     useDataGrid,
     useDataGridRef,
     useGridView,
+    useGroupLabel,
+    useHeaderCell,
 } from "@fragiola/data-grid-react";
 import { Profiler, StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -33,6 +36,12 @@ import { createRoot } from "react-dom/client";
 //                        sort uncontrolled
 //   &pinned=2            the first N columns pinned at the start (with groups, 5 pins C0 and
 //                        the first group); the two lines of CSS stacking needs are the fixture's
+//   &pinnedEnd=2         the last N columns pinned at the end (with groups, a whole last group:
+//                        3 of 20 columns, 7 of 60); with &resize=1 they resize, with &reorder=1
+//                        they reorder (among themselves)
+//   &dir=rtl             the grid right to left (its `direction`): the resizers and the drop
+//                        indicator mirrored; &pageDir=rtl lays the page out right to left
+//                        instead (`<html dir>`), the grid given no direction
 //   &details=1           expandable rows: C0's cell holds an expander (`expand-<row>`); a
 //                        detail (&detailHeight=200 tall) holds a grid of its own
 //                        (`inner-<row>`, 30 rows × 8 columns) and a button (`detail-button-<row>`)
@@ -56,11 +65,23 @@ import { createRoot } from "react-dom/client";
 //                        the order uncontrolled: a drop target is marked by the fixture's own
 //                        CSS; `controlled` holds the order in the fixture's state
 //                        (`columnOrder` and `onColumnOrderChange`)
+//   &span=1              column spans: on every fifth row (index % 5 = 0), C1's cell spans 3
+//                        columns (C1–C3) and the second to last column's asks for 5 (the last
+//                        column and its part keep it to fewer); C5's header cell spans C5–C6
+//   &collapsible=1       with &groups=1, the groups of 12 (G1, G3, …) collapsible: expanded,
+//                        all but their last column; collapsed, their first and last (C5 and
+//                        C16 for G1); their columns resizable. A group's header cell holds a
+//                        toggle (`toggle-<key>`, `aria-expanded`), the collapsed groups
+//                        uncontrolled
+//   &stickyLabels=1      a group's name (and its toggle) in a label that stays in view while the
+//                        group scrolls (`useGroupLabel`, `label-<key>`), a block as wide as its
+//                        content
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
-// `window.orderChanges` the column orders, and a button before and after the grid take Tab.
+// `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups, and a
+// button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -74,6 +95,7 @@ declare global {
         selectionChanges: (readonly RowKey[])[];
         widthChanges: ColumnWidths[];
         orderChanges: ColumnOrder[];
+        collapseChanges: (readonly string[])[];
     }
 }
 
@@ -254,25 +276,95 @@ function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
 
 /**
  * The columns under groups: C0 alone, then groups of 4 and 12 columns in turn (reorderable
- * with `reorderable`).
+ * with `reorderable`; the groups of 12 collapsible with `collapsible`: all but their last column
+ * expanded, their first and last collapsed, every one resizable).
  */
 function grouped(
     columns: Column<FixtureRow>[],
     reorderable: boolean,
+    collapsible: boolean,
 ): ColumnOrGroup<FixtureRow>[] {
     const [first, ...rest] = columns;
     const entries: ColumnOrGroup<FixtureRow>[] = first ? [first] : [];
     for (let start = 0, group = 0; start < rest.length; group++) {
         const size = group % 2 === 0 ? 4 : 12;
+        const children = rest.slice(start, start + size);
+        const collapses = collapsible && group % 2 === 1;
         entries.push({
             key: `G${group}`,
             name: `G${group}`,
-            children: rest.slice(start, start + size),
+            children: collapses
+                ? children.map((child, index) => ({
+                      ...child,
+                      resizable: true,
+                      ...(index === 0
+                          ? {}
+                          : {
+                                groupShow:
+                                    index === children.length - 1
+                                        ? ("collapsed" as const)
+                                        : ("expanded" as const),
+                            }),
+                  }))
+                : children,
             ...(reorderable ? { reorderable } : {}),
+            ...(collapses ? { collapsible } : {}),
         });
         start += size;
     }
     return entries;
+}
+
+// A group's label is a block as wide as its content: sticky moves it inside its header cell
+const LABEL_STYLE = { display: "block", width: "fit-content" } as const;
+
+/**
+ * A group's header content, as an app writes it: its name and, collapsible, its toggle (the
+ * grid's command), in a label that stays in view with `sticky`.
+ */
+function GroupContent({
+    cell,
+    sticky,
+}: {
+    cell: HeaderCellInfo<FixtureRow>;
+    sticky: boolean;
+}) {
+    const { model } = useDataGrid<FixtureRow>();
+    const { state } = useHeaderCell(cell);
+    const label = useGroupLabel(cell);
+    const content = (
+        <>
+            {headerCellContent(cell)}
+            {state.collapsed === undefined ? null : (
+                <>
+                    {" "}
+                    <button
+                        type="button"
+                        data-testid={`toggle-${cell.key}`}
+                        aria-expanded={!state.collapsed}
+                        onClick={() =>
+                            model.run("column-groups.toggle", {
+                                groupKey: cell.key,
+                            })
+                        }
+                    >
+                        {state.collapsed ? "+" : "-"}
+                    </button>
+                </>
+            )}
+        </>
+    );
+    return sticky ? (
+        <span
+            {...label.props}
+            data-testid={`label-${cell.key}`}
+            style={{ ...label.props.style, ...LABEL_STYLE }}
+        >
+            {content}
+        </span>
+    ) : (
+        content
+    );
 }
 
 // The empty state's content, centred in it (the part's own display is structural: a block)
@@ -305,6 +397,24 @@ function flexColumn(columnIndex: number): Partial<Column<FixtureRow>> {
     return columnIndex === 2 ? { flex: 2, maxWidth: 300 } : {};
 }
 
+/** Every fifth row: where `&span=1` spans its cells. */
+const spansRow = (args: ColSpanArgs<FixtureRow>, span: number) =>
+    args.type === "row" && args.row.index % 5 === 0 ? span : undefined;
+
+/** What `&span=1` gives a column: C1 and the second to last column span rows, C5 its header. */
+function spanColumn(
+    columnIndex: number,
+    columnCount: number,
+): Partial<Column<FixtureRow>> {
+    if (columnIndex === 1) return { colSpan: (args) => spansRow(args, 3) };
+    if (columnIndex === columnCount - 2) {
+        return { colSpan: (args) => spansRow(args, 5) };
+    }
+    return columnIndex === 5
+        ? { colSpan: ({ type }) => (type === "header" ? 2 : undefined) }
+        : {};
+}
+
 /** A cell's value: C1's wider with `&resize=1`, C3's wider still with `&autosize=1`. */
 function cellValue(
     columnIndex: number,
@@ -318,23 +428,35 @@ function cellValue(
     return (row) => `${row.index}:${columnIndex}`;
 }
 
-/** Whether `&reorder=1` makes a column reorderable: C1–C5, and C0 when pinned. */
-function reorderColumn(columnIndex: number, pinnedCount: number): boolean {
-    return columnIndex <= 5 && (columnIndex > 0 || pinnedCount > 0);
+/**
+ * Whether `&reorder=1` makes a column reorderable: C1–C5, C0 when pinned, and the ones pinned at
+ * the end.
+ */
+function reorderColumn(
+    columnIndex: number,
+    pinnedCount: number,
+    pinnedEnd: boolean,
+): boolean {
+    return (
+        pinnedEnd || (columnIndex <= 5 && (columnIndex > 0 || pinnedCount > 0))
+    );
 }
 
-// The drop indicator is the app's (O4): a line on the target's side, from its attribute
+// The drop indicator is the app's (O4): a line on the target's side, from its attribute (its
+// start: the right edge right to left)
 const DROP_TARGET_CSS = `
 [data-drop-target="before"] { box-shadow: inset 3px 0 0 blue; }
 [data-drop-target="after"] { box-shadow: inset -3px 0 0 blue; }
+[dir="rtl"] [data-drop-target="before"] { box-shadow: inset -3px 0 0 blue; }
+[dir="rtl"] [data-drop-target="after"] { box-shadow: inset 3px 0 0 blue; }
 `;
 
-// A resizer's place is the app's (W3): a strip at the right edge of its header cell (which is
-// positioned, absolute or sticky), the browser's touch panning off
+// A resizer's place is the app's (W3): a strip at its edge of its header cell (which is
+// positioned, absolute or sticky): the end edge, the start one for a column pinned at the end
+// (`state.edge`), logical sides so it mirrors right to left; the browser's touch panning off
 const RESIZER_STYLE = {
     position: "absolute",
     top: 0,
-    right: 0,
     width: 6,
     height: "100%",
     touchAction: "none",
@@ -353,7 +475,11 @@ function Resizer({ cell }: { cell: HeaderCellInfo<FixtureRow> }) {
             {...props}
             aria-label={`Resize ${cell.key}`}
             data-testid={`resizer-${cell.key}`}
-            style={RESIZER_STYLE}
+            style={
+                state.edge === "start"
+                    ? { ...RESIZER_STYLE, insetInlineStart: 0 }
+                    : { ...RESIZER_STYLE, insetInlineEnd: 0 }
+            }
         />
     );
 }
@@ -363,30 +489,45 @@ function HeaderRow({
     table,
     row,
     resize = false,
+    groupContent = false,
+    stickyLabels = false,
 }: {
     table: boolean;
     row?: HeaderRowInfo<FixtureRow> | undefined;
     resize?: boolean;
+    /** a group's header cell holds its toggle, or its label (`GroupContent`) */
+    groupContent?: boolean;
+    stickyLabels?: boolean;
 }) {
     const tag = tags(table);
     return (
         <DataGrid.HeaderRow row={row} render={tag.headerRow}>
             <DataGrid.HeaderCells<FixtureRow>>
-                {(cell) => (
-                    <DataGrid.HeaderCell
-                        cell={cell}
-                        render={tag.headerCell}
-                        style={pinnedStyle}
-                    >
-                        {resize ? (
-                            // its own content, then its resizer
-                            <>
-                                {headerCellContent(cell)}
-                                <Resizer cell={cell} />
-                            </>
-                        ) : undefined}
-                    </DataGrid.HeaderCell>
-                )}
+                {(cell) => {
+                    const own = groupContent && cell.group !== undefined;
+                    return (
+                        <DataGrid.HeaderCell
+                            cell={cell}
+                            render={tag.headerCell}
+                            style={pinnedStyle}
+                        >
+                            {resize || own ? (
+                                // its own content, then its resizer
+                                <>
+                                    {own ? (
+                                        <GroupContent
+                                            cell={cell}
+                                            sticky={stickyLabels}
+                                        />
+                                    ) : (
+                                        headerCellContent(cell)
+                                    )}
+                                    {resize ? <Resizer cell={cell} /> : null}
+                                </>
+                            ) : undefined}
+                        </DataGrid.HeaderCell>
+                    );
+                }}
             </DataGrid.HeaderCells>
         </DataGrid.HeaderRow>
     );
@@ -404,6 +545,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const groups = params.get("groups") === "1";
     const sort = params.get("sort") === "1";
     const pinnedCount = numberParam(params, "pinned", 0);
+    const pinnedEndCount = numberParam(params, "pinnedEnd", 0);
+    const rtl = params.get("dir") === "rtl";
     const details = params.get("details") === "1";
     const controls = params.get("controls") === "1";
     const resizeParam = params.get("resize");
@@ -413,6 +556,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const gridRef = useDataGridRef<FixtureRow>();
     const flex = params.get("flex") === "1";
     const autoSize = params.get("autosize") === "1";
+    const span = params.get("span") === "1";
+    const collapsible = params.get("collapsible") === "1";
+    const stickyLabels = params.get("stickyLabels") === "1";
     const reorderParam = params.get("reorder");
     const reorder = reorderParam === "1" || reorderParam === "controlled";
     const controlledOrder = reorderParam === "controlled";
@@ -435,54 +581,64 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const columns = useMemo<ColumnOrGroup<FixtureRow>[]>(() => {
         const leaves = Array.from(
             { length: columnCount },
-            (_, columnIndex): Column<FixtureRow> => ({
-                key: `c${columnIndex}`,
-                name: `C${columnIndex}`,
-                width: 100,
-                getValue: cellValue(columnIndex, resize, autoSize),
-                ...(sort && columnIndex < 2 ? { sortable: true } : {}),
-                ...(columnIndex < pinnedCount
-                    ? { pinned: "start" as const }
-                    : {}),
-                ...(controls ? controlColumn(columnIndex) : {}),
-                ...(resize ? resizeColumn(columnIndex) : {}),
-                ...(flex ? flexColumn(columnIndex) : {}),
-                ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
-                ...(reorder && reorderColumn(columnIndex, pinnedCount)
-                    ? { reorderable: true }
-                    : {}),
-                ...(rowSelection && columnIndex === 1
-                    ? {
-                          renderCell: ({ row }) => (
-                              <SelectBox rowIndex={row.index} />
-                          ),
-                      }
-                    : {}),
-                ...(sort && columnIndex === 1
-                    ? {
-                          renderHeaderCell: () => (
-                              <>
-                                  C1{" "}
-                                  <button type="button" data-testid="menu">
-                                      menu
-                                  </button>
-                              </>
-                          ),
-                      }
-                    : {}),
-            }),
+            (_, columnIndex): Column<FixtureRow> => {
+                const pinnedEnd = columnIndex >= columnCount - pinnedEndCount;
+                return {
+                    key: `c${columnIndex}`,
+                    name: `C${columnIndex}`,
+                    width: 100,
+                    getValue: cellValue(columnIndex, resize, autoSize),
+                    ...(sort && columnIndex < 2 ? { sortable: true } : {}),
+                    ...(columnIndex < pinnedCount
+                        ? { pinned: "start" as const }
+                        : {}),
+                    ...(pinnedEnd ? { pinned: "end" as const } : {}),
+                    ...(controls ? controlColumn(columnIndex) : {}),
+                    ...(resize ? resizeColumn(columnIndex) : {}),
+                    ...(resize && pinnedEnd ? { resizable: true } : {}),
+                    ...(flex ? flexColumn(columnIndex) : {}),
+                    ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
+                    ...(span ? spanColumn(columnIndex, columnCount) : {}),
+                    ...(reorder &&
+                    reorderColumn(columnIndex, pinnedCount, pinnedEnd)
+                        ? { reorderable: true }
+                        : {}),
+                    ...(rowSelection && columnIndex === 1
+                        ? {
+                              renderCell: ({ row }) => (
+                                  <SelectBox rowIndex={row.index} />
+                              ),
+                          }
+                        : {}),
+                    ...(sort && columnIndex === 1
+                        ? {
+                              renderHeaderCell: () => (
+                                  <>
+                                      C1{" "}
+                                      <button type="button" data-testid="menu">
+                                          menu
+                                      </button>
+                                  </>
+                              ),
+                          }
+                        : {}),
+                };
+            },
         );
-        return groups ? grouped(leaves, reorder) : leaves;
+        return groups ? grouped(leaves, reorder, collapsible) : leaves;
     }, [
         columnCount,
         groups,
         sort,
         pinnedCount,
+        pinnedEndCount,
         controls,
         flex,
         resize,
         autoSize,
+        span,
         reorder,
+        collapsible,
         rowSelection,
     ]);
     const rowHeight = useMemo(
@@ -530,7 +686,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         window.orderChanges.push(order);
                         if (controlledOrder) setColumnOrder(order);
                     }}
+                    onCollapsedGroupKeysChange={(keys) =>
+                        window.collapseChanges.push(keys)
+                    }
                     gridRef={gridRef}
+                    direction={rtl ? "rtl" : undefined}
                     data-testid="viewport"
                     style={{ width, height }}
                 >
@@ -548,6 +708,10 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                             table={table}
                                             row={row}
                                             resize={resize}
+                                            groupContent={
+                                                collapsible || stickyLabels
+                                            }
+                                            stickyLabels={stickyLabels}
                                         />
                                     )}
                                 </DataGrid.HeaderRows>
@@ -639,11 +803,16 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
 }
 
 export function mountGridFixture(kind: "table" | "div") {
+    // a page laid out right to left: the grid, given no direction, takes it
+    if (new URLSearchParams(location.search).get("pageDir") === "rtl") {
+        document.documentElement.dir = "rtl";
+    }
     window.commits = 0;
     window.sortChanges = [];
     window.selectionChanges = [];
     window.widthChanges = [];
     window.orderChanges = [];
+    window.collapseChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

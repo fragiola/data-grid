@@ -11,15 +11,19 @@ import {
     cellValue,
     columnResizerPart,
     EMPTY_WINDOW,
+    GROUP_LABEL_ATTRIBUTE,
+    type GridDirection,
     type GridView,
     type HeaderCellPart,
     type HeaderCellState,
     headerCellBox,
     headerCellPart,
+    inlineStart,
     type RowDetailState,
     type RowState,
     renderedWidth,
     rowAt,
+    rowColumns,
     rowDetailPart,
     rowDisplay,
     rowLeft,
@@ -45,6 +49,7 @@ import {
     ViewContext,
 } from "./context";
 import { type DataGridRef, noSubscription } from "./gridRef";
+import { layerRef } from "./utils/layerRef";
 import { dataAttributes } from "./utils/useRender";
 
 export type {
@@ -122,6 +127,25 @@ export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
 }
 
 /**
+ * The structural style key of an offset from a view's inline start (E1.1): `left`, or in a
+ * right-to-left grid `right`; with `"margin"`, `marginLeft` or `marginRight`. Written straight
+ * into the part's style object.
+ */
+export function inlineSide(direction: GridDirection): "left" | "right";
+export function inlineSide(
+    direction: GridDirection,
+    prefix: "margin",
+): "marginLeft" | "marginRight";
+export function inlineSide(
+    direction: GridDirection,
+    prefix?: "margin",
+): "left" | "right" | "marginLeft" | "marginRight" {
+    const side = inlineStart(direction);
+    if (!prefix) return side;
+    return side === "left" ? "marginLeft" : "marginRight";
+}
+
+/**
  * A row's structural style (a header row's too, at `top`): in its layer, from `rowLeft`, as wide
  * as its rendered cells (an expanded row, as what holds its detail); with pinned columns, a flex
  * container their sticky cells stack in.
@@ -137,7 +161,7 @@ export function rowStyle<TRow>(
         position: "absolute",
         ...(display ? { display } : {}),
         top,
-        left: rowLeft(view),
+        [inlineSide(view.direction)]: rowLeft(view),
         width,
         height,
         boxSizing: "border-box",
@@ -175,10 +199,13 @@ export function useRow<TRow>(row: RowInfo<TRow>): PartHookResult<RowState> {
     };
 }
 
-/** The cells a row renders, with their columns and values. */
+/**
+ * The cells a row renders, with their columns and values: one per rendered column, but a cell
+ * spanning columns (a column's `colSpan`, Epic #85) stands for the ones it covers.
+ */
 export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
     const view = useGridView<TRow>();
-    return view.columns.flatMap((columnIndex) => {
+    return rowColumns(view, row.rowIndex).flatMap((columnIndex) => {
         const column = view.columnDefs[columnIndex];
         if (!column) return [];
         return [
@@ -199,11 +226,13 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
 
 /**
  * The props a body cell and a header cell share, in one record: the roving tab stop, ARIA,
- * `data-*` and their structural style. A cell that scrolls is positioned in its row; a pinned one
- * is in the row's flow, `sticky`: the browser's scrolling keeps it in place, at the `left` inset
- * the engine writes (it is the engine's, like a layer's transform).
+ * `data-*` and their structural style. A cell that scrolls is positioned in its row (from its
+ * inline start); a pinned one is in the row's flow, `sticky`: the browser's scrolling keeps it in
+ * place, at the inline start inset the engine writes (it is the engine's, like a layer's
+ * transform).
  */
-function cellProps(
+function cellProps<TRow>(
+    view: GridView<TRow, ReactNode>,
     part: CellPart | HeaderCellPart,
     box: {
         readonly left: number;
@@ -215,12 +244,14 @@ function cellProps(
     // a header cell's state is the one with a `group` (its sort comes with it)
     const header = "group" in state ? state : undefined;
     const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
+    const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
     const { pinned } = state;
     const { width, height } = box;
     return {
         role: header ? "columnheader" : "gridcell",
         "aria-colindex": state.columnIndex + 1,
         ...(header ? ariaHeaderCellSpans(header) : undefined),
+        ...(ariaColSpan ? { "aria-colspan": ariaColSpan } : undefined),
         ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
         tabIndex: part.tabIndex,
         ...dataAttributes({
@@ -233,11 +264,13 @@ function cellProps(
             sortable: header?.sortable,
             sort: header?.sortDirection,
             "sort-priority": header?.sortPriority,
-            pinned: pinned ? "start" : undefined,
+            pinned: state.pinnedSide,
             "pinned-edge": state.pinnedEdge,
             interacting: state.interacting,
             resizable: header?.resizable,
             resizing: header?.resizing,
+            collapsible: header !== undefined && header.collapsed !== undefined,
+            collapsed: header?.collapsed,
             reorderable: header?.reorderable,
             dragging: header?.dragging,
             "drop-target": header?.dropTarget ?? undefined,
@@ -247,7 +280,7 @@ function cellProps(
             : {
                   position: "absolute",
                   top: 0,
-                  left: box.left,
+                  [inlineSide(view.direction)]: box.left,
                   width,
                   height,
                   boxSizing: "border-box",
@@ -255,13 +288,30 @@ function cellProps(
     };
 }
 
-/** A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. */
+/**
+ * A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. A cell
+ * spanning columns (Epic #85) is as wide as them, with `aria-colspan`.
+ */
 export function useCell<TRow>(cell: CellInfo<TRow>): PartHookResult<CellState> {
+    const { state, props } = useCellPart(cell);
+    return { state, props };
+}
+
+/** `useCell`, and how many columns the cell spans (a table cell's `colSpan`). */
+export function useCellPart<TRow>(
+    cell: CellInfo<TRow>,
+): PartHookResult<CellState> & { columnSpan: number } {
     const view = useGridView<TRow>();
     const part = cellPart(view, cell);
+    const columnSpan = part.ariaColSpan ?? 1;
     return {
         state: part.state,
-        props: cellProps(part, cellBox(view, cell.rowIndex, cell.columnIndex)),
+        props: cellProps(
+            view,
+            part,
+            cellBox(view, cell.rowIndex, cell.columnIndex, columnSpan),
+        ),
+        columnSpan,
     };
 }
 
@@ -292,7 +342,12 @@ export function useRowDetail<TRow>(
                 display: "block",
                 marginTop: box.top,
                 // in a row of pinned cells (flex), from the row's start, never shrunk
-                ...(flex ? { marginLeft: box.start, flexShrink: 0 } : {}),
+                ...(flex
+                    ? {
+                          [inlineSide(view.direction, "margin")]: box.start,
+                          flexShrink: 0,
+                      }
+                    : {}),
                 width: box.width,
                 height: box.height,
                 boxSizing: "border-box",
@@ -365,7 +420,7 @@ export function useHeaderCell<TRow>(
     return {
         state: part.state,
         // at its row's top: a cell spanning rows reaches down past it
-        props: cellProps(part, headerCellBox(view, cell)),
+        props: cellProps(view, part, headerCellBox(view, cell)),
     };
 }
 
@@ -394,6 +449,35 @@ export function useColumnResizer<TRow>(
                 resizing: state.resizing,
             }),
             style: {},
+        },
+    };
+}
+
+/** The state of a group's label: the key of the header cell it labels. */
+export interface GroupLabelState {
+    readonly groupKey: string;
+}
+
+/**
+ * A group's label (Epic #85, E1.3): the props of an element the app renders inside a group's
+ * header cell (its name, its toggle), which stays in view while the group scrolls: sticky in the
+ * cell, at the start of the columns that scroll (right of the pinned ones), within the cell's box,
+ * so it never leaves its group. The engine writes its inline start inset (`left`, `right` right to
+ * left), never React: give it no inset of your own. It must be narrower than its cell (an
+ * `inline-block`, a flex item): only then is there room to move, and nothing between it and the
+ * cell may clip (`overflow` other than `visible` or `clip`). In a pinned group it stays where it is.
+ */
+export function useGroupLabel<TRow>(
+    cell: HeaderCellInfo<TRow>,
+): PartHookResult<GroupLabelState> {
+    const { engine } = useRootGrid();
+    return {
+        state: { groupKey: cell.key },
+        props: {
+            ref: layerRef(engine, "label"),
+            [GROUP_LABEL_ATTRIBUTE]: cell.key,
+            ...dataAttributes({ "grid-part": "group-label" }),
+            style: { position: "sticky" },
         },
     };
 }

@@ -106,3 +106,9 @@ export const headerCell = (state: HeaderCellState) =>
 
 With several header rows, an upper row stays above the next (a structural `z-index`): a column
 spanning rows is never covered by the row it reaches into.
+
+## Collapsing, and labels in view
+
+A group can open and close (`collapsible`), its children showing in either state or both
+(`groupShow`), and a group's label can stay in view while a group wider than the view scrolls:
+see [Collapsible groups and sticky labels](/docs/concepts/collapsible-groups).

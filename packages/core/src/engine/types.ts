@@ -3,6 +3,7 @@ import type {
     CellPosition,
     Column,
     ColumnWidths,
+    GridDirection,
     HeaderCellLayout,
     HeaderLayout,
     ReorderSide,
@@ -40,6 +41,17 @@ export interface HeaderRowView<TRow = unknown, TNode = unknown> {
 }
 
 /**
+ * A body row's cells where columns span (Epic #85, E1.2): the columns its cells start at, in
+ * order, and how many columns each one spanning more than one covers.
+ */
+export interface RowSpans {
+    /** the view's `columns` less the ones a span covers, with a span reaching into them */
+    readonly columns: readonly number[];
+    /** by first column, the spans over 1 */
+    readonly spans: ReadonlyMap<number, number>;
+}
+
+/**
  * Everything a render of the grid needs. A new object only when what is rendered changes: the
  * rendered ranges, the sizes, the data, the columns or the active cell; scrolling inside the
  * overscan keeps the same view, so nothing renders.
@@ -47,8 +59,16 @@ export interface HeaderRowView<TRow = unknown, TNode = unknown> {
 export interface GridView<TRow = unknown, TNode = unknown> {
     /** the body rows to render, in order: the rendered range, plus the active row */
     readonly rows: readonly number[];
-    /** the columns to render, in order: the rendered range, plus the active column */
+    /**
+     * the columns to render, in order: the rendered range, plus the active column (a row whose
+     * cells span columns renders `rowColumns`)
+     */
     readonly columns: readonly number[];
+    /**
+     * the rendered rows whose cells span columns (E1.2), by row index: render `rowColumns` of a
+     * row, each cell `cellSpan` columns wide. `null` when none does
+     */
+    readonly rowSpans: ReadonlyMap<number, RowSpans> | null;
     /** the rendered rows' range (the overscan window), without the active row */
     readonly renderedRows: Range;
     /** the rendered columns' range (the overscan window), without the active column */
@@ -95,8 +115,24 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly sortColumns: readonly SortColumn[];
     /** how many columns are pinned at the start (always rendered, in `columns` first) */
     readonly pinnedColumnCount: number;
-    /** their width: the column window covers the view right of it */
+    /** their width: the column window covers the view after it */
     readonly pinnedWidth: number;
+    /** how many columns are pinned at the end (always rendered, in `columns` last) */
+    readonly pinnedEndColumnCount: number;
+    /** their width: the column window covers the view before it */
+    readonly pinnedEndWidth: number;
+    /**
+     * the grid's direction in effect, the model's else its viewport's (the page's): in `"rtl"`,
+     * every offset counts from the right edge (an adapter places by `right` where it places by
+     * `left` otherwise)
+     */
+    readonly direction: GridDirection;
+    /**
+     * the direction the model is given (`direction.set`, a root's prop), `undefined` for the
+     * page's: what an adapter renders as the viewport's `dir` (the engine writes none), so
+     * markup rendered before the grid attaches, or on a server, carries it
+     */
+    readonly givenDirection: GridDirection | undefined;
     /** the indexes of the rows shown expanded, ascending (loaded, their key expanded) */
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
@@ -107,6 +143,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly selectedRowKeys: readonly RowKey[];
     /** whether a loaded row can be selected; `undefined`: every row can */
     readonly isRowSelectable: RowSelectable<TRow> | undefined;
+    /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
+    readonly collapsedGroupKeys: readonly string[];
     /**
      * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
      * leaves), at its element's position (a header cell's top row and first column); `null` in
@@ -226,12 +264,21 @@ export type EngineEventKey = keyof EngineEventMap;
 
 /**
  * The elements whose geometry the engine writes: the layers (their `transform`), and the cells of
- * pinned columns (`pinned`: `position: sticky` in their row's flow, whose `left` inset the engine
- * writes so the browser's scrolling keeps them at the view's start; their `data-column-index`
- * says which column they are, a header cell's first), and expanded rows' details (`detail`:
- * sticky the same way, at the view's start: as a column at offset 0 would be).
+ * pinned columns (`pinned`: `position: sticky` in their row's flow, whose inline start inset,
+ * `left` or in RTL `right`, the engine writes so the browser's scrolling keeps them at the view's
+ * start or end; their `data-column-index` says which column they are, a header cell's first),
+ * expanded rows' details (`detail`: sticky the same way, at the view's start: as a column at
+ * offset 0 would be), and group labels (`label`, Epic #85, E1.3: sticky the same way inside their
+ * header cell, at the start of the columns that scroll, which the cell's box keeps them within;
+ * their `data-grid-group-label` names the header cell's key).
  */
-export type EngineLayer = "grid" | "header" | "body" | "pinned" | "detail";
+export type EngineLayer =
+    | "grid"
+    | "header"
+    | "body"
+    | "pinned"
+    | "detail"
+    | "label";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {

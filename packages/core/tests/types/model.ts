@@ -149,14 +149,19 @@ grid.run("sort-columns.set", {
 });
 void sortableGroup;
 
-// a column pins at the start; a group is pinned by its columns, and "end" is not there yet
+// a column pins at the start or at the end (Epic #85); a group is pinned by its columns
 const pinnedColumn: Column<Person> = {
     key: "name",
     width: 60,
     pinned: "start",
 };
-// @ts-expect-error
 const pinnedEnd: Column<Person> = { key: "age", width: 60, pinned: "end" };
+const pinnedMiddle: Column<Person> = {
+    key: "age",
+    width: 60,
+    // @ts-expect-error
+    pinned: "middle",
+};
 // @ts-expect-error
 const pinnedGroup: ColumnOrGroup<Person> = {
     key: "g",
@@ -185,6 +190,7 @@ const comparingGroup: ColumnOrGroup<Person> = {
 void wrongCompare;
 void comparingGroup;
 void pinnedEnd;
+void pinnedMiddle;
 void pinnedGroup;
 
 // a row toggles by its index or by its key, never both; a detail's height is a function of the row
@@ -259,6 +265,59 @@ engine.run("fit-columns", {});
 engine.run("fit-columns", { columnKeys: ["name"] });
 // @ts-expect-error
 engine.run("fit-columns", { columnKeys: "name" });
+
+// a column's span (Epic #85): the row is there only for a row's cell, typed by the row type
+const spanning: Column<Person> = {
+    key: "name",
+    width: 100,
+    colSpan: (args) => (args.type === "row" ? args.row.age : undefined),
+};
+void spanning;
+const untyped: Column<Person> = {
+    key: "name",
+    width: 100,
+    // @ts-expect-error
+    colSpan: (args) => args.row.age,
+};
+void untyped;
+// @ts-expect-error
+const spanningGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    colSpan: () => 2,
+    children: [{ key: "name", width: 80 }],
+};
+void spanningGroup;
+
+// collapsible groups (Epic #85, E1.3): a group collapses, a child shows in a state
+const collapsible: ColumnOrGroup<Person> = {
+    key: "g",
+    collapsible: true,
+    children: [
+        { key: "name", width: 80 },
+        { key: "age", width: 80, groupShow: "expanded" },
+    ],
+};
+void collapsible;
+const collapsingColumn: Column<Person> = {
+    key: "a",
+    width: 1,
+    // @ts-expect-error: a column does not collapse
+    collapsible: true,
+};
+void collapsingColumn;
+// @ts-expect-error
+const wrongShow: Column<Person> = { key: "a", width: 1, groupShow: "open" };
+void wrongShow;
+const collapsed: readonly string[] = grid.get("collapsed-group-keys");
+void collapsed;
+grid.run("column-groups.toggle", { groupKey: "g" });
+grid.run("column-groups.set", { groupKeys: ["g"] });
+// @ts-expect-error
+grid.run("column-groups.toggle", { columnKey: "g" });
+// @ts-expect-error
+grid.run("column-groups.set", { groupKeys: [1] });
+const isCollapsed: boolean = grid.is("group-collapsed", { groupKey: "g" });
+void isCollapsed;
 
 void groupWithCells;
 void groupWithWidth;

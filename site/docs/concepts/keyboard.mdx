@@ -20,7 +20,10 @@ it, the grid scrolls it into view and focuses it.
 | Ctrl+A, ⌘+A | selects every row (many rows selectable) |
 | Ctrl+Shift+←, Ctrl+Shift+→ | moves a reorderable header cell's column or group, the active cell following it (⌘ on a Mac) |
 
-Moves stop at the edges. A click or a Tab into a cell makes it active. On a sortable column's
+Moves stop at the edges. In a [right-to-left](/docs/concepts/right-to-left) grid the arrows
+mirror: ← moves to the next column and → to the previous one, as they point; Home and End stay the
+row's first and last cell, Ctrl+Shift+← moves a header cell after its next sibling, and on a resize
+handle ← moves it to the left, which widens its column. A click or a Tab into a cell makes it active. On a sortable column's
 header cell, Enter and Space toggle its [sort](/docs/concepts/sorting) (Ctrl adds the column).
 On a [reorderable](/docs/concepts/column-reordering) header cell, Ctrl+Shift+← and Ctrl+Shift+→
 move its column (or group) before the previous sibling or after the next one, focus staying on
@@ -30,7 +33,9 @@ it; elsewhere they move the active cell as the arrows do.
 
 With [column groups](/docs/concepts/column-groups), the header has several rows: Up from a column
 reaches the group above it, Down from a group its first column in view, and Left and Right move
-across the cells of a header row.
+across the cells of a header row. A cell [spanning columns](/docs/concepts/column-spanning) is one
+cell to the keys: an arrow into a column it covers lands on it, and the arrows leaving it go to
+the column past its span.
 
 ## One tab stop
 
@@ -71,8 +76,8 @@ other controls. Then, on the focused handle:
 
 | key | does |
 | --- | --- |
-| ←, → | 10 px narrower, wider |
-| Shift+←, Shift+→ | 50 px narrower, wider |
+| ←, → | moves the handle 10 px its way: the column wider where it grows that way (to the right, or to the left right to left; toward the start for a column pinned at the end) |
+| Shift+←, Shift+→ | the same by 50 px |
 | Home, End | the column's minimum, its maximum (its `aria-valuemax`: the view's width, without a `maxWidth`) |
 | Enter | fits the column to its content ([Automatic widths](/docs/concepts/auto-widths)) |
 | Escape | back to navigation; the width stays |

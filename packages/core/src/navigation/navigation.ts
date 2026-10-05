@@ -1,3 +1,4 @@
+import type { CellSpan } from "../model/spans";
 import type { CellPosition } from "../model/types";
 import { clamp } from "../utils";
 import type { Range } from "../viewport/window";
@@ -61,6 +62,13 @@ export interface GridBounds {
               columnIndex: number,
           ) => HeaderCellSpan | undefined)
         | undefined;
+    /**
+     * the body cell covering a body position under column spans (E1.2): its first column and
+     * span; without it, every body cell is one column
+     */
+    readonly cellSpanAt?:
+        | ((rowIndex: number, columnIndex: number) => CellSpan)
+        | undefined;
     /** the columns in view: a move down from a group lands on its first one in view */
     readonly visibleColumns?: Range | undefined;
 }
@@ -70,7 +78,9 @@ export interface GridBounds {
  * `pageSize` rows (at least one). Header rows are -1 and above (G4). A header cell's position is
  * its first column, on its row: a group's own row, or for a column spanning header rows (G2), the
  * row it was reached on, so the arrows walk every header row from end to end. Up from a column
- * reaches the group above it, Down from a group its first column in view.
+ * reaches the group above it, Down from a group its first column in view. A body cell spanning
+ * columns (E1.2) is at its first column: a move into a column it covers lands on it, a move out
+ * of it leaves from its edge.
  */
 export function nextPosition(
     position: CellPosition,
@@ -84,14 +94,19 @@ export function nextPosition(
     const page = Math.max(1, Math.floor(pageSize));
     const row = (index: number) => clamp(index, firstRow, lastRow);
     const column = (index: number) => clamp(index, 0, lastColumn);
-    /** the cell holding a position: a header cell's span, or the body cell itself */
+    /** the cell holding a position: a header cell's span, or the body cell's */
     const spanAt = (rowIndex: number, columnIndex: number): HeaderCellSpan => {
         const r = row(rowIndex);
         const c = column(columnIndex);
         const header = r < 0 ? bounds.headerCellAt?.(r, c) : undefined;
-        return (
-            header ?? { rowIndex: r, columnIndex: c, rowSpan: 1, columnSpan: 1 }
-        );
+        if (header) return header;
+        const body = r >= 0 ? bounds.cellSpanAt?.(r, c) : undefined;
+        return {
+            rowIndex: r,
+            columnIndex: body?.columnIndex ?? c,
+            rowSpan: 1,
+            columnSpan: body?.columnSpan ?? 1,
+        };
     };
     /** the position of the cell holding a position: its first column, on that row */
     const at = (rowIndex: number, columnIndex: number): CellPosition => {

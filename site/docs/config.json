@@ -47,6 +47,14 @@
                     "path": "concepts/column-groups"
                 },
                 {
+                    "label": "Collapsible groups",
+                    "path": "concepts/collapsible-groups"
+                },
+                {
+                    "label": "Column spanning",
+                    "path": "concepts/column-spanning"
+                },
+                {
                     "label": "Pinned columns",
                     "path": "concepts/pinned-columns"
                 },
@@ -61,6 +69,10 @@
                 {
                     "label": "Automatic widths",
                     "path": "concepts/auto-widths"
+                },
+                {
+                    "label": "Right to left",
+                    "path": "concepts/right-to-left"
                 },
                 {
                     "label": "Sorting",

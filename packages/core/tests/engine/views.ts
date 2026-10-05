@@ -64,10 +64,13 @@ export function inputsOf(
         viewportBodyHeight: 170,
         pinnedColumnCount: 0,
         pinnedWidth: 0,
+        pinnedEndColumnCount: 0,
+        pinnedEndWidth: 0,
         rowsRevision: 0,
         interaction: null,
         columnResize: null,
         columnReorder: null,
+        direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),
         ...overrides,
     };

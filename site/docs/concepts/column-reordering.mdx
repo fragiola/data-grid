@@ -67,10 +67,11 @@ order (to storage, to a server) is yours: it is a plain array.
 - **Among siblings only.** A column moves among the columns of its group, a group among the
   entries beside it. Moving a column into another group is not a move.
 - **Groups whole.** A group's header cell moves the group and every column under it.
-- **Pinned with pinned.** A [pinned column](/docs/concepts/pinned-columns) lands among the pinned
-  ones, the others among the others: pinned columns always lead, whatever the order says. What
-  counts is where it lands: a pinned column before the first column that scrolls becomes the last
-  pinned one, and a column after the last pinned one becomes the first that scrolls.
+- **Pinned with pinned.** A [pinned column](/docs/concepts/pinned-columns) lands among the ones
+  pinned where it is (at the start, or at the end), the others among the others: pinned columns
+  always lead and trail, whatever the order says. What counts is where it lands: a pinned column
+  before the first column that scrolls becomes the last pinned one, a column after the last pinned
+  one becomes the first that scrolls, and the same at the end.
 - **Fixed entries.** An entry without `reorderable` is never dragged nor moved by the keys, but
   its siblings may land on either side of it.
 
@@ -101,11 +102,11 @@ never drags, and the click that ends a drag never sorts.
 While the cell drags, at most once a frame, the grid works out where it would land: beside the
 sibling under the pointer, before or after it by the side of its middle. It reads the column
 positions, not the elements, so a sibling scrolled out of the rendered columns counts, under
-[scroll scaling](/docs/concepts/scroll-scaling) too. Near the left or right edge of the columns
-that scroll, the grid scrolls them, faster nearer the edge, so a far column comes into reach; it
+[scroll scaling](/docs/concepts/scroll-scaling) too. Near either edge of the columns that scroll
+(between the pinned parts), the grid scrolls them, faster nearer the edge, so a far column comes into reach; it
 stops once the siblings the column moves among all show on that side, so a drag inside a small
-group never scrolls the grid away. A pinned column's drag stays over the pinned ones and scrolls
-nothing. A scroll during the drag (the wheel, the scrollbar) works the target out again from where
+group never scrolls the grid away. A pinned column's drag stays over its pinned part and scrolls
+nothing. [Right to left](/docs/concepts/right-to-left), the sides mirror: "before" is to the right. A scroll during the drag (the wheel, the scrollbar) works the target out again from where
 the pointer is, so the release lands where the indicator shows.
 
 The columns do not move during the drag: only the state changes. The release runs one

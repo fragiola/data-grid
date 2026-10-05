@@ -74,7 +74,13 @@ export function fakeViewport({ width, height, clampTo }: FakeViewportOptions) {
         scrollLeft: {
             get: () => scroll.left,
             set: (value: number) => {
-                scroll.left = clamp(value, (view) => view.width - size.width);
+                // 0 to the maximum, or laid out right to left (its `dir`, the page's) the
+                // maximum's mirror to 0
+                const sign =
+                    getComputedStyle(element).direction === "rtl" ? -1 : 1;
+                scroll.left =
+                    sign *
+                    clamp(sign * value, (view) => view.width - size.width);
             },
         },
     });
@@ -136,6 +142,15 @@ export function mountEngine(
     grid.append(...layers.map((name) => registered[name]));
     viewport.append(grid);
     document.body.append(viewport);
+    // the adapter's part: the viewport's `dir` is the direction the model is given, rendered
+    // before it attaches and with every view
+    const renderDir = () => {
+        const given = engine.adapter.getView().givenDirection;
+        if (given) viewport.setAttribute("dir", given);
+        else viewport.removeAttribute("dir");
+    };
+    renderDir();
+    engine.adapter.subscribe(renderDir);
     const detach = engine.adapter.attach(viewport);
     engine.adapter.registerLayer("grid", grid);
     for (const name of layers) {

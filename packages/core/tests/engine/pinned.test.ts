@@ -132,9 +132,9 @@ describe("validation", () => {
                 { key: "who", children: [column("a", true), column("b")] },
             ]),
         ).toMatch(/mixes pinned and unpinned/);
-        expect(columnsError([{ key: "a", width: 10, pinned: "end" }])).toMatch(
-            /invalid pin/,
-        );
+        expect(
+            columnsError([{ key: "a", width: 10, pinned: "middle" }]),
+        ).toMatch(/invalid pin/);
         const model = createDataGridModel<Row>({ columns: COLUMNS });
         const result = model.run("columns.set", {
             columns: [column("a"), column("b", true)],

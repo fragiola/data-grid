@@ -4,6 +4,9 @@ import {
     type Column,
     type ColumnOrGroup,
     DataGrid,
+    type HeaderCellInfo,
+    headerCellContent,
+    useGroupLabel,
 } from "@fragiola/data-grid-react";
 import { formatMoney, measurement, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
@@ -80,6 +83,19 @@ const columns: ColumnOrGroup<Person>[] = [
     ),
 ];
 
+/**
+ * A group's name in a label that stays in view while the group scrolls: sticky in the group's
+ * cell, at the view's start once the group's start has scrolled out, never past its end.
+ */
+function GroupLabel({ cell }: { cell: HeaderCellInfo<Person> }) {
+    const label = useGroupLabel(cell);
+    return (
+        <span {...label.props} className={styles.label}>
+            {headerCellContent(cell)}
+        </span>
+    );
+}
+
 export default function GroupedHeaders() {
     return (
         <div className={styles.frame}>
@@ -103,7 +119,11 @@ export default function GroupedHeaders() {
                                             <DataGrid.HeaderCell
                                                 cell={cell}
                                                 className={styles.headerCell}
-                                            />
+                                            >
+                                                {cell.group ? (
+                                                    <GroupLabel cell={cell} />
+                                                ) : undefined}
+                                            </DataGrid.HeaderCell>
                                         )}
                                     </DataGrid.HeaderCells>
                                 </DataGrid.HeaderRow>

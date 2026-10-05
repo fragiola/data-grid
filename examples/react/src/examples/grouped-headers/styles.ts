@@ -33,20 +33,25 @@ const active =
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]";
 
 /**
- * A group: its label centred over its columns, a line under it. A column spanning both header
- * rows keeps its label at the bottom, level with the other columns'.
+ * A group: its label centred over its columns, a line under it; its padding is its label's, which
+ * keeps it where the label sticks to the view's start, and nothing in it clips (an `overflow`
+ * would hold the label in place). A column spanning both header rows keeps its label at the
+ * bottom, level with the other columns'.
  */
 export const headerCell = (state: HeaderCellState) =>
     cn(
-        "flex px-(--dg-cell-padding) outline-none",
+        "flex outline-none",
         "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
         "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
         state.group
             ? "items-center justify-center border-b-(length:--dg-gridline) text-palette-contrast"
-            : "items-center",
+            : "items-center px-(--dg-cell-padding)",
         state.rowSpan > 1 && "items-end pb-2",
         active,
     );
+
+/** a group's label: as wide as its name (it moves inside its cell) */
+export const label = "whitespace-nowrap px-(--dg-cell-padding)";
 
 export const row = (state: RowState) =>
     cn(

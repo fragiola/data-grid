@@ -11,6 +11,7 @@ import {
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
+    type GridDirection,
     type GridView,
     keptOrder,
     keptWidths,
@@ -21,6 +22,7 @@ import {
     type RowSelection,
     type Size,
     type SortColumn,
+    sameKeys,
     sameOrder,
     sameRowKeys,
     sameSortColumns,
@@ -174,6 +176,18 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
          * the keys, or a command ran
          */
         onColumnOrderChange?: ((columnOrder: ColumnOrder) => void) | undefined;
+        /**
+         * the collapsed groups' keys (groups with `collapsible`), controlled; pair it with
+         * `onCollapsedGroupKeysChange`. A collapsed group shows only its children for that state
+         * (`groupShow`)
+         */
+        collapsedGroupKeys?: readonly string[] | undefined;
+        /** the collapsed groups' keys to start with, uncontrolled */
+        defaultCollapsedGroupKeys?: readonly string[] | undefined;
+        /** the collapsed groups changed (or, controlled, ask to): a group was toggled, or a command ran */
+        onCollapsedGroupKeysChange?:
+            | ((collapsedGroupKeys: readonly string[]) => void)
+            | undefined;
         /** the rows in view or rendered changed: load what they need */
         onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
         /** the columns in view or rendered changed */
@@ -186,6 +200,13 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         overscan?: { rows?: number; columns?: number } | undefined;
         /** the cap on an axis's scroll size before scroll scaling takes over (default 10M px) */
         maxScrollSize?: number | undefined;
+        /**
+         * the grid's direction (default: the page's, as the browser computes it for the root): in
+         * `"rtl"` its start is the right edge, the columns, pinned ones and scroll mirrored, and
+         * ArrowLeft moves to the next column. Given, the root renders it as `dir` (on the server
+         * too); without it, the root has none
+         */
+        direction?: GridDirection | undefined;
         /**
          * a handle on this grid from outside the root (`useDataGridRef()`): its model and engine,
          * and the hooks that take it. `ref` stays the root's element.
@@ -292,12 +313,16 @@ export function Root<TRow>(props: RootProps<TRow>) {
         columnOrder,
         defaultColumnOrder,
         onColumnOrderChange,
+        collapsedGroupKeys,
+        defaultCollapsedGroupKeys,
+        onCollapsedGroupKeysChange,
         onRowWindowChange,
         onColumnWindowChange,
         onRowsEndReached,
         endReachedThreshold,
         overscan,
         maxScrollSize,
+        direction,
         gridRef,
         children,
         ...rest
@@ -326,6 +351,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
             columnWidths: columnWidths ?? defaultColumnWidths,
             columnOrder: columnOrder ?? defaultColumnOrder,
+            collapsedGroupKeys: collapsedGroupKeys ?? defaultCollapsedGroupKeys,
+            direction,
         });
         const flags: ControlledFlags = {
             syncing: { current: false },
@@ -367,7 +394,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 apply: (value) => {
                     model.run("sort-columns.set", {
                         sortColumns: validSortColumns(
-                            model.state.columns,
+                            model.state.columnEntries,
                             value,
                         ),
                     });
@@ -462,6 +489,25 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const collapsed = bind(
+            propsState<TRow, readonly string[]>(latest, {
+                prefix: "column-groups.",
+                prop: (props) => props.collapsedGroupKeys,
+                onChange: (props) => props.onCollapsedGroupKeysChange,
+                // keys to start with that were not all strings (or listed one twice) start
+                // without those: the app is told the keys the grid holds
+                start: (props) => props.defaultCollapsedGroupKeys,
+                read: (state) => state.collapsedGroupKeys,
+                // a set: the same keys in another order are no change
+                same: sameKeys,
+                // kept as at mount, and the parent told the keys as they settled
+                apply: (groupKeys) => {
+                    model.run("column-groups.set", {
+                        groupKeys: keptOrder(groupKeys),
+                    });
+                },
+            }),
+        );
         const engine = createDataGridEngine<TRow, ReactNode>(model, {
             overscan,
             maxScrollSize,
@@ -497,10 +543,19 @@ export function Root<TRow>(props: RootProps<TRow>) {
             selection,
             widths,
             order,
+            collapsed,
             // settled (and started) in this order: the layout inputs first, so a position the order
-            // moved settles in the same pass; then the selection before the sort, as their
-            // values to start with are told
-            controlled: [widths, order, position, selection, sort, expanded],
+            // or a collapse moved settles in the same pass; then the selection before the sort, as
+            // their values to start with are told
+            controlled: [
+                widths,
+                order,
+                collapsed,
+                position,
+                selection,
+                sort,
+                expanded,
+            ],
             after,
         };
     });
@@ -521,13 +576,14 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // the viewport attaches after the parts' first layout effects (refs attach child first)
         // and its size makes a new view: render it before the first paint, not after
         if (engine.adapter.getView() !== view) rerender((count) => count + 1);
-        // the props follow onto the model, before paint. Controlled widths and order first: layout
-        // inputs, the axis a position scrolls into view against (an order moves the active cell
-        // with its column: there it stays unless its own prop changed, told at the settle). Then
-        // a controlled position: valid before the data changes (rows filtered down), it survives
-        // them
+        // the props follow onto the model, before paint. Controlled widths, order and collapsed
+        // groups first: layout inputs, the axis a position scrolls into view against (an order or
+        // a collapse moves the active cell with its column: there it stays unless its own prop
+        // changed, told at the settle). Then a controlled position: valid before the data changes
+        // (rows filtered down), it survives them
         grid.widths.follow();
         grid.order.follow();
+        grid.collapsed.follow();
         grid.position.follow();
         flags.applying.current = true;
     });
@@ -590,6 +646,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
         }
     }, [model, rowSelection, isRowSelectable]);
 
+    useLayoutEffect(() => {
+        // a prop removed goes back to the page's direction (the engine reads the viewport's)
+        if (direction !== model.state.direction) {
+            model.run("direction.set", { direction: direction ?? null });
+        }
+    }, [model, direction]);
+
     // and last: a controlled position valid only after the data changed (rows grown) follows now;
     // one the data made impossible was clamped by the model, and the parent is told where. A
     // controlled sort follows the columns, and one they cannot take is told as it settled
@@ -639,6 +702,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
             }),
             // a scroll container is a tab stop in some browsers: the grid has its own
             tabIndex: -1,
+            // the direction given (the prop, `direction.set`): rendered, never the engine's
+            ...(view.givenDirection ? { dir: view.givenDirection } : {}),
             style: { position: "relative", overflow: "auto" },
         },
     });

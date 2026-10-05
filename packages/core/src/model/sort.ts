@@ -4,21 +4,32 @@
 // (src/HeaderCell.tsx), Original work Copyright (c) 2014 Prometheus Research, Modified work
 // Copyright 2015 Comcast, under the MIT licence (see the root LICENSE).
 
+import { entryByKey, isColumnGroup } from "../header/header";
 import { sameList } from "../utils";
 import { fail } from "./result";
-import type { Column, CommandResult, SortColumn, SortDirection } from "./types";
+import type {
+    Column,
+    ColumnOrGroup,
+    CommandResult,
+    SortColumn,
+    SortDirection,
+} from "./types";
 
 export const SORT_DIRECTIONS: readonly SortDirection[] = [
     "ascending",
     "descending",
 ];
 
-/** The sortable column with this key, or why there is none. */
+/**
+ * The sortable column with this key among the columns (or the entries' leaves: a column a
+ * collapsed group hides keeps its sort, E1.3), or why there is none.
+ */
 export function sortableColumn<TRow, TNode>(
-    columns: readonly Column<TRow, TNode>[],
+    columns: readonly ColumnOrGroup<TRow, TNode>[],
     columnKey: unknown,
 ): CommandResult<Column<TRow, TNode>> {
-    const column = columns.find((candidate) => candidate.key === columnKey);
+    const entry = entryByKey(columns, columnKey);
+    const column = entry && !isColumnGroup(entry) ? entry : undefined;
     if (!column) return fail("not_found", `no column "${String(columnKey)}"`);
     if (column.sortable !== true) {
         return fail("refused", `column "${column.key}" is not sortable`);
@@ -27,11 +38,12 @@ export function sortableColumn<TRow, TNode>(
 }
 
 /**
- * What a sort keeps of itself among these columns: each entry a sortable column, once, with a
- * direction. The same array when it keeps everything.
+ * What a sort keeps of itself among these columns (or the entries' leaves, hidden ones
+ * included): each entry a sortable column, once, with a direction. The same array when it keeps
+ * everything.
  */
 export function validSortColumns<TRow, TNode>(
-    columns: readonly Column<TRow, TNode>[],
+    columns: readonly ColumnOrGroup<TRow, TNode>[],
     sortColumns: readonly SortColumn[],
 ): readonly SortColumn[] {
     const seen = new Set<string>();

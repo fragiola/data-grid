@@ -1,18 +1,20 @@
 ---
 title: Pinned columns
-description: Keep the leading columns in view while the others scroll sideways, under virtualization and scroll scaling, from the keyboard, as divs or as a table.
+description: Keep the leading and trailing columns in view while the others scroll sideways, under virtualization and scroll scaling, as divs or as a table.
 ---
 
-A pinned column stays at the start of the view while the other columns scroll sideways: a row
-number, a name, the columns that say which row you are reading. Its cells stay in their rows, in
-the same markup, as divs or as a real table.
+A pinned column stays at the start or at the end of the view while the other columns scroll
+sideways: a row number, a name, the columns that say which row you are reading at the start; a
+total, a status or the row's actions at the end. Its cells stay in their rows, in the same markup,
+as divs or as a real table.
 
 <Example id="pinned-columns" />
 
 ## Pinning a column
 
-Give the leading columns `pinned: "start"`. Pinned columns come first, and a group's columns are
-all pinned or none: a group whose columns are pinned is pinned with them.
+Give the leading columns `pinned: "start"` and the trailing ones `pinned: "end"`. The columns
+pinned at the start come first, the ones pinned at the end last, and a group's columns are all
+in one part: a group whose columns are pinned is pinned with them.
 
 ```tsx title="columns.tsx"
 const columns: ColumnOrGroup<Person>[] = [
@@ -25,21 +27,38 @@ const columns: ColumnOrGroup<Person>[] = [
         ],
     },
     // … the columns that scroll
+    {
+        key: "summary",
+        name: "Summary",
+        children: [
+            { key: "average", name: "Average", width: 96, pinned: "end" },
+            { key: "best", name: "Best", width: 96, pinned: "end" },
+        ],
+    },
 ];
 ```
 
-A pinned column after one that is not, or a group mixing both, is refused like any invalid
-column (`columns.set` fails, and a grid never starts with them).
+A column pinned at the start after one that is not, a column after one pinned at the end, or a
+group mixing parts, is refused like any invalid column (`columns.set` fails, and a grid never
+starts with them).
 
 ## What stays in view
 
-Pinned columns are always rendered, wherever the view is. The column window
-(`onColumnWindowChange`, `useColumnWindow`) describes the columns that scroll: the view right of
-the pinned ones. Bringing a cell into view (the keyboard, `scroll-to-cell`) leaves it right of
-them, never under them, and a pinned cell is always in view: it never scrolls sideways.
+Pinned columns are always rendered, wherever the view is: the ones pinned at the start first in
+each row, the ones pinned at the end last. The column window (`onColumnWindowChange`,
+`useColumnWindow`) describes the columns that scroll: the view between the two pinned parts.
+Bringing a cell into view (the keyboard, `scroll-to-cell`) leaves it between them, never under
+them, and a pinned cell is always in view: it never scrolls sideways. The columns pinned at the
+end sit at the view's end, or, in a grid narrower than its view, right after the other columns.
 
-When the pinned columns are as wide as the view or wider (a narrow screen), they would hide every
-other column: they scroll with the rest until the view is wider again.
+When the pinned columns of both parts are as wide as the view or wider (a narrow screen), they
+would hide every other column: they scroll with the rest until the view is wider again.
+
+A column moves only within its part ([reordering](/docs/concepts/column-reordering)), and a
+column pinned at the end flexes and fits like any other; it [resizes](/docs/concepts/column-resizing)
+from its start edge, its boundary with the columns that scroll (`state.edge` is `"start"`). In a
+[right-to-left](/docs/concepts/right-to-left) grid the start is the right edge: the columns
+pinned at the start sit there, the ones pinned at the end on the left.
 
 ## Stacking is yours
 
@@ -53,14 +72,20 @@ pinned cells opaque and above the cells that scroll under them:
     z-index: 1;
 }
 
-/* the last pinned column: a line or a shadow where the others pass under it */
-[data-pinned-edge] {
+/* a pinned part's edge: a line or a shadow where the others pass under it */
+[data-pinned="start"][data-pinned-edge] {
     box-shadow: 6px 0 8px -6px rgb(0 0 0 / 0.3);
+}
+[data-pinned="end"][data-pinned-edge] {
+    box-shadow: -6px 0 8px -6px rgb(0 0 0 / 0.3);
 }
 ```
 
-A row's box holds the pinned cells (it starts their width and the rendered columns' width before
-its layer), so a row's background and its hover cover them. A row stripe that is translucent
+A row's box holds the pinned cells: it starts both parts' width and the rendered columns' width
+before its layer, and with columns pinned at the end it reaches past the last rendered column by
+their width and the rendered columns' width again, so sticky holds them at the view's end through
+a scroll not rendered yet (with every column pinned, it holds them all where they are). A row's
+background and its hover cover them. A row stripe that is translucent
 needs painting on the pinned cell too, over its opaque background (the example does it from the
 cell's state).
 
@@ -78,19 +103,22 @@ cells that scroll are on.
 
 | on a cell or header cell | when |
 | --- | --- |
-| `data-pinned` | `start`, its column is pinned (a header cell: all of its columns) |
-| `data-pinned-edge` | it ends at the last pinned column |
+| `data-pinned` | `start` or `end`, where its column is pinned (a header cell: all of its columns) |
+| `data-pinned-edge` | it is its part's edge: it ends at the last column pinned at the start, or starts at the first pinned at the end |
 
-`useCell` and `useHeaderCell` report the same as `pinned` and `pinnedEdge`. ARIA does not change:
+`useCell` and `useHeaderCell` report the same as `pinned` (either part), `pinnedSide` (`"start"`
+or `"end"`) and `pinnedEdge`. ARIA does not change:
 the DOM order is the columns' order, and `aria-colindex` is the column's.
 
 ## How it works
 
-A pinned cell is `position: sticky` in its row's flow, before the cells that scroll, and the row
-is a flex container: the browser keeps the cell in place as it scrolls, on every frame it paints,
-a fling and the scrollbar's thumb included. The grid writes the cell's `left` inset, the offset
-that cancels its layer's: unscaled it changes only when a new column window renders, never while
-you scroll, and under [scroll scaling](/docs/concepts/scroll-scaling) it is written with the
-grid's own moves, in the same frame. A `transform` or an inset (`top`, `left`, `right`,
+A pinned cell is `position: sticky` in its row's flow, the ones pinned at the end after the ones
+pinned at the start, and the row is a flex container: the browser keeps the cell in place as it
+scrolls, on every frame it paints, a fling and the scrollbar's thumb included. The grid writes the
+cell's `left` inset (`right` [right to left](/docs/concepts/right-to-left)), the offset that
+cancels its layer's, and for a column pinned at the end the way to the view's end: unscaled it
+changes only when a new column window renders or the view's width changes, never while you
+scroll, and under [scroll scaling](/docs/concepts/scroll-scaling) it is written with the grid's
+own moves, in the same frame. A `transform` or an inset (`top`, `left`, `right`,
 `bottom`, `inset`) you give a pinned cell is dropped, since sticky would obey it. A grid without
 pinned columns renders as before: no flex rows, no sticky cells.

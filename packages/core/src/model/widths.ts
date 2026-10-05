@@ -381,7 +381,10 @@ export type ColumnSpan = Pick<
     "columnIndex" | "columnSpan"
 >;
 
-/** Whether a column of a span (a header cell's) is resizable. */
+/**
+ * Whether a column of a span (a header cell's: a group's columns, or a column's and the ones its
+ * header span covers) is resizable.
+ */
 export function spanResizable(
     columns: readonly SizedColumn[],
     { columnIndex, columnSpan }: ColumnSpan,

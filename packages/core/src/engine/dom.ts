@@ -1,4 +1,4 @@
-import type { CellPosition } from "../model/types";
+import type { CellPosition, GridDirection } from "../model/types";
 import type { Direction } from "../navigation/navigation";
 
 // What the engine reads in the DOM, with no state of its own: the keys it maps, the controls and
@@ -16,6 +16,17 @@ export const KEYS: Record<string, Direction> = {
     PageUp: "page-up",
     PageDown: "page-down",
 };
+
+/**
+ * A key as the grid reads it (E1.1): in a right-to-left grid the left and right arrows swap, so
+ * ArrowLeft goes to the next column, as it goes to the right in a left-to-right one. Home and End
+ * stay the row's start and end.
+ */
+export function inlineKey(key: string, direction: GridDirection): string {
+    if (direction === "ltr") return key;
+    if (key === "ArrowLeft") return "ArrowRight";
+    return key === "ArrowRight" ? "ArrowLeft" : key;
+}
 
 /** A key with Ctrl (or ⌘) held: Ctrl+Home and Ctrl+End reach the grid's ends. */
 export const CTRL_KEYS: Record<string, Direction> = {
@@ -120,6 +131,12 @@ export const PAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(KEYS));
  * value the column's or the group's key. The engine drags it and gives it the arrows.
  */
 export const COLUMN_RESIZER_ATTRIBUTE = "data-grid-column-resizer";
+
+/**
+ * A group's label (Epic #85, E1.3): an element the app renders in a group's header cell, its value
+ * the group's key. The engine keeps it in view while the group scrolls (the `label` layer).
+ */
+export const GROUP_LABEL_ATTRIBUTE = "data-grid-group-label";
 
 /** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
 export function isResizer(element: Element): boolean {

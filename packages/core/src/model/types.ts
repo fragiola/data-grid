@@ -31,6 +31,22 @@ export interface CellRenderProps<TRow, TNode = unknown> {
     readonly value: unknown;
 }
 
+/**
+ * What a column's `colSpan` is asked with (E1.2): which cell, by the kind of row it is in. Its
+ * header cell (on the header's last row, -1), or a loaded body row's cell with its row.
+ */
+export type ColSpanArgs<TRow> =
+    | {
+          readonly type: "header";
+          readonly rowIndex: number;
+          readonly row?: undefined;
+      }
+    | {
+          readonly type: "row";
+          readonly rowIndex: number;
+          readonly row: TRow;
+      };
+
 /** A column of the grid (D10). */
 export interface Column<TRow, TNode = unknown> {
     /** unique among the grid's columns */
@@ -61,10 +77,11 @@ export interface Column<TRow, TNode = unknown> {
      */
     readonly sortable?: boolean | undefined;
     /**
-     * `"start"`: the column stays at the visible start while the others scroll sideways. Pinned
-     * columns come first, and a group's columns are all pinned or none
+     * `"start"`: the column stays at the view's start while the others scroll sideways; `"end"`:
+     * at its end. Columns pinned at the start come first, the ones pinned at the end last, and a
+     * group's columns are all in one part (pinned at the start, at the end, or not)
      */
-    readonly pinned?: "start" | undefined;
+    readonly pinned?: PinnedSide | undefined;
     /**
      * whether a person can resize it (a handle the app renders in its header cell, dragged or
      * moved with the arrows). The grid keeps the widths; without it, the column is its `width`
@@ -90,9 +107,20 @@ export interface Column<TRow, TNode = unknown> {
     readonly autoSize?: boolean | undefined;
     /**
      * whether a person can move it among its siblings (its header cell dragged, or Ctrl/⌘+Shift
-     * with the arrows), the pinned ones among the pinned. The grid keeps the order
+     * with the arrows), within its part (pinned at the start, at the end, or not). The grid keeps
+     * the order
      */
     readonly reorderable?: boolean | undefined;
+    /**
+     * how many columns a cell of this column spans (Epic #85, E1.2): its header cell
+     * (`type: "header"`) or a loaded row's cell (`type: "row"`). The cell covers the columns
+     * after it, which render no cell there; it never reaches past its part (pinned at the start,
+     * at the end, or not) nor the last column, nor, in the header, past its sibling columns.
+     * `undefined` or 1: no span. Asked only for the cells a render shows, never for every row
+     */
+    readonly colSpan?:
+        | ((args: ColSpanArgs<TRow>) => number | undefined)
+        | undefined;
     /**
      * how two rows compare by this column, for sorting rows in memory (`@fragiola/data-grid/local`):
      * negative when `a` comes first. Without one, their values compare by type
@@ -106,10 +134,17 @@ export interface Column<TRow, TNode = unknown> {
     readonly filter?:
         | ((value: unknown, filterValue: unknown, row: TRow) => boolean)
         | undefined;
+    /**
+     * under a collapsible group (Epic #85, E1.3): shown only while it is expanded, or only while
+     * it is collapsed; without it, in both states
+     */
+    readonly groupShow?: GroupShow | undefined;
     /** anything the app wants to keep on the column */
     readonly meta?: Readonly<Record<string, unknown>> | undefined;
     /** a column has no children: an entry with children is a {@link ColumnGroup} */
     readonly children?: never;
+    /** a column does not collapse: a group does */
+    readonly collapsible?: never;
 }
 
 /**
@@ -127,6 +162,14 @@ export interface ColumnGroup<TRow, TNode = unknown> {
         | undefined;
     /** its columns and groups, in order: at least one column below it */
     readonly children: readonly ColumnOrGroup<TRow, TNode>[];
+    /**
+     * whether it collapses (Epic #85, E1.3): collapsed (`collapsedGroupKeys`), it shows only its
+     * children whose `groupShow` is `"collapsed"` or unset, expanded only those whose `groupShow`
+     * is `"expanded"` or unset; at least one in each state
+     */
+    readonly collapsible?: boolean | undefined;
+    /** under a collapsible group: the state it shows in (see {@link Column.groupShow}) */
+    readonly groupShow?: GroupShow | undefined;
     /** anything the app wants to keep on the group */
     readonly meta?: Readonly<Record<string, unknown>> | undefined;
     /** a group is sized by its columns, and has no cells of its own */
@@ -144,6 +187,8 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     /** a group neither flexes nor fits itself: its columns do */
     readonly flex?: never;
     readonly autoSize?: never;
+    /** a group spans its columns */
+    readonly colSpan?: never;
     /**
      * whether a person can move it, whole, among its siblings (see {@link Column.reorderable});
      * its columns move inside it by their own
@@ -153,6 +198,9 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly compare?: never;
     readonly filter?: never;
 }
+
+/** Which state of its collapsible group an entry shows in (E1.3): expanded only, or collapsed only. */
+export type GroupShow = "expanded" | "collapsed";
 
 /** A sort's direction: the values of `aria-sort`. */
 export type SortDirection = "ascending" | "descending";
@@ -186,7 +234,9 @@ export type ColumnOrGroup<TRow, TNode = unknown> =
 
 /**
  * A header cell, as the core lays it out (G3): a group spanning its columns, or a column. A column
- * with fewer groups above it than the header has rows spans the rows down to the last (G2).
+ * with fewer groups above it than the header has rows spans the rows down to the last (G2), and
+ * one whose `colSpan` says so for the header spans the sibling columns after it (E1.2), which then
+ * have no cell on screen (`cellByKey` still finds theirs, of one column).
  */
 export type HeaderCellLayout<TRow, TNode = unknown> = {
     /** the group's or the column's key */
@@ -214,7 +264,10 @@ export interface HeaderLayout<TRow, TNode = unknown> {
     readonly depth: number;
     /** per header row, the top one first: the cells starting in it, in column order */
     readonly rows: readonly (readonly HeaderCellLayout<TRow, TNode>[])[];
-    /** the cell covering a header position (a spanning column covers the rows below its top) */
+    /**
+     * the cell covering a header position (a spanning column covers the rows below its top, and a
+     * header `colSpan` the columns it reaches)
+     */
     cellAt(
         rowIndex: number,
         columnIndex: number,
@@ -251,6 +304,15 @@ export type DetailHeight<TRow> =
  */
 export type RowSelection = "single" | "multiple";
 
+/** Where a pinned column stays: at the view's start, or at its end (Epic #85, E1.1). */
+export type PinnedSide = "start" | "end";
+
+/**
+ * The grid's direction (E1.1): left to right, or right to left, where its start is the right
+ * edge. Indexes, windows and offsets are the same both ways: only where they show is mirrored
+ */
+export type GridDirection = "ltr" | "rtl";
+
 /** Whether a loaded row can be selected (R5): a row it refuses is never added. */
 export type RowSelectable<TRow> = (row: TRow, rowIndex: number) => boolean;
 
@@ -280,11 +342,14 @@ export type RowSource<TRow> =
 
 /** The model's state: immutable, replaced on every committed command. */
 export interface DataGridState<TRow, TNode = unknown> {
-    /** the grid's columns: the leaves of `columnEntries`, in the column order */
+    /**
+     * the grid's columns: the leaves of `columnEntries`, in the column order, less the ones a
+     * collapsed group hides (or an expanded one, E1.3)
+     */
     readonly columns: readonly Column<TRow, TNode>[];
     /**
-     * the columns and groups as declared (the same array as `columns` without groups and without
-     * an order)
+     * the columns and groups as declared (the same array as `columns` without groups, a
+     * `colSpan` and an order)
      */
     readonly columnEntries: readonly ColumnOrGroup<TRow, TNode>[];
     /** the header's rows and cells */
@@ -330,6 +395,16 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly columnWidths: ColumnWidths;
     /** the order columns and groups take among their siblings (empty: as declared) */
     readonly columnOrder: ColumnOrder;
+    /**
+     * the keys of the collapsed groups, in the order they were collapsed (E1.3). A key that is no
+     * collapsible group is kept: it may come back
+     */
+    readonly collapsedGroupKeys: readonly string[];
+    /**
+     * the grid's direction: in `"rtl"`, its start is the right edge; `undefined`, the page's (an
+     * engine reads its viewport's)
+     */
+    readonly direction: GridDirection | undefined;
 }
 
 /** What `createDataGridModel` starts from. */
@@ -361,6 +436,10 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     columnWidths?: ColumnWidths;
     /** the column order to start with (an entry that is not a string is dropped) */
     columnOrder?: ColumnOrder;
+    /** the keys of the groups collapsed to start with (an entry that is not a string is dropped) */
+    collapsedGroupKeys?: readonly string[];
+    /** the grid's direction (default: the page's, as an engine reads it from its viewport) */
+    direction?: GridDirection | undefined;
 }
 
 /** `data.set`'s payload: the rows, or a count and a getter; and optionally how to key them. */
@@ -552,8 +631,8 @@ export interface CommandMap<TRow, TNode = unknown> {
     };
     /**
      * moves a reorderable column or group before or after one of its siblings (its parent
-     * group's entries, or the top level; that one may be fixed): a pinned one beside a pinned
-     * one, another beside another. One landing where it is commits nothing. Returns the column
+     * group's entries, or the top level; that one may be fixed) within its part: one pinned at
+     * the start beside another, one pinned at the end beside another, the others among theirs. One landing where it is commits nothing. Returns the column
      * order
      */
     "column-order.move": {
@@ -568,6 +647,30 @@ export interface CommandMap<TRow, TNode = unknown> {
     "column-order.reset": {
         payload: NoPayload;
         result: ColumnOrder;
+    };
+    /**
+     * replaces the collapsed groups' keys (each once). A key that is no collapsible group is
+     * kept: it may come back. Returns them
+     */
+    "column-groups.set": {
+        payload: { readonly groupKeys: readonly string[] };
+        result: readonly string[];
+    };
+    /**
+     * collapses a collapsible group, or expands it when it is collapsed (a group a collapsed one
+     * hides included). Returns the collapsed groups' keys
+     */
+    "column-groups.toggle": {
+        payload: { readonly groupKey: string };
+        result: readonly string[];
+    };
+    /**
+     * changes the grid's direction: in `"rtl"`, its start is the right edge; `null`, the page's
+     * (an engine reads its viewport's). Returns it
+     */
+    "direction.set": {
+        payload: { readonly direction: GridDirection | null };
+        result: GridDirection | undefined;
     };
     /**
      * changes the row height (a number or a function of the index), the header row's, or an
@@ -761,8 +864,12 @@ export interface QueryMap<TRow, TNode = unknown> {
     };
     /** the order columns and groups take among their siblings */
     "column-order": { payload: undefined; result: ColumnOrder };
+    /** the collapsed groups' keys, in the order they were collapsed */
+    "collapsed-group-keys": { payload: undefined; result: readonly string[] };
     "row-height": { payload: undefined; result: Size };
     "header-row-height": { payload: undefined; result: number };
+    /** the grid's direction, `undefined` for the page's (an engine's view tells the one in effect) */
+    direction: { payload: undefined; result: GridDirection | undefined };
     /** the expanded rows' keys, in the order they were expanded */
     "expanded-row-keys": { payload: undefined; result: readonly RowKey[] };
     /** the indexes of the rows shown expanded (loaded, their key expanded), ascending */
@@ -792,6 +899,8 @@ export interface QuestionMap {
     "row-loaded": { readonly rowIndex: number };
     /** whether a column sorts the grid (a column, `sortable`) */
     "column-sortable": { readonly columnKey: string };
+    /** whether a group is collapsed: a collapsible group, its key collapsed */
+    "group-collapsed": { readonly groupKey: string };
     /** whether the row shows its detail: loaded, and its key expanded */
     "row-expanded": { readonly rowIndex: number };
     /** whether the row is selected: rows are selectable, it is loaded and its key selected */

@@ -1,20 +1,27 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
 export type { Axis, Size } from "./axis/axis";
-export { COLUMN_RESIZER_ATTRIBUTE, TAB_STOP_ATTRIBUTE } from "./engine/dom";
+export {
+    COLUMN_RESIZER_ATTRIBUTE,
+    GROUP_LABEL_ATTRIBUTE,
+    TAB_STOP_ATTRIBUTE,
+} from "./engine/dom";
 export { createDataGridEngine } from "./engine/engine";
 export {
     ariaHeaderCellSpans,
     ariaRowCount,
     ariaRowDetail,
     ariaRowIndex,
+    cellSpan,
     columnLeft,
     columnPinning,
     type HeaderCellSort,
     headerCellBox,
     headerCellSort,
+    inlineStart,
     renderedWidth,
     rowCellsHeight,
+    rowColumns,
     rowDetailBox,
     rowDisplay,
     rowExpanded,
@@ -57,6 +64,7 @@ export type {
     EngineQueryMap,
     GridView,
     HeaderRowView,
+    RowSpans,
 } from "./engine/types";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
@@ -72,6 +80,7 @@ export { cellValue, rowAt } from "./model/source";
 export type {
     CellPosition,
     CellRenderProps,
+    ColSpanArgs,
     Column,
     ColumnGroup,
     ColumnOrder,
@@ -91,7 +100,9 @@ export type {
     DataGridState,
     DataSetPayload,
     DetailHeight,
+    GridDirection,
     GroupHeaderCellRenderProps,
+    GroupShow,
     HeaderCellLayout,
     HeaderCellRenderProps,
     HeaderLayout,
@@ -99,6 +110,7 @@ export type {
     NoPayload,
     PayloadArgs,
     PayloadOf,
+    PinnedSide,
     QueryKey,
     QueryMap,
     QuestionKey,
@@ -120,6 +132,7 @@ export {
     type HeaderCellSpan,
     sameCell,
 } from "./navigation/navigation";
+export { sameKeys } from "./utils";
 export { DEFAULT_MAX_SCROLL_SIZE } from "./viewport/scaling";
 export type { ScrollAlign } from "./viewport/scroll-target";
 export {

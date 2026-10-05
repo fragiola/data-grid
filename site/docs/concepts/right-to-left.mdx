@@ -1,0 +1,89 @@
+---
+title: Right to left
+description: Lay the grid out from the right edge for Arabic, Hebrew or Persian, with every column feature, the scroll and the keys mirrored and the indexes unchanged.
+---
+
+A right-to-left grid reads from the right edge: its first column is on the right, it scrolls to
+the left, and the columns pinned at the start stay on the right. Give `DataGrid.Root` a
+`direction`, and the grid mirrors itself; the indexes, the windows and ARIA stay what they are.
+
+<Example id="rtl" />
+
+## Setting the direction
+
+```tsx title="grid.tsx"
+<DataGrid.Root columns={columns} rows={rows} direction="rtl">
+    {/* … the parts, as for any grid */}
+</DataGrid.Root>
+```
+
+`direction` is `"ltr"` or `"rtl"`, and it can change while the grid is on screen: the view stays
+as far from the start as it was. Given, the root renders it as `dir` (in server-rendered markup
+too), so the page lays the grid out in it, and your styles inside the grid follow it too.
+Without one, the grid takes the page's: a grid under `<html dir="rtl">` (or any element laid out
+right to left) reads right to left with no prop, and has no `dir`. It reads the page's direction
+from its scroll container when it attaches and when a direction you gave is taken back, never
+per key, scroll or resize; a page whose direction changes later is picked up at the next attach,
+so give the grid `direction` when your app switches it. A `direction` you give wins. The model keeps the one given (`model.get("direction")`, `undefined` for the page's,
+and `direction.set { direction }`, `null` to give it back to the page); the view tells the one in
+effect (`useGridView().direction`).
+
+## What mirrors
+
+Everything that has a side:
+
+- **The columns** start at the right edge, and the grid scrolls to the left. Its scroll container
+  reports a negative `scrollLeft` there, as every current browser does; the grid's own reads
+  (`engine.get("scroll-position")`, `scroll-to`, `scroll-to-cell`) count from the start, the same
+  both ways.
+- **[Pinned columns](/docs/concepts/pinned-columns)**: the ones pinned at the start stay on the
+  right, the ones pinned at the end on the left.
+- **The keys**: ← moves to the next column and → to the previous one, as they point. Home and End
+  stay the row's first and last cell. On a [reorderable](/docs/concepts/column-reordering) header
+  cell, Ctrl+Shift+← moves its column after the next sibling; on a
+  [resize handle](/docs/concepts/column-resizing), ← widens its column.
+- **Resizing**: dragging a handle toward the end, to the left, widens its column. Place the
+  handle at the cell's end edge, the left one (`inset-inline-end: 0` places it on both); a column
+  pinned at the end moves its start edge, the right one (`state.edge` is `"start"`).
+- **Reordering**: "before" a sibling is to its right; the edge scroll runs near both edges, as
+  left to right.
+- **[Automatic widths](/docs/concepts/auto-widths)**, [column groups](/docs/concepts/column-groups),
+  [row details](/docs/guides/master-detail) and [scroll scaling](/docs/concepts/scroll-scaling)
+  work the same, mirrored.
+
+What does not change: the column indexes (`data-column-index`, `aria-colindex`), the column order,
+the windows (`onColumnWindowChange`), and the commands. Column 0 is the first column, on the right.
+
+## Styling both ways
+
+The grid places its parts from the right (`right` where it writes `left` left to right); your
+styles decide everything else. Write them with logical sides, and they mirror with the grid:
+
+```css title="grid.css"
+[data-grid-part="cell"],
+[data-grid-part="header-cell"] {
+    border-inline-end: 1px solid var(--line);
+    padding-inline: 8px;
+}
+
+/* a resize handle at the cell's end edge, the left one right to left */
+[data-grid-part="column-resizer"] {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    width: 6px;
+}
+```
+
+In Tailwind, the logical utilities (`border-e`, `pe-2`, `end-0`, `ms-auto`) do the same. What has
+no logical form, a shadow's offset or a drop indicator drawn with an inset shadow, takes both:
+`ltr:` and `rtl:` variants, or a `[dir="rtl"]` selector, which the root's `dir` matches.
+
+## How it works
+
+The grid works in offsets from the start, the same numbers both ways, and mirrors only where it
+meets the page: the negative `scrollLeft` it reads and sets, the pointer's position (from the view's
+right edge), the transform it moves the rows by, and the side it writes a pinned cell's or a
+detail's inset on. The primitives place every part by `right` instead of `left`, and the rows,
+flex containers when columns are pinned, lay their pinned cells out from the right on their own:
+the root's `dir` makes their direction right to left.

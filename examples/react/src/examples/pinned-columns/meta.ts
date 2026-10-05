@@ -3,7 +3,7 @@ import type { ExampleMeta } from "../meta-types";
 export default {
     title: "Pinned columns",
     description:
-        "A pinned group of two columns stays at the start while three years of monthly scores scroll under it, with a divider on the pinned edge.",
+        "A person stays pinned at the start and a summary at the end while three years of monthly scores scroll between them, a shadow on each pinned edge.",
     category: "virtualization",
     order: 5,
     features: [

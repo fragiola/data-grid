@@ -1,7 +1,6 @@
 import {
     ariaRowCount,
     ariaRowIndex,
-    type DataGridEngine,
     type EngineLayer,
 } from "@fragiola/data-grid";
 import type * as React from "react";
@@ -25,10 +24,11 @@ import {
     type CellState,
     type HeaderCellState,
     headerCellContent,
+    inlineSide,
     type RowDetailState,
     type RowState,
     rowStyle,
-    useCell,
+    useCellPart,
     useCells,
     useGridView,
     useHeaderCell,
@@ -39,6 +39,7 @@ import {
     useRowDetail,
     useRows,
 } from "./hooks";
+import { layerRef } from "./utils/layerRef";
 import {
     type DivPrimitiveProps,
     dataAttributes,
@@ -47,32 +48,8 @@ import {
 
 export { Root, type RootProps, type RootState } from "./Root";
 
-type LayerRef = React.RefCallback<HTMLElement>;
-
-/** Each engine's layer refs, made once: a part's ref keeps its identity across renders. */
-const layerRefs = new WeakMap<object, Map<EngineLayer, LayerRef>>();
-
-/** A ref that registers an element as one of the layers an engine writes. */
-function layerRef(
-    engine: DataGridEngine<unknown, ReactNode>,
-    layer: EngineLayer,
-): LayerRef {
-    let refs = layerRefs.get(engine);
-    if (!refs) {
-        refs = new Map();
-        layerRefs.set(engine, refs);
-    }
-    let ref = refs.get(layer);
-    if (!ref) {
-        ref = (element) =>
-            element ? engine.adapter.registerLayer(layer, element) : undefined;
-        refs.set(layer, ref);
-    }
-    return ref;
-}
-
 /** A ref that registers an element as one of the layers the engine of the `Root` around writes. */
-function useLayer(layer: EngineLayer): LayerRef {
+function useLayer(layer: EngineLayer): React.RefCallback<HTMLElement> {
     return layerRef(useRootGrid().engine, layer);
 }
 
@@ -80,7 +57,8 @@ function useLayer(layer: EngineLayer): LayerRef {
 const LAYER_KEYS = ["transform"] as const;
 
 /**
- * A pinned cell's `left` inset is the engine's, and the other insets and a `transform` would let it
+ * A pinned cell's inline start inset (`left`, right to left `right`) is the engine's, and the
+ * other insets and a `transform` would let it
  * move from its place (`position: sticky` obeys every inset it is given).
  */
 const PINNED_KEYS = [
@@ -100,8 +78,8 @@ const PINNED_KEYS = [
 
 /**
  * A cell's props with its table spans: a `render` element that is a `th` or a `td` takes `colSpan`
- * and `rowSpan`, each only over 1 (a render function finds them in the state). The same props
- * without.
+ * and `rowSpan`, each only over 1 (a render function finds them in its props' `aria-colspan` and
+ * `aria-rowspan`, a header cell's in its state too). The same props without.
  */
 function withTableSpans(
     props: Record<string, unknown>,
@@ -322,7 +300,8 @@ export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
 
 /**
  * A header cell (`role="columnheader"`), a group's or a column's. A `<th>` through `render`, which
- * then gets `colSpan`/`rowSpan` too (a render function finds them in the state).
+ * then gets `colSpan`/`rowSpan` too (a render function finds them in the state, and in its props'
+ * `aria-colspan`/`aria-rowspan`).
  */
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
     const { cell, children, ...rest } = props;
@@ -365,7 +344,7 @@ export function Empty(props: EmptyProps) {
             ...dataAttributes({ "grid-part": "empty" }),
             style: {
                 position: "sticky",
-                left: 0,
+                [inlineSide(view.direction)]: 0,
                 display: "block",
                 width: view.viewportWidth,
                 height: view.viewportBodyHeight,
@@ -397,7 +376,7 @@ export function Body(props: BodyProps) {
             style: {
                 position: "absolute",
                 top: view.headerHeight,
-                left: 0,
+                [inlineSide(view.direction)]: 0,
                 boxSizing: "border-box",
             },
         },
@@ -478,12 +457,15 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
 };
 
 /**
- * A body cell (`role="gridcell"`), positioned in its row. A `<td>` through `render`. The active
- * cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on click.
+ * A body cell (`role="gridcell"`), positioned in its row. A `<td>` through `render`, which then
+ * gets `colSpan` when it spans columns (`aria-colspan`, a column's `colSpan`); a render function
+ * finds the span in its props' `aria-colspan` (`<td {...props} colSpan={props["aria-colspan"]} />`).
+ * The active cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on
+ * click.
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
     const { cell, children, ...rest } = props;
-    const own = useCell(cell);
+    const own = useCellPart(cell);
     const { engine } = useRootGrid();
     let content: ReactNode = null;
     if (children !== undefined) {
@@ -500,7 +482,8 @@ export function Cell<TRow>(props: CellProps<TRow>) {
             : plain(cell.value);
     }
     return useRenderElement("div", rest, {
-        ...own,
+        state: own.state,
+        props: withTableSpans(own.props, rest.render, own.columnSpan),
         children: content,
         // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
         ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
