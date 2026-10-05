@@ -213,9 +213,47 @@ export function renderedWidth<TRow, TNode>(
 }
 
 /**
+ * Where columns `from` to `to` (a cell's span) are in their row: the first one's left (as
+ * `columnLeft`), and as wide as they are. When the columns' scroll is scaled, a span can be wider
+ * than a browser lays out: it is then cut to the rendered columns (they reach past the view).
+ */
+export function spanInRow<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    from: number,
+    to: number,
+): { readonly left: number; readonly width: number } {
+    const axis = view.columnAxis;
+    let start = axis.offsetOf(from);
+    let end = axis.offsetOf(to);
+    const { pinned, pinnedSide } = columnPinning(view, from, to - from);
+    // a pinned span is always whole: its columns are all rendered
+    if (axis.totalSize > view.width && !pinned) {
+        // the rendered columns it reaches into, or the active column it is rendered for (the
+        // only column rendered outside them)
+        const rendered = view.renderedColumns;
+        const reaches = overlaps(rendered, from, to);
+        const activeIndex = view.active?.columnIndex;
+        const extra =
+            activeIndex !== undefined &&
+            !overlaps(rendered, activeIndex, activeIndex + 1) &&
+            activeIndex >= from &&
+            activeIndex < to
+                ? activeIndex
+                : undefined;
+        const clipFrom = reaches ? rendered.start : (extra ?? from);
+        const clipTo = reaches ? rendered.end : (extra ?? from) + 1;
+        start = Math.max(start, axis.offsetOf(clipFrom));
+        end = Math.min(end, axis.offsetOf(clipTo));
+    }
+    return {
+        left: leftInRow(view, start, pinnedSide),
+        width: Math.max(0, end - start),
+    };
+}
+
+/**
  * A header cell's box in the header layer: its row's top, its first column's left, as wide as its
- * columns and as tall as its rows. When the columns' scroll is scaled, a group can be wider than a
- * browser lays out: its box is then cut to the rendered columns (they reach past the view).
+ * columns (cut to the rendered ones under scaling, `spanInRow`) and as tall as its rows.
  */
 export function headerCellBox<TRow, TNode>(
     view: GridView<TRow, TNode>,
@@ -226,35 +264,38 @@ export function headerCellBox<TRow, TNode>(
     readonly width: number;
     readonly height: number;
 } {
-    const axis = view.columnAxis;
-    const from = cell.columnIndex;
-    const to = cell.columnIndex + cell.columnSpan;
-    let start = axis.offsetOf(from);
-    let end = axis.offsetOf(to);
-    const { pinned, pinnedSide } = columnPinning(view, from, cell.columnSpan);
-    // a pinned cell is always whole: its columns are all rendered
-    if (axis.totalSize > view.width && !pinned) {
-        // the rendered columns it reaches into, or the active column it is rendered for
-        const rendered = view.renderedColumns;
-        const reaches = overlaps(rendered, from, to);
-        const extra = view.columns.find(
-            (c) =>
-                (c < rendered.start || c >= rendered.end) &&
-                c >= from &&
-                c < to,
-        );
-        const clipFrom = reaches ? rendered.start : (extra ?? from);
-        const clipTo = reaches ? rendered.end : (extra ?? from) + 1;
-        start = Math.max(start, axis.offsetOf(clipFrom));
-        end = Math.min(end, axis.offsetOf(clipTo));
-    }
+    const { left, width } = spanInRow(
+        view,
+        cell.columnIndex,
+        cell.columnIndex + cell.columnSpan,
+    );
     return {
         top: (cell.rowIndex + view.headerRowCount) * view.headerRowHeight,
         // in its header row, as `columnLeft`
-        left: leftInRow(view, start, pinnedSide),
-        width: Math.max(0, end - start),
+        left,
+        width,
         height: cell.rowSpan * view.headerRowHeight,
     };
+}
+
+/**
+ * The columns a body row renders cells at (E1.2): the view's `columns`, less the ones its spans
+ * cover, with a span reaching into them from a column not rendered.
+ */
+export function rowColumns<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+): readonly number[] {
+    return view.rowSpans?.get(rowIndex)?.columns ?? view.columns;
+}
+
+/** How many columns a body cell spans (E1.2): 1 unless its column's `colSpan` says more for its row. */
+export function cellSpan<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    rowIndex: number,
+    columnIndex: number,
+): number {
+    return view.rowSpans?.get(rowIndex)?.spans.get(columnIndex) ?? 1;
 }
 
 /** A header cell's `aria-colspan` and `aria-rowspan`, each only when it spans more than one. */

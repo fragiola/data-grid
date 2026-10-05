@@ -1,0 +1,93 @@
+---
+title: Column spanning
+description: Let a cell or a header cell cover the columns after it, row by row, with the keys, the windows, pinned columns and ARIA following the span.
+---
+
+A cell can span columns: a booking over the hours it takes, a section label across a row, a
+total under several columns. A column's `colSpan` says, cell by cell, how many columns its cell
+covers; the columns it covers render no cell there, and the spanning cell is as wide as all of
+them.
+
+<Example id="column-spanning" />
+
+## Spanning a cell
+
+`colSpan` is a function on a column. The grid asks it for the cells it renders: a loaded row's
+cell (`type: "row"`, with the row and its index) and the column's header cell (`type: "header"`).
+It answers how many columns the cell covers, itself included; `undefined` or 1 is no span.
+
+```tsx title="columns.tsx"
+import type { Column } from "@fragiola/data-grid-react";
+
+const hour = (start: number): Column<Room> => ({
+    key: `h${start}`,
+    name: `${start}:00`,
+    width: 96,
+    colSpan: (args) =>
+        args.type === "row"
+            ? args.row.bookings.find((booking) => booking.start === start)?.hours
+            : undefined,
+});
+```
+
+The row's cells cover each part of the grid from its first column on: a cell that spans covers
+the next ones, and the grid never asks a covered column for its own span in that row. A row not
+loaded yet spans nothing, so its placeholder cells stay one per column. Rows change their spans
+as their data does: tell the grid with `rows.changed`, as for any new data; an active cell its
+row's new data covers becomes the span's.
+
+## Where a span stops
+
+A span is kept within the columns it may cover:
+
+- never past the last column;
+- never across a [pinned part's](/docs/concepts/pinned-columns) edge: a column pinned at the
+  start spans only columns pinned at the start, a column that scrolls only columns that scroll,
+  and a column pinned at the end only the ones after it;
+- in the header, only over the sibling columns right after it: never over a group, nor out of
+  its own [group](/docs/concepts/column-groups).
+
+## Rendering
+
+Nothing changes in your markup. `DataGrid.Cells` hands its children one cell per rendered
+column, a spanning cell standing for the ones it covers (`useCells` is the same list), and
+`DataGrid.HeaderCells` does the same in the header. A spanning cell is as wide as its columns
+and carries `aria-colspan`; rendered as a `<td>` or a `<th>`, it gets `colSpan` too. Style it
+with the attribute: `[aria-colspan]`, or `[&[aria-colspan]]:` in Tailwind. A header cell's state
+also tells its span (`state.columnSpan`).
+
+The grid works the spans out only for the rows it renders, once each time the rendered rows or
+columns change: never for every row, and never per scroll frame. A cell whose span starts left of
+the rendered columns and reaches into them is rendered all the same, so a wide span stays on
+screen while its first column is scrolled away.
+
+## Keys and the active cell
+
+A spanning cell is one cell to the keys:
+
+- an arrow into a column it covers lands on it, and the arrows leaving it go to the column after
+  its span (or before it);
+- Up and Down move from the span's first column (Down from its first column in view), to the
+  cell holding that column in the next row;
+- the active position is the span's first column: `active-position.set` on a covered column
+  makes the spanning cell active (and so does new data, or a new column order, covering the
+  active column), and a click on it activates its first column; `model.is("cell-active")` is
+  true on any of its columns;
+- a span with any of its columns in view is in view: moving to it scrolls nothing.
+
+## What a span leaves alone
+
+Spans are a matter of cells, not of columns: widths, the order and the windows count columns as
+before.
+
+- **Resizing.** A header cell spanning columns resizes them all, as a group's does: they share
+  the change in proportion to their widths, each within its limits, and its handle reports their
+  width together. A covered column has no header cell of its own: it resizes through the span,
+  or by its key (`column-widths.resize`).
+- **Fitting.** A fit to content (`fit-columns`, a double click on a handle, `autoSize`) measures
+  the cells of one column only: it passes over a cell spanning several. Fitting a header span
+  fits each of its columns.
+- **Reordering.** A column whose header cell spans its siblings moves with the ones it covers. A
+  covered column has no header cell to drag, and `column-order.move` refuses it while covered.
+- **Direction.** In a [right-to-left](/docs/concepts/right-to-left) grid, spans grow toward the
+  left, as the columns do.

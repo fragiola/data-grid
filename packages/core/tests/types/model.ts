@@ -266,6 +266,28 @@ engine.run("fit-columns", { columnKeys: ["name"] });
 // @ts-expect-error
 engine.run("fit-columns", { columnKeys: "name" });
 
+// a column's span (Epic #85): the row is there only for a row's cell, typed by the row type
+const spanning: Column<Person> = {
+    key: "name",
+    width: 100,
+    colSpan: (args) => (args.type === "row" ? args.row.age : undefined),
+};
+void spanning;
+const untyped: Column<Person> = {
+    key: "name",
+    width: 100,
+    // @ts-expect-error
+    colSpan: (args) => args.row.age,
+};
+void untyped;
+// @ts-expect-error
+const spanningGroup: ColumnOrGroup<Person> = {
+    key: "g",
+    colSpan: () => 2,
+    children: [{ key: "name", width: 80 }],
+};
+void spanningGroup;
+
 void groupWithCells;
 void groupWithWidth;
 void columnWithChildren;

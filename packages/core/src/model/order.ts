@@ -111,8 +111,9 @@ export function hasReorderable(entries: readonly ReorderableEntry[]): boolean {
 
 /**
  * A header cell among its siblings (O2): the cells of the same parent group (or of the top level)
- * in order, where it is among them, and the part it may move within, the ones pinned at the start,
- * the ones pinned at the end or the others (`[start, end)`).
+ * in order, where it is among them (-1 for a column a header span covers, E1.2: it has no cell
+ * there), and the part it may move within, the ones pinned at the start, the ones pinned at the
+ * end or the others (`[start, end)`).
  */
 export interface Siblings<TRow, TNode> {
     readonly cell: HeaderCellLayout<TRow, TNode>;
@@ -191,15 +192,19 @@ export function siblingsOf<TRow, TNode>(
 }
 
 /**
- * The key of a cell's column or group: a header cell's own, a body cell's column's (the leaf
- * covering the header's last row). What an order change keeps the active cell on.
+ * The key of a cell's column or group: a header cell's own, a body cell's column's. What an order
+ * change keeps the active cell on.
  */
 export function cellKeyAt<TRow, TNode>(
-    header: HeaderLayout<TRow, TNode>,
+    state: {
+        readonly header: HeaderLayout<TRow, TNode>;
+        readonly columns: readonly Column<TRow, TNode>[];
+    },
     position: { readonly rowIndex: number; readonly columnIndex: number },
 ): string | undefined {
-    return header.cellAt(Math.min(position.rowIndex, -1), position.columnIndex)
-        ?.key;
+    return position.rowIndex >= 0
+        ? state.columns[position.columnIndex]?.key
+        : state.header.cellAt(position.rowIndex, position.columnIndex)?.key;
 }
 
 /**

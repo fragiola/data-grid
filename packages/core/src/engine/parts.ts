@@ -1,4 +1,5 @@
 import { isReorderable } from "../model/order";
+import { spanHolds } from "../model/spans";
 import type {
     CellPosition,
     HeaderCellLayout,
@@ -15,6 +16,7 @@ import {
 import { sameCell } from "../navigation/navigation";
 import { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
 import {
+    cellSpan,
     columnLeft,
     columnPinning,
     headerCellSort,
@@ -23,6 +25,7 @@ import {
     rowExpanded,
     rowSelectable,
     rowSelected,
+    spanInRow,
 } from "./geometry";
 import type { GridView } from "./types";
 
@@ -145,11 +148,16 @@ export interface RowPart {
     readonly ariaSelected: boolean | undefined;
 }
 
-/** A body cell's state, and its `tabIndex`. */
+/** A body cell's state, its `tabIndex` and its `aria-colspan`. */
 export interface CellPart {
     readonly state: CellState;
     /** the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others */
     readonly tabIndex: 0 | -1;
+    /**
+     * how many columns it spans, when more than one (a column's `colSpan`, E1.2): its
+     * `aria-colspan` (and a table cell's `colSpan`); `undefined` for a cell of one column
+     */
+    readonly ariaColSpan: number | undefined;
 }
 
 /** A header cell's state, its `tabIndex` and its `aria-sort`. */
@@ -221,16 +229,30 @@ export function rowPart<TRow, TNode>(
     };
 }
 
-/** A body cell's state, and its `tabIndex`. */
+/**
+ * A body cell's state, its `tabIndex` and its `aria-colspan`: a cell spanning columns (E1.2) is
+ * active on any of them.
+ */
 export function cellPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     cell: CellPosition & { readonly loaded: boolean },
 ): CellPart {
+    const span = cellSpan(view, cell.rowIndex, cell.columnIndex);
     const { pinned, pinnedEdge, pinnedSide } = columnPinning(
         view,
         cell.columnIndex,
+        span,
     );
-    const active = view.active !== null && sameCell(view.active, cell);
+    const { active: position } = view;
+    const active =
+        position !== null &&
+        (span === 1
+            ? sameCell(position, cell)
+            : position.rowIndex === cell.rowIndex &&
+              spanHolds(
+                  { columnIndex: cell.columnIndex, columnSpan: span },
+                  position.columnIndex,
+              ));
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -243,22 +265,30 @@ export function cellPart<TRow, TNode>(
             interacting: interacting(view, cell),
         },
         tabIndex: active ? 0 : -1,
+        ariaColSpan: span > 1 ? span : undefined,
     };
 }
 
 /**
- * A body cell's box in its row: its column's left, as wide as its column and as tall as its row's
- * own height (a detail below the cells is not theirs). As `headerCellBox` for a header cell.
+ * A body cell's box in its row: its column's left, as wide as its column (a span's columns, E1.2:
+ * cut to the rendered ones under scaling, as a header cell's) and as tall as its row's own height
+ * (a detail below the cells is not theirs). As `headerCellBox` for a header cell. `span`, when
+ * the caller has it (`CellPart.ariaColSpan`), saves its lookup.
  */
 export function cellBox<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
     columnIndex: number,
+    span = cellSpan(view, rowIndex, columnIndex),
 ): { readonly left: number; readonly width: number; readonly height: number } {
+    const height = rowCellsHeight(view, rowIndex);
+    if (span > 1) {
+        return { ...spanInRow(view, columnIndex, columnIndex + span), height };
+    }
     return {
         left: columnLeft(view, columnIndex),
         width: view.columnAxis.sizeOf(columnIndex),
-        height: rowCellsHeight(view, rowIndex),
+        height,
     };
 }
 

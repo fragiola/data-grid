@@ -41,6 +41,17 @@ export interface HeaderRowView<TRow = unknown, TNode = unknown> {
 }
 
 /**
+ * A body row's cells where columns span (Epic #85, E1.2): the columns its cells start at, in
+ * order, and how many columns each one spanning more than one covers.
+ */
+export interface RowSpans {
+    /** the view's `columns` less the ones a span covers, with a span reaching into them */
+    readonly columns: readonly number[];
+    /** by first column, the spans over 1 */
+    readonly spans: ReadonlyMap<number, number>;
+}
+
+/**
  * Everything a render of the grid needs. A new object only when what is rendered changes: the
  * rendered ranges, the sizes, the data, the columns or the active cell; scrolling inside the
  * overscan keeps the same view, so nothing renders.
@@ -48,8 +59,16 @@ export interface HeaderRowView<TRow = unknown, TNode = unknown> {
 export interface GridView<TRow = unknown, TNode = unknown> {
     /** the body rows to render, in order: the rendered range, plus the active row */
     readonly rows: readonly number[];
-    /** the columns to render, in order: the rendered range, plus the active column */
+    /**
+     * the columns to render, in order: the rendered range, plus the active column (a row whose
+     * cells span columns renders `rowColumns`)
+     */
     readonly columns: readonly number[];
+    /**
+     * the rendered rows whose cells span columns (E1.2), by row index: render `rowColumns` of a
+     * row, each cell `cellSpan` columns wide. `null` when none does
+     */
+    readonly rowSpans: ReadonlyMap<number, RowSpans> | null;
     /** the rendered rows' range (the overscan window), without the active row */
     readonly renderedRows: Range;
     /** the rendered columns' range (the overscan window), without the active column */

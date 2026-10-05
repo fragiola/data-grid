@@ -1,4 +1,5 @@
 import {
+    type ColSpanArgs,
     type Column,
     type ColumnOrder,
     type ColumnOrGroup,
@@ -62,6 +63,9 @@ import { createRoot } from "react-dom/client";
 //                        the order uncontrolled: a drop target is marked by the fixture's own
 //                        CSS; `controlled` holds the order in the fixture's state
 //                        (`columnOrder` and `onColumnOrderChange`)
+//   &span=1              column spans: on every fifth row (index % 5 = 0), C1's cell spans 3
+//                        columns (C1–C3) and the second to last column's asks for 5 (the last
+//                        column and its part keep it to fewer); C5's header cell spans C5–C6
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
@@ -311,6 +315,24 @@ function flexColumn(columnIndex: number): Partial<Column<FixtureRow>> {
     return columnIndex === 2 ? { flex: 2, maxWidth: 300 } : {};
 }
 
+/** Every fifth row: where `&span=1` spans its cells. */
+const spansRow = (args: ColSpanArgs<FixtureRow>, span: number) =>
+    args.type === "row" && args.row.index % 5 === 0 ? span : undefined;
+
+/** What `&span=1` gives a column: C1 and the second to last column span rows, C5 its header. */
+function spanColumn(
+    columnIndex: number,
+    columnCount: number,
+): Partial<Column<FixtureRow>> {
+    if (columnIndex === 1) return { colSpan: (args) => spansRow(args, 3) };
+    if (columnIndex === columnCount - 2) {
+        return { colSpan: (args) => spansRow(args, 5) };
+    }
+    return columnIndex === 5
+        ? { colSpan: ({ type }) => (type === "header" ? 2 : undefined) }
+        : {};
+}
+
 /** A cell's value: C1's wider with `&resize=1`, C3's wider still with `&autosize=1`. */
 function cellValue(
     columnIndex: number,
@@ -437,6 +459,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const gridRef = useDataGridRef<FixtureRow>();
     const flex = params.get("flex") === "1";
     const autoSize = params.get("autosize") === "1";
+    const span = params.get("span") === "1";
     const reorderParam = params.get("reorder");
     const reorder = reorderParam === "1" || reorderParam === "controlled";
     const controlledOrder = reorderParam === "controlled";
@@ -476,6 +499,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     ...(resize && pinnedEnd ? { resizable: true } : {}),
                     ...(flex ? flexColumn(columnIndex) : {}),
                     ...(autoSize && columnIndex === 3 ? { autoSize } : {}),
+                    ...(span ? spanColumn(columnIndex, columnCount) : {}),
                     ...(reorder &&
                     reorderColumn(columnIndex, pinnedCount, pinnedEnd)
                         ? { reorderable: true }
@@ -513,6 +537,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         flex,
         resize,
         autoSize,
+        span,
         reorder,
         rowSelection,
     ]);

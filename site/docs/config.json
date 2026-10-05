@@ -47,6 +47,10 @@
                     "path": "concepts/column-groups"
                 },
                 {
+                    "label": "Column spanning",
+                    "path": "concepts/column-spanning"
+                },
+                {
                     "label": "Pinned columns",
                     "path": "concepts/pinned-columns"
                 },

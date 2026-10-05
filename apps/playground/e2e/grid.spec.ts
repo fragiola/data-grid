@@ -3153,5 +3153,183 @@ for (const kind of KINDS) {
                 });
             });
         });
+
+        test.describe("column spans", () => {
+            const SPAN = { rows: 1_000, columns: 20, span: 1 } as const;
+
+            /** An element's start from the view's inline start (its right edge right to left), and its width. */
+            async function inlineBox(
+                viewport: Locator,
+                target: Locator,
+                rtl = false,
+            ) {
+                const view = await viewport.evaluate((element) => {
+                    const left =
+                        element.getBoundingClientRect().left +
+                        element.clientLeft;
+                    return { left, right: left + element.clientWidth };
+                });
+                const box = await boxOf(target);
+                return {
+                    start: rtl
+                        ? view.right - (box.x + box.width)
+                        : box.x - view.left,
+                    width: box.width,
+                };
+            }
+
+            function columnHeader(page: Page, columnIndex: number) {
+                return page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]`,
+                );
+            }
+
+            for (const dir of ["ltr", "rtl"] as const) {
+                const rtl = dir === "rtl";
+                test(`renders a span as wide as its columns, without the cells it covers${rtl ? ", right to left" : ""}`, async ({
+                    page,
+                }) => {
+                    const viewport = await open(
+                        page,
+                        kind,
+                        rtl ? { ...SPAN, dir } : SPAN,
+                    );
+                    const span = cell(page, 0, 1);
+                    await expect(span).toHaveAttribute("aria-colspan", "3");
+                    await expect(span).toHaveAttribute("aria-colindex", "2");
+                    if (kind === "table") {
+                        await expect(span).toHaveAttribute("colspan", "3");
+                    }
+                    const box = await inlineBox(viewport, span, rtl);
+                    expect(box.start).toBeCloseTo(100, 0);
+                    expect(box.width).toBeCloseTo(300, 0);
+                    await expect(cell(page, 0, 2)).toHaveCount(0);
+                    await expect(cell(page, 0, 3)).toHaveCount(0);
+                    expect(
+                        (await inlineBox(viewport, cell(page, 0, 4), rtl))
+                            .start,
+                    ).toBeCloseTo(400, 0);
+                    // the next row spans nothing
+                    await expect(cell(page, 1, 2)).toHaveCount(1);
+                    await expect(cell(page, 1, 1)).not.toHaveAttribute(
+                        "aria-colspan",
+                    );
+                    // C5's header cell covers C6's
+                    const c5 = columnHeader(page, 5);
+                    await expect(c5).toHaveAttribute("aria-colspan", "2");
+                    if (kind === "table") {
+                        await expect(c5).toHaveAttribute("colspan", "2");
+                    }
+                    expect(
+                        (await inlineBox(viewport, c5, rtl)).width,
+                    ).toBeCloseTo(200, 0);
+                    await expect(columnHeader(page, 6)).toHaveCount(0);
+                });
+            }
+
+            test("renders a span that starts left of the rendered columns", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, SPAN);
+                // C5 at the view's start: C3 and C4 rendered before it (the overscan), C1 not
+                await scroll(page, viewport, 0, 500);
+                const { columns } = await windows(page);
+                expect(columns.rendered.start).toBe(3);
+                await expect(cell(page, 1, 1)).toHaveCount(0);
+                const span = cell(page, 0, 1);
+                await expect(span).toHaveCount(1);
+                const box = await boxOf(span);
+                const c4 = await boxOf(cell(page, 1, 4));
+                expect(box.x + box.width).toBeCloseTo(c4.x, 0);
+                expect(box.width).toBeCloseTo(300, 0);
+            });
+
+            test("lands on a span with the keys, leaves it from its edge, and snaps to its first column", async ({
+                page,
+            }) => {
+                await open(page, kind, SPAN);
+                await cell(page, 0, 0).click();
+                await page.keyboard.press("ArrowRight");
+                await expect(cell(page, 0, 1)).toBeFocused();
+                expect(await active(page)).toEqual({
+                    rowIndex: 0,
+                    columnIndex: 1,
+                });
+                await page.keyboard.press("ArrowRight");
+                await expect(cell(page, 0, 4)).toBeFocused();
+                await page.keyboard.press("ArrowLeft");
+                await expect(cell(page, 0, 1)).toBeFocused();
+                await page.keyboard.press("ArrowDown");
+                await expect(cell(page, 1, 1)).toBeFocused();
+                await cell(page, 1, 3).click();
+                await page.keyboard.press("ArrowUp");
+                await expect(cell(page, 0, 1)).toBeFocused();
+                // a covered position is the span's
+                await page.evaluate(() =>
+                    window.grid?.model.run("active-position.set", {
+                        rowIndex: 5,
+                        columnIndex: 3,
+                    }),
+                );
+                expect(await active(page)).toEqual({
+                    rowIndex: 5,
+                    columnIndex: 1,
+                });
+                await expect(cell(page, 5, 1)).toHaveAttribute(
+                    "data-active",
+                    "",
+                );
+                await expect(cell(page, 5, 1)).toHaveAttribute("tabindex", "0");
+                // the header: C6 is C5's cell
+                await page.evaluate(() =>
+                    window.grid?.model.run("active-position.set", {
+                        rowIndex: -1,
+                        columnIndex: 6,
+                    }),
+                );
+                await expect(columnHeader(page, 5)).toBeFocused();
+                await page.keyboard.press("ArrowRight");
+                await expect(columnHeader(page, 7)).toBeFocused();
+            });
+
+            test("keeps a span inside its pinned part", async ({ page }) => {
+                // C0–C2 pinned at the start: C1 covers C2 only; the last column pinned at the
+                // end: C18 covers nothing
+                const viewport = await open(page, kind, {
+                    ...SPAN,
+                    pinned: 3,
+                    pinnedEnd: 1,
+                });
+                const span = cell(page, 0, 1);
+                await expect(span).toHaveAttribute("aria-colspan", "2");
+                await expect(span).toHaveAttribute("data-pinned", "start");
+                await expect(span).toHaveAttribute("data-pinned-edge", "");
+                expect((await boxOf(span)).width).toBeCloseTo(200, 0);
+                await expect(cell(page, 0, 3)).toHaveCount(1);
+                await scroll(page, viewport, 0, "end");
+                await expect(cell(page, 0, 18)).not.toHaveAttribute(
+                    "aria-colspan",
+                );
+                await expect(cell(page, 0, 19)).toHaveAttribute(
+                    "data-pinned",
+                    "end",
+                );
+                // both pinned at the end: C18 covers C19, at the view's end
+                await open(page, kind, { ...SPAN, pinnedEnd: 2 });
+                const end = cell(page, 0, 18);
+                await expect(end).toHaveAttribute("aria-colspan", "2");
+                await expect(end).toHaveAttribute("data-pinned", "end");
+                const box = await inlineBox(viewport, end);
+                expect(box.width).toBeCloseTo(200, 0);
+                expect(box.start + box.width).toBeCloseTo(
+                    await viewport.evaluate((element) => element.clientWidth),
+                    0,
+                );
+                // sideways, it stays there
+                await scroll(page, viewport, 0, 700);
+                const moved = await inlineBox(viewport, end);
+                expect(moved.start).toBeCloseTo(box.start, 0);
+            });
+        });
     });
 }

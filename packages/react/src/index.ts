@@ -3,6 +3,7 @@
 export type {
     AxisWindow,
     CellPosition,
+    ColSpanArgs,
     ColumnOrder,
     ColumnWidths,
     DataGridEngine,

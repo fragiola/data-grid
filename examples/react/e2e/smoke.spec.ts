@@ -18,6 +18,7 @@ const REPRESENTATIVE: string[] = [
     "column-reordering", // the drop indicator and the dragged cell, drawn with the theme's tokens
     "auto-widths", // a native range input and a grid narrower than its frame
     "rtl", // the grid mirrored: logical sides, both pinned parts, the handles at the left edge
+    "column-spanning", // cells and header cells spanning columns, a tint filling a span
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

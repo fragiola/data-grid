@@ -8,6 +8,7 @@ export {
     ariaRowCount,
     ariaRowDetail,
     ariaRowIndex,
+    cellSpan,
     columnLeft,
     columnPinning,
     type HeaderCellSort,
@@ -16,6 +17,7 @@ export {
     inlineStart,
     renderedWidth,
     rowCellsHeight,
+    rowColumns,
     rowDetailBox,
     rowDisplay,
     rowExpanded,
@@ -58,6 +60,7 @@ export type {
     EngineQueryMap,
     GridView,
     HeaderRowView,
+    RowSpans,
 } from "./engine/types";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
@@ -73,6 +76,7 @@ export { cellValue, rowAt } from "./model/source";
 export type {
     CellPosition,
     CellRenderProps,
+    ColSpanArgs,
     Column,
     ColumnGroup,
     ColumnOrder,

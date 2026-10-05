@@ -2,6 +2,14 @@ import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import { headerCellsIn, headerRowCount, pinnedEndFrom } from "../header/header";
 import { holdsRow, holdsRowIn } from "../model/expansion";
 import { rowAt } from "../model/source";
+import {
+    type CellSpan,
+    cellCovering,
+    hasColumnSpans,
+    rowSpanArgs,
+    type SpansState,
+    spanAt,
+} from "../model/spans";
 import type {
     CellPosition,
     ColumnWidths,
@@ -16,7 +24,7 @@ import {
     type Range,
     sameRange,
 } from "../viewport/window";
-import type { GridView, HeaderRowView } from "./types";
+import type { GridView, HeaderRowView, RowSpans } from "./types";
 
 // The view (D9), as pure functions: the axes a state lays out, the view a render shows built from
 // the state, the windows and the sizes, and whether a new one differs from the last (scrolling
@@ -104,8 +112,9 @@ function between(range: Range, from: number, to: number): Range {
 }
 
 /**
- * The column rendered outside the window for the active cell: its own, or none for a header
- * cell whose span reaches into the window (it is rendered with the window's cells).
+ * The column rendered outside the window for the active cell: its own, or none for a cell whose
+ * span reaches into the window (it is rendered with the window's cells): a header cell's, or
+ * `activeSpan`, a body cell's under column spans (E1.2).
  */
 export function activeColumn<TRow, TNode>(
     active: CellPosition | null,
@@ -113,6 +122,7 @@ export function activeColumn<TRow, TNode>(
     pinnedCount: number,
     renderedColumns: Range,
     endFrom = Number.POSITIVE_INFINITY,
+    activeSpan?: CellSpan,
 ): number | null {
     // a pinned column is always rendered
     if (
@@ -122,18 +132,19 @@ export function activeColumn<TRow, TNode>(
     ) {
         return null;
     }
-    if (active.rowIndex < 0) {
-        const cell = header.cellAt(active.rowIndex, active.columnIndex);
-        if (
-            cell &&
-            overlaps(
-                renderedColumns,
-                cell.columnIndex,
-                cell.columnIndex + cell.columnSpan,
-            )
-        ) {
-            return null;
-        }
+    const cell =
+        active.rowIndex < 0
+            ? header.cellAt(active.rowIndex, active.columnIndex)
+            : activeSpan;
+    if (
+        cell &&
+        overlaps(
+            renderedColumns,
+            cell.columnIndex,
+            cell.columnIndex + cell.columnSpan,
+        )
+    ) {
+        return null;
     }
     return active.columnIndex;
 }
@@ -182,6 +193,52 @@ export function createHeaderRows<TRow, TNode>(): HeaderRowsFor<TRow, TNode> {
             );
         },
     );
+}
+
+/**
+ * The body cells of the rows a view renders where columns span (E1.2): for each loaded row with a
+ * span, the columns its cells start at (`columns`, ascending, less the ones a span covers, plus a
+ * span reaching into them from a column not rendered) and the spans over 1. `null` without one:
+ * every row renders `columns`. Asked of the rendered rows only, along one walk per row
+ * (`cellCovering`, from each cell to the next rendered column); a row without a span allocates
+ * nothing.
+ */
+export function rowSpansOf<TRow, TNode>(
+    state: SpansState<TRow, TNode>,
+    rows: readonly number[],
+    columns: readonly number[],
+): ReadonlyMap<number, RowSpans> | null {
+    if (!hasColumnSpans(state.columns)) return null;
+    let found: Map<number, RowSpans> | null = null;
+    /** the cell the walk is at (one for every row) */
+    const cell = { columnIndex: 0, columnSpan: 1 };
+    for (const rowIndex of rows) {
+        const args = rowSpanArgs(state, rowIndex);
+        if (!args) continue;
+        /** from the first span on: the columns the cells start at, and the spans */
+        let starts: number[] | null = null;
+        let spans: Map<number, number> | null = null;
+        /** where the next cell starts at the earliest: the end of the last one */
+        let reach = 0;
+        for (let at = 0; at < columns.length; at++) {
+            const columnIndex = columns[at] ?? 0;
+            if (columnIndex < reach) continue;
+            cellCovering(state.columns, args, reach, columnIndex, cell);
+            if (cell.columnSpan > 1) {
+                // every column before the first span is a cell of its own
+                starts ??= columns.slice(0, at);
+                spans ??= new Map();
+                spans.set(cell.columnIndex, cell.columnSpan);
+            }
+            starts?.push(cell.columnIndex);
+            reach = cell.columnIndex + cell.columnSpan;
+        }
+        if (starts && spans) {
+            found ??= new Map();
+            found.set(rowIndex, { columns: starts, spans });
+        }
+    }
+    return found;
 }
 
 /** What a view is built from: the model's state, the windows, and the view's own measures. */
@@ -236,23 +293,29 @@ export function buildView<TRow, TNode>({
         pinnedCount,
         columnWindow.rendered,
         endFrom,
+        active && hasColumnSpans(state.columns)
+            ? spanAt(state, active.rowIndex, active.columnIndex)
+            : undefined,
     );
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
+    const rows = indexes(
+        rowWindow.rendered.start,
+        rowWindow.rendered.end,
+        active && active.rowIndex >= 0 ? active.rowIndex : null,
+    );
+    // the pinned columns first and last, always rendered
+    const columns = indexes(
+        endFrom,
+        columnCount,
+        null,
+        indexes(start, end, extraColumn, indexes(0, pinnedCount, null)),
+    );
     return {
         ...measures,
-        rows: indexes(
-            rowWindow.rendered.start,
-            rowWindow.rendered.end,
-            active && active.rowIndex >= 0 ? active.rowIndex : null,
-        ),
-        // the pinned columns first and last, always rendered
-        columns: indexes(
-            endFrom,
-            columnCount,
-            null,
-            indexes(start, end, extraColumn, indexes(0, pinnedCount, null)),
-        ),
+        rows,
+        columns,
+        rowSpans: rowSpansOf(state, rows, columns),
         renderedRows: rowWindow.rendered,
         renderedColumns: columnWindow.rendered,
         rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
@@ -338,21 +401,35 @@ export function viewChanged<TRow, TNode>(
     );
 }
 
-/** Where a cell's element is: a header cell's top row and first column. */
+/**
+ * Where a cell's element is: a header cell's top row and first column, a body cell spanning
+ * columns its first column (E1.2).
+ */
 export function elementPosition<TRow, TNode>(
     position: CellPosition,
-    header: HeaderLayout<TRow, TNode>,
+    state: SpansState<TRow, TNode> & Pick<DataGridState<TRow, TNode>, "header">,
 ): CellPosition {
-    if (position.rowIndex >= 0) return position;
-    const cell = header.cellAt(position.rowIndex, position.columnIndex);
+    if (position.rowIndex >= 0) {
+        if (!hasColumnSpans(state.columns)) return position;
+        const { columnIndex } = spanAt(
+            state,
+            position.rowIndex,
+            position.columnIndex,
+        );
+        return columnIndex === position.columnIndex
+            ? position
+            : { rowIndex: position.rowIndex, columnIndex };
+    }
+    const cell = state.header.cellAt(position.rowIndex, position.columnIndex);
     return cell
         ? { rowIndex: cell.rowIndex, columnIndex: cell.columnIndex }
         : position;
 }
 
 /**
- * The column to scroll to for a cell: its own, or for a header cell spanning columns, none
- * while any of them is in view (`visibleColumns`), else the one nearest to the view.
+ * The column to scroll to for a cell: its own, or for a cell spanning columns (a header cell's
+ * span, `cellSpan` a body cell's under column spans), none while any of them is in view
+ * (`visibleColumns`), else the one nearest to the view.
  */
 export function columnToScrollTo<TRow, TNode>(
     position: CellPosition,
@@ -360,11 +437,14 @@ export function columnToScrollTo<TRow, TNode>(
     pinnedCount: number,
     visibleColumns: Range,
     endFrom = Number.POSITIVE_INFINITY,
+    cellSpan?: CellSpan,
 ): number | undefined {
-    if (position.rowIndex >= 0) return position.columnIndex;
-    const cell = header.cellAt(position.rowIndex, position.columnIndex);
+    const cell =
+        position.rowIndex >= 0
+            ? cellSpan
+            : header.cellAt(position.rowIndex, position.columnIndex);
     if (!cell || cell.columnSpan <= 1) return position.columnIndex;
-    // a pinned group is always in view
+    // a pinned span is always in view
     if (
         cell.columnIndex + cell.columnSpan <= pinnedCount ||
         cell.columnIndex >= endFrom

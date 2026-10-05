@@ -31,6 +31,22 @@ export interface CellRenderProps<TRow, TNode = unknown> {
     readonly value: unknown;
 }
 
+/**
+ * What a column's `colSpan` is asked with (E1.2): which cell, by the kind of row it is in. Its
+ * header cell (on the header's last row, -1), or a loaded body row's cell with its row.
+ */
+export type ColSpanArgs<TRow> =
+    | {
+          readonly type: "header";
+          readonly rowIndex: number;
+          readonly row?: undefined;
+      }
+    | {
+          readonly type: "row";
+          readonly rowIndex: number;
+          readonly row: TRow;
+      };
+
 /** A column of the grid (D10). */
 export interface Column<TRow, TNode = unknown> {
     /** unique among the grid's columns */
@@ -96,6 +112,16 @@ export interface Column<TRow, TNode = unknown> {
      */
     readonly reorderable?: boolean | undefined;
     /**
+     * how many columns a cell of this column spans (Epic #85, E1.2): its header cell
+     * (`type: "header"`) or a loaded row's cell (`type: "row"`). The cell covers the columns
+     * after it, which render no cell there; it never reaches past its part (pinned at the start,
+     * at the end, or not) nor the last column, nor, in the header, past its sibling columns.
+     * `undefined` or 1: no span. Asked only for the cells a render shows, never for every row
+     */
+    readonly colSpan?:
+        | ((args: ColSpanArgs<TRow>) => number | undefined)
+        | undefined;
+    /**
      * how two rows compare by this column, for sorting rows in memory (`@fragiola/data-grid/local`):
      * negative when `a` comes first. Without one, their values compare by type
      */
@@ -146,6 +172,8 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     /** a group neither flexes nor fits itself: its columns do */
     readonly flex?: never;
     readonly autoSize?: never;
+    /** a group spans its columns */
+    readonly colSpan?: never;
     /**
      * whether a person can move it, whole, among its siblings (see {@link Column.reorderable});
      * its columns move inside it by their own
@@ -188,7 +216,9 @@ export type ColumnOrGroup<TRow, TNode = unknown> =
 
 /**
  * A header cell, as the core lays it out (G3): a group spanning its columns, or a column. A column
- * with fewer groups above it than the header has rows spans the rows down to the last (G2).
+ * with fewer groups above it than the header has rows spans the rows down to the last (G2), and
+ * one whose `colSpan` says so for the header spans the sibling columns after it (E1.2), which then
+ * have no cell on screen (`cellByKey` still finds theirs, of one column).
  */
 export type HeaderCellLayout<TRow, TNode = unknown> = {
     /** the group's or the column's key */
@@ -216,7 +246,10 @@ export interface HeaderLayout<TRow, TNode = unknown> {
     readonly depth: number;
     /** per header row, the top one first: the cells starting in it, in column order */
     readonly rows: readonly (readonly HeaderCellLayout<TRow, TNode>[])[];
-    /** the cell covering a header position (a spanning column covers the rows below its top) */
+    /**
+     * the cell covering a header position (a spanning column covers the rows below its top, and a
+     * header `colSpan` the columns it reaches)
+     */
     cellAt(
         rowIndex: number,
         columnIndex: number,
@@ -294,8 +327,8 @@ export interface DataGridState<TRow, TNode = unknown> {
     /** the grid's columns: the leaves of `columnEntries`, in the column order */
     readonly columns: readonly Column<TRow, TNode>[];
     /**
-     * the columns and groups as declared (the same array as `columns` without groups and without
-     * an order)
+     * the columns and groups as declared (the same array as `columns` without groups, a
+     * `colSpan` and an order)
      */
     readonly columnEntries: readonly ColumnOrGroup<TRow, TNode>[];
     /** the header's rows and cells */

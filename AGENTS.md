@@ -73,7 +73,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the layers' offsets imperatively; React never reconciles what the engine writes.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
-    flex?, autoSize?, reorderable?, compare?, filter?, meta? }`. Without children, a header cell renders
+    flex?, autoSize?, reorderable?, colSpan?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -144,6 +144,25 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `marginRight`), and the rows' flex lays pinned cells out from the right on its own (the
     viewport's direction). A direction change keeps the view as far from the start, the insets and the
     transforms written again on the new side. The app's styles mirror with logical sides.
+    **Column spans (Epic #85, E1.2):** `colSpan?: (args: ColSpanArgs<TRow>) => number | undefined`
+    on a column (never a group), `args` `{ type: "header", rowIndex: -1 } | { type: "row", row,
+    rowIndex }` (summary rows join the union later). A cell covers the columns after it within its
+    part and the columns; a row's cells partition each part from its start (a covered column is
+    never asked); a row not loaded spans nothing. Header spans are laid out with the header
+    (`layoutColumns`, over sibling leaves only): `columnSpan` and `cellAt` carry them, a covered
+    leaf keeps a one-column cell in `cellByKey` only; a spanning header cell's key resizes and fits
+    its whole span, as a group's. Body spans depend on the row: `spanAt(state, rowIndex,
+    columnIndex)` and the view's `rowSpansOf` share one walk (`cellCovering`, `model/spans.ts`) over
+    the columns with a `colSpan` only, asked for the rendered rows only (`view.rowSpans`, `null`
+    without one, a row without a span allocating nothing; `rowColumns`, `cellSpan`), never per
+    scroll frame (D9); a span starting left of the window is rendered, and an active span reaching
+    into it needs no extra column. The spanning cell is as wide as its columns, `aria-colspan`
+    (`colSpan` as a `td`), active on any of them; an arrow into a covered column lands on it and
+    leaves from its edge (`cellSpanAt` bound); the model snaps the active position to its first
+    column (`active-position.*`, `reconcile`, a new order, `rows.changed` holding the active row),
+    `is("cell-active")` holds on any of its columns, and `elementPosition` finds its element. A fit
+    never measures a spanning cell; a header span reorders with the columns it covers, a covered
+    column cannot move.
     **Master-detail (Epic #41, M1–M4):** the model keeps `expandedRowKeys` (keys, `rowKey` else index; `expanded-rows.set { rowKeys }`,
     `expanded-rows.toggle { rowIndex } | { rowKey }`, `is("row-expanded", { rowIndex })`),
     controlled or not on `Root` like the sort (`expandedRowKeys`/`defaultExpandedRowKeys`/

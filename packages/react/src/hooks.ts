@@ -22,6 +22,7 @@ import {
     type RowState,
     renderedWidth,
     rowAt,
+    rowColumns,
     rowDetailPart,
     rowDisplay,
     rowLeft,
@@ -196,10 +197,13 @@ export function useRow<TRow>(row: RowInfo<TRow>): PartHookResult<RowState> {
     };
 }
 
-/** The cells a row renders, with their columns and values. */
+/**
+ * The cells a row renders, with their columns and values: one per rendered column, but a cell
+ * spanning columns (a column's `colSpan`, Epic #85) stands for the ones it covers.
+ */
 export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
     const view = useGridView<TRow>();
-    return view.columns.flatMap((columnIndex) => {
+    return rowColumns(view, row.rowIndex).flatMap((columnIndex) => {
         const column = view.columnDefs[columnIndex];
         if (!column) return [];
         return [
@@ -238,12 +242,14 @@ function cellProps<TRow>(
     // a header cell's state is the one with a `group` (its sort comes with it)
     const header = "group" in state ? state : undefined;
     const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
+    const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
     const { pinned } = state;
     const { width, height } = box;
     return {
         role: header ? "columnheader" : "gridcell",
         "aria-colindex": state.columnIndex + 1,
         ...(header ? ariaHeaderCellSpans(header) : undefined),
+        ...(ariaColSpan ? { "aria-colspan": ariaColSpan } : undefined),
         ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
         tabIndex: part.tabIndex,
         ...dataAttributes({
@@ -278,17 +284,30 @@ function cellProps<TRow>(
     };
 }
 
-/** A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. */
+/**
+ * A body cell's state, and the props for its element: the roving tab stop, ARIA, `data-*`. A cell
+ * spanning columns (Epic #85) is as wide as them, with `aria-colspan`.
+ */
 export function useCell<TRow>(cell: CellInfo<TRow>): PartHookResult<CellState> {
+    const { state, props } = useCellPart(cell);
+    return { state, props };
+}
+
+/** `useCell`, and how many columns the cell spans (a table cell's `colSpan`). */
+export function useCellPart<TRow>(
+    cell: CellInfo<TRow>,
+): PartHookResult<CellState> & { columnSpan: number } {
     const view = useGridView<TRow>();
     const part = cellPart(view, cell);
+    const columnSpan = part.ariaColSpan ?? 1;
     return {
         state: part.state,
         props: cellProps(
             view,
             part,
-            cellBox(view, cell.rowIndex, cell.columnIndex),
+            cellBox(view, cell.rowIndex, cell.columnIndex, columnSpan),
         ),
+        columnSpan,
     };
 }
 

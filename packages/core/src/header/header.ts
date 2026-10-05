@@ -6,7 +6,7 @@ import type {
     HeaderLayout,
     PinnedSide,
 } from "../model/types";
-import { isWidth, lowerBound } from "../utils";
+import { isWidth, lowerBound, spanValue } from "../utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,
@@ -44,9 +44,9 @@ export interface ColumnLayout<TRow, TNode> {
 /**
  * Why the entries are not a valid `columns`, or `null`: every key unique across groups and
  * columns (so no group inside itself), every width finite and not negative (limits and `flex`
- * too, the minimum not above the maximum), `flex` and `autoSize` on columns only, at least one
- * column under every group, the columns pinned at the start first and the ones pinned at the end
- * last, and a group's columns in one part.
+ * too, the minimum not above the maximum), `flex`, `autoSize` and `colSpan` (a function) on
+ * columns only, at least one column under every group, the columns pinned at the start first and
+ * the ones pinned at the end last, and a group's columns in one part.
  */
 export function columnsError(entries: unknown): string | null {
     if (!Array.isArray(entries)) return "columns must be an array";
@@ -81,6 +81,10 @@ export function columnsError(entries: unknown): string | null {
                 if (autoSize !== undefined && typeof autoSize !== "boolean") {
                     return `column "${key}" has an invalid autoSize`;
                 }
+                const colSpan: unknown = Reflect.get(entry, "colSpan");
+                if (colSpan !== undefined && typeof colSpan !== "function") {
+                    return `column "${key}" has a colSpan that is not a function`;
+                }
                 const pinned: unknown = Reflect.get(entry, "pinned");
                 if (
                     pinned !== undefined &&
@@ -111,6 +115,9 @@ export function columnsError(entries: unknown): string | null {
                 Reflect.get(entry, "autoSize") !== undefined
             ) {
                 return `group "${key}" flexes or fits itself: a group is sized by its columns`;
+            }
+            if (Reflect.get(entry, "colSpan") !== undefined) {
+                return `group "${key}" has a colSpan: a group spans its columns`;
             }
             const from = parts.length;
             const below = visit(children);
@@ -185,6 +192,27 @@ export function pinnedEndColumnCount<TRow, TNode>(
     return count;
 }
 
+/**
+ * How many columns a column's header cell spans (E1.2): its `colSpan` for the header, kept to
+ * the columns right after it among its siblings, in its part. 1 for a group, or without one.
+ */
+function headerSpan<TRow, TNode>(
+    siblings: readonly ColumnOrGroup<TRow, TNode>[],
+    at: number,
+): number {
+    const column = siblings[at];
+    if (!column || isColumnGroup(column) || !column.colSpan) return 1;
+    const wanted = spanValue(column.colSpan({ type: "header", rowIndex: -1 }));
+    let span = 1;
+    for (; span < wanted; span++) {
+        const next = siblings[at + span];
+        if (!next || isColumnGroup(next) || next.pinned !== column.pinned) {
+            break;
+        }
+    }
+    return span;
+}
+
 /** A header of one row: a cell per column. */
 function flatHeader<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
@@ -229,8 +257,8 @@ function cellsByKey<TRow, TNode>(
 
 /**
  * Lays the entries of `columns` out: their leaves, and the header's rows and cells, each sibling
- * list in the order `order` gives it (the column order, Epic #75). Without a group and an order,
- * the columns are the entries themselves (the same array). It never throws: a group inside itself
+ * list in the order `order` gives it (the column order, Epic #75). Without a group, a `colSpan`
+ * and an order, the columns are the entries themselves (the same array). It never throws: a group inside itself
  * is not entered again, and a group without columns has no cell (`columnsError` refuses both).
  */
 export function layoutColumns<TRow, TNode>(
@@ -239,7 +267,11 @@ export function layoutColumns<TRow, TNode>(
         list: readonly E[],
     ) => readonly E[],
 ): ColumnLayout<TRow, TNode> {
-    if (entries.every((entry) => !isColumnGroup(entry))) {
+    // a header span (E1.2) is laid out as a group is
+    if (
+        entries.every((entry) => !isColumnGroup(entry)) &&
+        !entries.some((entry) => entry.colSpan)
+    ) {
         const columns = order ? order(entries) : entries;
         return { columns, header: flatHeader(columns) };
     }
@@ -265,22 +297,35 @@ export function layoutColumns<TRow, TNode>(
         () => [],
     );
     const columns: Column<TRow, TNode>[] = [];
+    /** the columns' cells a header span covers: no cell on screen, kept for `cellByKey` */
+    const covered: HeaderCellLayout<TRow, TNode>[] = [];
     const place = (
         list: readonly ColumnOrGroup<TRow, TNode>[],
         level: number,
     ) => {
-        for (const entry of order ? order(list) : list) {
+        const siblings = order ? order(list) : list;
+        /** the siblings after a header span it covers */
+        let skip = 0;
+        for (const [index, entry] of siblings.entries()) {
             const row = rows[level];
             if (!row) return;
             if (!isColumnGroup(entry)) {
-                row.push({
+                const columnSpan = skip > 0 ? 1 : headerSpan(siblings, index);
+                const cell: HeaderCellLayout<TRow, TNode> = {
                     key: entry.key,
                     rowIndex: level - depth,
                     columnIndex: columns.length,
-                    columnSpan: 1,
+                    columnSpan,
                     rowSpan: depth - level,
                     column: entry,
-                });
+                };
+                if (skip > 0) {
+                    skip -= 1;
+                    covered.push(cell);
+                } else {
+                    skip = columnSpan - 1;
+                    row.push(cell);
+                }
                 columns.push(entry);
                 continue;
             }
@@ -330,7 +375,9 @@ export function layoutColumns<TRow, TNode>(
             rows,
             cellAt: (rowIndex, columnIndex) =>
                 cover[rowIndex + depth]?.[columnIndex],
-            cellByKey: cellsByKey(rows),
+            cellByKey: cellsByKey(
+                covered.length > 0 ? [...rows, covered] : rows,
+            ),
         },
     };
 }

@@ -29,7 +29,7 @@ import {
     type RowDetailState,
     type RowState,
     rowStyle,
-    useCell,
+    useCellPart,
     useCells,
     useGridView,
     useHeaderCell,
@@ -480,12 +480,13 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
 };
 
 /**
- * A body cell (`role="gridcell"`), positioned in its row. A `<td>` through `render`. The active
- * cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on click.
+ * A body cell (`role="gridcell"`), positioned in its row. A `<td>` through `render`, which then
+ * gets `colSpan` when it spans columns (`aria-colspan`, a column's `colSpan`). The active cell is
+ * the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on click.
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
     const { cell, children, ...rest } = props;
-    const own = useCell(cell);
+    const own = useCellPart(cell);
     const { engine } = useRootGrid();
     let content: ReactNode = null;
     if (children !== undefined) {
@@ -502,7 +503,8 @@ export function Cell<TRow>(props: CellProps<TRow>) {
             : plain(cell.value);
     }
     return useRenderElement("div", rest, {
-        ...own,
+        state: own.state,
+        props: withTableSpans(own.props, rest.render, own.columnSpan),
         children: content,
         // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
         ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,

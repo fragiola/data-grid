@@ -13,6 +13,11 @@ export function isWidth(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+/** What a column's `colSpan` answered, as a span (E1.2): a whole number of columns, at least 1. */
+export function spanValue(value: unknown): number {
+    return typeof value === "number" && value >= 2 ? Math.floor(value) : 1;
+}
+
 /** Whether `value` is an index: a whole number, 0 or more, and below `count` when given. */
 export function isIndex(
     value: number,

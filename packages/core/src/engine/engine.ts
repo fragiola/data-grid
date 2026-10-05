@@ -16,6 +16,7 @@ import {
     siblingsOf,
 } from "../model/order";
 import { rowAt } from "../model/source";
+import { hasColumnSpans, spanAt } from "../model/spans";
 import type {
     CellPosition,
     Column,
@@ -82,6 +83,7 @@ import {
     VIEWPORTS,
 } from "./dom";
 import {
+    cellSpan,
     cellsSizeOf,
     inlineSign,
     inlineStart,
@@ -912,14 +914,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function scrollPayloadFor(
         position: CellPosition,
     ): EngineActionMap["scroll-to-cell"] {
+        const body = position.rowIndex >= 0;
         return {
-            rowIndex: position.rowIndex >= 0 ? position.rowIndex : undefined,
+            rowIndex: body ? position.rowIndex : undefined,
             columnIndex: columnToScrollTo(
                 position,
                 state.header,
                 pinnedCount,
                 columnWindow.visible,
                 pinnedEndFrom(columnAxis.count, pinnedEndCount),
+                // a body cell spanning columns (E1.2) is in view while any of them is
+                body && hasColumnSpans(state.columns)
+                    ? spanAt(state, position.rowIndex, position.columnIndex)
+                    : undefined,
             ),
         };
     }
@@ -1048,7 +1055,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** This grid's own element of a cell (a nested grid may have one at the same indexes). */
     function cellElement(position: CellPosition): HTMLElement | null {
         if (!viewport) return null;
-        const selector = cellSelector(elementPosition(position, state.header));
+        const selector = cellSelector(elementPosition(position, state));
         for (const element of viewport.querySelectorAll<HTMLElement>(
             selector,
         )) {
@@ -1468,15 +1475,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 `[data-row-index][data-column-index="${columnIndex}"]`,
             )) {
                 const rowIndex = Number(element.getAttribute("data-row-index"));
+                const header =
+                    rowIndex < 0
+                        ? shown.header.cellAt(rowIndex, columnIndex)
+                        : undefined;
                 if (
                     Number.isInteger(rowIndex) &&
                     ownerViewport(element) === viewport &&
                     // a body cell of a loaded row, or the column's own header cell (not a
-                    // group's starting at it)
+                    // group's starting at it); never a cell spanning columns (E1.2): wider
+                    // than its column
                     (rowIndex >= 0
-                        ? rowAt(shown.source, rowIndex) !== undefined
-                        : shown.header.cellAt(rowIndex, columnIndex)?.key ===
-                          key)
+                        ? rowAt(shown.source, rowIndex) !== undefined &&
+                          cellSpan(shown, rowIndex, columnIndex) === 1
+                        : header?.key === key && header?.columnSpan === 1)
                 ) {
                     elements.push(element);
                     columnOf.push(columnIndex);
@@ -2258,11 +2270,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return null;
         }
-        const key = cellKeyAt(before.header, from);
-        return key !== undefined && key === cellKeyAt(after.header, to)
+        const key = cellKeyAt(before, from);
+        return key !== undefined && key === cellKeyAt(after, to)
             ? {
-                  from: elementPosition(from, before.header),
-                  to: elementPosition(to, after.header),
+                  from: elementPosition(from, before),
+                  to: elementPosition(to, after),
               }
             : null;
     }

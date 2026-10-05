@@ -6,6 +6,7 @@ import {
     sameCell,
 } from "../navigation/navigation";
 import { clamp, isIndex, keySet, toggledKey } from "../utils";
+import { overlaps } from "../viewport/window";
 import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
@@ -50,6 +51,7 @@ import {
     validSortColumns,
 } from "./sort";
 import { cellValue, loadedRowKey, type RowsState, rowAt } from "./source";
+import { hasColumnSpans, spanAt, spanHolds } from "./spans";
 import type {
     CellPosition,
     Column,
@@ -183,28 +185,38 @@ function rowCountOf<TRow>(source: RowSource<TRow>): number {
     return "rows" in source ? source.rows.length : source.rowCount;
 }
 
-/** What moves in the grid are bounded by: its rows, its columns and its header's cells. */
+/**
+ * What moves in the grid are bounded by: its rows, its columns, its header's cells and, with
+ * column spans, its body cells' (E1.2).
+ */
 function boundsOf<TRow, TNode>(state: DataGridState<TRow, TNode>): GridBounds {
     return {
         rowCount: state.rowCount,
         columnCount: state.columns.length,
         headerRowCount: headerRowCount(state),
         headerCellAt: state.header.cellAt,
+        cellSpanAt: hasColumnSpans(state.columns)
+            ? (rowIndex, columnIndex) => spanAt(state, rowIndex, columnIndex)
+            : undefined,
     };
 }
 
 /**
- * A position inside a header cell's span, as that cell's position: its first column, on the same
- * row (a column spanning header rows has a position on each of them).
+ * A position inside a cell's span, as that cell's position: its first column, on the same row (a
+ * header cell's; a column spanning header rows has a position on each of them; a body cell's
+ * under a column span, E1.2).
  */
-function headerCellPosition<TRow, TNode>(
+function cellPosition<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     position: CellPosition,
 ): CellPosition {
-    if (position.rowIndex >= 0) return position;
-    const cell = state.header.cellAt(position.rowIndex, position.columnIndex);
-    return cell && cell.columnIndex !== position.columnIndex
-        ? { rowIndex: position.rowIndex, columnIndex: cell.columnIndex }
+    const columnIndex =
+        position.rowIndex >= 0
+            ? spanAt(state, position.rowIndex, position.columnIndex).columnIndex
+            : state.header.cellAt(position.rowIndex, position.columnIndex)
+                  ?.columnIndex;
+    return columnIndex !== undefined && columnIndex !== position.columnIndex
+        ? { rowIndex: position.rowIndex, columnIndex }
         : position;
 }
 
@@ -236,7 +248,7 @@ function reconcile<TRow, TNode>(
     ) {
         return { ...state, activePosition: null };
     }
-    const position = headerCellPosition(state, {
+    const position = cellPosition(state, {
         rowIndex: clamp(active.rowIndex, firstRow, lastRow),
         columnIndex: clamp(active.columnIndex, 0, state.columns.length - 1),
     });
@@ -334,7 +346,10 @@ function setting<T>(value: T | null | undefined, current: T | undefined) {
     return value === undefined ? current : (value ?? undefined);
 }
 
-/** The columns of a span: a column's or a group's header cell (`header.cellByKey`). */
+/**
+ * The columns of a span: a column's or a group's header cell (`header.cellByKey`), a column's
+ * with the ones its header span covers (E1.2).
+ */
 function columnsOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     span: ColumnSpan,
@@ -379,16 +394,35 @@ function withOrder<TRow, TNode>(
     }
     const { columns, header } = layoutOf(state.columnEntries, columnOrder);
     const active = state.activePosition;
-    const key = active ? cellKeyAt(state.header, active) : undefined;
+    const key = active ? cellKeyAt(state, active) : undefined;
     const moved = key === undefined ? undefined : header.cellByKey(key);
     const activePosition =
         active && moved && moved.columnIndex !== active.columnIndex
             ? { rowIndex: active.rowIndex, columnIndex: moved.columnIndex }
             : active;
+    // in its new place, a span may cover it (E1.2)
     return done(
-        { ...state, columnOrder, columns, header, activePosition },
+        withSnappedActive({
+            ...state,
+            columnOrder,
+            columns,
+            header,
+            activePosition,
+        }),
         columnOrder,
     );
+}
+
+/**
+ * The state with its active position at its cell's (`cellPosition`): a span's first column; the
+ * same object when it is there.
+ */
+function withSnappedActive<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+): DataGridState<TRow, TNode> {
+    const active = state.activePosition;
+    const position = active && cellPosition(state, active);
+    return position === active ? state : { ...state, activePosition: position };
 }
 
 function validSize(size: unknown): boolean {
@@ -474,7 +508,14 @@ function createHandlers<TRow, TNode>(
                           range,
                       )
                     : state;
-            return done(next, range);
+            // the active row's new data may span over its column (E1.2)
+            const active = next.activePosition;
+            return done(
+                active && overlaps(range, active.rowIndex, active.rowIndex + 1)
+                    ? withSnappedActive(next)
+                    : next,
+                range,
+            );
         },
         "sort-columns.set": (state, { sortColumns }) => {
             if (!Array.isArray(sortColumns)) {
@@ -775,6 +816,13 @@ function createHandlers<TRow, TNode>(
             if (!isReorderable(siblings.cell)) {
                 return fail("refused", `"${columnKey}" is not reorderable`);
             }
+            // a column a header span covers (E1.2) has no cell among its siblings
+            if (index < 0) {
+                return fail(
+                    "refused",
+                    `"${columnKey}" is covered by a header span`,
+                );
+            }
             const target = cells.findIndex((cell) => cell.key === targetKey);
             if (target < 0) {
                 return fail(
@@ -792,10 +840,23 @@ function createHandlers<TRow, TNode>(
                 );
             }
             if (to === index) return done(state, state.columnOrder);
-            const keys = cells.map((cell) => cell.key);
-            keys.splice(index, 1);
-            keys.splice(to, 0, columnKey);
-            return withOrder(state, movedOrder(state.columnOrder, keys));
+            // a column whose header spans its siblings (E1.2) moves with the ones it covers
+            const units = cells.map((cell) =>
+                cell.group || cell.columnSpan === 1
+                    ? [cell.key]
+                    : state.columns
+                          .slice(
+                              cell.columnIndex,
+                              cell.columnIndex + cell.columnSpan,
+                          )
+                          .map((column) => column.key),
+            );
+            const [moved = [columnKey]] = units.splice(index, 1);
+            units.splice(to, 0, moved);
+            return withOrder(
+                state,
+                movedOrder(state.columnOrder, units.flat()),
+            );
         },
         "column-order.reset": (state) => withOrder(state, []),
         "direction.set": (state, { direction }) => {
@@ -839,7 +900,7 @@ function createHandlers<TRow, TNode>(
                     `no cell at row ${payload.rowIndex}, column ${payload.columnIndex}`,
                 );
             }
-            const position = headerCellPosition(state, {
+            const position = cellPosition(state, {
                 rowIndex: payload.rowIndex,
                 columnIndex: payload.columnIndex,
             });
@@ -1136,9 +1197,22 @@ export function createDataGridModel<TRow, TNode = unknown>(
     const questions: {
         [K in QuestionKey]: (payload: QuestionMap[K]) => boolean;
     } = {
-        "cell-active": (position) =>
-            state.activePosition !== null &&
-            sameCell(state.activePosition, position, state.header.cellAt),
+        // a header cell spanning rows or columns, a body cell spanning columns (E1.2): any
+        // position inside it
+        "cell-active": (position) => {
+            const active = state.activePosition;
+            if (!active) return false;
+            if (
+                position.rowIndex < 0 ||
+                active.rowIndex !== position.rowIndex
+            ) {
+                return sameCell(active, position, state.header.cellAt);
+            }
+            return spanHolds(
+                spanAt(state, position.rowIndex, position.columnIndex),
+                active.columnIndex,
+            );
+        },
         "row-active": ({ rowIndex }) =>
             state.activePosition?.rowIndex === rowIndex,
         "row-loaded": ({ rowIndex }) =>
