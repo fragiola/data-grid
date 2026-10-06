@@ -99,6 +99,10 @@
                     "path": "concepts/row-grouping"
                 },
                 {
+                    "label": "Tree data",
+                    "path": "concepts/tree-data"
+                },
+                {
                     "label": "Measured heights",
                     "path": "concepts/measured-heights"
                 },

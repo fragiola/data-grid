@@ -18,7 +18,6 @@ import {
     siblingsOf,
 } from "../model/order";
 import {
-    groupAt,
     groupExpanded,
     groupKeyAt,
     loadedRowKey,
@@ -2582,9 +2581,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * A row group's keys on a body cell in navigation (Epic #87, the APG treegrid), rows having
-     * kinds: Enter or Space on a group row toggles it, once per press; on a row's first column, →
+     * kinds: Enter on a group row toggles it, and Space on any row that expands (a tree's parent too,
+     * Enter staying its cell's), once per press; on the cell holding the row's toggle (else, the row
+     * rendering none, its first column), →
      * expands a collapsed row group and ← collapses an expanded one, or, from a row that is not
-     * an expanded group, goes to the row it is under (its first column). Each through a command,
+     * an expanded group, goes to the row it is under (the same column). Each through a command,
      * so a middleware can refuse it; any other arrow, or one with nothing to do here, moves.
      */
     function rowGroupKey(event: KeyboardEvent, target: Element): boolean {
@@ -2599,18 +2600,28 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const position = bodyCellOf(target);
         if (!position) return false;
         const { rowIndex } = position;
-        if (event.key === "Enter" || event.key === " ") {
-            if (!groupAt(state.source, rowIndex)) return false;
+        const meta = rowMetaAt(state.source, rowIndex);
+        // Enter on a group row only (a data row's Enter is its cell's: its controls, editing);
+        // Space on any row that expands (a tree's parent too)
+        if (
+            (event.key === "Enter" && meta?.group) ||
+            (event.key === " " &&
+                groupKeyAt(state, rowIndex, meta) !== undefined)
+        ) {
             event.preventDefault();
             // a held key repeats: it would open and close the group
             if (!event.repeat) model.run("row-groups.toggle", { rowIndex });
             return true;
         }
         const move = KEYS[inlineKey(event.key, direction)];
-        if ((move !== "left" && move !== "right") || position.columnIndex > 0) {
+        // on the tree's column: the cell holding the row's toggle, else (a leaf, a row loading)
+        // the column the grid's toggles are in, else the first
+        if (
+            (move !== "left" && move !== "right") ||
+            !onTreeColumn(rowIndex, target, position.columnIndex)
+        ) {
             return false;
         }
-        const meta = rowMetaAt(state.source, rowIndex);
         const groupKey = groupKeyAt(state, rowIndex, meta);
         // → on a collapsed row group expands it, ← on an expanded one collapses it
         if (
@@ -2631,12 +2642,41 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         event.preventDefault();
         pendingFocus = true;
+        // the same column: the tree's (a parent's toggle is where its rows' is)
         model.run("active-position.set", {
             rowIndex: parentIndex,
-            columnIndex: 0,
+            columnIndex: position.columnIndex,
         });
         flushFocus();
         return true;
+    }
+
+    /**
+     * Whether a cell is on its row's tree column (Epic #87): the cell holding the row's group
+     * toggle; for a row rendering none (a leaf, a row loading), the column this grid's toggles are
+     * in, else the first column.
+     */
+    function onTreeColumn(
+        rowIndex: number,
+        cell: Element,
+        columnIndex: number,
+    ): boolean {
+        const own = toggleCellOf(`="${rowIndex}"`);
+        if (own) return own === cell;
+        const any = toggleCellOf("");
+        const column = any ? positionOf(any)?.columnIndex : undefined;
+        return columnIndex === (column ?? 0);
+    }
+
+    /** The cell of this grid holding a group toggle (`value`: its attribute's, or any), or `null`. */
+    function toggleCellOf(value: string): Element | null {
+        if (!viewport) return null;
+        for (const toggle of viewport.querySelectorAll(
+            `[${GROUP_TOGGLE_ATTRIBUTE}${value}]`,
+        )) {
+            if (ownerViewport(toggle) === viewport) return cellNodeOf(toggle);
+        }
+        return null;
     }
 
     function keydown(event: KeyboardEvent): boolean {

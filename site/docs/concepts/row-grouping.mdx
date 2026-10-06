@@ -151,9 +151,12 @@ The keys are the APG treegrid's, on a body cell in navigation:
 
 | key | on |
 | --- | --- |
-| Enter, Space | a group row: toggle it, once per press (F2 hands a cell's controls the keys) |
-| → | a collapsed group's first column: expand it; anywhere else, the next cell |
-| ← | an expanded group's first column: collapse it; another row's first column: go to the row it is under |
+| Enter, Space | a group row: toggle it, once per press (F2 hands a cell's controls the keys); Space a [tree's parent](/docs/concepts/tree-data) too |
+| → | a collapsed group's tree cell: expand it; anywhere else, the next cell |
+| ← | an expanded group's tree cell: collapse it; another row's tree cell: go to the row it is under, in that column |
+
+A row's tree cell is the one holding its toggle (`useGroupToggle`'s element); for a row with none,
+the cell in the column the grid's toggles are in, else the first column.
 | Shift+Space | a group row: select its rows, or clear them all when every one is selected |
 
 Right to left, ← and → swap, as everywhere. Each key runs one command, after your own handlers: a
@@ -171,9 +174,9 @@ anchor toggles it. In single mode a group row cannot be selected.
 
 `rowKeys` are taken as given, as `selected-rows.set` takes keys: the grid cannot ask
 `isRowSelectable` of rows it does not have (a collapsed group's). List only the rows that can be
-selected: `useLocalRows`'s `isRowSelectable` option (the root's predicate, called with a row's
-index among the rows you pass) leaves the ones it refuses out of every group's `rowKeys`. Give it
-to the root too, for the rows' own checkboxes.
+selected: `useLocalRows`'s `isRowSelectable` option, a function of the row only (so the same one
+works for the root's), leaves the ones it refuses out of every group's `rowKeys`. Give it to the
+root too, for the rows' own checkboxes.
 
 ## ARIA
 

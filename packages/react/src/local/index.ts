@@ -5,7 +5,6 @@ import type {
     RowKey,
     RowKeyGetter,
     RowMetaGetter,
-    RowSelectable,
     SortColumn,
 } from "@fragiola/data-grid";
 import {
@@ -18,6 +17,7 @@ import {
 } from "@fragiola/data-grid/local";
 import {
     type ReactNode,
+    useCallback,
     useEffect,
     useLayoutEffect,
     useMemo,
@@ -36,6 +36,8 @@ export {
 /** No grouping: the same list every render. */
 const NO_GROUPS: readonly string[] = [];
 
+const NO_KEYS: readonly RowKey[] = [];
+
 /** Where `useLocalRows` starts, and how it groups (Epic #87). */
 export interface UseLocalRowsOptions<TRow> extends LocalRowsOptions {
     /**
@@ -43,6 +45,14 @@ export interface UseLocalRowsOptions<TRow> extends LocalRowsOptions {
      * row per value, its rows under it while it is expanded. Followed: a new list groups again
      */
     readonly groupBy?: readonly string[] | undefined;
+    /**
+     * the rows under a row (Epic #87, tree data): given, `rows` are the tree's top rows, shown as
+     * a tree whose parents expand by their key (`rowKey`, else their place in the whole tree read
+     * top to bottom); `groupBy` is then not read. Keep it the same function between renders
+     */
+    readonly getSubRows?:
+        | ((row: TRow) => readonly TRow[] | undefined)
+        | undefined;
     /**
      * each column's aggregate over a group's rows, by column key: what the group row's cell in
      * that column shows (`GroupRow.aggregates`). Keep it the same object between renders
@@ -57,11 +67,12 @@ export interface UseLocalRowsOptions<TRow> extends LocalRowsOptions {
      */
     readonly rowKey?: RowKeyGetter<TRow> | undefined;
     /**
-     * whether a row can be selected (as `DataGrid.Root`'s), called with its index among the rows
-     * given: a group's `rowKeys`, what selecting it selects, leave out the rows it refuses. Give
-     * it to the root too (for the rows' own checkboxes). Keep it the same function between renders
+     * whether a row can be selected, a function of the row only, so the same one works for
+     * `DataGrid.Root`'s `isRowSelectable` (give it there too, for the rows' own checkboxes): a
+     * group's `rowKeys` and a tree parent's `subRowKeysOf` leave out the rows it refuses. Keep it
+     * the same function between renders
      */
-    readonly isRowSelectable?: RowSelectable<TRow> | undefined;
+    readonly isRowSelectable?: ((row: TRow) => boolean) | undefined;
     /** the expanded groups' keys, controlled (`groupKeyOf`); pair it with `onExpandedGroupKeysChange` */
     readonly expandedGroupKeys?: readonly RowKey[] | undefined;
     /** the expanded groups changed (or, controlled, ask to) */
@@ -112,7 +123,10 @@ export interface LocalRowsResult<TRow> {
     readonly filteredCount: number;
     /** every page's rows, filtered, searched and sorted: "select all" across pages */
     readonly filteredRows: readonly TRow[];
-    /** the grouping (Epic #87): its columns and its expanded groups, for the app's controls */
+    /**
+     * the grouping or the tree (Epic #87): its columns, its expanded groups (a tree's parents),
+     * for the app's controls
+     */
     readonly group: {
         /** the columns the rows are grouped by, the outer one first (none: not grouped) */
         readonly by: readonly string[];
@@ -120,9 +134,15 @@ export interface LocalRowsResult<TRow> {
         readonly expandedKeys: readonly RowKey[];
         /** expands these groups (the others collapse) */
         setExpandedKeys(expandedGroupKeys: readonly RowKey[]): void;
-        /** expands every group, at every depth */
+        /** expands every group (a tree's every parent), at every depth */
         expandAll(): void;
         collapseAll(): void;
+        /**
+         * the keys of the rows under the row shown at `rowIndex`: a group's rows, a tree parent's
+         * rows at every depth (collapsed ones included); none for another row. What a parent's
+         * checkbox selects with it (`toggledRowKeys` in `@fragiola/data-grid/selection`)
+         */
+        subRowKeysOf(rowIndex: number): readonly RowKey[];
     };
     readonly sort: {
         /** the sorted columns, the first one first (the header toggles them too) */
@@ -145,8 +165,10 @@ export interface LocalRowsResult<TRow> {
      * The rows given, with a move of the rows the grid shows applied (Epic #86: `DataGrid.Root`'s
      * `onRowMove`): the moved row placed beside the row it lands next to on screen, a filtered or
      * paged grid's included. A new array to set as the rows (`rows` itself when nothing moves).
-     * The grid moves no row while it is sorted. Stable: it reads the latest rows, and moves told
-     * before the next render apply one after the other (each to the rows the last one returned).
+     * The grid moves no row while it is sorted, nor while its rows have kinds; in tree mode
+     * (`getSubRows`) it moves nothing and returns `rows` (a tree's rows are not one list). Stable:
+     * it reads the latest rows, and moves told before the next render apply one after the other
+     * (each to the rows the last one returned).
      */
     moveRow(move: {
         readonly fromIndex: number;
@@ -228,6 +250,7 @@ export function useLocalRows<TRow>(
         groupBy,
         aggregates: options?.aggregates,
         rowKey: options?.rowKey,
+        getSubRows: options?.getSubRows,
         isRowSelectable: options?.isRowSelectable,
         expandedGroupKeys,
     });
@@ -266,6 +289,9 @@ export function useLocalRows<TRow>(
                 toIndex: number;
             }) => {
                 const { rows: given, view: shown } = moved.current;
+                // a tree's rows are not one list: nothing moves (the grid moves no row while its
+                // rows have kinds)
+                if (latestOptions.current?.getSubRows) return given;
                 const move = shownRowMove(shown.rowIndexes, fromIndex, toIndex);
                 if (!move) return given;
                 const next = moveRowIn(given, move.fromIndex, move.toIndex);
@@ -283,6 +309,11 @@ export function useLocalRows<TRow>(
     );
     const last = view.pageCount - 1;
     const { groups } = view;
+    // the same function while the rows shown are (a parent's keys are worked out once per tree)
+    const subRowKeysOf = useCallback(
+        (rowIndex: number) => groups?.subRowKeysOf(rowIndex) ?? NO_KEYS,
+        [groups],
+    );
     const sort = {
         sortColumns: state.sortColumns,
         onSortColumnsChange: local.setSortColumns,
@@ -316,6 +347,7 @@ export function useLocalRows<TRow>(
             setExpandedKeys: setExpanded,
             expandAll: () => setExpanded(groups?.groupKeys ?? []),
             collapseAll: () => setExpanded([]),
+            subRowKeysOf,
         },
         sort: {
             columns: state.sortColumns,

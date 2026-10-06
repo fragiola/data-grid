@@ -3,8 +3,8 @@ import { fail } from "./result";
 import {
     dataRowAt,
     keyOf,
-    loadedRowKey,
     type RowsState,
+    rowKeyAt,
     rowMetaAt,
 } from "./source";
 import type {
@@ -209,27 +209,32 @@ export function notLoaded(rowIndex: number): CommandFailure {
     );
 }
 
-/** The anchor, when its key is still at its index. */
+/** The anchor, when its key (a group row's group key, Epic #87) is still at its index. */
 export function validAnchor<TRow>(
     state: Selecting<TRow>,
 ): SelectionAnchor | null {
     const anchor = state.selectionAnchor;
     if (!anchor) return null;
-    return loadedRowKey(state, anchor.rowIndex) === anchor.rowKey
-        ? anchor
-        : null;
+    return rowKeyAt(state, anchor.rowIndex) === anchor.rowKey ? anchor : null;
 }
 
 /**
- * The anchor once the keys are `keys`: kept while its row's state is the one it gives a range;
- * the keys changed it by other means (cleared it, selected it), no range starts there.
+ * The anchor once the keys are `keys`: kept while its row's state is the one it gives a range
+ * (a group row's, Epic #87: every one of its rows selected, or not); the keys changed it by other
+ * means (cleared it, selected it), no range starts there.
  */
-export function keptAnchor(
+export function keptAnchor<TRow>(
+    state: Pick<RowsState<TRow>, "source">,
     anchor: SelectionAnchor | null,
     keys: readonly RowKey[],
 ): SelectionAnchor | null {
     if (!anchor) return null;
-    return keySet(keys).has(anchor.rowKey) === anchor.selected ? anchor : null;
+    const group = rowMetaAt(state.source, anchor.rowIndex)?.group;
+    const selected =
+        group?.key === anchor.rowKey
+            ? groupSelected(group, keys)
+            : keySet(keys).has(anchor.rowKey);
+    return selected === anchor.selected ? anchor : null;
 }
 
 /** One row toggled, by its key (single mode: alone). */

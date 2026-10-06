@@ -5103,5 +5103,137 @@ for (const kind of KINDS) {
                 ).toBeFocused();
             });
         });
+
+        test.describe("tree data", () => {
+            // 100 top rows, each with 3 rows, each of those with 2: a row's index is its place in
+            // the whole tree (the top rows 0, 10, 20, …); a parent's C0 holds its toggle
+            const TREE = { rows: 1_000, columns: 20, tree: 1 } as const;
+
+            function row(page: Page, rowIndex: number) {
+                return page.locator(
+                    `[data-grid-part="row"][data-row-index="${rowIndex}"]`,
+                );
+            }
+
+            function gridPart(page: Page) {
+                return page.locator('[data-grid-part="grid"]');
+            }
+
+            test("makes a treegrid of the top rows, parents data rows that expand", async ({
+                page,
+            }) => {
+                await open(page, kind, TREE);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "role",
+                    "treegrid",
+                );
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "101",
+                );
+                const first = row(page, 0);
+                await expect(first).toHaveAttribute("aria-level", "1");
+                await expect(first).toHaveAttribute("aria-expanded", "false");
+                await expect(first).toHaveAttribute("aria-setsize", "100");
+                await expect(first).toHaveAttribute("aria-posinset", "1");
+                await expect(first).not.toHaveAttribute("data-group-row");
+                await expect(cell(page, 0, 0)).toHaveText("+ 0:0");
+                await expect(cell(page, 1, 0)).toHaveText("+ 10:0");
+                await expect(cell(page, 1, 2)).toHaveText("10:2");
+            });
+
+            test("expands a parent by its toggle, its rows a level down", async ({
+                page,
+            }) => {
+                await open(page, kind, TREE);
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "104",
+                );
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await expect(row(page, 0)).toHaveAttribute(
+                    "data-group-expanded",
+                    "",
+                );
+                await expect(row(page, 2)).toHaveAttribute("aria-level", "2");
+                await expect(row(page, 2)).toHaveAttribute("aria-setsize", "3");
+                await expect(row(page, 2)).toHaveAttribute(
+                    "aria-posinset",
+                    "2",
+                );
+                await expect(cell(page, 2, 0)).toHaveText("+ 4:0");
+                await expect(cell(page, 4, 0)).toHaveText("+ 10:0");
+                expect(
+                    await page.evaluate(() => window.groupChanges.at(-1)),
+                ).toEqual([0]);
+            });
+
+            test("expands with Space and →, goes up and collapses with ←", async ({
+                page,
+            }) => {
+                await open(page, kind, TREE);
+                await cell(page, 0, 1).click();
+                // Enter stays the cell's: nothing opens
+                await page.keyboard.press("Enter");
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                await page.keyboard.press(" ");
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                // on the first column, → opens a collapsed parent, then moves
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("Home");
+                await page.keyboard.press("ArrowRight");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await expect(row(page, 2)).toHaveAttribute("aria-level", "3");
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(cell(page, 1, 0)).toBeFocused();
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(cell(page, 0, 0)).toBeFocused();
+            });
+
+            test("selects a parent alone, by its own key", async ({ page }) => {
+                await open(page, kind, { ...TREE, selection: "multiple" });
+                await page.getByTestId("select-0").click();
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                expect(
+                    await page.evaluate(() => window.selectionChanges.at(-1)),
+                ).toEqual([0]);
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-selected",
+                    "false",
+                );
+            });
+        });
     });
 }

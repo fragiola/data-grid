@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type DataGridModelOptions,
     GROUP_TOGGLE_ATTRIBUTE,
@@ -110,6 +110,24 @@ describe("the parts", () => {
         expect(rowPart(view, 4, true).state.groupExpanded).toBeUndefined();
     });
 
+    it("read a row's kind once per row part", () => {
+        const read = vi.fn(getRowMeta);
+        const view = viewOf(
+            stateOf({
+                getRowMeta: read,
+                rowKey: (row) => row.id,
+                rowSelection: "multiple",
+                selectedRowKeys: [1],
+                expandedGroupKeys: ["g0"],
+            }),
+        );
+        for (const rowIndex of [0, 1, 5]) {
+            read.mockClear();
+            rowPart(view, rowIndex, true);
+            expect(read, `row ${rowIndex}`).toHaveBeenCalledTimes(1);
+        }
+    });
+
     it("give a toggle its row's state and its mark", () => {
         const view = viewOf(stateOf({ getRowMeta, expandedGroupKeys: ["g0"] }));
         expect(groupTogglePart(view, 0)).toEqual({
@@ -164,7 +182,9 @@ describe("Enter and Space", () => {
     it("do nothing of the kind on a data row, nor without row kinds", () => {
         const { activate, key, expanded } = setup();
         key(activate(1), "Enter");
-        key(activate(5), " ");
+        key(activate(1), " ");
+        // a tree's parent keeps Enter for its cell (its controls, editing)
+        expect(key(activate(5), "Enter").handled).toBe(false);
         expect(expanded()).toEqual(["g0"]);
         const plain = setup({ getRowMeta: undefined });
         const toggles: unknown[] = [];
@@ -174,6 +194,24 @@ describe("Enter and Space", () => {
         });
         expect(plain.key(plain.activate(0), "Enter").handled).toBe(false);
         expect(toggles).toEqual([]);
+    });
+
+    it("Space toggles a tree's parent (a row that expands), by its key", () => {
+        const { activate, key, expanded } = setup();
+        const target = activate(5);
+        expect(key(target, " ").handled).toBe(true);
+        expect(expanded()).toEqual(["g0", 5]);
+        key(target, " ");
+        expect(expanded()).toEqual(["g0"]);
+    });
+
+    it("ranges from a group row toggled last: it is the anchor", () => {
+        const { model, activate, key } = setup({ rowSelection: "multiple" });
+        key(activate(1), " ", { shiftKey: true });
+        key(activate(3), " ", { shiftKey: true });
+        key(activate(3), "ArrowDown", { shiftKey: true });
+        // from row 3, not from row 1: row 2 stays out
+        expect(model.state.selectedRowKeys).toEqual([1, 3, 4]);
     });
 
     it("leave Shift+Space to the selection: a group row selects its rows", () => {
@@ -232,6 +270,42 @@ describe("the arrows on a row's first column", () => {
         expect(model.state.activePosition).toEqual({
             rowIndex: 2,
             columnIndex: 0,
+        });
+    });
+
+    it("act on the cell holding the row's toggle, and for a row with none on the toggles' column", () => {
+        const { model, grid, activate, key, expanded } = setup();
+        // the toggles in the second column, after a selection column
+        cellElement(
+            grid,
+            3,
+            1,
+            `<button ${GROUP_TOGGLE_ATTRIBUTE}="3"></button>`,
+        );
+        cellElement(
+            grid,
+            0,
+            1,
+            `<button ${GROUP_TOGGLE_ATTRIBUTE}="0"></button>`,
+        );
+        const toggleCell = grid.querySelector(
+            '[data-row-index="3"][data-column-index="1"]',
+        );
+        if (!toggleCell) throw new Error("no cell");
+        model.run("active-position.set", { rowIndex: 3, columnIndex: 1 });
+        key(toggleCell, "ArrowRight");
+        expect(expanded()).toEqual(["g0", "g1"]);
+        // the first column is a plain one there
+        key(activate(3, 0), "ArrowRight");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 3,
+            columnIndex: 1,
+        });
+        // a row with no toggle of its own: on the toggles' column, ← goes up, in that column
+        key(activate(2, 1), "ArrowLeft");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 0,
+            columnIndex: 1,
         });
     });
 

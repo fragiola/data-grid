@@ -57,7 +57,8 @@ as `DataGrid.Root` wants its columns: the hook works again when they change.
 ## In stages
 
 The rows are filtered, then searched, then sorted, then grouped (with `groupBy`,
-[Row grouping](/docs/concepts/row-grouping)), then paged. Each stage is worked out again only
+[Row grouping](/docs/concepts/row-grouping)) or shown as a tree (with `getSubRows`,
+[Tree data](/docs/concepts/tree-data)), then paged. Each stage is worked out again only
 when its own inputs change: turning a page sorts nothing again, a new sort filters nothing
 again, and expanding a group groups nothing again.
 

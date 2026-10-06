@@ -5,13 +5,13 @@ import type {
     RowKey,
     RowKeyGetter,
     RowMeta,
-    RowSelectable,
     SortColumn,
     SortDirection,
 } from "../model/types";
 import { keySet } from "../utils";
 import type { RowEntry } from "./filter";
 import { sortEntries } from "./sort";
+import { subtreeKeysOf, type TreeNode } from "./tree";
 import { textOf } from "./values";
 
 // Rows in memory grouped by columns (Epic #87, E3.2): the pipeline's stage after the filters, the
@@ -23,7 +23,7 @@ import { textOf } from "./values";
 /** What grouping the rows takes besides them (`useLocalRows`'s options). */
 export interface LocalGrouping<TRow> {
     /** the columns to group by, the outer one first (a key no column has groups by `row[key]`) */
-    readonly groupBy: readonly string[];
+    readonly groupBy?: readonly string[] | undefined;
     /**
      * each column's aggregate over a group's rows, by column key: what the group row's cell in
      * that column shows (`GroupRow.aggregates`)
@@ -37,10 +37,18 @@ export interface LocalGrouping<TRow> {
      */
     readonly rowKey?: RowKeyGetter<TRow> | undefined;
     /**
-     * whether a row can be selected, called with its index among the rows given: a group's
-     * `rowKeys` leave out the ones it refuses (the grid selects a group by them, as given)
+     * whether a row can be selected, a function of the row only (so the same one works for
+     * `DataGrid.Root`'s `isRowSelectable`): a group's `rowKeys` and a tree parent's
+     * `subRowKeysOf` leave out the rows it refuses (the grid selects a group by them, as given)
      */
-    readonly isRowSelectable?: RowSelectable<TRow> | undefined;
+    readonly isRowSelectable?: ((row: TRow) => boolean) | undefined;
+    /**
+     * the rows under a row, for tree data (E3.3): given, the rows given are the tree's top rows
+     * and the pipeline shows them as a tree (`groupBy` is then not read)
+     */
+    readonly getSubRows?:
+        | ((row: TRow) => readonly TRow[] | undefined)
+        | undefined;
     /** the expanded groups' keys; without them, the pipeline's own (`setExpandedGroupKeys`) */
     readonly expandedGroupKeys?: readonly RowKey[] | undefined;
 }
@@ -58,9 +66,20 @@ export interface GroupedRows<TRow> {
     getRowMeta(index: number): RowMeta | undefined;
     /** a data row's key: `rowKey`'s answer, else its index among the rows given */
     rowKey(row: TRow, index: number): RowKey;
-    /** every group's key, at every depth: what expanding them all sets */
+    /**
+     * every group's key, at every depth (a tree's: every parent's key): what expanding them all
+     * sets
+     */
     readonly groupKeys: readonly RowKey[];
+    /**
+     * the keys of the rows under the row at `index`: a group row's rows' (`rowKeys`), a tree
+     * parent's rows at every depth (as filtered, its collapsed ones included); none for any other
+     * row. What a checkbox selecting a parent with its rows sets (`toggledRowKeys`)
+     */
+    subRowKeysOf(index: number): readonly RowKey[];
 }
+
+const NO_KEYS: readonly RowKey[] = [];
 
 /** A group: its row, and its groups one column further (none at the last column) or its rows. */
 export interface GroupNode<TRow> {
@@ -73,6 +92,8 @@ export interface GroupNode<TRow> {
 export interface ShownRow<TRow> {
     readonly meta: RowMeta;
     readonly entry: RowEntry<TRow> | undefined;
+    /** a tree's row (Epic #87, E3.3): its node, the rows under it */
+    readonly node?: TreeNode<TRow> | undefined;
 }
 
 /**
@@ -102,7 +123,7 @@ export function groupTree<TRow, TNode>(
     sortColumns: readonly SortColumn[],
     aggregates: LocalGrouping<TRow>["aggregates"],
     rowKey: RowKeyGetter<TRow> | undefined,
-    isRowSelectable?: RowSelectable<TRow> | undefined,
+    isRowSelectable?: ((row: TRow) => boolean) | undefined,
 ): readonly GroupNode<TRow>[] {
     const byKey = groupBy.map(
         (key): Column<TRow, TNode> =>
@@ -148,9 +169,7 @@ export function groupTree<TRow, TNode>(
                     sums.map(([key, aggregate]) => [key, aggregate(rowsOf)]),
                 ),
                 rowKeys: (isRowSelectable
-                    ? own.filter((entry) =>
-                          isRowSelectable(entry.row, entry.index),
-                      )
+                    ? own.filter((entry) => isRowSelectable(entry.row))
                     : own
                 ).map(keyOf),
             };
@@ -275,6 +294,7 @@ export function groupedRowsOf<TRow>(
     start: number,
     groupKeys: readonly RowKey[],
     rowKey: RowKeyGetter<TRow> | undefined,
+    isRowSelectable?: ((row: TRow) => boolean) | undefined,
 ): GroupedRows<TRow> {
     const rows =
         start === 0
@@ -301,5 +321,12 @@ export function groupedRowsOf<TRow>(
             return rowKey ? rowKey(row, entry.index) : entry.index;
         },
         groupKeys,
+        subRowKeysOf: (index) => {
+            const shown = rows[index];
+            if (shown?.meta.group) return shown.meta.group.rowKeys ?? NO_KEYS;
+            return shown?.node
+                ? subtreeKeysOf(shown.node, rowKey, isRowSelectable)
+                : NO_KEYS;
+        },
     };
 }

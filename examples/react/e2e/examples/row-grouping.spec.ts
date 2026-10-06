@@ -42,17 +42,21 @@ test("expands and collapses a group with the keys", async ({ page }) => {
     await cell(page, 0, 3).click();
     await page.keyboard.press("Enter");
     await expect(row(page, 0)).toHaveAttribute("aria-expanded", "true");
-    // ← on the first column collapses it
-    await page.keyboard.press("Home");
+    // ← on the group's name (its toggle's cell, after the checkboxes) collapses it
+    await cell(page, 0, 1).click({ position: { x: 200, y: 10 } });
     await page.keyboard.press("ArrowLeft");
+    await expect(row(page, 0)).toHaveAttribute("aria-expanded", "false");
+    // the checkbox column is a plain one: → moves to the name, then opens
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowRight");
     await expect(row(page, 0)).toHaveAttribute("aria-expanded", "false");
     await page.keyboard.press("ArrowRight");
     await expect(row(page, 0)).toHaveAttribute("aria-expanded", "true");
-    // down into its people, and ← back up to the group
+    // down into its people, and ← on a name back up to the group's
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowLeft");
     await settle(page);
-    await expect(cell(page, 0, 0)).toBeFocused();
+    await expect(cell(page, 0, 1)).toBeFocused();
 });
 
 test("groups by team, then city", async ({ page }) => {

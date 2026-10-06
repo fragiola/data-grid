@@ -362,7 +362,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     anything else equals. A filter, the search or the sort changing goes to the first page.
    **Row kinds and grouping (Epic #87, E3.1–E3.2):** one generic still (the epic's stop
    condition never met). A source's optional `getRowMeta` (`RowSource`, `RowMetaGetter`; option,
-   `data.set`, `Root`'s `getRowMeta`; `sourceMatches` compares it) answers a `RowMeta` `{ depth?,
+   `data.set`: left out, kept; given `undefined`, cleared, as `rowKey`; `Root` passes it always;
+   `sourceMatches` compares it) answers a `RowMeta` `{ depth?,
    group?, expandable?, parentIndex?, setSize?, posInSet? }` per index, asked only for the
    source's rows (`rowMetaAt`, bounded by `rowCountOf`), `undefined` a data row at the top. A
    **group row** carries `group: GroupRow` (core type, `model/types.ts`: `{ key, columnKey, value,
@@ -384,7 +385,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    groups: the app's rows follow the keys. Selection: `selected-rows.toggle { rowIndex }` at a group
    row (multiple mode, `rowKeys` named: `groupSelectable`) selects its `rowKeys` or clears them all
    when every one is (`groupToggledKeys`, anchor kept by `keptAnchor`), with `extend` a range from
-   the anchor (none: a toggle); `rowKeys` are kept as given (as `selected-rows.set`'s: the grid
+   the anchor (none: a toggle), and by index makes the group row the anchor (its group key, the
+   state it gave; `validAnchor` reads `rowKeyAt`, `keptAnchor` a group anchor's state by
+   `groupSelected`, `selection-anchor.set` takes a group row); `rowKeys` are kept as given (as `selected-rows.set`'s: the grid
    cannot ask `isRowSelectable` of a collapsed group's rows; the app lists the selectable ones);
    `is("row-selected")` on a group row is every one of its keys selected (`groupSelected`, cached
    per group and key list); a range and select-all take a group row's `rowKeys` (`keysOfRow`: a
@@ -420,7 +423,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `parentIndex`); the state keeps `expandedGroupKeys` (`setExpandedGroupKeys`,
    `defaultExpandedGroupKeys`); the view's `groups: GroupedRows | null` (`rowCount`, `getRow`,
    `getRowMeta`, `rowKey`, `groupKeys`). `useLocalRows` options `groupBy`, `aggregates`, `rowKey`, `isRowSelectable`
-   (leaves refused rows out of `rowKeys`; `LocalGrouping` too),
+   (`(row) => boolean`, the row only so the root's works too: leaves refused rows out of
+   `rowKeys` and `subRowKeysOf`; `LocalGrouping` too),
    `expandedGroupKeys`/`onExpandedGroupKeysChange` (controlled, else its own; the options read
    from a ref written in a layout effect); grouped, `props` are `rowCount`, `getRow`,
    `getRowMeta`, `rowKey`, `expandedGroupKeys`, a stable `onExpandedGroupKeysChange` and the sort,
@@ -428,6 +432,26 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    given, `rowIndexes`: the same keys grouped or not); `group` `{ by, expandedKeys,
    setExpandedKeys, expandAll, collapseAll }` for the app's controls. A server sends the same
    flattened shape (documented).
+   **Tree data (Epic #87, E3.3):** the same row model: a tree's parent is a data row with
+   `RowMeta.expandable` (its own key expands it, through `expandedGroupKeys`), its rows a level
+   down (`depth`, `parentIndex`, `setSize`, `posInSet`). Keys: Space toggles any row that expands
+   (`groupKeyAt`), Enter only a group row (a data row's Enter stays its cell's: controls, editing);
+   →/← as for groups. Selection: a parent selects itself (a data row); its rows are the app's
+   (`subRowKeysOf` + `useSelectAll`/`toggledRowKeys`). `/local`: `local/tree.ts` (`treeOf`,
+   `keptTree`, `shownTreeOf`, `parentKeysOf`, `subtreeKeysOf`; pure `treeRows(rows, grouping)`),
+   `LocalGrouping.getSubRows` (`groupBy` then not read): every row at every depth is an entry,
+   its index its place in the tree read top to bottom (`getValue`'s `rowIndex`, the default key;
+   give `rowKey` for keys stable across changes); filters and the search on every row, a match's
+   ancestors kept (`filteredCount`/`filteredRows`: the kept rows at every depth, in the sorted
+   tree's order, `treeEntriesOf`); the sort per sibling list; the page of the rows shown; `moveRow`
+   a no-op; the tree read once per
+   rows and `getSubRows`, kept per filter and sort, shown per expansion. `GroupedRows.groupKeys`
+   (a tree's parents' keys) and `subRowKeysOf(index)` (a group's `rowKeys`, a parent's rows at
+   every depth as kept, less the refused ones; cached per node, `subtreeKeysOf`'s WeakMap; the
+   hook's `group.subRowKeysOf` changes only with the rows shown). `useLocalRows` option `getSubRows`, `group.subRowKeysOf`. A server's
+   lazy children are an app pattern (the `tree-data` example's `lazy.ts`): not-loaded rows keep
+   their place under an expanded parent with their meta (`data-loading`); a failed listing is
+   forgotten, asked again when its folder opens again.
    **Row selection (Epic #57, R1–R9):** headless first: the core keeps only what ARIA, `data-*`
    and the keys need. The model keeps `selectedRowKeys` (keys, `rowKey` else index, in the order
    selected; `selected-rows.set { rowKeys }`, `selected-rows.toggle { rowIndex, extend? } |
@@ -655,11 +679,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     same), after the consumer's handlers; with `rowKey` the active cell follows the row once the
     app moved it; without `onRowMove` they are plain arrows. A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. With row kinds (Epic
-    #87, `rowGroupKey`, the APG treegrid, on a body cell in navigation, no modifier): Enter and
-    Space on a group row run one `row-groups.toggle` (once per press; before interaction, so a
-    group cell's controls get the keys by F2); on a row's first column (logical: `inlineKey`) → on a
-    collapsed row group expands it, ← on an expanded one collapses it, else ← goes to its
-    `parentIndex` (`active-position.set`, focus following); any other arrow, or one with nothing to
+    #87, `rowGroupKey`, the APG treegrid, on a body cell in navigation, no modifier): Enter on a
+    group row and Space on any row that expands (a tree's parent too) run one `row-groups.toggle`
+    (once per press; before interaction, so a group cell's controls get the keys by F2); on a row's
+    tree cell (`onTreeColumn`: the cell holding its `data-grid-group-toggle`, the engine's own
+    cells; a row with none, the column this grid's toggles are in, else the first) → (logical:
+    `inlineKey`) on a collapsed row group expands it, ← on an expanded one collapses it, else ←
+    goes to its `parentIndex` in the same column (`active-position.set`, focus following); any other arrow, or one with nothing to
     do, moves as usual. Shift+Space on a group row selects its rows. With summary rows
     (Epic #86) the keys move by line through the header, the top summary rows, the body and the
     bottom ones (see D10). ARIA: `role="grid"` (`treegrid` with row kinds),

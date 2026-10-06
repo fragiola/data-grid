@@ -107,6 +107,10 @@ import { createRoot } from "react-dom/client";
 //                        (<count>)`, its C4 the sum of its rows' indexes (an aggregate), its C1
 //                        a checkbox with &selection=multiple; keyed by index, the expanded
 //                        groups uncontrolled
+//   &tree=1              tree data in memory (`useLocalRows`'s `getSubRows`): 100 top rows, each
+//                        with 3 rows, each of those with 2 (1,000 in all), a row's index its
+//                        place in the whole tree read top to bottom (its key); a parent's C0
+//                        cell holds its toggle (`group-toggle-<row>`) before its value
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
@@ -183,6 +187,26 @@ function GroupToggle({ cell }: { cell: CellInfo<FixtureRow> }) {
             {state.expanded ? "-" : "+"}
         </button>
     );
+}
+
+/**
+ * `&tree=1`'s tree: 100 top rows, each with 3 rows, each of those with 2, every row's index its
+ * place in the whole tree read top to bottom.
+ */
+function fixtureTree(): {
+    roots: FixtureRow[];
+    subRows: Map<FixtureRow, FixtureRow[]>;
+} {
+    let next = 0;
+    const subRows = new Map<FixtureRow, FixtureRow[]>();
+    const level = (count: number, below: readonly number[]): FixtureRow[] =>
+        Array.from({ length: count }, () => {
+            const row = { index: next++ };
+            const [size, ...rest] = below;
+            if (size !== undefined) subRows.set(row, level(size, rest));
+            return row;
+        });
+    return { roots: level(100, [3, 2]), subRows };
 }
 
 /** A group row's cell content: C0 its toggle and its value and count, C1 its checkbox. */
@@ -766,6 +790,15 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const rowReorder = params.get("rowReorder") === "1";
     const groupByParam = numberParam(params, "groupBy", 0);
     const grouping = groupByParam > 0;
+    const tree = params.get("tree") === "1";
+    const treeData = useMemo(() => (tree ? fixtureTree() : null), [tree]);
+    const getSubRows = useMemo(
+        () =>
+            treeData
+                ? (row: FixtureRow) => treeData.subRows.get(row)
+                : undefined,
+        [treeData],
+    );
     // the rows' order, by id (the index each row had first): the app's, moved on each move
     const [rowOrder, setRowOrder] = useState<readonly number[]>(() =>
         rowReorder ? Array.from({ length: rowCount }, (_, index) => index) : [],
@@ -879,19 +912,24 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     );
     const memoryRows = useMemo(
         () =>
-            grouping
-                ? Array.from({ length: rowCount }, (_, index) => ({ index }))
-                : NO_ROWS,
-        [grouping, rowCount],
+            treeData
+                ? treeData.roots
+                : grouping
+                  ? Array.from({ length: rowCount }, (_, index) => ({ index }))
+                  : NO_ROWS,
+        [treeData, grouping, rowCount],
     );
     const local = useLocalRows(memoryRows, columns, {
         groupBy,
+        getSubRows,
         aggregates: AGGREGATES,
         rowKey: rowId,
         onExpandedGroupKeysChange: (keys) => window.groupChanges.push(keys),
     });
     const groupedProps =
-        grouping && local.props.rows === undefined ? local.props : undefined;
+        (grouping || tree) && local.props.rows === undefined
+            ? local.props
+            : undefined;
     const rowHeight = useMemo(
         () =>
             autoRows
@@ -1026,6 +1064,14 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                             rowSelection ===
                                                                 "multiple",
                                                         )
+                                                    ) : tree &&
+                                                      cell.columnIndex === 0 ? (
+                                                        <>
+                                                            <GroupToggle
+                                                                cell={cell}
+                                                            />{" "}
+                                                            {String(cell.value)}
+                                                        </>
                                                     ) : (details ||
                                                           rowReorder) &&
                                                       cell.columnIndex === 0 ? (

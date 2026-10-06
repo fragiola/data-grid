@@ -295,6 +295,24 @@ describe("row groups", () => {
         expect(selected).toEqual([false, true, false, true]);
     });
 
+    it("drop the row kinds when getRowMeta is removed from the root", () => {
+        const getRowMeta = () => ({ depth: 0 });
+        const plain = (props: { meta?: boolean }) => (
+            <DataGrid.Root
+                columns={columns}
+                rows={sales}
+                rowHeight={20}
+                getRowMeta={props.meta ? getRowMeta : undefined}
+            >
+                <DataGrid.Grid />
+            </DataGrid.Root>
+        );
+        const { container, rerender } = render(plain({ meta: true }));
+        expect(grid(container)?.getAttribute("role")).toBe("treegrid");
+        rerender(plain({}));
+        expect(grid(container)?.getAttribute("role")).toBe("grid");
+    });
+
     it("nest by two columns, and expand them all", () => {
         const { container } = render(<Sales groupBy={["country", "city"]} />);
         act(() => latest?.group.expandAll());

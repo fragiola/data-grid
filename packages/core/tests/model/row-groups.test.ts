@@ -100,10 +100,14 @@ describe("rows with kinds", () => {
         expect(model.get("expanded-group-keys")).toEqual([]);
     });
 
-    it("takes and drops getRowMeta with the data", () => {
+    it("takes getRowMeta with the data: left out, kept; given undefined, cleared (as rowKey)", () => {
         const model = setup();
         const rows = [{ id: "x", amount: 1 }];
+        const kept = model.state.source.getRowMeta;
         expect(model.run("data.set", { rows }).ok).toBe(true);
+        expect(model.state.source.getRowMeta).toBe(kept);
+        expect(model.state.rowKey).toBeDefined();
+        model.run("data.set", { rows, getRowMeta: undefined });
         expect(model.state.source.getRowMeta).toBeUndefined();
         const getRowMeta = () => ({ depth: 2 });
         model.run("data.set", { rows, getRowMeta });
@@ -245,6 +249,39 @@ describe("selecting a group row", () => {
         });
         const all = model.run("selected-rows.select-all", {});
         expect(all.ok || all.error.code).toBe("not_loaded");
+    });
+
+    it("makes a group row toggled by its index the anchor, with the state it gave", () => {
+        const model = setup({ rowSelection: "multiple" });
+        model.run("selected-rows.toggle", { rowIndex: 1 });
+        model.run("selected-rows.toggle", { rowIndex: 3 });
+        expect(model.get("selection-anchor")).toEqual({
+            rowKey: "b",
+            rowIndex: 3,
+            selected: true,
+        });
+        // from the group row, not from r1: r2 stays out
+        model.run("selected-rows.toggle", { rowIndex: 4, extend: true });
+        expect(model.get("selected-row-keys")).toEqual(["r1", "r3", "p"]);
+        // the keys set as the anchor's state left it: the anchor stays
+        model.run("selected-rows.set", { rowKeys: ["r3"] });
+        expect(model.get("selection-anchor")?.rowKey).toBe("b");
+        model.run("selected-rows.set", { rowKeys: [] });
+        expect(model.get("selection-anchor")).toBeNull();
+        // a group row can be the anchor a controlled root sets back
+        expect(
+            model.run("selection-anchor.set", { rowIndex: 0, selected: false })
+                .ok,
+        ).toBe(true);
+    });
+
+    it("names groupKeys when row-groups.set is given no list", () => {
+        const model = setup();
+        const result = model.run("row-groups.set", {
+            // @ts-expect-error: not a list
+            groupKeys: "a",
+        });
+        expect(result.ok || result.error.message).toMatch(/^groupKeys/);
     });
 
     it("extends a range to a group row, and toggles it without an anchor", () => {

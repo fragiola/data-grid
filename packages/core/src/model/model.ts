@@ -66,10 +66,12 @@ import {
 } from "./sort";
 import {
     cellValue,
+    dataRowAt,
     groupAt,
     groupCellValue,
     groupKeyAt,
     isGroupExpanded,
+    keyOf,
     loadedRowKey,
     type RowsState,
     rowAt,
@@ -113,6 +115,7 @@ import type {
     ResultOf,
     RowKey,
     RowKeyGetter,
+    RowMeta,
     RowSource,
     SelectionAnchor,
     SortColumn,
@@ -368,8 +371,9 @@ function sourceOf<TRow>(given: RowSource<TRow>): RowSource<TRow> {
 /** The keys a `set` takes, once each, or why they are refused. */
 function validRowKeys(
     rowKeys: readonly RowKey[],
+    name = "rowKeys",
 ): CommandResult<readonly RowKey[]> {
-    if (!Array.isArray(rowKeys)) return invalid("rowKeys must be an array");
+    if (!Array.isArray(rowKeys)) return invalid(`${name} must be an array`);
     const keys = uniqueRowKeys(rowKeys);
     return keys
         ? { ok: true, value: keys }
@@ -384,11 +388,15 @@ function loadedKeyAt<TRow>(
     state: RowsState<TRow>,
     rowIndex: number,
     unloaded: (rowIndex: number) => CommandFailure,
+    meta: RowMeta | undefined = rowMetaAt(state.source, rowIndex),
 ): CommandResult<RowKey> {
     if (!isIndex(rowIndex, state.rowCount)) {
         return fail("not_found", `no row ${rowIndex}`);
     }
-    const key = loadedRowKey(state, rowIndex);
+    const row = meta?.group
+        ? undefined
+        : dataRowAt(state.source, rowIndex, meta);
+    const key = row === undefined ? undefined : keyOf(state, row, rowIndex);
     return key === undefined ? unloaded(rowIndex) : { ok: true, value: key };
 }
 
@@ -617,9 +625,14 @@ function toggledGroup<TRow, TNode>(
             ? toggled(selected(state, extended.value, state.selectionAnchor))
             : extended;
     }
-    const keys = groupToggledKeys(state, group);
+    // a toggle by index makes its row the anchor, with the state it gave (as a data row's)
+    const was = isRowSelected(state, rowIndex);
     return toggled(
-        selected(state, keys, keptAnchor(state.selectionAnchor, keys)),
+        selected(state, groupToggledKeys(state, group), {
+            rowKey: group.key,
+            rowIndex,
+            selected: !was,
+        }),
     );
 }
 
@@ -672,7 +685,12 @@ function createHandlers<TRow, TNode>(
             }
             const next = withSource(
                 state,
-                sourceOf(payload),
+                // a field left out keeps what the grid has, one given `undefined` clears it
+                sourceOf(
+                    "getRowMeta" in payload
+                        ? payload
+                        : { ...payload, getRowMeta: state.source.getRowMeta },
+                ),
                 "rowKey" in payload ? payload.rowKey : state.rowKey,
                 hints,
             );
@@ -813,7 +831,7 @@ function createHandlers<TRow, TNode>(
             );
         },
         "row-groups.set": (state, { groupKeys }) => {
-            const keys = validRowKeys(groupKeys);
+            const keys = validRowKeys(groupKeys, "groupKeys");
             if (!keys.ok) return keys;
             return withGroupKeys(state, keys.value);
         },
@@ -848,7 +866,7 @@ function createHandlers<TRow, TNode>(
             return selected(
                 state,
                 keys,
-                keptAnchor(state.selectionAnchor, keys),
+                keptAnchor(state, state.selectionAnchor, keys),
             );
         },
         "selected-rows.toggle": (state, payload) => {
@@ -861,16 +879,17 @@ function createHandlers<TRow, TNode>(
                 );
             }
             const rowIndex = payload.rowIndex;
-            const group = groupAt(state.source, rowIndex);
-            if (group) {
+            // the row read once: a group row, or a data row's key
+            const meta = rowMetaAt(state.source, rowIndex);
+            if (meta?.group) {
                 return toggledGroup(
                     state,
-                    group,
+                    meta.group,
                     rowIndex,
                     payload.extend === true,
                 );
             }
-            const found = loadedKeyAt(state, rowIndex, notLoaded);
+            const found = loadedKeyAt(state, rowIndex, notLoaded, meta);
             if (!found.ok) return found;
             const key = found.value;
             // one row at a time has no range: a Shift+click is a toggle there
@@ -912,10 +931,14 @@ function createHandlers<TRow, TNode>(
             ),
         "selection-anchor.set": (state, { rowIndex, selected: selects }) => {
             if (!state.rowSelection) return selectionOff();
-            const found = loadedKeyAt(state, rowIndex, notLoaded);
-            if (!found.ok) return found;
+            if (!isIndex(rowIndex, state.rowCount)) {
+                return fail("not_found", `no row ${rowIndex}`);
+            }
+            // a group row's anchor is its group key (Epic #87)
+            const rowKey = rowKeyAt(state, rowIndex);
+            if (rowKey === undefined) return notLoaded(rowIndex);
             const anchor = {
-                rowKey: found.value,
+                rowKey,
                 rowIndex,
                 selected: selects !== false,
             };
@@ -934,7 +957,7 @@ function createHandlers<TRow, TNode>(
             return selected(
                 state,
                 all.value,
-                keptAnchor(state.selectionAnchor, all.value),
+                keptAnchor(state, state.selectionAnchor, all.value),
             );
         },
         "row-selection.set": (state, { rowSelection, isRowSelectable }) => {
@@ -967,7 +990,7 @@ function createHandlers<TRow, TNode>(
                           selectedRowKeys: keys,
                           // no range survives selection turned off, nor its row trimmed
                           selectionAnchor: mode
-                              ? keptAnchor(state.selectionAnchor, keys)
+                              ? keptAnchor(state, state.selectionAnchor, keys)
                               : null,
                       };
             return done(next, undefined);
@@ -1515,9 +1538,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "cell-value-by": ({ rowIndex, columnIndex }) => {
             const column = state.columns[columnIndex];
             if (!column) return undefined;
-            const group = groupAt(state.source, rowIndex);
-            if (group) return groupCellValue(group, column);
-            const row = rowAt(state.source, rowIndex);
+            const meta = rowMetaAt(state.source, rowIndex);
+            if (meta?.group) return groupCellValue(meta.group, column);
+            const row = dataRowAt(state.source, rowIndex, meta);
             return row !== undefined
                 ? cellValue(column, row, rowIndex)
                 : undefined;

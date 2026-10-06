@@ -22,4 +22,5 @@ export {
     pageRows,
     searchRows,
     sortRows,
+    treeRows,
 } from "./rows";
