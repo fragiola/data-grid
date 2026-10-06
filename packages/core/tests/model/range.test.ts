@@ -175,14 +175,38 @@ describe("the selected range", () => {
         expect(empty.run("selected-range.select-all", {}).ok).toBe(false);
     });
 
-    it("goes when cells stop being selectable, and keeps inside the body as rows and columns go", () => {
-        const model = grid({ selectedRange: range([2, 1], [8, 3]) });
-        model.run("data.set", {
-            rows: [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }],
+    it("goes when cells stop being selectable, or other rows or columns are at its corners", () => {
+        const rows = Array.from({ length: 10 }, (_, id) => ({ id }));
+        const model = grid({
+            rows,
+            rowKey: (row) => row.id,
+            selectedRange: range([2, 1], [8, 3]),
         });
-        expect(model.state.selectedRange).toEqual(range([2, 1], [3, 3]));
-        model.run("columns.set", { columns: COLUMNS.slice(0, 2) });
-        expect(model.state.selectedRange).toEqual(range([2, 1], [3, 1]));
+        // rows growing at the end (infinite scrolling) and new rows and columns objects that hold
+        // the same keys at its corners keep it
+        model.run("data.set", {
+            rows: [...rows, ...rows.map((row) => ({ id: row.id + 10 }))],
+        });
+        model.run("columns.set", { columns: [...COLUMNS] });
+        expect(model.state.selectedRange).toEqual(range([2, 1], [8, 3]));
+        // the rows sorted again: other rows at its corners
+        model.run("data.set", {
+            rows: [...rows].reverse(),
+        });
+        expect(model.state.selectedRange).toBeNull();
+        // a column hidden at a corner
+        model.run("selected-range.set", range([2, 1], [3, 3]));
+        model.run("columns.set", {
+            columns: [COLUMNS[0], COLUMNS[2], COLUMNS[3]].filter(
+                (column) => column !== undefined,
+            ),
+        });
+        expect(model.state.selectedRange).toBeNull();
+        // rows gone past its corner: clamped onto other rows, it goes
+        model.run("selected-range.set", range([2, 1], [8, 2]));
+        model.run("data.set", { rows: rows.slice(0, 4) });
+        expect(model.state.selectedRange).toBeNull();
+        model.run("selected-range.set", range([0, 0], [1, 1]));
         model.run("data.set", { rows: [] });
         expect(model.state.selectedRange).toBeNull();
         const other = grid({ selectedRange: range([0, 0], [1, 1]) });
@@ -199,6 +223,37 @@ describe("the selected range", () => {
         expect(bad.ok).toBe(false);
         other.run("cell-selection.set", { cellSelection: "range" });
         expect(other.get("cell-selection")).toBe("range");
+    });
+
+    it("keeps a corner on a row not loaded by index, and takes its keys once it is", () => {
+        const loaded = new Map<number, Row>();
+        const getRow = (index: number) => loaded.get(index);
+        const model = grid({
+            rows: undefined,
+            rowCount: 100,
+            getRow,
+            rowKey: (row) => row.id,
+            selectedRange: range([2, 0], [5, 1]),
+        });
+        expect(model.state.selectedRangeKeys).toEqual({
+            anchor: undefined,
+            focus: undefined,
+        });
+        // rows arriving at its corners: their keys
+        loaded.set(2, { id: 102 });
+        loaded.set(5, { id: 105 });
+        model.run("rows.changed", { start: 0, end: 10 });
+        expect(model.state.selectedRangeKeys).toEqual({
+            anchor: { rowKey: 102, columnKey: "id" },
+            focus: { rowKey: 105, columnKey: "name" },
+        });
+        // more rows behind the same getter (infinite scrolling): it stays
+        model.run("data.set", { rowCount: 200, getRow });
+        expect(model.state.selectedRange).toEqual(range([2, 0], [5, 1]));
+        // another row at a corner: it goes
+        loaded.set(5, { id: 999 });
+        model.run("rows.changed", { start: 5, end: 6 });
+        expect(model.state.selectedRange).toBeNull();
     });
 
     it("goes when the active cell moves off its anchor, whatever moves it", () => {

@@ -6,6 +6,7 @@ import type {
     Column,
     ColumnWidths,
     EditingCell,
+    EditorProps,
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
@@ -192,6 +193,12 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly fillable: boolean;
     /** the fill a handle's drag is making, or `null` */
     readonly fill: FillDrag | null;
+    /**
+     * the cells a fill drags from (E4.4): the selected range, else the active body cell, widened
+     * to the column spans it cuts, as its first and last cells; its handle at the last one.
+     * `null` without one, cells not filling, or while a cell is edited
+     */
+    readonly fillSource: CellRange | null;
     /** the selected range of body cells, or `null` (a cell's part tells whether it is in it) */
     readonly selectedRange: CellRange | null;
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
@@ -284,6 +291,8 @@ export interface RowMove {
 export interface EditDraft {
     readonly value: unknown;
     readonly initialValue: unknown;
+    /** what marks an element outside the cell as this edit's editor (the same for the edit) */
+    readonly editorProps: EditorProps;
 }
 
 /**

@@ -343,29 +343,55 @@ describe("cell ranges by the pointer", () => {
         press(first, "pointerup", 20, yOf(5));
     });
 
-    it("ends a drag when the rows or the columns change under it, the range kept", () => {
-        const { cellAt, drag, press, selected, model } = setup();
+    it("keeps a drag through rows growing at the end (infinite scrolling) and same-keyed columns", () => {
+        const getRow = (id: number) => ({ id });
+        const { cellAt, drag, press, selected, model } = setup({
+            rowKey: (row) => row.id,
+        });
         const cell = cellAt(1, 1);
         drag(cell, [xOf(1), yOf(1)], xOf(2), 250);
         expect(frames.size).toBe(1);
-        model.run("data.set", { rowCount: 500, getRow: (id) => ({ id }) });
-        frame();
-        expect(frames.size).toBe(0);
-        const kept = selected();
-        expect(kept?.anchor).toEqual(at(1, 1));
+        // more rows behind the same keys, a new getter, a new columns array: it goes on
+        model.run("data.set", { rowCount: 2_000, getRow });
+        model.run("columns.set", { columns: [...COLUMNS] });
+        expect(frames.size).toBe(1);
         press(cell, "pointermove", xOf(3), yOf(2));
         frame();
         press(cell, "pointerup", xOf(3), yOf(2));
-        expect(selected()).toEqual(kept);
-        // new columns
+        // still dragging: the range reached the pointer's column
+        expect(selected()?.anchor).toEqual(at(1, 1));
+        expect(selected()?.focus.columnIndex).toBe(3);
+    });
+
+    it("ends a drag when other rows or columns come under its anchor", () => {
+        const { cellAt, drag, press, selected, model } = setup({
+            rowKey: (row) => row.id,
+        });
+        const cell = cellAt(1, 1);
+        drag(cell, [xOf(1), yOf(1)], xOf(2), 250);
+        expect(frames.size).toBe(1);
+        // the rows sorted again: another row at its anchor (the range goes with it)
+        model.run("data.set", {
+            rowCount: 1_000,
+            getRow: (index) => ({ id: 999 - index }),
+        });
+        frame();
+        expect(frames.size).toBe(0);
+        expect(selected()).toBeNull();
+        press(cell, "pointermove", xOf(3), yOf(2));
+        frame();
+        press(cell, "pointerup", xOf(3), yOf(2));
+        expect(selected()).toBeNull();
+        // a column hidden at its anchor
         drag(cell, [xOf(1), yOf(1)], xOf(2), yOf(3));
-        const before = selected();
-        expect(before?.focus.columnIndex).toBe(2);
-        model.run("columns.set", { columns: COLUMNS.slice(0, 6) });
+        expect(selected()?.focus.columnIndex).toBe(2);
+        model.run("columns.set", {
+            columns: COLUMNS.filter((_, index) => index !== 1),
+        });
         press(cell, "pointermove", xOf(0), yOf(5));
         frame();
         press(cell, "pointerup", xOf(0), yOf(5));
-        expect(selected()).toEqual(before);
+        expect(selected()).toBeNull();
     });
 
     it("starts no drag and selects nothing from a Shift+press whose extend is refused", () => {
@@ -618,7 +644,7 @@ describe("the clipboard", () => {
         expect(header.childElementCount).toBe(0);
     });
 
-    it("leaves a page's own selection, and drops its node with the next task without a copy", async () => {
+    it("takes the copy from a page's selection elsewhere, leaves one in the cell, and drops its node with the next task", async () => {
         const { engine, cellAt } = setup({ activePosition: at(1, 1) });
         const cell = cellAt(1, 1);
         const text = document.createElement("p");
@@ -626,10 +652,24 @@ describe("the clipboard", () => {
         document.body.append(text);
         const selection = document.getSelection();
         if (!selection) throw new Error("no selection");
+        // text selected elsewhere on the page would take the copy: the cell's node holds it
         selection.selectAllChildren(text);
         keydown(engine, cell, "c", { ctrlKey: true });
+        expect(cell.childElementCount).toBe(1);
+        expect(cell.contains(selection.anchorNode)).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(cell.childElementCount).toBe(0);
+        // the page's selection put back
         expect(String(selection)).toBe("page text");
+        // text selected in the cell itself copies as it is
+        const content = document.createElement("span");
+        content.textContent = "cell text";
+        cell.append(content);
+        selection.selectAllChildren(content);
+        keydown(engine, cell, "c", { ctrlKey: true });
+        expect(cell.childElementCount).toBe(1);
+        expect(String(selection)).toBe("cell text");
+        content.remove();
         selection.removeAllRanges();
         keydown(engine, cell, "c", { ctrlKey: true });
         expect(cell.childElementCount).toBe(1);

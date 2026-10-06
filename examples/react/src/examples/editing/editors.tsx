@@ -81,12 +81,13 @@ export function AmountEditor<TRow>({
 
 /**
  * A status: a select, open as the edit starts; choosing one commits it. Its list is portalled out
- * of the grid: marked as the edit's (`data-grid-editor`), a press or focus there keeps it open.
+ * of the grid: marked as the edit's (`editorProps`), a press or focus there keeps it open.
  */
 export function StatusEditor<TRow>({
     value,
     onCommit,
     column,
+    editorProps,
     className,
 }: EditorProps<TRow>) {
     return (
@@ -101,7 +102,7 @@ export function StatusEditor<TRow>({
             <Select.Trigger aria-label={column.name} className={className}>
                 <Select.Value />
             </Select.Trigger>
-            <Select.Content data-grid-editor="">
+            <Select.Content {...editorProps}>
                 {STATUSES.map((status) => (
                     <Select.Item key={status} value={status}>
                         {status}

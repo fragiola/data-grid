@@ -44,14 +44,18 @@ the key that started it (`startKey`) and three functions:
 The draft is the grid's while the edit lasts: it starts as the cell's value, and only the edited
 cell renders as it changes. `startKey` is the printable key typed to start the edit, else
 `undefined`: a text field starts from it, as a spreadsheet replaces a cell's content with what is
-typed (`onChange(startKey)` when the editor mounts). The grid focuses the edited cell's first
-control once it renders, unless your editor took focus itself. A cell rendered with children of
+typed (`onChange(startKey)` when the editor mounts). The grid focuses the edited cell's editor
+once it renders, unless your editor took focus itself: the first control inside an element of the
+cell marked with `data-grid-editor`, else its first control that is not one of the grid's own (a
+row's drag handle, a group's toggle, a fill handle, a resizer). A cell rendered with children of
 your own shows them while edited too: `useCellEdit(cell)` gives an editor in them the same props,
 `null` for any other cell.
 
 An edit needs an editor to take focus: when the edited cell renders no control (an `editable`
-column without `renderEditCell`, nor an editor in its children), the edit is cancelled as it
-renders, so it never holds the keys with nothing to type in.
+column without `renderEditCell`, nor an editor in its children), the edit is cancelled right after
+it renders (the next task), so it never holds the keys with nothing to type in. An editor that
+focuses its control a moment later (in an effect or the next frame, a field portalled out of the
+grid marked with its `editorProps`) keeps it.
 
 ## Telling the edit
 
@@ -90,7 +94,9 @@ Inside an edit every other key is the editor's: the arrows, Home, End and the pa
 caret, never the active cell; Ctrl+A, copy and paste are the field's own. The grid's keys run
 after your own handlers, so an editor that prevents Enter or Tab keeps the edit open: a value it
 refuses, a newline in a text area. Shift+Space stays the [row selection](/docs/concepts/row-selection)'s,
-and Ctrl, ⌘ or Alt with a key starts no edit.
+and ⌘, Ctrl or Alt with a key starts no edit, but a character typed with AltGr (Ctrl+Alt on
+Windows) or Option (macOS) does. The keys of a composition (an input method) are never the grid's:
+the Enter that confirms one stays the editor's.
 
 On a cell that is not editable, nothing changes: Enter and F2 on a cell holding controls still hand
 them the keys ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)), and Enter on a
@@ -111,12 +117,14 @@ something keeps it there.
 
 A select's list or a date picker's calendar is often rendered at the end of the page (a portal),
 outside the edited cell. A press or focus there would commit the edit as one outside the cell.
-Mark such an element with `data-grid-editor`: a press or focus inside it belongs to the edit.
+Spread the editor's `editorProps` on such an element: a press or focus inside it belongs to the
+edit. They carry `data-grid-editor`, its value naming this edit of this grid, so another grid's
+popover (or one left from an earlier edit) is not this edit's.
 
 ```tsx title="status-editor.tsx"
 <Select.Root value={String(value)} defaultOpen onValueChange={(status) => onCommit(status)}>
     <Select.Trigger aria-label="Status" />
-    <Select.Content data-grid-editor="">{/* the options */}</Select.Content>
+    <Select.Content {...editorProps}>{/* the options */}</Select.Content>
 </Select.Root>
 ```
 

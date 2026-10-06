@@ -42,8 +42,11 @@ and `selected-range.clear`, which a [middleware](/docs/concepts/model-and-engine
 
 The range covers body cells only: the header and the [summary rows](/docs/concepts/summary-rows)
 are never in it. A [group row](/docs/concepts/row-grouping)'s cells are cells of the range like
-any other. When rows or columns go (new data, a filter), the range stays inside the ones left,
-cut at the last row and column; when the columns are laid out again (a new
+any other. The range stays on the cells it was set on, by their row's key (`rowKey`, else its
+index) and their column's key at its corners: new rows or columns that keep them there (rows
+loaded at the end as a person scrolls, a new `columns` array) keep it, and other ones there (the
+rows sorted again, a row inserted above, a column hidden) take it away. Give rows a key so a sort
+is told apart. When the columns are laid out again (a new
 [order](/docs/concepts/column-reordering), a [group](/docs/concepts/collapsible-groups) opened or
 closed), it goes.
 
@@ -75,7 +78,8 @@ it, and nothing scrolls sideways: only the edges of the columns that scroll scro
 among the pinned columns leaves them where they are. The cell under the pointer comes from the rows'
 and columns' positions, not the elements, so [scroll scaling](/docs/concepts/scroll-scaling) and
 [measured heights](/docs/concepts/measured-heights) change nothing. Escape during a drag clears
-the range.
+the range. Rows arriving at the end during a drag keep it going; other rows or columns at its
+anchor end it.
 
 A Shift+click reaches the clicked cell from the range's anchor (the active cell without a range),
 the active cell and focus staying; dragged on, it goes on from there. A press on a control inside
@@ -111,9 +115,10 @@ Ctrl+C on one of the grid's cells puts the range (or, without one, the active ce
 clipboard as tab-separated text: a row per line, a tab between values, a value holding a tab, a
 line break or a double quote quoted. It uses the page's own copy event, so the browser asks for no
 permission, and it reaches the grid after your own `onCopy` on the root: `preventDefault` there
-keeps the grid out. A field inside a cell keeps its own copy. Safari fires a copy only while
-something is selected: on Ctrl+C (⌘+C) the grid selects a hidden node of the focused cell for the
-copy, when nothing else is, and puts the page's selection back right after.
+keeps the grid out. A field inside a cell keeps its own copy. On Ctrl+C (⌘+C) the grid selects a
+hidden node of the focused cell for the copy, and puts the page's selection back right after:
+Safari fires a copy only while something is selected, and text selected elsewhere on the page
+would take the copy. Text selected inside the cell itself copies as it is.
 
 Each cell's text is its column's `getCopyText({ row, rowIndex, column, columnIndex, value })`,
 else its value as text: a string, a number or a boolean as it is, anything else (an object, a

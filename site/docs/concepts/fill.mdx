@@ -47,7 +47,8 @@ yours to compute from the same ranges, as the [example](/examples/fill)'s series
 
 The handle is an element of yours: render it in your cells with `useFillHandle(cell)`. It is
 visible in one cell only, the corner a fill drags from: the selected range's last row and last
-column, else the active cell (a body cell), and never while a cell is
+column (past any cell spanning columns the range cuts), else the active cell (a body cell), and
+never while a cell is
 [edited](/docs/concepts/editing). There, its props mark it for the grid
 (`data-grid-fill-handle`, `data-grid-part="fill-handle"`, `data-filling` during a drag);
 elsewhere it has none: render nothing.
@@ -93,8 +94,9 @@ has `fillTarget`), and `engine.get("fill")` (and its event) is `{ source, target
 together, anchored at the active cell's corner: the active cell stays where it is, unless it was
 at the source's bottom (or end) and the fill went down (or across), where it moves to the filled
 cells' last row (or column), the same corner of the larger range. Escape (after your own handlers,
-wherever focus is), a cancelled pointer or a lost capture end the drag telling nothing; new rows or
-columns, another selection (a key, your code) and an edit opening end it too.
+wherever focus is), a cancelled pointer or a lost capture end the drag telling nothing; other rows
+or columns at the source's corners, another selection (a key, your code) and an edit opening end
+it too. Rows arriving at the end (infinite scrolling) keep it going.
 
 ## What a fill reaches
 

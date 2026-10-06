@@ -20,13 +20,7 @@ import {
     groupByKey,
     isGroupCollapsed,
 } from "./collapse";
-import {
-    editingKeysAt,
-    editRefusal,
-    isCellEditable,
-    sameEditingCell,
-    sameEditingKeys,
-} from "./editing";
+import { editRefusal, isCellEditable, sameEditingCell } from "./editing";
 import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
@@ -73,6 +67,7 @@ import {
     validSortColumns,
 } from "./sort";
 import {
+    cellKeysAt,
     cellValue,
     dataRowAt,
     groupAt,
@@ -87,6 +82,8 @@ import {
     rowKeyAt,
     rowLoaded,
     rowMetaAt,
+    sameCellKeys,
+    sameKnownKeys,
 } from "./source";
 import { activeInCell, coveringCell, hasColumnSpans, spanAt } from "./spans";
 import {
@@ -234,10 +231,13 @@ function selectionOff(): CommandFailure {
 }
 
 /**
- * The state after a command, its range kept to its rule (Epic #88): a range's anchor is the
- * active cell where it started, so the active cell moving elsewhere (a click, a Tab, a control
- * taking focus, the keys, the app's `active-position.set`, a new order) leaves no range; a range
- * the active cell did not start (select-all) stays until it moves.
+ * The state after a command, its range and its edit kept to their rules (Epic #88). A range's
+ * anchor is the active cell where it started, so the active cell moving elsewhere (a click, a
+ * Tab, a control taking focus, the keys, the app's `active-position.set`, a new order) leaves no
+ * range; a range the active cell did not start (select-all) stays until it moves. A range and an
+ * edit stay on the cells they were set on, by key (`withRangeKeys`, `withKeptEditing`); both are
+ * looked at only when what they depend on changed (the rows, or `rows.changed` over their rows,
+ * the columns, the active cell, the range or the edit), never after an unrelated command.
  */
 function withActiveRules<TRow, TNode>(
     before: DataGridState<TRow, TNode>,
@@ -245,13 +245,72 @@ function withActiveRules<TRow, TNode>(
 ): DataGridState<TRow, TNode> {
     const range = after.selectedRange;
     const active = after.activePosition;
-    const next =
+    const shaped =
+        after.source !== before.source || after.columns !== before.columns;
+    /** rows told changed behind the same `getRow`: what holds one of them looks again */
+    const changed =
+        after.rowsChanged !== before.rowsChanged ? after.rowsChanged : null;
+    const reread = (position: CellPosition) =>
+        changed !== null &&
+        overlaps(changed, position.rowIndex, position.rowIndex + 1);
+    let next =
         !range ||
         active === before.activePosition ||
         (active !== null && sameCell(active, range.anchor))
             ? after
             : { ...after, selectedRange: null };
-    return withKeptEditing(next);
+    const kept = next.selectedRange;
+    const rangeShaped =
+        shaped ||
+        (kept !== null && (reread(kept.anchor) || reread(kept.focus)));
+    if (rangeShaped || kept !== before.selectedRange) {
+        next = withRangeKeys(next, rangeShaped ? before : null);
+    }
+    const editing = next.editingCell;
+    return editing &&
+        (shaped ||
+            reread(editing) ||
+            active !== before.activePosition ||
+            editing !== before.editingCell)
+        ? withKeptEditing(next)
+        : next;
+}
+
+/**
+ * The state with its range's keys (E4.1): taken at its corners when it is set; after new rows or
+ * columns (`before`, the state the range's keys were taken in), other keys at a corner (a sort,
+ * rows inserted above, a column hidden or moved) leave no range, the same ones keep it (rows
+ * growing at the end). A corner on a row not loaded is kept by index, its keys taken once it is.
+ */
+function withRangeKeys<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    before: DataGridState<TRow, TNode> | null,
+): DataGridState<TRow, TNode> {
+    const range = state.selectedRange;
+    if (!range) {
+        return state.selectedRangeKeys
+            ? { ...state, selectedRangeKeys: null }
+            : state;
+    }
+    const was = before?.selectedRange ? before.selectedRangeKeys : null;
+    const anchor = cellKeysAt(state, range.anchor);
+    const focus = cellKeysAt(state, range.focus);
+    if (
+        was &&
+        (!sameKnownKeys(was.anchor, anchor) || !sameKnownKeys(was.focus, focus))
+    ) {
+        return { ...state, selectedRange: null, selectedRangeKeys: null };
+    }
+    const keys = state.selectedRangeKeys;
+    const next = {
+        anchor: anchor ?? was?.anchor,
+        focus: focus ?? was?.focus,
+    };
+    return keys &&
+        sameCellKeys(keys.anchor, next.anchor) &&
+        sameCellKeys(keys.focus, next.focus)
+        ? state
+        : { ...state, selectedRangeKeys: next };
 }
 
 /**
@@ -271,12 +330,9 @@ function withKeptEditing<TRow, TNode>(
         active !== null &&
         sameCell(active, editing) &&
         isCellEditable(state, editing)
-            ? editingKeysAt(state, editing)
+            ? cellKeysAt(state, editing)
             : undefined;
-    if (
-        keys &&
-        (!state.editingKeys || sameEditingKeys(keys, state.editingKeys))
-    ) {
+    if (keys && (!state.editingKeys || sameCellKeys(keys, state.editingKeys))) {
         // an edit given to start with takes the keys it finds
         return state.editingKeys ? state : { ...state, editingKeys: keys };
     }
@@ -418,7 +474,8 @@ function keptActiveRow<TRow, TNode>(
 /**
  * The active position kept inside the grid after its shape changed from `before`'s (or none
  * left): on the same row where it can be (`keptActiveRow`), and column; and the selected range
- * inside its body (`keptRange`, Epic #88).
+ * inside its body (`keptRange`, Epic #88). Its keys and the edit's are the command's rules'
+ * (`withActiveRules`).
  */
 function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
@@ -426,9 +483,9 @@ function reconcile<TRow, TNode>(
 ): DataGridState<TRow, TNode> {
     const next = keptActive(state, before);
     const range = keptRange(next, next.selectedRange);
-    return withKeptEditing(
-        range === next.selectedRange ? next : { ...next, selectedRange: range },
-    );
+    return range === next.selectedRange
+        ? next
+        : { ...next, selectedRange: range };
 }
 
 /** `reconcile`'s active position. */
@@ -1150,7 +1207,7 @@ function createHandlers<TRow, TNode>(
                 : {
                       ...state,
                       editingCell: editing,
-                      editingKeys: editingKeysAt(state, position) ?? null,
+                      editingKeys: cellKeysAt(state, position) ?? null,
                   };
             return done(next, next.editingCell ?? editing);
         },
@@ -1630,6 +1687,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         cellSelection: cellMode,
         // kept inside the body once the rows are given (`withSource`)
         selectedRange: options.selectedRange ?? null,
+        selectedRangeKeys: null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
         collapsedGroupKeys,
@@ -1654,6 +1712,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
         // the position given is for these rows
         false,
     );
+    // a range and an edit given to start with take the keys they find
+    state = withKeptEditing(withRangeKeys(state, null));
     const middlewares: Middleware<TRow, TNode>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
     const queue: Queued[] = [];

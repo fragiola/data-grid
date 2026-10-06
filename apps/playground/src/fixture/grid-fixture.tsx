@@ -124,7 +124,7 @@ import { createRoot } from "react-dom/client";
 //   &edit=1              editable cells: C1 with a text field (`editor-<row>`; typing starts it
 //                        with the key typed), C5 on even rows only with a picker whose options
 //                        (`option-<value>`) are portalled to the page's body, marked as the
-//                        edit's (`data-grid-editor`); the fixture keeps the values edited and
+//                        edit's (`editorProps`); the fixture keeps the values edited and
 //                        tells the grid (`rows.changed`)
 //   &fill=1              a fill handle (`fill-handle`) in the cell at the range's corner (or the
 //                        active cell's); a fill repeats the source's values into the fixture's
@@ -233,6 +233,7 @@ function PickEditor({
     value,
     rowIndex,
     onCommit,
+    editorProps,
 }: EditCellRenderProps<FixtureRow, ReactNode>) {
     const [open, setOpen] = useState(false);
     return (
@@ -246,7 +247,7 @@ function PickEditor({
             </button>
             {open
                 ? createPortal(
-                      <div data-grid-editor="" data-testid="picker-options">
+                      <div {...editorProps} data-testid="picker-options">
                           {["red", "green", "blue"].map((option) => (
                               <button
                                   key={option}

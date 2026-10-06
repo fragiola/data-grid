@@ -126,6 +126,7 @@ export {
     summaryRowsOf,
 } from "./model/summary";
 export type {
+    CellKeys,
     CellPosition,
     CellRange,
     CellRenderProps,
@@ -152,7 +153,7 @@ export type {
     DetailHeight,
     EditCellRenderProps,
     EditingCell,
-    EditingKeys,
+    EditorProps,
     GridDirection,
     GroupCellRenderProps,
     GroupColSpanArgs,
@@ -171,6 +172,7 @@ export type {
     QueryMap,
     QuestionKey,
     QuestionMap,
+    RangeKeys,
     RangePaste,
     ReorderSide,
     ResultOf,

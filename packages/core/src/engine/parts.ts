@@ -715,34 +715,22 @@ export function columnResizerPart<TRow, TNode>(
 }
 
 /**
- * A cell's fill handle (Epic #88, E4.4): visible in the cell at the corner a fill drags from (the
- * selected range's last row and last column, a cell spanning columns when it reaches it; without
- * a range, the active body cell), while cells fill and none is edited; its attributes then.
+ * A cell's fill handle (Epic #88, E4.4): visible in the cell at the last cell of what a fill
+ * drags from (`view.fillSource`, worked out once a view: the selected range's last row and last
+ * column, widened to the spans it cuts, else the active body cell; a cell spanning columns when
+ * it reaches it), while cells fill and none is edited; its attributes then.
  */
 export function fillHandlePart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     cell: CellPosition,
 ): FillHandlePart {
     const filling = view.fill !== null;
-    // the corner a fill drags from, read without allocating: every cell asks
-    const range = view.selectedRange;
-    const active = view.active;
-    const rowIndex = range
-        ? Math.max(range.anchor.rowIndex, range.focus.rowIndex)
-        : active?.rowIndex;
-    const columnIndex = range
-        ? Math.max(range.anchor.columnIndex, range.focus.columnIndex)
-        : active?.columnIndex;
+    const corner = view.fillSource?.focus;
     const visible =
-        view.fillable &&
-        !view.editingCell &&
-        rowIndex === cell.rowIndex &&
-        columnIndex !== undefined &&
-        // a body cell (without a range, the active cell may be a header's or a summary row's)
-        rowIndex >= 0 &&
-        rowIndex < view.rowCount &&
-        columnIndex >= cell.columnIndex &&
-        columnIndex <
+        corner !== undefined &&
+        corner.rowIndex === cell.rowIndex &&
+        corner.columnIndex >= cell.columnIndex &&
+        corner.columnIndex <
             cell.columnIndex + cellSpan(view, cell.rowIndex, cell.columnIndex);
     return visible
         ? {

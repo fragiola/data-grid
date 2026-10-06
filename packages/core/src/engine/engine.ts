@@ -27,6 +27,7 @@ import {
     spannedArea,
 } from "../model/range";
 import {
+    cellKeysAt,
     groupExpanded,
     groupKeyAt,
     loadedRowKey,
@@ -34,19 +35,21 @@ import {
     rowKeyAt,
     rowLoaded,
     rowMetaAt,
+    sameKnownKeys,
 } from "../model/source";
 import { hasColumnSpans, spanAt } from "../model/spans";
 import { summaryRowAt } from "../model/summary";
 import type {
+    CellKeys,
     CellPosition,
     CellRange,
     Column,
     ColumnWidths,
-    EditingKeys,
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
     PinnedSide,
+    RangeKeys,
     ReorderSide,
     RowKey,
 } from "../model/types";
@@ -103,10 +106,13 @@ import {
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     inlineKey,
+    isAltCharacter,
     isCellNode,
+    isComposing,
     isControl,
     isEditable,
     isElement,
+    isGridControl,
     isPagelessControl,
     isResizer,
     KEYS,
@@ -150,7 +156,7 @@ import type {
     EngineLayer,
     EngineQueryKey,
     EngineQueryMap,
-    FillDrag as FillState,
+    FillDrag,
     GridView,
     RowMove,
     RowReorder,
@@ -275,6 +281,8 @@ interface RangeDrag extends PointerDrag {
     readonly kind: "range";
     /** the range's anchor: the pressed cell, or with Shift the range's own */
     readonly anchor: CellPosition;
+    /** the keys at the anchor at the press: other ones there end the drag */
+    readonly anchorKeys: CellKeys | undefined;
     /** the cell the range reaches, as last set */
     focus: CellPosition;
 }
@@ -284,9 +292,11 @@ interface RangeDrag extends PointerDrag {
  * cell when it started, widened to the spans it cuts) and the cell the selection is anchored at
  * then, the target following the cell under the pointer.
  */
-interface FillDrag extends PointerDrag {
+interface FillHandleDrag extends PointerDrag {
     readonly kind: "fill";
     readonly source: CellRange;
+    /** the keys at the source's corners at the press: other ones there end the drag */
+    readonly sourceKeys: RangeKeys;
     readonly anchor: CellPosition;
     /** the body cell the pointer was last over, `null` before a move */
     cell: CellPosition | null;
@@ -297,7 +307,7 @@ type Drag<TRow, TNode> =
     | ReorderDrag<TRow, TNode>
     | RowDrag
     | RangeDrag
-    | FillDrag;
+    | FillHandleDrag;
 
 /**
  * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
@@ -345,6 +355,9 @@ const COPY_NODE_STYLE: readonly (readonly [string, string])[] = [
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
 
 /** Creates the engine of one grid on screen. */
+/** The engines made so far: each one's edits are named apart from another's (`editorProps`). */
+let engineCount = 0;
+
 export function createDataGridEngine<TRow, TNode = unknown>(
     model: DataGridModel<TRow, TNode>,
     initialOptions: DataGridEngineOptions = {},
@@ -431,7 +444,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let columnReorder: ColumnReorder | null = null;
     let rowReorder: RowReorder | null = null;
     /** the fill a handle's drag is making (Epic #88, E4.4) */
-    let fill: FillState | null = null;
+    let fill: FillDrag | null = null;
+    /**
+     * the cells a fill drags from now (`fillSource`), cells filling: worked out when the range,
+     * the active cell, the edit, the rows or the columns change, not per cell nor per press
+     */
+    let fillFrom: CellRange | null = fillSource();
     let drag: Drag<TRow, TNode> | null = null;
     /** the last press the grid took (its drag, over or not): once it dragged, its click is its */
     let lastPress: Drag<TRow, TNode> | null = null;
@@ -491,6 +509,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         for (const listener of [...eventListeners[event]]) listener(value);
     }
 
+    /** Whether the keys taken at a body cell may still be there (`sameKnownKeys`). */
+    function keptAt(position: CellPosition, keys: CellKeys | undefined) {
+        return sameKnownKeys(keys, cellKeysAt(state, position));
+    }
+
     /** Whether `a` is the cell `b` (a header cell spanning rows is the same on each of them). */
     function same(a: CellPosition | null, b: CellPosition): boolean {
         return a !== null && sameCell(a, b, state.header.cellAt);
@@ -526,6 +549,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             reorderableRows: options.reorderableRows === true,
             fillable: options.fillable === true,
             fill,
+            fillSource: fillFrom,
             rowReorder,
             direction,
             headerRowsFor,
@@ -1374,7 +1398,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         publish("row-reorder", next);
     }
 
-    function setFill(next: FillState | null) {
+    function setFill(next: FillDrag | null) {
         fill = next;
         publish("fill", next);
     }
@@ -1439,7 +1463,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const fillHandle = options.fillable
             ? markedOf(event.target, FILL_HANDLE_ATTRIBUTE)
             : null;
-        const source = fillHandle && fillSource();
+        const source = fillHandle && fillFrom;
         const anchor = state.activePosition ?? state.selectedRange?.anchor;
         if (source && anchor) {
             event.preventDefault();
@@ -1448,6 +1472,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 kind: "fill",
                 dragged: true,
                 source,
+                sourceKeys: {
+                    anchor: cellKeysAt(state, source.anchor),
+                    focus: cellKeysAt(state, source.focus),
+                },
                 anchor,
                 cell: null,
                 element: viewport,
@@ -1514,7 +1542,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function rangePress(
         event: PointerEvent,
-        press: Omit<RangeDrag, "kind" | "anchor" | "focus" | "element">,
+        press: Omit<
+            RangeDrag,
+            "kind" | "anchor" | "anchorKeys" | "focus" | "element"
+        >,
         element: HTMLElement,
     ): RangeDrag | null {
         if (
@@ -1540,7 +1571,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // a touch dragged scrolls the grid: it selects no range
         if (event.pointerType === "touch") return null;
-        return { ...press, kind: "range", anchor, focus: cell, element };
+        return {
+            ...press,
+            kind: "range",
+            anchor,
+            anchorKeys: cellKeysAt(state, anchor),
+            focus: cell,
+            element,
+        };
     }
 
     /**
@@ -2397,7 +2435,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** the edit's draft: the engine's while a cell is edited (`edit-draft`), else `null` */
     let editDraft: EditDraft | null = null;
     /** the keys the draft was made for (the model's `editingKeys`): other ones, another draft */
-    let draftFor: EditingKeys | null = null;
+    let draftFor: CellKeys | null = null;
+    /** this engine's name among the page's grids, and its edits so far: an edit's editor's name */
+    const engineName = `g${++engineCount}`;
+    let editCount = 0;
+    /** an edit whose cell took no focus at its commit: cancelled in the next task, unless an editor took it */
+    let noEditorTimer: number | null = null;
     /**
      * an edit started: its editor takes focus at the commit that renders it (`focusEditor`), while
      * focus is in the grid, or (`edit-cell`, a toolbar's) wherever it is
@@ -2424,24 +2467,40 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * Whether an element belongs to the edit: inside the edited cell (the cell itself included),
-     * or inside an element the app marks as its editor's (`EDITOR_ATTRIBUTE`: a popover).
+     * or inside an element the app marks with this edit's `editorProps` (a popover): another
+     * grid's editor, or an earlier edit's, is not this one's.
      */
     function partOfEdit(element: Element): boolean {
         const editing = state.editingCell;
         const cell = editing && cellElement(editing);
+        const name = editDraft?.editorProps[EDITOR_ATTRIBUTE];
         return Boolean(
-            cell?.contains(element) || element.closest(`[${EDITOR_ATTRIBUTE}]`),
+            cell?.contains(element) ||
+                (name && element.closest(`[${EDITOR_ATTRIBUTE}="${name}"]`)),
         );
     }
 
-    /** The edited cell's controls (its editor's), its own: a nested grid's are that grid's. */
+    /**
+     * The edited cell's controls that may be its editor, its own (a nested grid's are that
+     * grid's): the ones inside an element marked as an editor (`EDITOR_ATTRIBUTE`) first, then the
+     * others but the grid's own (a group's toggle, a row's drag handle, a fill handle, a resizer).
+     */
     function editorControlsIn(cell: HTMLElement): HTMLElement[] {
-        return [...cell.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-            (control) => ownerViewport(control) === viewport,
+        const controls = [
+            ...cell.querySelectorAll<HTMLElement>(FOCUSABLE),
+        ].filter(
+            (control) =>
+                ownerViewport(control) === viewport && !isGridControl(control),
         );
+        const marked = (control: HTMLElement) =>
+            cell.contains(control.closest(`[${EDITOR_ATTRIBUTE}]`));
+        return [
+            ...controls.filter(marked),
+            ...controls.filter((control) => !marked(control)),
+        ];
     }
 
-    /** Focuses the first control of the edited cell that takes focus; returns it, or `null`. */
+    /** Focuses the first editor control of the edited cell that takes focus; returns it, or `null`. */
     function focusEditorIn(cell: HTMLElement): HTMLElement | null {
         const doc = cell.ownerDocument;
         for (const control of editorControlsIn(cell)) {
@@ -2454,16 +2513,21 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /**
      * Enter, F2 or a printable key on a body cell in navigation that can be edited (its column
      * editable for its row): one `editing-cell.set` (a printable key its `startKey`; Enter and
-     * F2 once per press). Not with Ctrl, ⌘ or Alt, nor Shift+Space (the row's selection) or
-     * Shift+Enter; a cell that cannot be edited lets the key through (its controls, a move).
+     * F2 once per press). A character typed with AltGr (Ctrl and Alt) or Option (Alt) starts one
+     * too (`isAltCharacter`); not with ⌘, Ctrl alone or another Alt key, nor Shift+Space (the
+     * row's selection), Shift+Enter or a key of a composition (an IME); a cell that cannot be
+     * edited lets the key through (its controls, a move).
      */
     function editStartKey(event: KeyboardEvent, target: Element): boolean {
         const { key } = event;
+        const alt = event.altKey;
         const printable =
             [...key].length === 1 && !(key === " " && event.shiftKey);
         if (
-            event.ctrlKey ||
             event.metaKey ||
+            (event.ctrlKey && !alt) ||
+            (alt && !isAltCharacter(event)) ||
+            isComposing(event) ||
             !(
                 printable ||
                 key === "F2" ||
@@ -2540,7 +2604,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (!editing || !draft) return;
         const column = state.columns[editing.columnIndex];
         if (column && !Object.is(draft.value, draft.initialValue)) {
-            editDraft = { value: draft.value, initialValue: draft.value };
+            editDraft = { ...draft, initialValue: draft.value };
             const edit: CellEdit = {
                 rowIndex: editing.rowIndex,
                 columnIndex: editing.columnIndex,
@@ -2595,7 +2659,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (keys === draftFor) return;
         draftFor = keys;
         const value = model.get("cell-value-by", state.editingCell);
-        editDraft = { value, initialValue: value };
+        editCount += 1;
+        editDraft = {
+            value,
+            initialValue: value,
+            editorProps: { [EDITOR_ATTRIBUTE]: `${engineName}-${editCount}` },
+        };
         editorFocus = editCellAsked ? "anywhere" : "grid";
         // a range's or a fill's drag ends, telling nothing
         if (drag?.kind === "range" || drag?.kind === "fill") endDrag("lost");
@@ -2659,8 +2728,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /**
      * At the commit that renders an edit: its editor takes focus, the cell's first control (while
      * focus is in the grid; started by `edit-cell`, wherever it is), unless the editor holds it
-     * already (its own `autoFocus`, its popover). A cell with no control to take it has no editor:
-     * the edit is cancelled, so an `editable` column without one traps no key.
+     * already (its own `autoFocus`, its popover). A cell with no control to take it may have an
+     * editor that takes focus later (a portalled control focused in an effect or a frame): in the
+     * next task, the same edit still open and focus in neither its cell's controls nor its
+     * editor's, it has none and is cancelled, so an `editable` column without one traps no key.
      */
     function focusEditor(rendered: GridView<TRow, TNode>) {
         const editing = state.editingCell;
@@ -2687,7 +2758,34 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             anywhere || inGrid
                 ? focusEditorIn(cell)
                 : editorControlsIn(cell)[0];
-        if (!focusedEditor) endEdit(null, inGrid);
+        if (!focusedEditor) cancelWithoutEditor(inGrid);
+    }
+
+    /** `focusEditor`'s cancel of an edit with no editor, in the next task (`noEditorTimer`). */
+    function cancelWithoutEditor(focusCell: boolean) {
+        const win = viewport?.ownerDocument.defaultView;
+        const keys = state.editingKeys;
+        if (!win) return endEdit(null, focusCell);
+        if (noEditorTimer !== null) win.clearTimeout(noEditorTimer);
+        noEditorTimer = win.setTimeout(() => {
+            noEditorTimer = null;
+            const editing = state.editingCell;
+            if (!editing || state.editingKeys !== keys) return;
+            const focused = win.document.activeElement;
+            if (
+                isElement(focused) &&
+                focused !== cellElement(editing) &&
+                partOfEdit(focused)
+            ) {
+                return;
+            }
+            // focus back on the cell only from the grid (nothing focused anywhere else since)
+            const inGrid =
+                !focused ||
+                focused === win.document.body ||
+                Boolean(viewport?.contains(focused));
+            endEdit(null, focusCell && inGrid);
+        }, 0);
     }
 
     // ── cell ranges: the drag, the edge scroll, the keys, the clipboard (Epic #88) ─
@@ -2706,7 +2804,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * among the pinned columns scrolls nothing sideways), then the cell under the pointer; held
      * near an edge, it scrolls on, a frame at a time.
      */
-    function cellDragStep(current: RangeDrag | FillDrag) {
+    function cellDragStep(current: RangeDrag | FillHandleDrag) {
         const x = viewXOf(current.x);
         const y = viewYOf(current.y);
         const part = columnPartAt(x);
@@ -2776,10 +2874,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * What a fill starts from: the selected range, else the active body cell, as its first and
-     * last cells; `null` without one (or while a cell is edited: its handle shows nothing then).
+     * last cells, widened to the column spans it cuts (`spannedArea`); `null` without one, cells
+     * not filling, or while a cell is edited (its handle shows nothing then).
      */
     function fillSource(): CellRange | null {
-        const area = state.editingCell ? null : selectedArea(state);
+        const area =
+            options.fillable && !state.editingCell ? selectedArea(state) : null;
         return area && spannedArea(state, area);
     }
 
@@ -2823,7 +2923,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * A fill's drag at the pointer's cell (`cellAtView`, the last one when unchanged): its
      * target, a new state when it changed.
      */
-    function fillTo(current: FillDrag, cell: CellPosition) {
+    function fillTo(current: FillHandleDrag, cell: CellPosition) {
         if (cell === current.cell) return;
         current.cell = cell;
         const target = fillTargetOf(current.source, cell);
@@ -2845,7 +2945,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * an active cell between the source's edges (in a span it was widened to) takes its first
      * side.
      */
-    function fillRange(current: FillDrag, target: CellRange) {
+    function fillRange(current: FillHandleDrag, target: CellRange) {
         const { source, anchor: was } = current;
         emit("range-fill", { source, target });
         if (!state.cellSelection) return;
@@ -2964,15 +3064,25 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * Ctrl/⌘+C on one of the grid's cells (E4.2), its keydown never prevented: the page's own
-     * `copy` follows, which WebKit fires only while something is selected. With the selection
-     * collapsed (as the grid keeps it: no text is selected by a press), a node of the cell's own,
-     * hidden and selectable, holds the selection until the copy (`copy`) or, without one, the
-     * next task (`endCopySelection`, which puts the selection back). No permission, every engine.
+     * `copy` follows, which WebKit fires only while something is selected, at the selection. A
+     * node of the cell's own, hidden and selectable, holds the selection (collapsed, as the grid
+     * keeps it, or text selected elsewhere on the page, which would take the copy) until the copy
+     * (`copy`) or, without one, the next task (`endCopySelection`, which puts the selection
+     * back); text selected inside the cell is left to copy as it is. No permission, every engine.
      */
     function selectForCopy(cell: Element) {
         const doc = cell.ownerDocument;
         const selection = doc.getSelection();
-        if (!selection?.isCollapsed) return;
+        if (!selection) return;
+        // text selected in the cell itself (its content, its editor) is copied as it is; a
+        // selection anywhere else on the page is not the grid's copy: replaced until it is over
+        if (
+            !selection.isCollapsed &&
+            cell.contains(selection.anchorNode) &&
+            cell.contains(selection.focusNode)
+        ) {
+            return;
+        }
         endCopySelection();
         const ranges = Array.from(
             { length: selection.rangeCount },
@@ -3591,9 +3701,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
         // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
         // and neither is one from the app's content beside the cells (an empty state's action)
+        // with Alt, only a character typed (AltGr, Option) is the grid's: it may start an edit
         if (
             event.defaultPrevented ||
-            event.altKey ||
+            (event.altKey && !isAltCharacter(event)) ||
             !isElement(target) ||
             !inViewport(target)
         ) {
@@ -3610,7 +3721,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // a commit and a move) and Escape (a cancel) only, from the editor or its cell; nothing
         // else in the edited cell ever reaches the grid's navigation
         if (state.editingCell && partOfEdit(target)) {
-            return !event.isComposing && editKey(event, target);
+            return (
+                !event.altKey && !isComposing(event) && editKey(event, target)
+            );
         }
         // in interaction, the cell's controls have the keys: the grid takes Escape (back to the
         // cell) and Tab (the cell's next control, wrapping) only, from a field too
@@ -3619,7 +3732,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             !isCellElement(target) &&
             // the app's own tab stop and a composition in progress (an IME) keep their keys
             !target.hasAttribute(TAB_STOP_ATTRIBUTE) &&
-            !event.isComposing
+            !isComposing(event)
         ) {
             const cell = cellElement(interaction.cell);
             if (cell?.contains(target)) {
@@ -3652,6 +3765,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
         }
         if (isEditable(target) || !ownsKeysOf(target)) return false;
+        // a character typed with Alt (AltGr, Option) edits a cell, and is nothing else of the grid's
+        if (event.altKey) return editStartKey(event, target);
         if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) {
             // Enter or Space on a sortable column's header cell toggles its sort, once per press:
             // a key held down repeats, and would cycle through the sort
@@ -4068,6 +4183,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
+        // what a fill drags from (E4.4), its handle's corner
+        if (
+            after.selectedRange !== before.selectedRange ||
+            after.activePosition !== before.activePosition ||
+            after.editingCell !== before.editingCell ||
+            after.source !== before.source ||
+            after.columns !== before.columns ||
+            after.rowsChanged !== before.rowsChanged
+        ) {
+            fillFrom = fillSource();
+        }
         if (before.direction !== after.direction) directionPending = true;
         // an edit started or ended (Epic #88): its draft follows
         if (after.editingCell !== before.editingCell) followEdit();
@@ -4171,22 +4297,25 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // a row's drag follows its row (E2.3), on the rows as laid out now
         if (drag?.kind === "row" && drag.dragged) followRowDrag(drag);
-        // cells no longer selectable, or other rows or columns under its anchor, end a range's
-        // drag (Epic #88): its indexes would point elsewhere
+        // cells no longer selectable, or other rows or columns at its anchor, end a range's drag
+        // (Epic #88): its indexes would point elsewhere. New rows or columns that keep the same
+        // keys there (rows growing at the end, a new `columns` array, a new getter) keep it
+        const shaped =
+            after.source !== before.source || after.columns !== before.columns;
         if (
             drag?.kind === "range" &&
             (!after.cellSelection ||
-                after.source !== before.source ||
-                after.columns !== before.columns)
+                (shaped && !keptAt(drag.anchor, drag.anchorKeys)))
         ) {
             stopDrag();
         }
-        // and a fill's (E4.4), filling nothing: its source's indexes would point elsewhere, and a
-        // selection changing (a key, the app) is no longer the one it fills from
+        // and a fill's (E4.4), filling nothing: other rows or columns at its source's corners, or
+        // a selection changing (a key, the app): no longer the one it fills from
         if (
             drag?.kind === "fill" &&
-            (after.source !== before.source ||
-                after.columns !== before.columns ||
+            ((shaped &&
+                (!keptAt(drag.source.anchor, drag.sourceKeys.anchor) ||
+                    !keptAt(drag.source.focus, drag.sourceKeys.focus))) ||
                 after.selectedRange !== before.selectedRange ||
                 after.activePosition !== before.activePosition)
         ) {
@@ -4325,6 +4454,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     true,
                 );
                 editPressDoc = null;
+                if (noEditorTimer !== null) {
+                    doc.defaultView?.clearTimeout(noEditorTimer);
+                    noEditorTimer = null;
+                }
                 stopMeasuring();
                 pointerDown = false;
                 pendingFocus = false;
@@ -4450,6 +4583,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 next.reorderableRows !== options.reorderableRows ||
                 next.fillable !== options.fillable;
             options = next;
+            fillFrom = fillSource();
             // rows that stop moving end a row's drag, moving nothing; cells that stop filling, a fill's
             if (!next.reorderableRows && drag?.kind === "row") endDrag("lost");
             if (!next.fillable && drag?.kind === "fill") endDrag("lost");

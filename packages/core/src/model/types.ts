@@ -390,6 +390,20 @@ export interface EditCellRenderProps<TRow, TNode = unknown> {
     readonly onCommit: (...value: [] | [value: unknown]) => void;
     /** ends the edit, telling nothing: the draft is dropped */
     readonly onCancel: () => void;
+    /**
+     * what marks an element outside the cell as this edit's (a select's or a date picker's
+     * popover, portalled out of the grid): spread it on that element; a press or focus there
+     * keeps the edit open
+     */
+    readonly editorProps: EditorProps;
+}
+
+/**
+ * The attribute marking an element as one edit's editor (Epic #88, E4.3): `data-grid-editor`, its
+ * value naming that edit of that grid (another grid's popover, or an earlier edit's, is not it).
+ */
+export interface EditorProps {
+    readonly "data-grid-editor": string;
 }
 
 /**
@@ -401,13 +415,22 @@ export interface EditingCell extends CellPosition {
 }
 
 /**
- * What an edit started on (E4.3): its row's key (`rowKey`, else its index) and its column's key.
- * The edit lasts while they are still at its position: other rows or columns there (a sort, rows
- * inserted above, new columns) end it.
+ * What is at a body cell (Epic #88): its row's key (`rowKey`, else its index) and its column's
+ * key. An edit and a range last while they are still at their positions: other rows or columns
+ * there (a sort, rows inserted above, a column hidden or new) end them.
  */
-export interface EditingKeys {
+export interface CellKeys {
     readonly rowKey: RowKey;
     readonly columnKey: string;
+}
+
+/**
+ * The keys at a range's corners (E4.1), taken when it is set; `undefined` for a corner on a row
+ * not loaded (kept by index until it is).
+ */
+export interface RangeKeys {
+    readonly anchor: CellKeys | undefined;
+    readonly focus: CellKeys | undefined;
 }
 
 /**
@@ -561,7 +584,7 @@ export interface DataGridState<TRow, TNode = unknown> {
      */
     readonly editingCell: EditingCell | null;
     /** the keys the edit started on (`null` without one): its row and column, kept by them */
-    readonly editingKeys: EditingKeys | null;
+    readonly editingKeys: CellKeys | null;
     /** how cells are selected; `undefined`: they are not (Epic #88, E4.1) */
     readonly cellSelection: CellSelection | undefined;
     /**
@@ -569,6 +592,8 @@ export interface DataGridState<TRow, TNode = unknown> {
      * active cell alone is what a copy copies)
      */
     readonly selectedRange: CellRange | null;
+    /** the keys at the range's corners (`null` without one): new rows or columns there end it */
+    readonly selectedRangeKeys: RangeKeys | null;
     /** the resized columns' widths, over their `width` (a resizable column's only count) */
     readonly columnWidths: ColumnWidths;
     /** the order columns and groups take among their siblings (empty: as declared) */

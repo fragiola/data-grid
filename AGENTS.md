@@ -489,11 +489,18 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    corner the keys and the pointer move), kept inside the body by `reconcile` (`keptRange`: each
    corner clamped to the last row and column; none without rows, columns or cell selection),
    cleared by `withLayout` (a new order or collapse: its columns are others) and after any
-   command that moves the active cell off its anchor (`withAnchoredRange`, run on every handler's
+   command that moves the active cell off its anchor (`withActiveRules`, run on every handler's
    state in `execute`: a click, a Tab, a control taking focus, a plain key, the app's
    `active-position.set`; one model rule, so a controlled range is told by the cross-piece rule,
    never by a second command; a range the active cell did not start, select-all's, stays until
-   it moves), controlled or not on
+   it moves), and kept on its cells by key: `selectedRangeKeys` (`RangeKeys { anchor, focus }`,
+   each a `CellKeys { rowKey, columnKey }`, the edit's type too, `cellKeysAt` in
+   `model/source.ts`; `undefined` for a corner on a row not loaded, kept by index, its keys taken
+   once it loads) are taken when the range is set; after new rows or columns (or `rows.changed`
+   over a corner's row) other keys at a corner (a sort, rows inserted above, a column hidden)
+   leave no range and the same ones keep it (rows growing at the end, a new `columns` array:
+   `withRangeKeys`, `sameKnownKeys`); looked at only when the rows, the columns or the range
+   change, never after an unrelated command, controlled or not on
    `Root` through the controlled factory (`selectedRange`/`defaultSelectedRange`/
    `onSelectedRangeChange`, prefix `selected-range.`, settled after the rows' selection, the prop
    applied through `keptRange`). Commands, `refused` while cells are not selectable:
@@ -535,17 +542,19 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    scroll, shared with the column reorder's `offsetAt`; scaling, measured rows and RTL alike),
    and `rangeTo` runs one `selected-range.set` when that cell changed; a scroll during the drag works it
    out again once a frame; the release takes the cell under it, Escape clears the range, cells
-   no longer selectable, a new source or new columns end the drag (its indexes would point
-   elsewhere; the range set so far stays); the click ending it is the drag's. The clipboard: `Root`
+   no longer selectable or other keys at its anchor after new rows or columns end the drag (its
+   indexes would point elsewhere: `keptAt` against the keys taken at the press; rows growing at
+   the end, infinite scrolling, keep it); the click ending it is the drag's. The clipboard: `Root`
    hands its element's `copy` and `paste` events to `engine.adapter.copy`/`paste` after the
    consumer's `onCopy`/`onPaste` (a prevented one is the app's), taken only from one of this
    grid's cells itself (`isCellElement`: a field inside one keeps its own clipboard, a nested
    grid's cell is that grid's) while cells are selectable. WebKit fires `copy` only while
-   something is selected: Ctrl/⌘+C on one of the grid's cells, with something to copy and the
-   page's selection collapsed, selects a hidden node appended to the cell (`selectForCopy`,
-   through the viewport document's Selection, the keydown never prevented); the copy takes the
-   event from that node as from its cell and `endCopySelection` removes it and puts the selection
-   back (else the next task does, through the view's `setTimeout`). A copy writes the range, else the
+   something is selected, and a copy goes to the selection: Ctrl/⌘+C on one of the grid's cells,
+   with something to copy, selects a hidden node appended to the cell (`selectForCopy`, through
+   the viewport document's Selection, the keydown never prevented), unless text inside that cell
+   is selected (its content, its editor: copied as it is); the copy takes the event from that
+   node as from its cell and `endCopySelection` removes it and puts the selection back (else the
+   next task does, through the view's `setTimeout`). A copy writes the range, else the
    active body cell, as TSV into `event.clipboardData` and is prevented: the page's own event, no
    permission (`rangeText`: a loaded row's cell through `Column.getCopyText(CellRenderProps)`,
    else `valueText` (a string, number, big integer or boolean as text, anything else empty;
@@ -570,26 +579,31 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    end), the editors and the data are the app's (D6: a commit is an event). `Column.editable?:
    boolean | (row, rowIndex) => boolean` and `renderEditCell?(EditCellRenderProps)` (`{ row,
    rowIndex, column, columnIndex, value (the draft), initialValue, startKey, onChange, onCommit,
-   onCancel }`; a group has neither: its type's `never`s). `model/editing.ts`: a cell can be
+   onCancel, editorProps }`; a group has neither: its type's `never`s). `model/editing.ts`: a cell can be
    edited (`editRefusal`, `isCellEditable`, `is("cell-editable")`) when it is a loaded data row's
    body cell whose column is editable for it: `not_found` past the grid, `refused` for a header or
    a summary row's cell, a group row's or a column not editable for it, `not_loaded` for a row not
    loaded yet; `hasEditable(columns)` (internal) keeps a grid without one from asking anything,
    the engine caching it per `state.columns` (`editsCells`). The model keeps `editingCell:
    EditingCell | null` (`{ rowIndex, columnIndex, startKey? }`, option, `get("editing-cell")`),
-   always the active cell, and `editingKeys` (`EditingKeys { rowKey, columnKey }`: the row's key,
-   `rowKey` else its index, and the column's, taken when it starts, `editingKeysAt`):
+   always the active cell, and `editingKeys` (`CellKeys { rowKey, columnKey }`: the row's key,
+   `rowKey` else its index, and the column's, taken when it starts, `cellKeysAt`, the range's
+   rule too):
    `editing-cell.set` (snapped to a span's first column; `refused` for any cell but the active
    one) and `editing-cell.clear`; controlled or not on `Root` through the controlled factory
    (`editingCell`/`defaultEditingCell`/`onEditingCellChange`, prefix `editing-cell.`, settled
-   after the position). One rule after every handler (`withActiveRules` in `execute`, with the
-   range's) and in `reconcile` (`withKeptEditing`): the edit stays only while it is the active
-   cell, can still be edited and has its keys at its place (another row there: a new order of the
-   rows, a row inserted above; another column: `columns.set`; an edit given to start with takes
-   the keys it finds); else no edit and no keys, nothing told. The draft is the engine's
-   (`EditDraft { value, initialValue }`, `engine.get("edit-draft")` and its event; the position
-   and `startKey` are `editingCell`'s): made from the cell's value (`cell-value-by`) when the
-   model's `editingKeys` change (`followEdit`, `draftFor`: at the top of the model subscription
+   after the position). One rule after a handler (`withActiveRules` in `execute`, with the
+   range's; at creation, for an edit given to start with: `withKeptEditing`), only when the
+   source, the columns, the active cell or the edit changed, or `rows.changed` reached its row (the
+   app's `editable` never asked after an unrelated command): the edit stays only while it is the
+   active cell, can still be edited and has its keys at its place (another row there: a new order
+   of the rows, a row inserted above; another column: `columns.set`; an edit given to start with
+   takes the keys it finds); else no edit and no keys, nothing told. The draft is the engine's
+   (`EditDraft { value, initialValue, editorProps }`, `engine.get("edit-draft")` and its event;
+   the position and `startKey` are `editingCell`'s; `editorProps` (`EditorProps`) is
+   `{ "data-grid-editor": "<engine>-<edit>" }`, the engine's name among the page's (a module
+   counter) and the edit's, the same for the edit): made from the cell's value (`cell-value-by`)
+   when the model's `editingKeys` change (`followEdit`, `draftFor`: at the top of the model subscription
    and once at creation, for an edit given to start with), replaced by `change-edit { value }`,
    dropped when the edit ends. Engine actions: `edit-cell` (refused, a cell that cannot be edited
    changes nothing; another edit open is committed first, told; then activate and
@@ -604,14 +618,18 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `onCellEdit(CellEditEvent<TRow>)` adds the row (`row-by`; none told for a row gone). Starting
    (`editStartKey`, after `rowGroupKey`, before the interaction's Enter/F2): on a body cell in
    navigation that can be edited, Enter and F2 (once per press) or a printable key (one
-   character, its `startKey`; not with Ctrl, ⌘ or Alt, nor Shift+Space, nor Shift+Enter), each one
-   `editing-cell.set`, prevented; a cell that cannot be edited lets them through (its controls'
+   character, its `startKey`; a character typed with AltGr, Ctrl and Alt, or Option, Alt alone,
+   too: `isAltCharacter`, Space aside, the one Alt path past the keydown's modifier guard, which
+   reaches nothing else of the grid's; not with ⌘ or Ctrl alone, nor Shift+Space, nor
+   Shift+Enter, nor a key of a composition: `isComposing`, `isComposing` or key code 229, which
+   Safari's confirming Enter carries), each one `editing-cell.set`, prevented; a cell that cannot be edited lets them through (its controls'
    interaction, unchanged); a double click (`click`, `detail` 2) on such a cell, not on a control
    inside it (`pressedBodyCellOf`), edits it. In an edit, every key from inside the edited cell
-   (`partOfEdit`: the cell, or an element the app marks `data-grid-editor`, `EDITOR_ATTRIBUTE`,
-   for a portalled popover) is its editor's but Enter (commit, move down; Shift: up), Tab
-   (commit, the next column; Shift: the previous one) and Escape (cancel), each after the
-   consumer's handlers (a prevented one keeps the edit open) and never during a composition; on
+   (`partOfEdit`: the cell, or an element the app marks with this edit's `editorProps`,
+   `EDITOR_ATTRIBUTE` = its name, for a portalled popover: another grid's or an earlier edit's is
+   not it) is its editor's but Enter (commit, move down; Shift: up), Tab (commit, the next column;
+   Shift: the previous one) and Escape (cancel), each after the consumer's handlers (a prevented
+   one keeps the edit open) and never during a composition (`isComposing`); on
    the edited cell itself (its editor without focus: a parent keeping the edit), any other key
    focuses the editor first, and the page keys (and Space without an editor) are prevented:
    nothing scrolls natively. A press anywhere but the edit and the viewport itself (its
@@ -620,10 +638,15 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `refocusAfterEdit`) focus left on the page's body or the viewport goes back to the active cell.
    Focus leaving for an element outside the edit commits too (`onFocusOut`; focus going nowhere
    is the press's). At the commit rendering an edit (`focusEditor`, for the view that renders it),
-   the edited cell's first control takes focus while focus is in the grid (started by `edit-cell`,
-   wherever it is) unless the editor holds it already (its own, its marked popover); a cell with
-   no control (an `editable` column without an editor) has its edit cancelled there, so it never
-   traps the keys. Focus in the edited cell never starts an interaction (`onFocusIn`). An edit
+   the edited cell's editor takes focus while focus is in the grid (started by `edit-cell`,
+   wherever it is) unless the editor holds it already (its own, its marked popover):
+   `editorControlsIn`, its own controls (a nested grid's are that grid's) but the grid's own
+   (`isGridControl`: a group's toggle, a row's drag handle, a fill handle, a resizer), the ones
+   inside an element marked `data-grid-editor` in the cell first; a cell where none takes it
+   (an `editable` column without an editor) has its edit cancelled in the next task
+   (`cancelWithoutEditor`, the view's `setTimeout`, cleared on detach), unless the same edit's
+   editor took focus by then (an effect, a frame: focus in the cell's controls or its marked
+   popover), so it never traps the keys. Focus in the edited cell never starts an interaction (`onFocusIn`). An edit
    starting ends a range's drag and an interaction; the range stays. The edited cell, the active
    one, stays rendered through any scroll. Parts: `CellState.editing` through `isHeldCell(held,
    cell)` (`engine/parts.ts`: the one comparison of a held cell, the interaction's too,
@@ -638,18 +661,20 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the values are the app's (a fill is an event, the grid writes no data). `Root`'s `onFill`
    turns it on (the engine option `fillable`, `view.fillable`; a grid without it is unchanged: no
    attribute, part state `undefined`). The handle is the app's element with `useFillHandle(cell)`'s
-   props (`fillHandlePart`: visible in the one cell at the corner a fill drags from, the selected
-   range's last row and last column, else the active body cell, a spanning cell when it reaches
-   it, never while a cell is edited; `FillHandleState { visible, filling }`; attributes
+   props (`fillHandlePart`: visible in the one cell at `view.fillSource`'s last cell, a spanning
+   cell when it reaches it, never while a cell is edited; `FillHandleState { visible, filling }`; attributes
    `FILL_HANDLE_ATTRIBUTE` (`data-grid-fill-handle`) = the row index, `data-grid-part="fill-handle"`,
    `data-filling`, an empty `style`; none elsewhere: render none; read without allocating, every
    cell asks, two constants for the hidden). A primary press on one (after the consumer's
    `onPointerDown`, a prevented one vetoes) is a drag at once, prevented (no focus, no text
    selection; never a range, an edit, a sort: `pressedBodyCellOf` passes it over, its click is the
-   drag's), captured by the viewport (`FillDrag` on the shared `PointerDrag` machinery, its
-   `source` the `selectedArea(state)` when it started, widened to the column spans it cuts on
-   any of its rows (`spannedArea`, every row read once a pass, once a press), and its `anchor`
-   the active cell then); once a frame `cellDragStep` edge-scrolls (the
+   drag's), captured by the viewport (`FillHandleDrag` on the shared `PointerDrag` machinery, its
+   `source` the view's `fillSource` when it started, the keys at its corners (`sourceKeys`) and
+   its `anchor` the active cell then); `fillSource` (`VIEW_KEYS`), worked out once per change of
+   the range, the active cell, the edit, the rows (`rows.changed` too) or the columns, never per
+   cell nor per press: `selectedArea(state)` widened to the column spans it cuts on any of its
+   rows (`spannedArea`, every row read once a pass), `null` while not fillable or editing; the
+   handle and the fill read the same one. Once a frame `cellDragStep` edge-scrolls (the
    range's rule: the body's edges, the scrolling columns' edges, never over a pinned strip) and
    `fillTo` works the target out (`fillTargetOf`: below the source, as wide, to the pointer's
    row, or to its end, as tall, to the pointer's column, whichever the pointer went farther past,
@@ -665,9 +690,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    past it there; between the edges, in a span the source widened to, the first side), an
    `active-position.set` there first when that moves it (refused or snapped: no range), then one
    `selected-range.set`. Escape (after the app's handlers, anywhere), `pointercancel`, a lost
-   capture or a move with no button tell nothing; a new source or new columns, another selected
-   range or active cell (a key, the app) and an edit opening (`followEdit`) end it, telling
-   nothing (`endDrag("lost")`), as `fillable` turning off does. The target is body cells
+   capture or a move with no button tell nothing; other keys at its source's corners after new
+   rows or columns (rows growing at the end keep it), another selected range or active cell (a
+   key, the app) and an edit opening (`followEdit`) end it, telling nothing (`endDrag("lost")`),
+   as `fillable` turning off does. The target is body cells
    (never the header nor a summary row); group rows, rows not loaded and cells not editable are in
    it: what a fill writes there is the app's rule. The extras are an opt-in entry point,
    `@fragiola/data-grid/fill` (never imported by the main one: `tests/local/entry.test.ts`):
@@ -1069,8 +1095,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   runs `row-groups.toggle` on its click, after the app's `onClick`.
 - **An edited cell renders its column's `renderEditCell` (Epic #88, E4.3)** in place of its
   content (a `Cell` given children renders only them: `useCellEdit(cell)` is for an editor
-  there); the editor, its look and its validation are the app's, `data-grid-editor` marks what of
-  it is portalled out of the grid.
+  there); the editor, its look and its validation are the app's; its `editorProps`
+  (`data-grid-editor`, the edit's name) mark what of it is portalled out of the grid.
 - **A fill handle is the app's element (Epic #88, E4.4).** `useFillHandle(cell)` returns
   `{ state, props }` (`state`: `visible`, `filling`; `props`: `data-grid-fill-handle`,
   `data-grid-part="fill-handle"`, `data-filling`, an empty `style`), and no props in any cell but

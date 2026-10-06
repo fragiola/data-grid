@@ -289,6 +289,7 @@ export interface ViewInputs<TRow, TNode>
         | "rowReorder"
         | "fillable"
         | "fill"
+        | "fillSource"
         | "direction"
     > {
     readonly state: DataGridState<TRow, TNode>;
@@ -439,6 +440,7 @@ const VIEW_KEYS = [
     "editingCell",
     "fillable",
     "fill",
+    "fillSource",
     "collapsedGroupKeys",
     "expandedGroupKeys",
     "interaction",

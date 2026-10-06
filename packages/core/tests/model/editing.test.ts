@@ -151,6 +151,35 @@ describe("the edited cell", () => {
         expect(keyed.state.editingCell).toBeNull();
     });
 
+    it("asks the app's rules again only when the rows, the columns, the active cell or the edit change", () => {
+        let asked = 0;
+        const columns: Column<Row>[] = [
+            { key: "id", width: 100 },
+            {
+                key: "note",
+                width: 100,
+                editable: () => {
+                    asked += 1;
+                    return true;
+                },
+            },
+        ];
+        const model = grid({ columns, activePosition: at(2, 1) });
+        model.run("editing-cell.set", at(2, 1));
+        asked = 0;
+        // commands that change none of it (rows told changed away from its row): no rule asked
+        model.run("sort-columns.set", { sortColumns: [] });
+        model.run("column-widths.set", { columnWidths: { id: 120 } });
+        model.run("rows.changed", { start: 4, end: 8 });
+        expect(asked).toBe(0);
+        model.run("rows.changed", { start: 0, end: 4 });
+        expect(asked).toBeGreaterThan(0);
+        asked = 0;
+        model.run("data.set", { rows: [...rows] });
+        expect(asked).toBeGreaterThan(0);
+        expect(model.get("editing-cell")).toEqual(at(2, 1));
+    });
+
     it("goes when the active cell moves, or the cell can no longer be edited", () => {
         const model = grid({ activePosition: at(1, 1) });
         model.run("editing-cell.set", at(1, 1));

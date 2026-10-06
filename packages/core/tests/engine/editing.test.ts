@@ -51,10 +51,17 @@ const COLUMNS: Column<Row>[] = [
     { key: "c", width: 100 },
 ];
 
+const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const at = (rowIndex: number, columnIndex: number) => ({
     rowIndex,
     columnIndex,
 });
+
+/** The name the edit open marks its editor's elements with (`editorProps`). */
+function editorName(engine: { get(key: "edit-draft"): EditDraft | null }) {
+    return engine.get("edit-draft")?.editorProps[EDITOR_ATTRIBUTE] ?? "";
+}
 
 function setup(modelOptions: Partial<DataGridModelOptions<Row>> = {}) {
     const grid = document.createElement("div");
@@ -88,7 +95,10 @@ describe("starting an edit", () => {
         const cell = cellAt(1, 1);
         expect(keydown(engine, cell, "Enter").handled).toBe(true);
         expect(editing()).toEqual(at(1, 1));
-        expect(drafts.at(-1)).toEqual({ value: "n1", initialValue: "n1" });
+        expect(drafts.at(-1)).toMatchObject({
+            value: "n1",
+            initialValue: "n1",
+        });
         expect(engine.get("edit-draft")).toBe(drafts.at(-1));
         model.run("editing-cell.clear", {});
         expect(drafts.at(-1)).toBeNull();
@@ -98,10 +108,83 @@ describe("starting an edit", () => {
         const typed = keydown(engine, cell, "é");
         expect(typed.event.defaultPrevented).toBe(true);
         expect(editing()).toEqual({ ...at(1, 1), startKey: "é" });
-        expect(engine.get("edit-draft")).toEqual({
+        expect(engine.get("edit-draft")).toMatchObject({
             value: "n1",
             initialValue: "n1",
         });
+    });
+
+    it("starts on a character typed with AltGr or Option, never with ⌘, Ctrl alone or in a composition", () => {
+        const { engine, cellAt, editing, model } = setup({
+            activePosition: at(1, 1),
+        });
+        const cell = cellAt(1, 1);
+        // AltGr (Ctrl and Alt, Windows) and Option (Alt, macOS) type characters
+        for (const init of [
+            { ctrlKey: true, altKey: true },
+            { altKey: true },
+        ]) {
+            const typed = keydown(engine, cell, "€", init);
+            expect(typed.handled).toBe(true);
+            expect(editing()).toEqual({ ...at(1, 1), startKey: "€" });
+            model.run("editing-cell.clear", {});
+        }
+        for (const [key, init] of [
+            ["€", { altKey: true, metaKey: true }],
+            ["e", { ctrlKey: true }],
+            [" ", { altKey: true }],
+            ["ArrowDown", { altKey: true }],
+            ["Enter", { altKey: true }],
+            // an IME's keys: Safari's confirming Enter is not `isComposing`
+            ["Enter", { keyCode: 229 }],
+            ["a", { isComposing: true }],
+        ] as const) {
+            keydown(engine, cell, key, init);
+            expect(editing()).toBeNull();
+            expect(model.state.activePosition).toEqual(at(1, 1));
+        }
+    });
+
+    it("leaves an IME's confirming Enter to the editor: no commit", () => {
+        const { engine, cellAt, editorIn, editing, edits } = setup({
+            activePosition: at(1, 1),
+        });
+        const cell = cellAt(1, 1);
+        keydown(engine, cell, "Enter");
+        const input = editorIn(cell);
+        engine.run("change-edit", { value: "かな" });
+        expect(keydown(engine, input, "Enter", { keyCode: 229 }).handled).toBe(
+            false,
+        );
+        expect(editing()).toEqual(at(1, 1));
+        keydown(engine, input, "Enter");
+        expect(edits).toHaveLength(1);
+    });
+
+    it("focuses the cell's marked editor first, else its first control that is not the grid's own", () => {
+        const { engine, cellAt, editing, commit } = setup({
+            activePosition: at(2, 1),
+        });
+        // a row's drag handle and a group's toggle before the editor
+        const cell = cellAt(
+            2,
+            1,
+            '<button data-grid-row-drag-handle="2">⋮</button><button data-grid-group-toggle="2">▸</button><input class="plain">',
+        );
+        keydown(engine, cell, "Enter");
+        commit();
+        expect(document.activeElement).toBe(cell.querySelector(".plain"));
+        engine.run("cancel-edit", {});
+        // a control inside an element marked as an editor wins over an earlier one
+        const marked = cellAt(
+            4,
+            1,
+            '<input class="first"><div data-grid-editor=""><input class="editor"></div>',
+        );
+        engine.run("edit-cell", at(4, 1));
+        commit();
+        expect(editing()).toEqual(at(4, 1));
+        expect(document.activeElement).toBe(marked.querySelector(".editor"));
     });
 
     it("leaves other keys, other cells and Shift+Space alone", () => {
@@ -262,7 +345,7 @@ describe("inside an edit", () => {
         const input = editorIn(cell);
         engine.run("change-edit", { value: "kept" });
         const popover = document.createElement("div");
-        popover.setAttribute(EDITOR_ATTRIBUTE, "");
+        popover.setAttribute(EDITOR_ATTRIBUTE, editorName(engine));
         const option = document.createElement("span");
         popover.append(option);
         document.body.append(popover);
@@ -282,6 +365,33 @@ describe("inside an edit", () => {
         expect(edits).toHaveLength(1);
     });
 
+    it("tells two grids' editors apart: another grid's marked editor commits this one's edit", () => {
+        const first = setup({ activePosition: at(2, 1) });
+        const second = setup({ activePosition: at(2, 1) });
+        const cells = [first, second].map(({ engine, cellAt, editorIn }) => {
+            const cell = cellAt(2, 1);
+            keydown(engine, cell, "Enter");
+            editorIn(cell);
+            engine.run("change-edit", { value: "typed" });
+            return cell;
+        });
+        expect(cells).toHaveLength(2);
+        const names = [first, second].map(({ engine }) => editorName(engine));
+        expect(names[0]).not.toBe(names[1]);
+        // the second grid's popover: its edit's, not the first's
+        const popover = document.createElement("div");
+        popover.setAttribute(EDITOR_ATTRIBUTE, names[1] ?? "");
+        document.body.append(popover);
+        expect(first.editing()).toEqual(at(2, 1));
+        for (const { engine } of [first, second]) {
+            pointer(engine, popover, "pointerdown", 10);
+        }
+        expect(first.editing()).toBeNull();
+        expect(first.edits).toHaveLength(1);
+        expect(second.editing()).toEqual(at(2, 1));
+        expect(second.edits).toEqual([]);
+    });
+
     it("commits when focus leaves for an element outside the edit, not into the marked editor", () => {
         const { engine, cellAt, editorIn, edits, editing } = setup({
             activePosition: at(2, 1),
@@ -291,7 +401,7 @@ describe("inside an edit", () => {
         const input = editorIn(edited);
         engine.run("change-edit", { value: "x" });
         const popover = document.createElement("input");
-        popover.setAttribute(EDITOR_ATTRIBUTE, "");
+        popover.setAttribute(EDITOR_ATTRIBUTE, editorName(engine));
         const elsewhere = document.createElement("input");
         document.body.append(popover, elsewhere);
         popover.focus();
@@ -319,13 +429,13 @@ describe("inside an edit", () => {
         ]);
         expect(editing()).toEqual(at(4, 2));
         expect(model.state.activePosition).toEqual(at(4, 2));
-        expect(engine.get("edit-draft")).toEqual({
+        expect(engine.get("edit-draft")).toMatchObject({
             value: 40,
             initialValue: 40,
         });
     });
 
-    it("focuses the editor of an edit-cell wherever focus was; cancels an edit with no editor", () => {
+    it("focuses the editor of an edit-cell wherever focus was; cancels an edit with no editor", async () => {
         const { engine, cellAt, editorIn, editing, commit } = setup({
             activePosition: at(1, 1),
         });
@@ -343,8 +453,41 @@ describe("inside an edit", () => {
         keydown(engine, bare, "Enter");
         expect(editing()).toEqual(at(3, 1));
         commit();
+        // the next task: an editor focused later (an effect, a frame) would have kept it
+        expect(editing()).toEqual(at(3, 1));
+        await nextTask();
         expect(editing()).toBeNull();
         expect(document.activeElement).toBe(bare);
+    });
+
+    it("keeps an edit whose editor takes focus after the commit: a portalled control marked as its editor's", async () => {
+        const { engine, cellAt, editing, commit } = setup({
+            activePosition: at(3, 1),
+        });
+        const bare = cellAt(3, 1);
+        bare.focus();
+        keydown(engine, bare, "Enter");
+        commit();
+        // the app's editor, outside the grid, focuses its control in an effect
+        const portal = document.createElement("div");
+        portal.setAttribute(EDITOR_ATTRIBUTE, editorName(engine));
+        const field = document.createElement("input");
+        portal.append(field);
+        document.body.append(portal);
+        field.focus();
+        await nextTask();
+        expect(editing()).toEqual(at(3, 1));
+        // another grid's editor, or one not marked, is not this edit's
+        engine.run("cancel-edit", {});
+        bare.focus();
+        keydown(engine, bare, "Enter");
+        commit();
+        const other = document.createElement("input");
+        other.setAttribute(EDITOR_ATTRIBUTE, "another-grid");
+        document.body.append(other);
+        other.focus();
+        await nextTask();
+        expect(editing()).toBeNull();
     });
 
     it("keeps the page keys of the edited cell itself from scrolling, its editor taking the others", () => {

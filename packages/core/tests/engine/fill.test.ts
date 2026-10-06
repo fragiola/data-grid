@@ -285,6 +285,37 @@ describe("a fill's drag", () => {
         expect(model.state.selectedRange).toEqual(range([1, 1], [3, 3]));
     });
 
+    it("goes on through rows growing at the end, and ends when other rows come under its source", () => {
+        const getRow = (id: number) => ({ id });
+        const { handleIn, press, fills, model, view } = setup({
+            rowKey: (row) => row.id,
+            activePosition: at(1, 1),
+        });
+        const handle = handleIn(1, 1);
+        press(handle, "pointerdown", xOf(1), yOf(1));
+        press(handle, "pointermove", xOf(1), yOf(3));
+        frame();
+        // infinite scrolling: more rows, the same keys at the source
+        model.run("data.set", { rowCount: 2_000, getRow });
+        expect(view().fill?.target).not.toBeNull();
+        press(handle, "pointerup", xOf(1), yOf(3));
+        expect(fills).toEqual([
+            { source: range([1, 1], [1, 1]), target: range([2, 1], [3, 1]) },
+        ]);
+        // the rows sorted again: another row at the source
+        model.run("selected-range.clear", {});
+        press(handle, "pointerdown", xOf(1), yOf(1));
+        press(handle, "pointermove", xOf(1), yOf(3));
+        frame();
+        model.run("data.set", {
+            rowCount: 2_000,
+            getRow: (index) => ({ id: 1_999 - index }),
+        });
+        expect(view().fill).toBeNull();
+        press(handle, "pointerup", xOf(1), yOf(3));
+        expect(fills).toHaveLength(1);
+    });
+
     it("tells nothing over the source or above it, and on Escape, a cancel or a lost capture", () => {
         const { handleIn, press, fills, engine, view } = setup({
             activePosition: at(3, 1),
@@ -379,6 +410,29 @@ describe("the fill's parts", () => {
         expect(visible(2, 1)).toBe(true);
         model.run("editing-cell.set", at(2, 1));
         expect(visible(2, 1)).toBe(false);
+    });
+
+    it("put the handle where the fill drags from: a range widened to the spans it cuts", () => {
+        const columns: Column<Row>[] = COLUMNS.map((column, index) =>
+            index === 1
+                ? {
+                      ...column,
+                      colSpan: ({ type, rowIndex }) =>
+                          type === "row" && rowIndex % 2 === 0 ? 2 : undefined,
+                  }
+                : column,
+        );
+        const { view } = setup({
+            columns,
+            activePosition: at(3, 0),
+            selectedRange: range([3, 0], [2, 1]),
+        });
+        // row 2's cell spans c1 and c2: the source reaches c2, its handle at row 3's c2
+        expect(view().fillSource).toEqual(range([2, 0], [3, 2]));
+        const visible = (rowIndex: number, columnIndex: number) =>
+            fillHandlePart(view(), at(rowIndex, columnIndex)).state.visible;
+        expect(visible(3, 2)).toBe(true);
+        expect(visible(3, 1)).toBe(false);
     });
 
     it("leave a grid that does not fill unchanged", () => {

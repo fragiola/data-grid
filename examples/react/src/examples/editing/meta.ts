@@ -11,7 +11,7 @@ export default {
         "renderEditCell",
         "onCellEdit",
         "data-editing",
-        "data-grid-editor",
+        "editorProps",
     ],
     docs: "/docs/concepts/editing",
 } satisfies ExampleMeta;

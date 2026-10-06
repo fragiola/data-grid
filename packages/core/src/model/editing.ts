@@ -1,12 +1,11 @@
 import { isIndex } from "../utils";
 import { fail } from "./result";
-import { dataRowAt, rowKeyAt, rowMetaAt } from "./source";
+import { dataRowAt, rowMetaAt } from "./source";
 import type {
     CellPosition,
     CommandFailure,
     DataGridState,
     EditingCell,
-    EditingKeys,
 } from "./types";
 
 // Cell editing (Epic #88, E4.3): the model keeps which cell is edited, the active one, and the
@@ -69,29 +68,6 @@ export function isCellEditable<TRow>(
     position: CellPosition,
 ): boolean {
     return editRefusal(state, position) === undefined;
-}
-
-/**
- * The keys at an edited position (E4.3): its row's (`rowKey`, else its index) and its column's;
- * `undefined` for no such cell.
- */
-export function editingKeysAt<TRow>(
-    state: EditingState<TRow>,
-    { rowIndex, columnIndex }: CellPosition,
-): EditingKeys | undefined {
-    const column = state.columns[columnIndex];
-    const rowKey = rowKeyAt(state, rowIndex);
-    return column && rowKey !== undefined
-        ? { rowKey, columnKey: column.key }
-        : undefined;
-}
-
-/** Whether two edits' keys are the same row's and column's. */
-export function sameEditingKeys(
-    a: EditingKeys | null | undefined,
-    b: EditingKeys | null | undefined,
-): boolean {
-    return a?.rowKey === b?.rowKey && a?.columnKey === b?.columnKey;
 }
 
 /** Whether a grid's columns edit at all: without one, nothing is asked. */

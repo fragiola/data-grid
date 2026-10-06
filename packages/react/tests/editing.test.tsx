@@ -1,10 +1,12 @@
 import { act, fireEvent, render } from "@testing-library/react";
-import { useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
     type CellEditEvent,
     type Column,
     DataGrid,
+    type EditCellRenderProps,
     type EditingCell,
 } from "../src";
 import { cellAt, stubViewportSize, tags } from "./helpers";
@@ -149,7 +151,7 @@ describe("the edited cell", () => {
         expect(changes).toEqual([{ ...at(1, 1), startKey: "q" }, null]);
     });
 
-    it("cancels an edit with no editor to focus: an editable column without one traps no key", () => {
+    it("cancels an edit with no editor to focus: an editable column without one traps no key", async () => {
         const changes: (EditingCell | null)[] = [];
         const { container } = render(
             <Grid
@@ -159,10 +161,74 @@ describe("the edited cell", () => {
         );
         const cell = cellAt(container, 1, 2);
         fireEvent.keyDown(cell, { key: "F2" });
+        // the next task: an editor focusing itself later would have kept it
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
         expect(cell).not.toHaveAttribute("data-editing");
         expect(changes).toEqual([at(1, 2), null]);
         fireEvent.keyDown(cell, { key: "ArrowDown" });
         expect(cellAt(container, 2, 2)).toHaveFocus();
+    });
+
+    it("keeps an edit whose portalled editor, marked with its editorProps, takes focus in an effect", async () => {
+        function PortalEditor({
+            value,
+            editorProps,
+        }: EditCellRenderProps<Item, ReactNode>) {
+            const field = useRef<HTMLInputElement>(null);
+            useEffect(() => field.current?.focus(), []);
+            return createPortal(
+                <div {...editorProps}>
+                    <input
+                        ref={field}
+                        aria-label="Portalled"
+                        defaultValue={String(value)}
+                    />
+                </div>,
+                document.body,
+            );
+        }
+        const portalled: Column<Item>[] = [
+            { key: "id", width: 80 },
+            {
+                key: "name",
+                width: 160,
+                editable: true,
+                renderEditCell: (props) => <PortalEditor {...props} />,
+            },
+        ];
+        const { container, getByLabelText } = render(
+            <DataGrid.Root
+                columns={portalled}
+                rows={items}
+                rowHeight={20}
+                defaultActivePosition={at(1, 1)}
+            >
+                <DataGrid.Grid>
+                    <DataGrid.Body>
+                        <DataGrid.Rows<Item>>
+                            {(row) => (
+                                <DataGrid.Row row={row}>
+                                    <DataGrid.Cells<Item>>
+                                        {(cell) => (
+                                            <DataGrid.Cell cell={cell} />
+                                        )}
+                                    </DataGrid.Cells>
+                                </DataGrid.Row>
+                            )}
+                        </DataGrid.Rows>
+                    </DataGrid.Body>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const cell = cellAt(container, 1, 1);
+        fireEvent.keyDown(cell, { key: "F2" });
+        const field = getByLabelText("Portalled");
+        expect(field.parentElement?.getAttribute("data-grid-editor")).toMatch(
+            /^g\d+-\d+$/,
+        );
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(field).toHaveFocus();
+        expect(cell).toHaveAttribute("data-editing");
     });
 
     it("tells a controlled parent once per commit, and a kept edit never tells a value twice", () => {

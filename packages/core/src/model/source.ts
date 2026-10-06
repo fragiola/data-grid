@@ -1,5 +1,7 @@
 import { isIndex, keySet } from "../utils";
 import type {
+    CellKeys,
+    CellPosition,
     Column,
     DataGridState,
     GroupRow,
@@ -136,6 +138,42 @@ export function loadedRowKey<TRow>(
 ): RowKey | undefined {
     const row = loadedRow(state, rowIndex);
     return row === undefined ? undefined : keyOf(state, row, rowIndex);
+}
+
+/**
+ * The keys at a body cell (Epic #88): its row's (`rowKey`, else its index) and its column's;
+ * `undefined` for no such cell, or a row not loaded.
+ */
+export function cellKeysAt<TRow>(
+    state: RowsState<TRow> & {
+        readonly columns: readonly { readonly key: string }[];
+    },
+    { rowIndex, columnIndex }: CellPosition,
+): CellKeys | undefined {
+    const column = state.columns[columnIndex];
+    const rowKey = column ? rowKeyAt(state, rowIndex) : undefined;
+    return column && rowKey !== undefined
+        ? { rowKey, columnKey: column.key }
+        : undefined;
+}
+
+/** Whether two cells' keys (or none) are the same row's and column's. */
+export function sameCellKeys(
+    a: CellKeys | null | undefined,
+    b: CellKeys | null | undefined,
+): boolean {
+    return a?.rowKey === b?.rowKey && a?.columnKey === b?.columnKey;
+}
+
+/**
+ * Whether a cell's keys taken earlier may still be at its position: the same ones, or either
+ * unknown (its row not loaded, then or now: kept by index).
+ */
+export function sameKnownKeys(
+    was: CellKeys | undefined,
+    now: CellKeys | undefined,
+): boolean {
+    return !was || !now || sameCellKeys(was, now);
 }
 
 /**

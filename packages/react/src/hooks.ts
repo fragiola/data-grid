@@ -457,7 +457,8 @@ function cellPartProps<TRow, P extends CellPart | SummaryCellPart>(
 /**
  * An edit's editor props (Epic #88, E4.3), for the cell being edited (`state.editing`): its row,
  * column and indexes, the draft (`value`, the engine's, this hook re-rendering as it changes), the
- * value it started from, the key that started it, and `onChange`, `onCommit` and `onCancel`;
+ * value it started from, the key that started it, `onChange`, `onCommit` and `onCancel`, and
+ * `editorProps` (spread on an element outside the cell that is the editor's: a popover);
  * `null` for any other cell. What a column's `renderEditCell` receives: call it in an editor of
  * your own rendered in a cell's children while it is edited (subscribe only there: every cell
  * subscribing would re-render with every keystroke).
@@ -498,6 +499,7 @@ export function useCellEdit<TRow>(
         value: draft.value,
         initialValue: draft.initialValue,
         startKey: editing.startKey,
+        editorProps: draft.editorProps,
         ...ways,
     };
 }
