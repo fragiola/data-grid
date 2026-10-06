@@ -4,6 +4,7 @@ export type { Axis, Size } from "./axis/axis";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
+    GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
     TAB_STOP_ATTRIBUTE,
 } from "./engine/dom";
@@ -16,6 +17,7 @@ export {
     cellSpan,
     columnLeft,
     columnPinning,
+    gridRole,
     type HeaderCellSort,
     headerCellBox,
     headerCellSort,
@@ -35,6 +37,7 @@ export {
     summaryHeight,
 } from "./engine/geometry";
 export {
+    type AriaTreeRow,
     type CellPart,
     type CellState,
     type ColumnResizerPart,
@@ -42,6 +45,9 @@ export {
     cellBox,
     cellPart,
     columnResizerPart,
+    type GroupTogglePart,
+    type GroupToggleState,
+    groupTogglePart,
     type HeaderCellPart,
     type HeaderCellState,
     headerCellPart,
@@ -50,6 +56,7 @@ export {
     type RowDragHandlePart,
     type RowDragHandleState,
     type RowPart,
+    type RowRead,
     type RowState,
     rowDetailPart,
     rowDragHandlePart,
@@ -89,7 +96,17 @@ export {
 export { keptOrder, sameOrder } from "./model/order";
 export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
-export { cellValue, rowAt } from "./model/source";
+export {
+    cellValue,
+    dataRowAt,
+    depthOf,
+    groupAt,
+    groupCellValue,
+    rowAt,
+    rowKeyAt,
+    rowKeyOf,
+    rowMetaAt,
+} from "./model/source";
 export {
     summaryRowAt,
     summaryRowIndex,
@@ -119,7 +136,10 @@ export type {
     DataSetPayload,
     DetailHeight,
     GridDirection,
+    GroupCellRenderProps,
+    GroupColSpanArgs,
     GroupHeaderCellRenderProps,
+    GroupRow,
     GroupShow,
     HeaderCellLayout,
     HeaderCellRenderProps,
@@ -138,6 +158,8 @@ export type {
     RowHeight,
     RowKey,
     RowKeyGetter,
+    RowMeta,
+    RowMetaGetter,
     RowSelectable,
     RowSelection,
     RowSource,

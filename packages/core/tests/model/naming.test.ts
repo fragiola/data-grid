@@ -7,7 +7,7 @@ import { COMMANDS } from "../../src/model/model";
 // dot, a read has none; a `get` key that takes a payload selecting one thing ends in `-by`, and its
 // payload's fields complete the sentence (`row-by { index }`, `column-by { key }`, `row-key-by
 // { rowIndex }`); an `is` key is `<entity>-<state>`; an index field is `index` (of what the key
-// returns) or `<entity>Index` (`rowIndex`, `columnIndex`, `summaryIndex`).
+// returns) or `<entity>Index` (`rowIndex`, `columnIndex`, `summaryIndex`, `parentIndex`).
 
 const MODEL = join(import.meta.dirname, "../../src/model");
 
@@ -74,9 +74,10 @@ describe("key names", () => {
         );
         expect(fields.length).toBeGreaterThan(0);
         for (const field of fields) {
-            // a summary row's index among its position's rows (Epic #86) is `summaryIndex`
+            // a summary row's index among its position's rows (Epic #86) is `summaryIndex`, the
+            // row index of the row a row is under (Epic #87) `parentIndex`
             expect(field, field).toMatch(
-                /^(index|row(Index)|column(Index)|summary(Index))$/,
+                /^(index|row(Index)|column(Index)|summary(Index)|parent(Index))$/,
             );
         }
     });

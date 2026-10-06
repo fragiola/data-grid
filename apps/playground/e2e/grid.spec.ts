@@ -4787,5 +4787,453 @@ for (const kind of KINDS) {
                 await expect(own(page, 2, 1)).toBeFocused();
             });
         });
+
+        test.describe("row groups", () => {
+            // 1,000 rows in memory grouped by C2 (`g<index % 5>`: 200 rows each), C4 their
+            // indexes' sum; a group row's C0 holds its toggle and `<value> (<count>)`
+            const GROUPED = { rows: 1_000, columns: 20, groupBy: 1 } as const;
+
+            function row(page: Page, rowIndex: number) {
+                return page.locator(
+                    `[data-grid-part="row"][data-row-index="${rowIndex}"]`,
+                );
+            }
+
+            /** The grid's element: its role and its counts. */
+            function gridPart(page: Page) {
+                return page.locator('[data-grid-part="grid"]');
+            }
+
+            /** A group row's C0, clicked beside its toggle: the cell is active, in navigation. */
+            async function activate(
+                page: Page,
+                rowIndex: number,
+                columnIndex = 0,
+            ) {
+                const target = cell(page, rowIndex, columnIndex);
+                const box = await boxOf(target);
+                await page.mouse.click(box.x + box.width - 4, box.y + 4);
+                await settle(page);
+                await expect(target).toBeFocused();
+            }
+
+            test("makes a treegrid of group rows, with counts and aggregates", async ({
+                page,
+            }) => {
+                await open(page, kind, { rows: 1_000 });
+                await expect(gridPart(page)).toHaveAttribute("role", "grid");
+                await expect(row(page, 0)).not.toHaveAttribute("aria-level");
+                await open(page, kind, GROUPED);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "role",
+                    "treegrid",
+                );
+                // the header's row and the five group rows
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "6",
+                );
+                await expect(
+                    page.locator('[data-grid-part="row"]'),
+                ).toHaveCount(5);
+                const first = row(page, 0);
+                await expect(first).toHaveAttribute("data-group-row", "");
+                await expect(first).toHaveAttribute("aria-level", "1");
+                await expect(first).toHaveAttribute("aria-expanded", "false");
+                await expect(first).toHaveAttribute("aria-setsize", "5");
+                await expect(first).toHaveAttribute("aria-posinset", "1");
+                await expect(first).not.toHaveAttribute("data-loading");
+                await expect(cell(page, 0, 0)).toHaveText("+ g0 (200)");
+                await expect(cell(page, 0, 2)).toHaveText("g0");
+                // 0 + 5 + … + 995
+                await expect(cell(page, 0, 4)).toHaveText("99500");
+                await expect(cell(page, 4, 0)).toHaveText("+ g4 (200)");
+            });
+
+            test("expands and collapses a group by its toggle", async ({
+                page,
+            }) => {
+                await open(page, kind, GROUPED);
+                await page.getByTestId("group-toggle-1").click();
+                await settle(page);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "206",
+                );
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await expect(row(page, 1)).toHaveAttribute(
+                    "data-group-expanded",
+                    "",
+                );
+                await expect(
+                    page.getByTestId("group-toggle-1"),
+                ).toHaveAttribute("aria-expanded", "true");
+                // its rows under it, a level down
+                await expect(row(page, 2)).toHaveAttribute("aria-level", "2");
+                await expect(row(page, 2)).not.toHaveAttribute(
+                    "data-group-row",
+                );
+                await expect(cell(page, 2, 0)).toHaveText("1:0");
+                await expect(cell(page, 3, 0)).toHaveText("6:0");
+                await expect(cell(page, 2, 2)).toHaveText("g1");
+                expect(
+                    await page.evaluate(() => window.groupChanges.length),
+                ).toBe(1);
+                await page.getByTestId("group-toggle-1").click();
+                await settle(page);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "6",
+                );
+                await expect(cell(page, 2, 0)).toHaveText("+ g2 (200)");
+            });
+
+            test("expands, collapses and goes up the tree with the keys", async ({
+                page,
+            }) => {
+                await open(page, kind, GROUPED);
+                await activate(page, 1, 1);
+                // Enter and Space toggle a group row
+                await page.keyboard.press("Enter");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await page.keyboard.press(" ");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                // on the first column, → expands, then moves
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("ArrowRight");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await expect(cell(page, 1, 0)).toBeFocused();
+                // down into its rows, ← goes back up to it, and ← there collapses it
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("ArrowDown");
+                await settle(page);
+                await expect(cell(page, 3, 0)).toBeFocused();
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(cell(page, 1, 0)).toBeFocused();
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                await expect(cell(page, 1, 0)).toBeFocused();
+            });
+
+            test("nests by two columns", async ({ page }) => {
+                await open(page, kind, { ...GROUPED, groupBy: 2 });
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(cell(page, 1, 0)).toHaveText("+ h0 (100)");
+                await expect(row(page, 1)).toHaveAttribute("aria-level", "2");
+                await expect(row(page, 1)).toHaveAttribute("aria-setsize", "2");
+                await page.getByTestId("group-toggle-1").click();
+                await settle(page);
+                await expect(row(page, 2)).toHaveAttribute("aria-level", "3");
+                await expect(cell(page, 2, 0)).toHaveText("0:0");
+                // ← from a row three levels down goes to its group
+                await cell(page, 4, 0).click();
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(cell(page, 1, 0)).toBeFocused();
+            });
+
+            test("selects a group's rows", async ({ page }) => {
+                await open(page, kind, {
+                    ...GROUPED,
+                    selection: "multiple",
+                });
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-selected",
+                    "false",
+                );
+                await page.getByTestId("select-0").click();
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                const keys = await page.evaluate(
+                    () => window.selectionChanges.at(-1) ?? [],
+                );
+                expect(keys).toHaveLength(200);
+                expect(keys.slice(0, 2)).toEqual([0, 5]);
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                // a row cleared: its group no longer all selected
+                await page.getByTestId("select-1").click();
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-selected",
+                    "false",
+                );
+                // Shift+Space on a group row selects its rows again
+                await activate(page, 0, 2);
+                await page.keyboard.press("Shift+Space");
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                // Ctrl/⌘+A selects every row, the collapsed groups' too
+                await page.keyboard.press("ControlOrMeta+a");
+                await settle(page);
+                expect(
+                    await page.evaluate(
+                        () => window.selectionChanges.at(-1)?.length,
+                    ),
+                ).toBe(1_000);
+                // the collapsed group g1 (row 201, below the view) holds every one of its rows
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.is("row-selected", {
+                            rowIndex: 201,
+                        }),
+                    ),
+                ).toBe(true);
+            });
+
+            test("sorts inside the groups", async ({ page }) => {
+                await open(page, kind, { ...GROUPED, sort: 1 });
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(cell(page, 1, 0)).toHaveText("0:0");
+                const header = page.locator(
+                    '[data-grid-part="header-cell"][data-column-index="0"]',
+                );
+                await header.click();
+                await header.click();
+                await settle(page);
+                // descending: the group stays first (it sorts by C2), its rows reversed
+                await expect(cell(page, 0, 0)).toHaveText("- g0 (200)");
+                await expect(cell(page, 1, 0)).toHaveText("995:0");
+            });
+
+            test("keeps a pinned group cell in view and its rows under the summary rows", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...GROUPED,
+                    pinned: 1,
+                    summaryTop: 1,
+                    summaryBottom: 1,
+                });
+                // header, top summary row, then the first group row
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-rowindex",
+                    "3",
+                );
+                await expect(cell(page, 0, 0)).toHaveAttribute(
+                    "data-pinned",
+                    "start",
+                );
+                const before = await boxOf(cell(page, 0, 0));
+                await scroll(page, viewport, 0, 600);
+                const after = await boxOf(cell(page, 0, 0));
+                expect(after.x).toBeCloseTo(before.x, 0);
+                await expect(cell(page, 0, 0)).toHaveText("+ g0 (200)");
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "208",
+                );
+                await expect(
+                    page.locator(
+                        '[data-grid-part="summary-row"][data-row-index="205"]',
+                    ),
+                ).toHaveAttribute("aria-rowindex", "208");
+            });
+
+            test("scales with many rows, groups expanded", async ({ page }) => {
+                const viewport = await open(page, kind, {
+                    rows: 200_000,
+                    columns: 20,
+                    groupBy: 1,
+                    maxScrollSize: 500_000,
+                });
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "40006",
+                );
+                const scaled = await page.evaluate(
+                    () => window.grid?.engine.get("scroll-scaled").rows,
+                );
+                expect(scaled).toBe(true);
+                await scroll(page, viewport, "end");
+                // the last group row, in view
+                const last = cell(page, 40_004, 0);
+                await expect(last).toHaveText("+ g4 (40000)");
+                await expectFullyInBody(viewport, last);
+                await last.click({ position: { x: 90, y: 4 } });
+                await page.keyboard.press("ArrowUp");
+                await settle(page);
+                await expect(cell(page, 40_003, 0)).toBeFocused();
+                await page.keyboard.press("Control+Home");
+                await settle(page);
+                await expect(
+                    page.locator(
+                        '[data-grid-part="header-cell"][data-column-index="0"]',
+                    ),
+                ).toBeFocused();
+            });
+        });
+
+        test.describe("tree data", () => {
+            // 100 top rows, each with 3 rows, each of those with 2: a row's index is its place in
+            // the whole tree (the top rows 0, 10, 20, …); a parent's C0 holds its toggle
+            const TREE = { rows: 1_000, columns: 20, tree: 1 } as const;
+
+            function row(page: Page, rowIndex: number) {
+                return page.locator(
+                    `[data-grid-part="row"][data-row-index="${rowIndex}"]`,
+                );
+            }
+
+            function gridPart(page: Page) {
+                return page.locator('[data-grid-part="grid"]');
+            }
+
+            test("makes a treegrid of the top rows, parents data rows that expand", async ({
+                page,
+            }) => {
+                await open(page, kind, TREE);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "role",
+                    "treegrid",
+                );
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "101",
+                );
+                const first = row(page, 0);
+                await expect(first).toHaveAttribute("aria-level", "1");
+                await expect(first).toHaveAttribute("aria-expanded", "false");
+                await expect(first).toHaveAttribute("aria-setsize", "100");
+                await expect(first).toHaveAttribute("aria-posinset", "1");
+                await expect(first).not.toHaveAttribute("data-group-row");
+                await expect(cell(page, 0, 0)).toHaveText("+ 0:0");
+                await expect(cell(page, 1, 0)).toHaveText("+ 10:0");
+                await expect(cell(page, 1, 2)).toHaveText("10:2");
+            });
+
+            test("expands a parent by its toggle, its rows a level down", async ({
+                page,
+            }) => {
+                await open(page, kind, TREE);
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(gridPart(page)).toHaveAttribute(
+                    "aria-rowcount",
+                    "104",
+                );
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await expect(row(page, 0)).toHaveAttribute(
+                    "data-group-expanded",
+                    "",
+                );
+                await expect(row(page, 2)).toHaveAttribute("aria-level", "2");
+                await expect(row(page, 2)).toHaveAttribute("aria-setsize", "3");
+                await expect(row(page, 2)).toHaveAttribute(
+                    "aria-posinset",
+                    "2",
+                );
+                await expect(cell(page, 2, 0)).toHaveText("+ 4:0");
+                await expect(cell(page, 4, 0)).toHaveText("+ 10:0");
+                expect(
+                    await page.evaluate(() => window.groupChanges.at(-1)),
+                ).toEqual([0]);
+            });
+
+            test("expands with Space and →, goes up and collapses with ←", async ({
+                page,
+            }) => {
+                await open(page, kind, TREE);
+                await cell(page, 0, 1).click();
+                // Enter stays the cell's: nothing opens
+                await page.keyboard.press("Enter");
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                await page.keyboard.press(" ");
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                // on the first column, → opens a collapsed parent, then moves
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("Home");
+                await page.keyboard.press("ArrowRight");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "true",
+                );
+                await expect(row(page, 2)).toHaveAttribute("aria-level", "3");
+                await page.keyboard.press("ArrowDown");
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(cell(page, 1, 0)).toBeFocused();
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-expanded",
+                    "false",
+                );
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                await expect(cell(page, 0, 0)).toBeFocused();
+            });
+
+            test("selects a parent alone, by its own key", async ({ page }) => {
+                await open(page, kind, { ...TREE, selection: "multiple" });
+                await page.getByTestId("select-0").click();
+                await settle(page);
+                await expect(row(page, 0)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                expect(
+                    await page.evaluate(() => window.selectionChanges.at(-1)),
+                ).toEqual([0]);
+                await page.getByTestId("group-toggle-0").click();
+                await settle(page);
+                await expect(row(page, 1)).toHaveAttribute(
+                    "aria-selected",
+                    "false",
+                );
+            });
+        });
     });
 }

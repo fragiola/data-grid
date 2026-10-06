@@ -1,6 +1,6 @@
 import { leafColumns } from "../header/header";
-import type { ColumnOrGroup, SortColumn } from "../model/types";
-import { memo } from "../utils";
+import type { ColumnOrGroup, RowKey, SortColumn } from "../model/types";
+import { memo, sameList } from "../utils";
 import {
     entriesOf,
     filterEntries,
@@ -10,11 +10,27 @@ import {
     searchEntries,
     searchTextsOf,
 } from "./filter";
+import {
+    type GroupedRows,
+    groupedRowsOf,
+    groupKeysOf,
+    groupTree,
+    type LocalGrouping,
+    type ShownRow,
+    shownRowsOf,
+} from "./group";
 import { clampPageIndex, pageCount, pageOf } from "./page";
 import { sortEntries } from "./sort";
+import {
+    keptTree,
+    parentKeysOf,
+    shownTreeOf,
+    treeEntriesOf,
+    treeOf,
+} from "./tree";
 
-// The local pipeline (Epic #47): rows in memory filtered, searched, sorted and paged, in that
-// order, each stage computed again only when its own inputs change.
+// The local pipeline (Epic #47): rows in memory filtered, searched, sorted, grouped (Epic #87) and
+// paged, in that order, each stage computed again only when its own inputs change.
 
 /** The rows sorted by `sortColumns` (see `Column.compare`; empty values last; stable). */
 export function sortRows<TRow, TNode>(
@@ -58,6 +74,56 @@ export function pageRows<TRow>(
     return [...pageOf(rows, pageIndex, pageSize)];
 }
 
+/**
+ * The rows grouped by `grouping.groupBy` (Epic #87), in their order (sort them first), flattened as
+ * the grid shows them: each group row, then, while its key is in `grouping.expandedGroupKeys`, its
+ * groups or rows. The groups are ordered by their value, ascending, an empty one last.
+ */
+export function groupRows<TRow, TNode>(
+    rows: readonly TRow[],
+    columns: readonly ColumnOrGroup<TRow, TNode>[],
+    grouping: LocalGrouping<TRow>,
+): GroupedRows<TRow> {
+    const groups = groupTree(
+        entriesOf(rows),
+        grouping.groupBy ?? [],
+        leafColumns(columns),
+        [],
+        grouping.aggregates,
+        grouping.rowKey,
+        grouping.isRowSelectable,
+    );
+    return groupedRowsOf(
+        shownRowsOf(groups, grouping.expandedGroupKeys ?? []),
+        0,
+        groupKeysOf(groups),
+        grouping.rowKey,
+        grouping.isRowSelectable,
+    );
+}
+
+/**
+ * The rows as a tree (Epic #87, E3.3): `rows` its top rows, `grouping.getSubRows` each row's rows,
+ * flattened as the grid shows them: each row, then, while it is a parent whose key is in
+ * `grouping.expandedGroupKeys`, its rows. Each row's index (`getValue`'s, the default key) is its
+ * place in the whole tree read top to bottom.
+ */
+export function treeRows<TRow>(
+    rows: readonly TRow[],
+    grouping: LocalGrouping<TRow> & {
+        readonly getSubRows: (row: TRow) => readonly TRow[] | undefined;
+    },
+): GroupedRows<TRow> {
+    const { roots } = treeOf(rows, grouping.getSubRows);
+    return groupedRowsOf(
+        shownTreeOf(roots, grouping.expandedGroupKeys ?? [], grouping.rowKey),
+        0,
+        parentKeysOf(roots, grouping.rowKey),
+        grouping.rowKey,
+        grouping.isRowSelectable,
+    );
+}
+
 /** Where the local pipeline starts: every field optional. */
 export interface LocalRowsOptions {
     readonly defaultSortColumns?: readonly SortColumn[] | undefined;
@@ -66,6 +132,8 @@ export interface LocalRowsOptions {
     /** rows per page; without one, a single page of every row */
     readonly pageSize?: number | undefined;
     readonly defaultPageIndex?: number | undefined;
+    /** the groups expanded to start with, by key (`groupKeyOf`), when rows are grouped */
+    readonly defaultExpandedGroupKeys?: readonly RowKey[] | undefined;
 }
 
 /** What the local pipeline keeps: the state its controls change. */
@@ -76,11 +144,16 @@ export interface LocalRowsState {
     /** as set: `derive` shows the last page when it is past it */
     readonly pageIndex: number;
     readonly pageSize: number | undefined;
+    /** the expanded groups' keys (Epic #87), while rows are grouped */
+    readonly expandedGroupKeys: readonly RowKey[];
 }
 
 /** What the local pipeline derives from the rows: the page to show, and the counts. */
 export interface LocalRowsView<TRow> {
-    /** the current page's rows, filtered, searched and sorted */
+    /**
+     * the current page's rows, filtered, searched and sorted (grouped: the data rows it shows, in
+     * order, group rows aside)
+     */
     readonly rows: readonly TRow[];
     /**
      * where the current page's rows are among the rows given, in their order (`rows[i]` is the
@@ -90,7 +163,10 @@ export interface LocalRowsView<TRow> {
     readonly rowIndexes: readonly number[];
     /** every row given */
     readonly total: number;
-    /** the rows passing the filters and the search */
+    /**
+     * the rows passing the filters and the search (a tree's: the rows they leave, at every
+     * depth, a match's ancestors included)
+     */
     readonly filteredCount: number;
     /**
      * every page's rows, filtered, searched and sorted: what "select all" means across pages
@@ -101,7 +177,13 @@ export interface LocalRowsView<TRow> {
     /** the current page, kept inside the pages there are */
     readonly pageIndex: number;
     readonly pageSize: number | undefined;
+    /** grouped (Epic #87): of the rows shown, group rows included */
     readonly pageCount: number;
+    /**
+     * the rows grouped (Epic #87: `groupBy` given), as the grid takes them: the current page of
+     * the rows shown, group rows and the rows of the expanded ones; `null` without grouping
+     */
+    readonly groups: GroupedRows<TRow> | null;
 }
 
 /** A local pipeline: its state, the methods that change it, and the rows it derives. */
@@ -118,7 +200,10 @@ export interface LocalRows<TRow, TNode = unknown> {
     derive(
         rows: readonly TRow[],
         columns: readonly ColumnOrGroup<TRow, TNode>[],
+        grouping?: LocalGrouping<TRow>,
     ): LocalRowsView<TRow>;
+    /** the groups expanded, by key (Epic #87); the page stays */
+    setExpandedGroupKeys(expandedGroupKeys: readonly RowKey[]): void;
     /** sorts by these columns, from the first page */
     setSortColumns(sortColumns: readonly SortColumn[]): void;
     /** filters a column by a value (an empty one clears it), from the first page */
@@ -145,6 +230,7 @@ export function createLocalRows<TRow, TNode = unknown>(
         search: options.defaultSearch ?? "",
         pageIndex: validPageIndex(options.defaultPageIndex ?? 0),
         pageSize: validPageSize(options.pageSize),
+        expandedGroupKeys: options.defaultExpandedGroupKeys ?? [],
     };
     const listeners = new Set<() => void>();
 
@@ -193,6 +279,63 @@ export function createLocalRows<TRow, TNode = unknown>(
                 pageIndex: index,
                 pageSize,
                 pageCount: pageCount(ordered.length, pageSize),
+                groups: null,
+            };
+        },
+    );
+    // grouped (Epic #87): the groups, the rows shown, and their page
+    const groupByOf = kept<string>();
+    const tree = memo(groupTree<TRow, TNode>);
+    const shownOf = memo(shownRowsOf<TRow>);
+    const keysOf = memo(groupKeysOf<TRow>);
+    // a tree (E3.3): read once per rows, kept per filter and sort, shown per expansion
+    const treeFrom = memo(treeOf<TRow>);
+    const keptOf = memo(keptTree<TRow, TNode>);
+    const shownTree = memo(shownTreeOf<TRow>);
+    const parentKeys = memo(parentKeysOf<TRow>);
+    const treeEntries = memo(treeEntriesOf<TRow>);
+    const groupedView = memo(
+        (
+            shown: readonly ShownRow<TRow>[],
+            groupKeys: readonly RowKey[],
+            ordered: readonly RowEntry<TRow>[],
+            all: readonly RowEntry<TRow>[],
+            given: readonly TRow[],
+            pageIndex: number,
+            pageSize: number | undefined,
+            rowKey: LocalGrouping<TRow>["rowKey"],
+            isRowSelectable: LocalGrouping<TRow>["isRowSelectable"],
+        ): LocalRowsView<TRow> => {
+            const index = clampPageIndex(pageIndex, shown.length, pageSize);
+            const page = pageOf(shown, index, pageSize);
+            const entries = page.flatMap((row) =>
+                row.entry ? [row.entry] : [],
+            );
+            let rowIndexes: readonly number[] | undefined;
+            return {
+                rows: entries.map((entry) => entry.row),
+                get rowIndexes() {
+                    rowIndexes ??= entries.map((entry) => entry.index);
+                    return rowIndexes;
+                },
+                // a tree's rows at every depth
+                total: all.length,
+                filteredCount: ordered.length,
+                get filteredRows() {
+                    return ordered === all && all.length === given.length
+                        ? given
+                        : rowsOf(ordered);
+                },
+                pageIndex: index,
+                pageSize,
+                pageCount: pageCount(shown.length, pageSize),
+                groups: groupedRowsOf(
+                    page,
+                    pageSize === undefined ? 0 : index * pageSize,
+                    groupKeys,
+                    rowKey,
+                    isRowSelectable,
+                ),
             };
         },
     );
@@ -207,21 +350,66 @@ export function createLocalRows<TRow, TNode = unknown>(
                 listeners.delete(listener);
             };
         },
-        derive(rows, columns) {
+        derive(rows, columns, grouping) {
             const columnsOf = leaves(columns);
-            const all = entries(rows);
-            const ordered = sorted(
-                searched(
-                    filtered(all, state.filters, columnsOf),
-                    state.search,
-                    columnsOf,
-                    state.search.trim() === ""
-                        ? undefined
-                        : texts(all, columnsOf),
-                ),
-                state.sortColumns,
+            // a tree (E3.3): every row at every depth is an entry, in the tree's order
+            const getSubRows = grouping?.getSubRows;
+            const nested = getSubRows ? treeFrom(rows, getSubRows) : null;
+            const all = nested ? nested.entries : entries(rows);
+            const matched = searched(
+                filtered(all, state.filters, columnsOf),
+                state.search,
                 columnsOf,
+                state.search.trim() === "" ? undefined : texts(all, columnsOf),
             );
+            const expandedGroupKeys =
+                grouping?.expandedGroupKeys ?? state.expandedGroupKeys;
+            if (nested && grouping) {
+                // the rows that pass and their ancestors, each parent's rows sorted among them
+                const roots = keptOf(
+                    nested.roots,
+                    all,
+                    matched,
+                    state.sortColumns,
+                    columnsOf,
+                );
+                return groupedView(
+                    shownTree(roots, expandedGroupKeys, grouping.rowKey),
+                    parentKeys(roots, grouping.rowKey),
+                    // the rows the filters leave, at every depth, in the tree's order
+                    treeEntries(roots),
+                    all,
+                    rows,
+                    state.pageIndex,
+                    state.pageSize,
+                    grouping.rowKey,
+                    grouping.isRowSelectable,
+                );
+            }
+            const ordered = sorted(matched, state.sortColumns, columnsOf);
+            const groupBy = groupByOf(grouping?.groupBy ?? []);
+            if (grouping && groupBy.length > 0) {
+                const groups = tree(
+                    ordered,
+                    groupBy,
+                    columnsOf,
+                    state.sortColumns,
+                    grouping.aggregates,
+                    grouping.rowKey,
+                    grouping.isRowSelectable,
+                );
+                return groupedView(
+                    shownOf(groups, expandedGroupKeys),
+                    keysOf(groups),
+                    ordered,
+                    all,
+                    rows,
+                    state.pageIndex,
+                    state.pageSize,
+                    grouping.rowKey,
+                    grouping.isRowSelectable,
+                );
+            }
             // pure: a page past the last shows the last; the state keeps what was set (an adapter
             // may write the shown page back once it is on screen)
             return view(
@@ -258,6 +446,20 @@ export function createLocalRows<TRow, TNode = unknown>(
             update({ pageIndex: validPageIndex(pageIndex) }, false),
         setPageSize: (pageSize) =>
             update({ pageSize: validPageSize(pageSize) }, true),
+        setExpandedGroupKeys: (expandedGroupKeys) =>
+            update({ expandedGroupKeys }, false),
+    };
+}
+
+/**
+ * A list kept while it holds the same items (a new array of the same keys each render is the
+ * same list): what a stage memoised by identity compares.
+ */
+function kept<T>(): (list: readonly T[]) => readonly T[] {
+    let last: readonly T[] = [];
+    return (list) => {
+        if (!sameList(last, list, Object.is)) last = list;
+        return last;
     };
 }
 

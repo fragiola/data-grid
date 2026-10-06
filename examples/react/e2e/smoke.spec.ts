@@ -23,6 +23,8 @@ const REPRESENTATIVE: string[] = [
     "summary-rows", // sticky rows under the header and at the bottom edge, a span among them
     "auto-row-heights", // rows as tall as their wrapped text, measured: padding and lines counted
     "row-reordering", // the rows' handles, the dragged row and the drop indicator, drawn with the theme's tokens
+    "row-grouping", // group rows tinted, their toggles and counts, an indented tree, checkboxes on groups
+    "tree-data", // folders and files indented, their toggles and icons, rows loading in place
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

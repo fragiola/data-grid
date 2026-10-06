@@ -2,6 +2,7 @@ import {
     ariaRowCount,
     ariaRowIndex,
     type EngineLayer,
+    gridRole,
     type SummaryPosition,
     summaryHeight,
 } from "@fragiola/data-grid";
@@ -124,9 +125,10 @@ export interface GridState {
 export type GridProps = DivPrimitiveProps<GridState> & { children?: ReactNode };
 
 /**
- * The grid (`role="grid"`) and the sizer: as large as the whole dataset (the physical size, under
- * scroll scaling), so the scrollbars represent it. A `<table>` through `render`. It is the grid's
- * tab stop while no cell is active.
+ * The grid (`role="grid"`; `treegrid` when its rows have kinds, Epic #87: `getRowMeta` on the
+ * root) and the sizer: as large as the whole dataset (the physical size, under scroll scaling), so
+ * the scrollbars represent it. A `<table>` through `render`. It is the grid's tab stop while no
+ * cell is active.
  */
 export function Grid(props: GridProps) {
     const { children, ...rest } = props;
@@ -145,7 +147,7 @@ export function Grid(props: GridProps) {
         ref: layerRef(engine, "grid"),
         children,
         props: {
-            role: "grid",
+            role: gridRole(view),
             "aria-rowcount": ariaRowCount(view),
             "aria-colcount": view.columnCount,
             // many rows selectable (R7)
@@ -500,7 +502,9 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
     cell: CellInfo<TRow>;
     /**
      * without children: the column's `renderCell` for a loaded row, else its value as text (a
-     * string, number or boolean); nothing while the row is not loaded
+     * string, number or boolean); nothing while the row is not loaded. On a group row (Epic #87),
+     * the column's `renderGroupCell`, else the cell's value as text (the group's value in its
+     * column, its aggregate elsewhere)
      */
     children?: ReactNode;
 };
@@ -518,6 +522,17 @@ export function Cell<TRow>(props: CellProps<TRow>) {
     let content: ReactNode = null;
     if (children !== undefined) {
         content = children;
+    } else if (cell.group) {
+        // a group row has no data row: its group's value and aggregates (Epic #87)
+        content = cell.column.renderGroupCell
+            ? cell.column.renderGroupCell({
+                  group: cell.group,
+                  rowIndex: cell.rowIndex,
+                  column: cell.column,
+                  columnIndex: cell.columnIndex,
+                  value: cell.value,
+              })
+            : plain(cell.value);
     } else if (cell.loaded && cell.row !== undefined) {
         content = cell.column.renderCell
             ? cell.column.renderCell({

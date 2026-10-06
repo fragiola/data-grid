@@ -1,5 +1,5 @@
 import { cellValue } from "../model/source";
-import type { Column } from "../model/types";
+import type { Column, RowKey, RowKeyGetter } from "../model/types";
 import { foldText, isEmptyValue, textOf } from "./values";
 
 /** The filters by column key: a value each; an empty one (`undefined`, `null`, `""`, `[]`) is no filter. */
@@ -9,6 +9,17 @@ export type LocalFilters = Readonly<Record<string, unknown>>;
 export interface RowEntry<TRow> {
     readonly row: TRow;
     readonly index: number;
+}
+
+/**
+ * A row's key in the local pipeline (Epic #87): `rowKey`'s answer with its index among the rows
+ * given (a tree's: its place in the whole tree), else that index. The one rule for every stage.
+ */
+export function entryKeyOf<TRow>(
+    entry: RowEntry<TRow>,
+    rowKey: RowKeyGetter<TRow> | undefined,
+): RowKey {
+    return rowKey ? rowKey(entry.row, entry.index) : entry.index;
 }
 
 /** The rows as entries: each with its index. */

@@ -27,7 +27,7 @@ looking for its feature would search, and `order` is its place inside the catego
 | `data-loading` | where rows come from: infinite loading, loading by window, tiles |
 | `keyboard` | the active cell and the keys that move it, and replacing them |
 | `columns` | what a person does to the columns, and the widths the grid gives them: resizing, reordering, automatic widths; the direction they read in; cells spanning columns; groups that open and close |
-| `row-operations` | the grid's row state the app orders its rows by (sorting, rows in memory, selection), and the rows the app adds to it: summary rows |
+| `row-operations` | the grid's row state the app orders its rows by (sorting, rows in memory, selection), and the rows the app adds to it: summary rows, group rows, a tree's rows |
 | `styling` | how the grid looks when it is not about one feature, the unstyled grid |
 | `real-world` | tables that look like products: rich cells, selection, sorting and filters written in the app |
 

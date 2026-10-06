@@ -416,6 +416,16 @@ export function ariaRowDetail<TRow, TNode>(
     };
 }
 
+/**
+ * The grid's role: `treegrid` when its rows have kinds (Epic #87, `getRowMeta`: rows in a tree,
+ * group rows), else `grid`.
+ */
+export function gridRole<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): "grid" | "treegrid" {
+    return view.source.getRowMeta ? "treegrid" : "grid";
+}
+
 /** The grid's `aria-rowcount`: the header rows, every body row and the summary rows. */
 export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
     const { top, bottom } = view.summaryRows;

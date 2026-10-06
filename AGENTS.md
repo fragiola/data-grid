@@ -59,7 +59,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `undefined` is "not loaded yet": the row keeps its space and renders with `data-loading`. The
    engine reports the row and column windows (visible and rendered ranges) and the end being
    reached. Fetching, caching and placeholders are **app policy**: they live in the examples
-   (`_kit/`), never in a package.
+   (`_kit/`), never in a package. Either source may say what kind of row each index is
+   (`getRowMeta(index) => RowMeta | undefined`, Epic #87, part of the source: `data.set` carries
+   it): a group row, whose index the grid never reads a data row at, or a data row at a depth;
+   still one generic, and `getRow` unchanged (see D10's row kinds).
 7. **Sizes (D7).** `rowHeight: number | (index) => number | "auto"` (`RowHeight`; `"auto"`:
    measured, Epic #86, below); columns `width: number` (px), the
    width a column starts with and a reset gives back: the model keeps a resized column's width
@@ -128,7 +131,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the scroll as it is first (`syncScroll`), so a scroll whose event has not run yet (a scroll and
    a click in one task) never has the layers written against the scroll the engine last knew.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
-    renderHeaderCell?, renderCell?, renderSummaryCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
+    renderHeaderCell?, renderCell?, renderSummaryCell?, renderGroupCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
     flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
@@ -357,6 +360,105 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
     `Column.filter` override; a text filter contains (case and accents aside), a list holds,
     anything else equals. A filter, the search or the sort changing goes to the first page.
+   **Row kinds and grouping (Epic #87, E3.1–E3.2):** one generic still (the epic's stop
+   condition never met). A source's optional `getRowMeta` (`RowSource`, `RowMetaGetter`; option,
+   `data.set`: by index, it belongs to the source it comes with, so a payload without it has none,
+   unlike `rowKey` (a function of the row, kept when left out); `Root` passes it every time;
+   `sourceMatches` compares it) answers a `RowMeta` `{ depth?,
+   group?, expandable?, parentIndex?, setSize?, posInSet? }` per index, asked only for the
+   source's rows (`rowMetaAt`, bounded by `rowCountOf`), `undefined` a data row at the top. A
+   **group row** carries `group: GroupRow` (core type, `model/types.ts`: `{ key, columnKey, value,
+   depth, childCount (data rows at every depth below), aggregates, rowKeys? }`): `rowAt` answers
+   `undefined` there whatever the source holds (so every data-row reader, the key rule, details,
+   spans by `type: "row"`, the selection's ranges, measured heights' `loadedRowKey`, see none),
+   `groupAt`, `rowKeyAt` (a group row's key is its group's: `row-key-by`, `Rows`' React key,
+   `takeRow`/`forgetMeasures`' measured key), `is("row-loaded")` true (nothing to wait for:
+   `RowInfo.loaded`, no `data-loading`), `cell-value-by` and `CellInfo.value` `groupCellValue`
+   (the group's value in its column, else `aggregates[column.key]`). A data row may expand
+   (`expandable`, a tree's parent, #97) by its own key (`groupKeyAt`). The model keeps
+   `expandedGroupKeys` (a set of keys, `sameKeys`; group keys and expandable rows' keys; a key no
+   row has is kept), controlled or not on `Root` through the controlled factory
+   (`expandedGroupKeys`/`defaultExpandedGroupKeys`/`onExpandedGroupKeysChange`, prefix
+   `row-groups.`, settled last): `row-groups.toggle { rowIndex } | { groupKey }` (`not_found` past
+   the rows, `refused` for a row that does not expand), `row-groups.set { groupKeys }`,
+   `get("expanded-group-keys")`, `get("row-meta-by", { rowIndex })`,
+   `is("row-group-expanded", { rowIndex })` (`groupExpanded`: a `keySet` lookup). The grid never
+   groups: the app's rows follow the keys. Selection: `selected-rows.toggle { rowIndex }` at a group
+   row (multiple mode, `rowKeys` named: `groupSelectable`) selects its `rowKeys` or clears them all
+   when every one is (`groupToggledKeys`, anchor kept by `keptAnchor`), with `extend` a range from
+   the anchor (none: a toggle), and by index makes the group row the anchor (its group key, the
+   state it gave; `validAnchor` reads `rowKeyAt`, `keptAnchor` a group anchor's state by
+   `groupSelected`, `selection-anchor.set` takes a group row); `rowKeys` are kept as given (as `selected-rows.set`'s: the grid
+   cannot ask `isRowSelectable` of a collapsed group's rows; the app lists the selectable ones);
+   `is("row-selected")` on a group row is every one of its keys selected (`groupSelected`, cached
+   per group and key list); a range and select-all take a collapsed group row's `rowKeys`
+   (`keysOfRow`: its rows are not on the rows), an expanded one's rows as rows (a range never
+   reaches past its ends); a data row not loaded still refuses it all. Group keys and data row
+   keys share one key space and must never collide (`/local`'s group keys are JSON strings). A row's
+   per-render paths read its meta once and pass it on (`rowMetaAt`, `dataRowAt`, `rowKeyOf`,
+   `rowSelectedWith`/`rowSelectableWith`, `groupKeyAt`'s `meta` and `row`, `rowPart`'s and
+   `groupTogglePart`'s `RowRead`): `rowPart` reads a data row only when the selection or its key
+   needs it, and nothing is asked without `getRowMeta`; `useRows` reads the meta once, carries it
+   (`RowInfo.meta`, `CellInfo.meta`) into `useRow` and `useGroupToggle`, and keys rows by the
+   core's `rowKeyOf` (the engine's measured keys' rule). A fit measures group rows' cells
+   (`rowLoaded`); `autoSize` waits for a loaded data row (group rows alone, all collapsed, would
+   freeze it at their cells), then measures them with it. `expanded-rows.toggle` refuses a group row (no detail); `rowsMove` is false while
+   the source has `getRowMeta` (grouped rows never move). Spans ask `{ type: "group", group,
+   rowIndex }` (`GroupColSpanArgs`). `Column.renderGroupCell({ group, rowIndex, column,
+   columnIndex, value })` is what a group row's `Cell` without children shows, else `value` as text;
+   never `renderCell`. Parts: `RowState` gains `depth` (`undefined` without row kinds), `group`,
+   `groupExpanded` (`undefined` for a row that does not expand); `RowPart.ariaTree`
+   (`AriaTreeRow`: `aria-level` = depth + 1, `aria-expanded`, `aria-setsize`, `aria-posinset`,
+   `undefined` without row kinds); `gridRole(view)` is `treegrid` with `getRowMeta`, else `grid`;
+   `groupTogglePart` (`GroupToggleState { rowIndex, groupKey, expandable, expanded, depth }`,
+   attributes `aria-expanded` and `GROUP_TOGGLE_ATTRIBUTE` = the row index, none for a row that does
+   not expand); the engine's `click` runs `row-groups.toggle` for a marked toggle (a control of its
+   cell, never a sort; before the modifiers' guard: Shift or Alt+click toggles too). `view.expandedGroupKeys` (`VIEW_KEYS`). A grid without `getRowMeta` asks
+   none, renders the same (no attribute, part fields `undefined`, `role="grid"`). React:
+   `RowInfo.group`/`depth`, `CellInfo.group`, `data-group-row`, `data-group-expanded`, `data-depth`
+   on rows, `useGroupToggle(row)`. `/local`: the grouping stage (`local/group.ts`: `groupTree`,
+   `shownRowsOf`, `groupedRowsOf`, `groupKeysOf`; pure, `groupRows(rows, columns, grouping)`) after
+   filter, search and sort, before the page:
+   `derive(rows, columns, grouping?)` (`LocalGrouping { groupBy, aggregates?, rowKey?,
+   expandedGroupKeys? }`; `groupBy` compared by its items, each stage memoised: expanding groups
+   nothing again) groups by text value (an empty value one group), orders the groups by the sort
+   when it sorts their column else ascending (`sortEntries` over their first rows: `compare`,
+   empty last), keeps the rows' order inside, keys a group `groupKeyOf(path)` (JSON of `[columnKey,
+   text]` pairs, exported) and its rows by `rowKey(row, index among the rows given)` else that
+   index; pages the rows shown, group rows included (a parent on an earlier page: no
+   `parentIndex`); the state keeps `expandedGroupKeys` (`setExpandedGroupKeys`,
+   `defaultExpandedGroupKeys`); the view's `groups: GroupedRows | null` (`rowCount`, `getRow`,
+   `getRowMeta`, `rowKey`, `groupKeys`). `useLocalRows` options `groupBy`, `aggregates`, `rowKey`, `isRowSelectable`
+   (`(row) => boolean`, the row only so the root's works too: leaves refused rows out of
+   `rowKeys` and `subRowKeysOf`; `LocalGrouping` too),
+   `expandedGroupKeys`/`onExpandedGroupKeysChange` (controlled, else its own; the options read
+   from a ref written in a layout effect); grouped, `props` are `rowCount`, `getRow`,
+   `getRowMeta`, `rowKey`, `expandedGroupKeys`, a stable `onExpandedGroupKeysChange` and the sort,
+   else as before plus the `rowKey` option when given (called with the row's index among the rows
+   given, `rowIndexes`: the same keys grouped or not); `group` `{ by, expandedKeys,
+   setExpandedKeys, expandAll, collapseAll }` for the app's controls. A server sends the same
+   flattened shape (documented).
+   **Tree data (Epic #87, E3.3):** the same row model: a tree's parent is a data row with
+   `RowMeta.expandable` (its own key expands it, through `expandedGroupKeys`), its rows a level
+   down (`depth`, `parentIndex`, `setSize`, `posInSet`). Keys: Space toggles any row that expands
+   (`groupKeyAt`), Enter only a group row (a data row's Enter stays its cell's: controls, editing);
+   →/← as for groups. Selection: a parent selects itself (a data row); its rows are the app's
+   (`subRowKeysOf` + `useSelectAll`/`toggledRowKeys`). `/local`: `local/tree.ts` (`treeOf`,
+   `keptTree`, `shownTreeOf`, `parentKeysOf`, `subtreeKeysOf`; pure `treeRows(rows, grouping)`),
+   `LocalGrouping.getSubRows` (`groupBy` then not read): every row at every depth is an entry,
+   its index its place in the tree read top to bottom (`getValue`'s `rowIndex`, the default key,
+   one rule for every stage: `entryKeyOf` in `local/filter.ts`;
+   give `rowKey` for keys stable across changes); filters and the search on every row, a match's
+   ancestors kept (`filteredCount`/`filteredRows`: the kept rows at every depth, in the sorted
+   tree's order, `treeEntriesOf`); the sort per sibling list; the page of the rows shown; `moveRow`
+   a no-op; the tree read once per
+   rows and `getSubRows`, kept per filter and sort, shown per expansion. `GroupedRows.groupKeys`
+   (a tree's parents' keys) and `subRowKeysOf(index)` (a group's `rowKeys`, a parent's rows at
+   every depth as kept, less the refused ones; cached per node, `subtreeKeysOf`'s WeakMap; the
+   hook's `group.subRowKeysOf` changes only with the rows shown). `useLocalRows` option `getSubRows`, `group.subRowKeysOf`. A server's
+   lazy children are an app pattern (the `tree-data` example's `lazy.ts`): not-loaded rows keep
+   their place under an expanded parent with their meta (`data-loading`); a failed listing is
+   forgotten, asked again when its folder opens again.
    **Row selection (Epic #57, R1–R9):** headless first: the core keeps only what ARIA, `data-*`
    and the keys need. The model keeps `selectedRowKeys` (keys, `rowKey` else index, in the order
    selected; `selected-rows.set { rowKeys }`, `selected-rows.toggle { rowIndex, extend? } |
@@ -583,9 +685,19 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     first or last row, next to a row not loaded and while sorted too, moving nothing; RTL the
     same), after the consumer's handlers; with `rowKey` the active cell follows the row once the
     app moved it; without `onRowMove` they are plain arrows. A consumer can
-    cancel or replace any key, and middleware can refuse or redirect a move. With summary rows
+    cancel or replace any key, and middleware can refuse or redirect a move. With row kinds (Epic
+    #87, `rowGroupKey`, the APG treegrid, on a body cell in navigation, no modifier): Enter on a
+    group row and Space on any row that expands (a tree's parent too) run one `row-groups.toggle`
+    (once per press; before interaction, so a group cell's controls get the keys by F2); on a row's
+    tree cell (`onTreeColumn`, asked only of a row that expands or has a `parentIndex`: the cell
+    holding its `data-grid-group-toggle`, the engine's own cells; a row with none, the column
+    this grid's toggles are in: one rendered, else `treeColumn`, the one they were last found in,
+    reset with the columns, else the first; the app keeps them in one column) → (logical:
+    `inlineKey`) on a collapsed row group expands it, ← on an expanded one collapses it, else ←
+    goes to its `parentIndex` in the same column (`active-position.set`, focus following); any other arrow, or one with nothing to
+    do, moves as usual. Shift+Space on a group row selects its rows. With summary rows
     (Epic #86) the keys move by line through the header, the top summary rows, the body and the
-    bottom ones (see D10). ARIA: `role="grid"`,
+    bottom ones (see D10). ARIA: `role="grid"` (`treegrid` with row kinds),
     `aria-rowcount`/`aria-colcount` are totals, `aria-rowindex`/`aria-colindex` 1-based.
 12. **Versions (D12).** Exact versions published at least 7 days ago, checked against the registry
     (`npm view`) before pinning. **No virtualization library**: virtualization is the core's job.
@@ -715,7 +827,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   given, is structural: `Root` renders `view.givenDirection`.)
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`; a selectable
   row's `aria-selected="false"` is ARIA's own "selectable, not selected"; a row's drag handle's
-  `aria-hidden="true"`): `data-active`,
+  `aria-hidden="true"`; a group row's and its toggle's `aria-expanded="false"`, ARIA's collapsed): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
@@ -736,9 +848,15 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `data-grid-row-drag-handle`, `data-grid-part="row-drag-handle"`, `data-reorderable`,
   `data-dragging`, an empty `style`); its look, cursor and `touch-action: none` are the app's, and
   it is a plain element, not a control (a press focuses its cell).
+- **A group row's toggle is the app's control (Epic #87).** `useGroupToggle(row)` (a row's or a
+  cell's info) returns `{ state, props }` (`state`: `rowIndex`, `groupKey`, `expandable`,
+  `expanded`, `depth`; `props`: `aria-expanded`, `data-grid-group-toggle` = the row index,
+  `data-grid-part="group-toggle"`, `data-expanded`, an empty `style`), and no props under a row
+  that does not expand; its element (a `button`), name, look and place are the app's. The engine
+  runs `row-groups.toggle` on its click, after the app's `onClick`.
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
   until a root holds it; `useRow`'s props hold a measured row's `ref`); a part hook (`useRow`, `useCell`, `useHeaderCell`,
-  `useColumnResizer`, `useGroupLabel`, `useRowDragHandle`, `useSummaryRow`, `useSummaryCell`) returns
+  `useColumnResizer`, `useGroupLabel`, `useRowDragHandle`, `useGroupToggle`, `useSummaryRow`, `useSummaryCell`) returns
   `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
@@ -759,6 +877,10 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   writes the same transform to each. A
   pinned column's `Cell`/`HeaderCell` drop a consumer's `transform` and insets (`top`, `left`,
   `right`, `bottom`, `inset*`): its inline start inset (`left`, `right` in RTL) is the engine's.
+- **`Grid` is `role="treegrid"` while the rows have kinds (Epic #87, `gridRole`)**, else
+  `grid`; rows then carry `aria-level`, a row group `aria-expanded`, and `aria-setsize`/
+  `aria-posinset` when their meta says. A `Cell` on a group row renders `renderGroupCell`, else
+  its value (the group's value or its aggregate) as text.
 - **Header rows render through `HeaderRows` (Epic #13, G6)**, a children function over the
   header rows that `Header` renders by default; each `HeaderRow` takes its `row`, `HeaderCells`
   that row's cells (groups and columns), and `HeaderCell` carries `data-group` for a group and

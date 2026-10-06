@@ -144,6 +144,12 @@ export const ROW_DRAG_HANDLE_ATTRIBUTE = "data-grid-row-drag-handle";
  */
 export const GROUP_LABEL_ATTRIBUTE = "data-grid-group-label";
 
+/**
+ * A row group's toggle (Epic #87): the control the app renders in a group row (or a row that
+ * expands), its value the row's index. A click on it toggles the row's group (`row-groups.toggle`).
+ */
+export const GROUP_TOGGLE_ATTRIBUTE = "data-grid-group-toggle";
+
 /** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
 export function isResizer(element: Element): boolean {
     return element.hasAttribute(COLUMN_RESIZER_ATTRIBUTE);

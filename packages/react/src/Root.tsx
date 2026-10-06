@@ -19,6 +19,7 @@ import {
     type RowHeight,
     type RowKey,
     type RowKeyGetter,
+    type RowMetaGetter,
     type RowMove,
     type RowSelectable,
     type RowSelection,
@@ -95,6 +96,13 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         /** a row's key; without one, rows are keyed by their index */
         rowKey?: RowKeyGetter<TRow> | undefined;
         /**
+         * what kind of row an index is (Epic #87): a group row (`group`: the grid reads no row at
+         * its index; `getRow` may answer `undefined` there), or a data row at a depth, under a row
+         * (`parentIndex`), that may expand (`expandable`). Given, the grid is a `treegrid`; rows
+         * in memory get it from `useLocalRows`'s `groupBy`
+         */
+        getRowMeta?: RowMetaGetter | undefined;
+        /**
          * a row's height in pixels, or a function of its index (default 35); `"auto"`: as tall as
          * its content, measured once rendered (`estimatedRowHeight` until then)
          */
@@ -145,6 +153,21 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         /** the expanded rows changed (or, controlled, ask to): a row was toggled, or a command ran */
         onExpandedRowKeysChange?:
             | ((expandedRowKeys: readonly RowKey[]) => void)
+            | undefined;
+        /**
+         * the expanded row groups' keys (Epic #87: a group row's `GroupRow.key`, a row that
+         * expands by its key), controlled; pair it with `onExpandedGroupKeysChange`. The app's
+         * rows follow them (`useLocalRows` does it for rows in memory)
+         */
+        expandedGroupKeys?: readonly RowKey[] | undefined;
+        /** the expanded row groups' keys to start with, uncontrolled */
+        defaultExpandedGroupKeys?: readonly RowKey[] | undefined;
+        /**
+         * the expanded row groups changed (or, controlled, ask to): a group was toggled (its
+         * toggle, Enter, Space, →, ←), or a command ran
+         */
+        onExpandedGroupKeysChange?:
+            | ((expandedGroupKeys: readonly RowKey[]) => void)
             | undefined;
         /**
          * an expanded row's detail height in pixels, or a function of the row (default 300): it
@@ -297,8 +320,10 @@ function sourceMatches<TRow>(
     rows: readonly TRow[] | undefined,
     rowCount: number | undefined,
     getRow: ((index: number) => TRow | undefined) | undefined,
+    getRowMeta: RowMetaGetter | undefined,
 ): boolean {
     const { source } = state;
+    if (source.getRowMeta !== getRowMeta) return false;
     if (rows !== undefined) {
         return "rows" in source && source.rows === rows;
     }
@@ -321,6 +346,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         rows,
         rowCount,
         getRow,
+        getRowMeta,
         rowKey,
         rowHeight,
         estimatedRowHeight,
@@ -336,6 +362,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
         expandedRowKeys,
         defaultExpandedRowKeys,
         onExpandedRowKeysChange,
+        expandedGroupKeys,
+        defaultExpandedGroupKeys,
+        onExpandedGroupKeysChange,
         detailHeight,
         estimatedDetailHeight,
         rowSelection,
@@ -373,6 +402,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             ...(rows !== undefined
                 ? { rows }
                 : { rowCount: rowCount ?? 0, getRow }),
+            getRowMeta,
             rowKey,
             rowHeight,
             estimatedRowHeight,
@@ -385,6 +415,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                     : defaultActivePosition,
             sortColumns: sortColumns ?? defaultSortColumns,
             expandedRowKeys: expandedRowKeys ?? defaultExpandedRowKeys,
+            expandedGroupKeys: expandedGroupKeys ?? defaultExpandedGroupKeys,
             detailHeight,
             estimatedDetailHeight,
             rowSelection,
@@ -451,6 +482,19 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 same: sameRowKeys,
                 apply: (rowKeys) => {
                     model.run("expanded-rows.set", { rowKeys });
+                },
+            }),
+        );
+        const groups = bind(
+            propsState<TRow, readonly RowKey[]>(latest, {
+                prefix: "row-groups.",
+                prop: (props) => props.expandedGroupKeys,
+                onChange: (props) => props.onExpandedGroupKeysChange,
+                read: (state) => state.expandedGroupKeys,
+                // a set: the same keys in another order are no change
+                same: sameKeys,
+                apply: (groupKeys) => {
+                    model.run("row-groups.set", { groupKeys });
                 },
             }),
         );
@@ -600,6 +644,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 selection,
                 sort,
                 expanded,
+                groups,
             ],
             after,
         };
@@ -641,7 +686,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
 
     useLayoutEffect(() => {
         if (
-            sourceMatches(model.state, rows, rowCount, getRow) &&
+            sourceMatches(model.state, rows, rowCount, getRow, getRowMeta) &&
             rowKey === model.state.rowKey
         ) {
             return;
@@ -649,14 +694,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
         model.run(
             "data.set",
             rows !== undefined
-                ? { rows, rowKey }
+                ? { rows, getRowMeta, rowKey }
                 : {
                       rowCount: rowCount ?? 0,
                       getRow: getRow ?? (() => undefined),
+                      getRowMeta,
                       rowKey,
                   },
         );
-    }, [model, rows, rowCount, getRow, rowKey]);
+    }, [model, rows, rowCount, getRow, getRowMeta, rowKey]);
 
     useLayoutEffect(() => {
         const { state } = model;

@@ -1,0 +1,199 @@
+---
+title: Tree data
+description: Show rows with rows under them as a tree, parents that expand by their key, the treegrid keys and ARIA, and children loaded from a server as they open.
+---
+
+Tree data shows rows that hold rows: folders and files, managers and their reports, tasks and
+their subtasks. A parent is a data row like any other, with its own key and cells; it expands to
+show its rows a level down. The grid uses the same row kinds as [row grouping](/docs/concepts/row-grouping):
+each row's kind comes with the rows (`getRowMeta`), the expanded parents are grid state
+(`expandedGroupKeys`), and the keys and ARIA are the APG treegrid's. The tree is your data's:
+in memory with `useLocalRows`, or listed by a server.
+
+<Example id="tree-data" />
+
+## Rows in memory
+
+Give `useLocalRows` the tree's top rows and `getSubRows`, which answers a row's rows. Spread its
+`props` on the root: the rows shown (`rowCount`, `getRow`), their kinds (`getRowMeta`), their
+keys (`rowKey`) and the expanded parents.
+
+```tsx title="files.tsx"
+import { type Column, DataGrid, useGroupToggle } from "@fragiola/data-grid-react";
+import { useLocalRows } from "@fragiola/data-grid-react/local";
+
+// keep both the same functions between renders (outside the component, or memoised)
+const getSubRows = (file: File) => file.children;
+const rowKey = (file: File) => file.path;
+
+function Files({ files }: { files: File[] }) {
+    const local = useLocalRows(files, columns, {
+        getSubRows,
+        rowKey,
+        defaultExpandedGroupKeys: ["src"],
+    });
+    return (
+        <DataGrid.Root {...local.props} columns={columns}>
+            <DataGrid.Grid aria-label="Files">
+                <DataGrid.Header />
+                <DataGrid.Body>
+                    <DataGrid.Rows<File>>
+                        {(row) => (
+                            <DataGrid.Row row={row}>
+                                <DataGrid.Cells<File>>
+                                    {(cell) => (
+                                        <DataGrid.Cell cell={cell}>
+                                            {cell.column.key === "name" ? (
+                                                <Name cell={cell} depth={row.depth} />
+                                            ) : undefined}
+                                        </DataGrid.Cell>
+                                    )}
+                                </DataGrid.Cells>
+                            </DataGrid.Row>
+                        )}
+                    </DataGrid.Rows>
+                </DataGrid.Body>
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
+
+function Name({ cell, depth }: { cell: CellInfo<File>; depth: number }) {
+    const { state, props } = useGroupToggle(cell);
+    return (
+        <span style={{ paddingInlineStart: depth * 20 }}>
+            {state.expandable ? (
+                <button type="button" {...props} aria-label={state.expanded ? "Collapse" : "Expand"}>
+                    {state.expanded ? "▾" : "▸"}
+                </button>
+            ) : null}
+            {cell.row?.name}
+        </span>
+    );
+}
+```
+
+A parent expands by its own key: give the hook a `rowKey` unique at every depth (a path, an id).
+Without one, a row's key is its place in the whole tree read top to bottom, every parent before
+its rows: stable while the tree does not change, not once rows are added or moved. That place is
+also the `rowIndex` a column's `getValue` gets.
+
+- **Filters and search** keep a row that passes and every row above it: its parents stay, so it
+  can be reached; a row that does not pass and holds none that does goes. They do not open
+  parents: `local.group.expandAll()` does.
+- **The sort** orders each parent's rows among themselves, the top rows too.
+- **A page** is of the rows shown, as with groups: a row whose parent is on an earlier page has no
+  row above it to go to.
+- **`groupBy` is not read** while `getSubRows` is given: a tree is not grouped as well.
+- **`filteredCount` and `filteredRows`** are the rows the filters leave, at every depth (a
+  match's ancestors included), in the tree's sorted order.
+- **`moveRow` moves nothing** in tree mode: a tree's rows are not one list (the grid moves no row
+  while its rows have kinds anyway).
+
+`local.group` holds the controls: `expandedKeys`, `setExpandedKeys`, `expandAll()`,
+`collapseAll()` and `subRowKeysOf(rowIndex)`, every key under a shown parent. Outside React,
+`treeRows(rows, { getSubRows, rowKey, expandedGroupKeys })` in `@fragiola/data-grid/local` makes the
+same rows.
+
+## Parents and their keys
+
+A tree's row says what it is through `getRowMeta`: `depth` (0 at the top), `expandable` on a
+parent, `parentIndex` (the row it is under), `setSize` and `posInSet`. A parent is no group row:
+it is a data row (`row.row` is the row, `row.group` is `undefined`), with its own cells and its
+own key, which is what expands it. Its toggle is yours, with `useGroupToggle(row)` as for a group
+row, and `model.run("row-groups.toggle", { rowIndex })` expands it from code.
+
+## Keys
+
+| key | on |
+| --- | --- |
+| Space | a parent: expand or collapse it, once per press |
+| → | a collapsed parent's tree cell: expand it; anywhere else, the next cell |
+| ← | an expanded parent's tree cell: collapse it; another row's tree cell: go to the row it is under, in that column |
+
+A row's **tree cell** is the one holding its toggle (`useGroupToggle`'s element); for a row with
+none (a leaf, a row loading), the cell in the column the grid's toggles are in (one rendered now,
+else the column they were last found in while the columns stay the same), else the first column.
+Keep the toggles in one column. A row that neither expands nor sits under one has plain arrows. A checkbox
+column before the names leaves the arrows plain there.
+
+Enter stays the cell's own (its controls, editing later): on a parent it does not toggle, as it
+does on a group row. Shift+Space selects the row, as anywhere.
+
+## Selection
+
+A parent is a data row: Shift+Space, a click on its checkbox, a range and select-all select it
+alone. `useLocalRows`'s `isRowSelectable` (a function of the row only, so the same one works for
+the root's) leaves the rows it refuses out of `subRowKeysOf`. Selecting what it holds is yours: `local.group.subRowKeysOf(rowIndex)` gives every key under
+it (as the filters leave the tree, collapsed rows included), and `useSelectAll([key, ...keys])`
+from `@fragiola/data-grid-react/selection` makes a checkbox for all of them, with "some" for its
+indeterminate state, as the example does.
+
+## Children from a server
+
+A server lists a folder when it opens. Keep its listings in your component, control the expanded
+keys, and give the root the rows shown: each entry, and under an open folder its entries, or,
+until they arrive, rows not loaded yet (`getRow` answers `undefined`, `getRowMeta` still tells their
+depth and parent): they keep their room and render with `data-loading`.
+
+```tsx
+const [listings, setListings] = useState(new Map([["", topEntries]]));
+const [expanded, setExpanded] = useState<readonly RowKey[]>([]);
+
+const shown = useMemo(() => {
+    const rows: { entry?: Entry; meta: RowMeta }[] = [];
+    const add = (folderId: string, count: number, depth: number, parentIndex?: number) => {
+        const items = listings.get(folderId);
+        for (let at = 0; at < (items?.length ?? count); at++) {
+            const entry = items?.[at];
+            const index = rows.length;
+            rows.push({
+                entry,
+                meta: {
+                    depth,
+                    parentIndex,
+                    setSize: items?.length ?? count,
+                    posInSet: at + 1,
+                    expandable: entry?.kind === "folder",
+                },
+            });
+            if (entry && expanded.includes(entry.id)) {
+                add(entry.id, entry.count, depth + 1, index);
+            }
+        }
+    };
+    add("", topEntries.length, 0);
+    return rows;
+}, [listings, expanded]);
+
+<DataGrid.Root
+    columns={columns}
+    rowCount={shown.length}
+    getRow={(index) => shown[index]?.entry}
+    getRowMeta={(index) => shown[index]?.meta}
+    rowKey={(entry) => entry.id}
+    expandedGroupKeys={expanded}
+    onExpandedGroupKeysChange={(keys) => {
+        setExpanded(keys);
+        for (const key of keys) {
+            if (!listings.has(String(key))) {
+                fetchFolder(String(key)).then((items) =>
+                    setListings((current) => new Map(current).set(String(key), items)),
+                );
+            }
+        }
+    }}
+/>
+```
+
+The example's `lazy.ts` is this pattern in full, with the getters kept the same while nothing
+changes. Ask for a folder once, and keep the `count` of a folder's entries in its listing so its
+rows have their room before they load. A listing that fails is asked for again the next time its
+folder opens: catch it, and forget you asked. A listing that fails is asked for again the next time its
+folder opens: catch it, and forget you asked.
+
+## ARIA
+
+A tree is a `treegrid`: each row carries `aria-level` (its depth + 1), a parent `aria-expanded`,
+and `aria-setsize`/`aria-posinset`. An expanded parent carries `data-group-expanded`, every row
+`data-depth`. The rest is as for [row grouping](/docs/concepts/row-grouping#aria).

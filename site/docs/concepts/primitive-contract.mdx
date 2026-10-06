@@ -70,7 +70,8 @@ name the grid yourself (`<DataGrid.Grid aria-label="People">`). A
 `useColumnResizer` gives it its props (ARIA, `data-*`, the marker the grid finds it by), never a
 name, a place or a look, and so does `useRowDragHandle` for a
 [row's drag handle](/docs/concepts/row-reordering) (hidden from screen readers: the keys move a
-row from its cells).
+row from its cells), and `useGroupToggle` for a [group row's toggle](/docs/concepts/row-grouping)
+(its `aria-expanded`, never a name).
 
 ## The recursion is yours
 

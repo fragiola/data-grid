@@ -177,6 +177,11 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
     readonly collapsedGroupKeys: readonly string[];
     /**
+     * the expanded row groups' keys (Epic #87): a group row, or a row that expands, shows its
+     * rows while its key is here (`source.getRowMeta` says which rows expand)
+     */
+    readonly expandedGroupKeys: readonly RowKey[];
+    /**
      * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
      * leaves), at its element's position (a header cell's top row and first column); `null` in
      * navigation
@@ -388,7 +393,7 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
      * Handles a click in the grid: on a sortable column's header cell, it toggles the sort
      * (Ctrl/⌘ adds the column); the click ending a press on a column resizer is the resizer's,
      * and a double click there fits its column to its content (`fit-columns`); the click ending a header cell's drag
-     * is the drag's. Returns whether the click was the
+     * is the drag's; one on a row group's toggle (Epic #87) toggles its row's group. Returns whether the click was the
      * grid's: a toggle ran, even when a middleware or a controlled parent declined it. Like `keydown`, an adapter calls it
      * after the consumer's own handlers, so `preventDefault` cancels it.
      */

@@ -45,6 +45,8 @@ import { done, fail, veto } from "./result";
 import {
     allKeys,
     extendedKeys,
+    groupSelectable,
+    groupToggledKeys,
     isRowSelectable,
     isRowSelected,
     keptAnchor,
@@ -62,7 +64,22 @@ import {
     toggledSort,
     validSortColumns,
 } from "./sort";
-import { cellValue, loadedRowKey, type RowsState, rowAt } from "./source";
+import {
+    cellValue,
+    dataRowAt,
+    groupAt,
+    groupCellValue,
+    groupKeyAt,
+    isGroupExpanded,
+    keyOf,
+    loadedRowKey,
+    type RowsState,
+    rowAt,
+    rowCountOf,
+    rowKeyAt,
+    rowLoaded,
+    rowMetaAt,
+} from "./source";
 import { activeInCell, coveringCell, hasColumnSpans, spanAt } from "./spans";
 import {
     NO_SUMMARY_ROWS,
@@ -86,6 +103,7 @@ import type {
     DataGridModelOptions,
     DataGridState,
     GridDirection,
+    GroupRow,
     Middleware,
     PayloadArgs,
     PayloadOf,
@@ -97,6 +115,7 @@ import type {
     ResultOf,
     RowKey,
     RowKeyGetter,
+    RowMeta,
     RowSource,
     SelectionAnchor,
     SortColumn,
@@ -171,6 +190,10 @@ type Handlers<TRow, TNode> = {
 const TOGGLE_BY =
     "toggle a rowIndex, or a rowKey (a string or a finite number)";
 
+/** The refusal of a row group's toggle given neither a row's index nor a key. */
+const TOGGLE_GROUP_BY =
+    "toggle a rowIndex, or a groupKey (a string or a finite number)";
+
 /** The sides a column lands on, beside a sibling. */
 const REORDER_SIDES: readonly ReorderSide[] = ["before", "after"];
 
@@ -197,10 +220,6 @@ function notOneOf(name: string, list: readonly string[]): CommandFailure {
 /** Every selection command's refusal while rows are not selectable. */
 function selectionOff(): CommandFailure {
     return fail("refused", "rows are not selectable (no rowSelection)");
-}
-
-function rowCountOf<TRow>(source: RowSource<TRow>): number {
-    return "rows" in source ? source.rows.length : source.rowCount;
 }
 
 /**
@@ -341,11 +360,20 @@ function withSource<TRow, TNode>(
     return withExpandedRows(next, hints, newRowsOf(state, next));
 }
 
+/** A source's own copy of where rows come from: the rows or the getter, and their kinds. */
+function sourceOf<TRow>(given: RowSource<TRow>): RowSource<TRow> {
+    const meta = given.getRowMeta ? { getRowMeta: given.getRowMeta } : {};
+    return "rows" in given
+        ? { rows: given.rows, ...meta }
+        : { rowCount: given.rowCount, getRow: given.getRow, ...meta };
+}
+
 /** The keys a `set` takes, once each, or why they are refused. */
 function validRowKeys(
     rowKeys: readonly RowKey[],
+    name = "rowKeys",
 ): CommandResult<readonly RowKey[]> {
-    if (!Array.isArray(rowKeys)) return invalid("rowKeys must be an array");
+    if (!Array.isArray(rowKeys)) return invalid(`${name} must be an array`);
     const keys = uniqueRowKeys(rowKeys);
     return keys
         ? { ok: true, value: keys }
@@ -360,11 +388,13 @@ function loadedKeyAt<TRow>(
     state: RowsState<TRow>,
     rowIndex: number,
     unloaded: (rowIndex: number) => CommandFailure,
+    meta: RowMeta | undefined = rowMetaAt(state.source, rowIndex),
 ): CommandResult<RowKey> {
     if (!isIndex(rowIndex, state.rowCount)) {
         return fail("not_found", `no row ${rowIndex}`);
     }
-    const key = loadedRowKey(state, rowIndex);
+    const row = dataRowAt(state.source, rowIndex, meta);
+    const key = row === undefined ? undefined : keyOf(state, row, rowIndex);
     return key === undefined ? unloaded(rowIndex) : { ok: true, value: key };
 }
 
@@ -558,6 +588,52 @@ function validEstimate(size: unknown): size is number {
     return typeof size === "number" && Number.isFinite(size) && size > 0;
 }
 
+/** The state with the expanded row groups' keys (a set: the same keys reordered change nothing). */
+function withGroupKeys<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    keys: readonly RowKey[],
+): Applied<TRow, TNode, readonly RowKey[]> {
+    const next = sameKeys(keys, state.expandedGroupKeys)
+        ? state
+        : { ...state, expandedGroupKeys: keys };
+    return done(next, next.expandedGroupKeys);
+}
+
+/**
+ * A group row's selection toggled (Epic #87): its rows' keys, all selected or all cleared (many
+ * rows only; a group naming none cannot be). With `extend`, a range from the anchor to it (group
+ * rows giving their rows' keys); without an anchor, a toggle.
+ */
+function toggledGroup<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    group: GroupRow,
+    rowIndex: number,
+    extend: boolean,
+): Applied<TRow, TNode, ResultOf<"selected-rows.toggle">> {
+    if (!groupSelectable(state, group)) {
+        return fail(
+            "refused",
+            `group row "${String(group.key)}" cannot be selected (multiple mode, its rows' keys)`,
+        );
+    }
+    // a range from the anchor; without one, a toggle (as a data row's)
+    const extended = extend ? extendedKeys(state, rowIndex) : undefined;
+    if (extended) {
+        return extended.ok
+            ? toggled(selected(state, extended.value, state.selectionAnchor))
+            : extended;
+    }
+    // a toggle by index makes its row the anchor, with the state it gave (as a data row's)
+    const was = isRowSelected(state, rowIndex);
+    return toggled(
+        selected(state, groupToggledKeys(state, group), {
+            rowKey: group.key,
+            rowIndex,
+            selected: !was,
+        }),
+    );
+}
+
 /**
  * The commands' handlers. `hints` (where expanded keys were last seen) is a cache they share: a
  * dry run may fill it, and every use checks it first.
@@ -601,11 +677,14 @@ function createHandlers<TRow, TNode>(
             } else if (typeof payload.getRow !== "function") {
                 return invalid("getRow must be a function");
             }
+            const { getRowMeta } = payload;
+            if (getRowMeta !== undefined && typeof getRowMeta !== "function") {
+                return invalid("getRowMeta must be a function");
+            }
             const next = withSource(
                 state,
-                "rows" in payload
-                    ? { rows: payload.rows }
-                    : { rowCount: payload.rowCount, getRow: payload.getRow },
+                // the rows' kinds belong to the source they come with (by index): left out, none
+                sourceOf(payload),
                 "rowKey" in payload ? payload.rowKey : state.rowKey,
                 hints,
             );
@@ -704,9 +783,14 @@ function createHandlers<TRow, TNode>(
         "expanded-rows.toggle": (state, payload) => {
             let key: RowKey;
             if (payload.rowIndex !== undefined) {
-                // its key is unknown until it loads
+                // its key is unknown until it loads; a group row has no detail (Epic #87)
                 const found = loadedKeyAt(state, payload.rowIndex, (rowIndex) =>
-                    fail("refused", `row ${rowIndex} is not loaded`),
+                    fail(
+                        "refused",
+                        groupAt(state.source, rowIndex)
+                            ? `row ${rowIndex} is a group row: it has no detail`
+                            : `row ${rowIndex} is not loaded`,
+                    ),
                 );
                 if (!found.ok) return found;
                 key = found.value;
@@ -740,6 +824,34 @@ function createHandlers<TRow, TNode>(
                 keys,
             );
         },
+        "row-groups.set": (state, { groupKeys }) => {
+            const keys = validRowKeys(groupKeys, "groupKeys");
+            if (!keys.ok) return keys;
+            return withGroupKeys(state, keys.value);
+        },
+        "row-groups.toggle": (state, payload) => {
+            let key: RowKey | undefined;
+            if (payload.rowIndex !== undefined) {
+                if (!isIndex(payload.rowIndex, state.rowCount)) {
+                    return fail("not_found", `no row ${payload.rowIndex}`);
+                }
+                key = groupKeyAt(state, payload.rowIndex);
+                if (key === undefined) {
+                    return fail(
+                        "refused",
+                        `row ${payload.rowIndex} does not expand (no group row, nor a loaded row that expands)`,
+                    );
+                }
+            } else if (isRowKey(payload.groupKey)) {
+                key = payload.groupKey;
+            } else {
+                return invalid(TOGGLE_GROUP_BY);
+            }
+            return withGroupKeys(
+                state,
+                toggledKey(state.expandedGroupKeys, key),
+            );
+        },
         "selected-rows.set": (state, { rowKeys }) => {
             if (!state.rowSelection) return selectionOff();
             const unique = validRowKeys(rowKeys);
@@ -748,7 +860,7 @@ function createHandlers<TRow, TNode>(
             return selected(
                 state,
                 keys,
-                keptAnchor(state.selectionAnchor, keys),
+                keptAnchor(state, state.selectionAnchor, keys),
             );
         },
         "selected-rows.toggle": (state, payload) => {
@@ -761,7 +873,17 @@ function createHandlers<TRow, TNode>(
                 );
             }
             const rowIndex = payload.rowIndex;
-            const found = loadedKeyAt(state, rowIndex, notLoaded);
+            // the row read once: a group row, or a data row's key
+            const meta = rowMetaAt(state.source, rowIndex);
+            if (meta?.group) {
+                return toggledGroup(
+                    state,
+                    meta.group,
+                    rowIndex,
+                    payload.extend === true,
+                );
+            }
+            const found = loadedKeyAt(state, rowIndex, notLoaded, meta);
             if (!found.ok) return found;
             const key = found.value;
             // one row at a time has no range: a Shift+click is a toggle there
@@ -803,10 +925,14 @@ function createHandlers<TRow, TNode>(
             ),
         "selection-anchor.set": (state, { rowIndex, selected: selects }) => {
             if (!state.rowSelection) return selectionOff();
-            const found = loadedKeyAt(state, rowIndex, notLoaded);
-            if (!found.ok) return found;
+            if (!isIndex(rowIndex, state.rowCount)) {
+                return fail("not_found", `no row ${rowIndex}`);
+            }
+            // a group row's anchor is its group key (Epic #87)
+            const rowKey = rowKeyAt(state, rowIndex);
+            if (rowKey === undefined) return notLoaded(rowIndex);
             const anchor = {
-                rowKey: found.value,
+                rowKey,
                 rowIndex,
                 selected: selects !== false,
             };
@@ -825,7 +951,7 @@ function createHandlers<TRow, TNode>(
             return selected(
                 state,
                 all.value,
-                keptAnchor(state.selectionAnchor, all.value),
+                keptAnchor(state, state.selectionAnchor, all.value),
             );
         },
         "row-selection.set": (state, { rowSelection, isRowSelectable }) => {
@@ -858,7 +984,7 @@ function createHandlers<TRow, TNode>(
                           selectedRowKeys: keys,
                           // no range survives selection turned off, nor its row trimmed
                           selectionAnchor: mode
-                              ? keptAnchor(state.selectionAnchor, keys)
+                              ? keptAnchor(state, state.selectionAnchor, keys)
                               : null,
                       };
             return done(next, undefined);
@@ -1224,6 +1350,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         ),
         rowsChanged: { revision: 0, start: 0, end: 0 },
         expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
+        expandedGroupKeys: uniqueRowKeys(options.expandedGroupKeys ?? []) ?? [],
         expandedRows: [],
         detailHeight: options.detailHeight ?? DEFAULT_DETAIL_HEIGHT,
         estimatedDetailHeight: validEstimate(options.estimatedDetailHeight)
@@ -1246,9 +1373,15 @@ export function createDataGridModel<TRow, TNode = unknown>(
     };
     let state = withSource(
         blank,
-        options.rows !== undefined || options.getRow === undefined
-            ? { rows: options.rows ?? [] }
-            : { rowCount: options.rowCount ?? 0, getRow: options.getRow },
+        sourceOf(
+            options.rows !== undefined || options.getRow === undefined
+                ? { rows: options.rows ?? [], getRowMeta: options.getRowMeta }
+                : {
+                      rowCount: options.rowCount ?? 0,
+                      getRow: options.getRow,
+                      getRowMeta: options.getRowMeta,
+                  },
+        ),
         options.rowKey,
         hints,
         // the position given is for these rows
@@ -1395,12 +1528,14 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 : undefined,
         "column-entries": () => state.columnEntries,
         "row-by": ({ index }) => rowAt(state.source, index),
-        "row-key-by": ({ rowIndex }) =>
-            loadedRowKey(state, rowIndex) ?? rowIndex,
+        "row-key-by": ({ rowIndex }) => rowKeyAt(state, rowIndex) ?? rowIndex,
         "cell-value-by": ({ rowIndex, columnIndex }) => {
-            const row = rowAt(state.source, rowIndex);
             const column = state.columns[columnIndex];
-            return row !== undefined && column
+            if (!column) return undefined;
+            const meta = rowMetaAt(state.source, rowIndex);
+            if (meta?.group) return groupCellValue(meta.group, column);
+            const row = dataRowAt(state.source, rowIndex, meta);
+            return row !== undefined
                 ? cellValue(column, row, rowIndex)
                 : undefined;
         },
@@ -1428,6 +1563,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "summary-row-by": ({ rowIndex }) => summaryRowAt(state, rowIndex),
         direction: () => state.direction,
         "expanded-row-keys": () => state.expandedRowKeys,
+        "expanded-group-keys": () => state.expandedGroupKeys,
+        "row-meta-by": ({ rowIndex }) => rowMetaAt(state.source, rowIndex),
         "expanded-rows": () => state.expandedRows,
         "detail-height": () => state.detailHeight,
         "row-selection": () => state.rowSelection,
@@ -1456,13 +1593,15 @@ export function createDataGridModel<TRow, TNode = unknown>(
         },
         "row-active": ({ rowIndex }) =>
             state.activePosition?.rowIndex === rowIndex,
-        "row-loaded": ({ rowIndex }) =>
-            rowAt(state.source, rowIndex) !== undefined,
+        // a group row (Epic #87) has nothing to wait for
+        "row-loaded": ({ rowIndex }) => rowLoaded(state.source, rowIndex),
         "column-sortable": ({ columnKey }) =>
             sortableColumn(state.columnEntries, columnKey).ok,
         "group-collapsed": ({ groupKey }) => isGroupCollapsed(state, groupKey),
         "row-expanded": ({ rowIndex }) =>
             holdsRow(state.expandedRows, rowIndex),
+        "row-group-expanded": ({ rowIndex }) =>
+            isGroupExpanded(state, rowIndex),
         "row-selected": ({ rowIndex }) => isRowSelected(state, rowIndex),
         "row-selectable": ({ rowIndex }) => isRowSelectable(state, rowIndex),
     };
@@ -1520,6 +1659,8 @@ export const COMMANDS = [
     "sort-columns.toggle",
     "expanded-rows.set",
     "expanded-rows.toggle",
+    "row-groups.set",
+    "row-groups.toggle",
     "selected-rows.set",
     "selected-rows.toggle",
     "selected-rows.select-all",

@@ -6,7 +6,7 @@ import {
     pinnedPartsOf,
 } from "../header/header";
 import { lowerBound } from "../utils";
-import { rowAt } from "./source";
+import { dataRowAt, rowMetaAt } from "./source";
 import { summaryRowAt } from "./summary";
 import type { CellPosition, ColSpanArgs, Column, DataGridState } from "./types";
 
@@ -156,8 +156,8 @@ export function cellCovering<TRow, TNode>(
 }
 
 /**
- * What a loaded row's cells are asked with, or a summary row's (E2.1), or `null` for a row not
- * loaded (or no column spans).
+ * What a loaded row's cells are asked with, a summary row's (E2.1) or a group row's (Epic #87), or
+ * `null` for a row not loaded (or no column spans).
  */
 export function rowSpanArgs<TRow, TNode>(
     state: SpansState<TRow, TNode>,
@@ -167,7 +167,9 @@ export function rowSpanArgs<TRow, TNode>(
     const summary = summaryRowAt(state, rowIndex);
     if (summary) return { type: "summary", ...summary };
     if (rowIndex < 0) return null;
-    const row = rowAt(state.source, rowIndex);
+    const meta = rowMetaAt(state.source, rowIndex);
+    if (meta?.group) return { type: "group", group: meta.group, rowIndex };
+    const row = dataRowAt(state.source, rowIndex, meta);
     return row === undefined ? null : { type: "row", row, rowIndex };
 }
 
