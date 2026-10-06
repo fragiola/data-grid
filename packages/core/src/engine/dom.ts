@@ -151,6 +151,12 @@ export const GROUP_LABEL_ATTRIBUTE = "data-grid-group-label";
 export const GROUP_TOGGLE_ATTRIBUTE = "data-grid-group-toggle";
 
 /**
+ * A fill handle (Epic #88, E4.4): an element the app renders in the cell at the corner of the
+ * range (or the active cell), its value that cell's row index. A press on it drags a fill.
+ */
+export const FILL_HANDLE_ATTRIBUTE = "data-grid-fill-handle";
+
+/**
  * What belongs to an edit outside its cell (Epic #88, E4.3): an element the app marks (a select's
  * or a date picker's popover, portalled out of the grid). A press or focus there keeps the edit
  * open; anywhere else outside the edited cell, it commits.

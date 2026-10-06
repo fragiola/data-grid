@@ -14,6 +14,8 @@ import {
     depthOf,
     type EditCellRenderProps,
     EMPTY_WINDOW,
+    type FillHandleState,
+    fillHandlePart,
     GROUP_LABEL_ATTRIBUTE,
     type GridDirection,
     type GridView,
@@ -80,6 +82,7 @@ import { dataAttributes } from "./utils/useRender";
 export type {
     CellState,
     ColumnResizerState,
+    FillHandleState,
     GroupToggleState,
     HeaderCellState,
     RowDetailState,
@@ -375,6 +378,7 @@ function cellProps<TRow>(
             "selected-cell": body?.selected,
             "range-edge": body?.rangeEdges,
             editing: body?.editing,
+            "fill-target": body?.fillTarget,
         }),
         style: measured
             ? {
@@ -681,6 +685,36 @@ export function useRowDragHandle(row: {
                 "grid-part": "row-drag-handle",
                 reorderable: state.reorderable,
                 dragging: state.dragging,
+            }),
+            style: {},
+        },
+    };
+}
+
+/**
+ * A fill handle (Epic #88, E4.4): the state and props of an element the app renders in a cell
+ * (a cell's info, or its position), visible in the cell at the corner a fill drags from (the
+ * selected range's last row and column, else the active cell) while cells fill (`onFill` on
+ * `DataGrid.Root`) and none is edited. A press on it drags the fill (the engine's, after the
+ * app's own `onPointerDown`). The props mark it (`data-grid-fill-handle`,
+ * `data-grid-part="fill-handle"`, `data-filling` during a drag); its look, its place at the
+ * corner (a cell is positioned), its cursor and `touch-action: none` are the app's: it has no
+ * style of its own. Not visible (`state.visible` false), it has no props: render none.
+ */
+export function useFillHandle(cell: {
+    readonly rowIndex: number;
+    readonly columnIndex: number;
+}): PartHookResult<FillHandleState> {
+    const view = useGridView();
+    const { state, attributes } = fillHandlePart(view, cell);
+    if (!attributes) return { state, props: { style: {} } };
+    return {
+        state,
+        props: {
+            ...attributes,
+            ...dataAttributes({
+                "grid-part": "fill-handle",
+                filling: state.filling,
             }),
             style: {},
         },

@@ -1,141 +1,21 @@
 "use client";
 
+import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { useState } from "react";
 import {
-    type CellEditEvent,
-    type Column,
-    DataGrid,
-    type EditCellRenderProps,
-} from "@fragiola/data-grid-react";
-import { type ReactNode, useLayoutEffect, useState } from "react";
-import { Input, Numeric } from "#/components/atoms/fields";
-import { Select } from "#/components/ui/select";
-import { formatMoney, hash } from "../_kit/data";
-import { STATUSES, type Task, tasks } from "../_kit/tasks";
+    budgetedTasks,
+    type BudgetedTask as Row,
+    withField,
+} from "../_kit/budgeted-tasks";
+import { formatMoney } from "../_kit/data";
+import { AmountEditor, DateEditor, StatusEditor, TextEditor } from "./editors";
 import * as styles from "./styles";
 
 // Tasks edited in place: the grid edits a cell (the keys, the draft, the commit), the editors are
-// the app's (a text field, a number, a select, a date) and so is the data: each commit is told,
-// and the app writes it into its rows.
+// the app's (a text field, a number, a select, a date: `editors.tsx`) and so is the data: each
+// commit is told, and the app writes it into its rows.
 
-interface Row extends Task {
-    /** in dollars */
-    budget: number;
-}
-
-const initialRows: Row[] = tasks(120).map((task, index) => ({
-    ...task,
-    budget: 100 * (5 + hash(index + 7, 200)),
-}));
-
-const STATUS_ITEMS = Object.fromEntries(
-    STATUSES.map((status) => [status, status]),
-);
-
-function isStatus(value: unknown): value is Task["status"] {
-    return STATUSES.some((status) => status === value);
-}
-
-type EditorProps = EditCellRenderProps<Row, ReactNode>;
-
-/** An edit typing started: the editor starts from the key typed, as a spreadsheet does. */
-function useStartKey(
-    startKey: string | undefined,
-    onChange: (value: unknown) => void,
-) {
-    useLayoutEffect(() => {
-        if (startKey !== undefined) onChange(startKey);
-    }, [startKey, onChange]);
-}
-
-/** A task's name: a text field. */
-function TextEditor({ value, startKey, onChange, column }: EditorProps) {
-    useStartKey(startKey, onChange);
-    return (
-        <Input
-            aria-label={column.name}
-            value={String(value ?? "")}
-            onValueChange={(text) => onChange(text)}
-            className={styles.editor}
-        />
-    );
-}
-
-/** The budget's text as a number, or `undefined` when it is none. */
-function amountOf(value: unknown): number | undefined {
-    const amount = typeof value === "number" ? value : Number(value);
-    return String(value).trim() !== "" && Number.isFinite(amount) && amount >= 0
-        ? Math.round(amount)
-        : undefined;
-}
-
-/**
- * A budget: a number. A value that is no amount keeps the edit open: the editor prevents Enter
- * and Tab (its own handler runs before the grid's), and says so.
- */
-function BudgetEditor({ value, startKey, onChange, column }: EditorProps) {
-    useStartKey(
-        startKey !== undefined && /\d/.test(startKey) ? startKey : undefined,
-        onChange,
-    );
-    const valid = amountOf(value) !== undefined;
-    return (
-        <Numeric
-            aria-label={column.name}
-            aria-invalid={!valid}
-            min={0}
-            step={100}
-            value={String(value ?? "")}
-            onValueChange={(text) => onChange(text)}
-            onKeyDown={(event) => {
-                if (!valid && (event.key === "Enter" || event.key === "Tab")) {
-                    event.preventDefault();
-                }
-            }}
-            className={styles.editor}
-        />
-    );
-}
-
-/**
- * A status: a select, open as the edit starts; choosing one commits it. Its list is portalled out
- * of the grid: marked as the edit's (`data-grid-editor`), a press or focus there keeps it open.
- */
-function StatusEditor({ value, onCommit, column }: EditorProps) {
-    return (
-        <Select.Root
-            items={STATUS_ITEMS}
-            value={String(value)}
-            defaultOpen
-            onValueChange={(status) => {
-                if (isStatus(status)) onCommit(status);
-            }}
-        >
-            <Select.Trigger aria-label={column.name} className={styles.select}>
-                <Select.Value />
-            </Select.Trigger>
-            <Select.Content data-grid-editor="">
-                {STATUSES.map((status) => (
-                    <Select.Item key={status} value={status}>
-                        {status}
-                    </Select.Item>
-                ))}
-            </Select.Content>
-        </Select.Root>
-    );
-}
-
-/** A due date: the browser's date field. */
-function DateEditor({ value, onChange, column }: EditorProps) {
-    return (
-        <Input
-            type="date"
-            aria-label={column.name}
-            value={String(value ?? "")}
-            onValueChange={(date) => onChange(date)}
-            className={styles.editor}
-        />
-    );
-}
+const initialRows = budgetedTasks(120);
 
 const columns: Column<Row>[] = [
     {
@@ -143,7 +23,9 @@ const columns: Column<Row>[] = [
         name: "Task",
         width: 220,
         editable: true,
-        renderEditCell: (props) => <TextEditor {...props} />,
+        renderEditCell: (props) => (
+            <TextEditor {...props} className={styles.editor} />
+        ),
     },
     { key: "project", name: "Project", width: 120 },
     {
@@ -157,45 +39,30 @@ const columns: Column<Row>[] = [
                 {formatMoney(row.budget)}
             </span>
         ),
-        renderEditCell: (props) => <BudgetEditor {...props} />,
+        renderEditCell: (props) => (
+            <AmountEditor {...props} className={styles.editor} />
+        ),
     },
     {
         key: "status",
         name: "Status",
         width: 160,
         editable: true,
-        renderEditCell: (props) => <StatusEditor {...props} />,
+        renderEditCell: (props) => (
+            <StatusEditor {...props} className={styles.select} />
+        ),
     },
     {
         key: "due",
         name: "Due",
         width: 150,
         editable: true,
-        renderEditCell: (props) => <DateEditor {...props} />,
+        renderEditCell: (props) => (
+            <DateEditor {...props} className={styles.editor} />
+        ),
     },
     { key: "assignee", name: "Assignee", width: 120 },
 ];
-
-/** A task with an edit written in, by the app's own rules; `undefined` when the value is refused. */
-function withEdit(row: Row, { columnKey, value }: CellEditEvent<Row>) {
-    if (columnKey === "name" && typeof value === "string" && value.trim()) {
-        return { ...row, name: value.trim() };
-    }
-    if (columnKey === "budget") {
-        const budget = amountOf(value);
-        return budget === undefined ? undefined : { ...row, budget };
-    }
-    if (columnKey === "status" && isStatus(value))
-        return { ...row, status: value };
-    if (
-        columnKey === "due" &&
-        typeof value === "string" &&
-        /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ) {
-        return { ...row, due: value };
-    }
-    return undefined;
-}
 
 export default function Editing() {
     // the app's rows: the grid never writes them, a commit is told
@@ -223,7 +90,11 @@ export default function Editing() {
                 rowKey={(row) => row.id}
                 rowHeight={38}
                 onCellEdit={(edit) => {
-                    const next = withEdit(edit.row, edit);
+                    const next = withField(
+                        edit.row,
+                        edit.columnKey,
+                        edit.value,
+                    );
                     const column = columns[edit.columnIndex];
                     if (!next) {
                         setAnnouncement(

@@ -95,6 +95,10 @@
                     "path": "concepts/editing"
                 },
                 {
+                    "label": "Fill handle",
+                    "path": "concepts/fill"
+                },
+                {
                     "label": "Row reordering",
                     "path": "concepts/row-reordering"
                 },

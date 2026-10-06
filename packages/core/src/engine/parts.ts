@@ -33,6 +33,7 @@ import { sameCell } from "../navigation/navigation";
 import { keySet } from "../utils";
 import {
     COLUMN_RESIZER_ATTRIBUTE,
+    FILL_HANDLE_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
 } from "./dom";
@@ -118,6 +119,30 @@ export interface CellState {
     readonly rangeEdges: string | undefined;
     /** it is the cell being edited (Epic #88, E4.3): it shows its editor */
     readonly editing: boolean;
+    /**
+     * a fill's drag would fill it (Epic #88, E4.4: in its target); `undefined` while cells do not
+     * fill (`fillable` off)
+     */
+    readonly fillTarget: boolean | undefined;
+}
+
+/** The state of a fill handle (Epic #88, E4.4): the element the app renders at a range's corner. */
+export interface FillHandleState {
+    /**
+     * its cell is the corner a fill drags from: the last row's last cell of the selected range,
+     * else the active body cell; cells fill and no cell is edited. Else render none
+     */
+    readonly visible: boolean;
+    /** a drag on it is filling */
+    readonly filling: boolean;
+}
+
+/** A fill handle's state and its attributes (the mark the engine finds it by), when visible. */
+export interface FillHandlePart {
+    readonly state: FillHandleState;
+    readonly attributes:
+        | { readonly [FILL_HANDLE_ATTRIBUTE]: number }
+        | undefined;
 }
 
 /** The state of a summary row (Epic #86, E2.1). */
@@ -513,6 +538,14 @@ export function cellPart<TRow, TNode>(
                 ? rangeEdgesOf(range, cell.rowIndex, cell.columnIndex, span)
                 : undefined,
             editing: isHeldCell(view.editingCell, cell),
+            fillTarget: view.fillable
+                ? inRange(
+                      view.fill?.target ?? null,
+                      cell.rowIndex,
+                      cell.columnIndex,
+                      span,
+                  )
+                : undefined,
         },
         tabIndex: active ? 0 : -1,
         ariaColSpan: span > 1 ? span : undefined,
@@ -582,6 +615,7 @@ export function summaryCellPart<TRow, TNode>(
         state: {
             ...part.state,
             selected: undefined,
+            fillTarget: undefined,
             position: cell.position,
             summaryIndex: cell.summaryIndex,
         },
@@ -679,6 +713,56 @@ export function columnResizerPart<TRow, TNode>(
         },
     };
 }
+
+/**
+ * A cell's fill handle (Epic #88, E4.4): visible in the cell at the corner a fill drags from (the
+ * selected range's last row and last column, a cell spanning columns when it reaches it; without
+ * a range, the active body cell), while cells fill and none is edited; its attributes then.
+ */
+export function fillHandlePart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: CellPosition,
+): FillHandlePart {
+    const filling = view.fill !== null;
+    // the corner a fill drags from, read without allocating: every cell asks
+    const range = view.selectedRange;
+    const active = view.active;
+    const rowIndex = range
+        ? Math.max(range.anchor.rowIndex, range.focus.rowIndex)
+        : active?.rowIndex;
+    const columnIndex = range
+        ? Math.max(range.anchor.columnIndex, range.focus.columnIndex)
+        : active?.columnIndex;
+    const visible =
+        view.fillable &&
+        !view.editingCell &&
+        rowIndex === cell.rowIndex &&
+        columnIndex !== undefined &&
+        // a body cell (without a range, the active cell may be a header's or a summary row's)
+        rowIndex >= 0 &&
+        rowIndex < view.rowCount &&
+        columnIndex >= cell.columnIndex &&
+        columnIndex <
+            cell.columnIndex + cellSpan(view, cell.rowIndex, cell.columnIndex);
+    return visible
+        ? {
+              state: { visible, filling },
+              attributes: { [FILL_HANDLE_ATTRIBUTE]: cell.rowIndex },
+          }
+        : filling
+          ? HIDDEN_FILLING
+          : HIDDEN;
+}
+
+/** A fill handle not shown (the one part for every other cell: nothing allocated). */
+const HIDDEN: FillHandlePart = {
+    state: { visible: false, filling: false },
+    attributes: undefined,
+};
+const HIDDEN_FILLING: FillHandlePart = {
+    state: { visible: false, filling: true },
+    attributes: undefined,
+};
 
 /**
  * Whether a grid's rows move now (E2.3): they move (`reorderableRows`), the grid is not sorted

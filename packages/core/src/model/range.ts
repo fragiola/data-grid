@@ -5,6 +5,7 @@ import { cellValue, dataRowAt, groupCellValue, rowMetaAt } from "./source";
 import {
     cellCovering,
     hasColumnSpans,
+    rowSpanArgs,
     type SpansState,
     spanAt,
     spanPartStart,
@@ -324,8 +325,77 @@ export function pastedRange(
     };
 }
 
-/** A range's first cell: its top row, its first column. */
-export function rangeStart(range: CellRange): CellPosition {
-    const { rows, columns } = rangeBounds(range);
-    return { rowIndex: rows.start, columnIndex: columns.start };
+/**
+ * The cells a copy, a paste or a fill acts on (E4.2, E4.4): the selected range, else the active
+ * body cell, as its first cell (`anchor`: top row, first column) and its last (`focus`); `null`
+ * without either.
+ */
+export function selectedArea(
+    state: BodyShape &
+        Pick<DataGridState<unknown>, "selectedRange" | "activePosition">,
+): CellRange | null {
+    const range = state.selectedRange;
+    const active = state.activePosition;
+    if (range) {
+        const { rows, columns } = rangeBounds(range);
+        return {
+            anchor: { rowIndex: rows.start, columnIndex: columns.start },
+            focus: { rowIndex: rows.end - 1, columnIndex: columns.end - 1 },
+        };
+    }
+    return active && isBodyCell(state, active)
+        ? { anchor: active, focus: active }
+        : null;
+}
+
+/**
+ * An area (its first cell and its last) widened to the column spans it cuts (E1.2, E4.4): on each
+ * of its rows, a cell covering its first column from before it or its last one past it moves
+ * that edge, again until no span crosses it; the same object without one. Each row is read once
+ * a pass (a fill's source, once a press).
+ */
+export function spannedArea<TRow>(
+    state: SpansState<TRow>,
+    area: CellRange,
+): CellRange {
+    const { columns } = state;
+    if (!hasColumnSpans(columns)) return area;
+    let start = area.anchor.columnIndex;
+    let end = area.focus.columnIndex;
+    /** the cell the walk is at (one for every row) */
+    const cell = { columnIndex: 0, columnSpan: 1 };
+    let widened = true;
+    while (widened) {
+        widened = false;
+        for (
+            let rowIndex = area.anchor.rowIndex;
+            rowIndex <= area.focus.rowIndex;
+            rowIndex++
+        ) {
+            const args = rowSpanArgs(state, rowIndex);
+            if (!args) continue;
+            cellCovering(
+                columns,
+                args,
+                spanPartStart(columns, start),
+                start,
+                cell,
+            );
+            if (cell.columnIndex < start) {
+                start = cell.columnIndex;
+                widened = true;
+            }
+            cellCovering(columns, args, spanPartStart(columns, end), end, cell);
+            if (cell.columnIndex + cell.columnSpan - 1 > end) {
+                end = cell.columnIndex + cell.columnSpan - 1;
+                widened = true;
+            }
+        }
+    }
+    return start === area.anchor.columnIndex && end === area.focus.columnIndex
+        ? area
+        : {
+              anchor: { rowIndex: area.anchor.rowIndex, columnIndex: start },
+              focus: { rowIndex: area.focus.rowIndex, columnIndex: end },
+          };
 }

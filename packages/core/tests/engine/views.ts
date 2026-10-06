@@ -72,6 +72,8 @@ export function inputsOf(
         columnReorder: null,
         reorderableRows: false,
         rowReorder: null,
+        fillable: false,
+        fill: null,
         direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),
         ...overrides,

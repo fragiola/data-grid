@@ -1,0 +1,105 @@
+---
+title: Fill handle
+description: A handle at the corner of a range a person drags down or across to fill cells, each fill told to you to produce and write the values.
+---
+
+A person drags the small square at the corner of a range (or of the active cell) down or across,
+and the cells it reaches are filled, as a spreadsheet fills a column with a value or a series.
+The grid owns the handle's drag, the target it shows and the event. The values are yours: the
+grid tells which cells to fill from which, and you produce and write them.
+
+<Example id="fill" />
+
+## Turning it on
+
+Give `DataGrid.Root` an `onFill`: while it has one, cells fill. Each fill is `{ source, target }`,
+two ranges of body cells, each as its first cell (`anchor`: its top row, its first column) and its
+last (`focus`): the cells it fills from (the selected range, else the active cell) and the cells to
+fill, never including the source. A source cutting a cell that
+[spans columns](/docs/concepts/column-spanning) on any of its rows takes the span's columns too, so a
+fill down is as wide as the spans and a fill across starts past them.
+
+```tsx title="plan.tsx"
+import { repeatedFill } from "@fragiola/data-grid/fill";
+
+<DataGrid.Root
+    columns={columns}
+    rows={plans}
+    cellSelection="range"
+    onFill={(fill) =>
+        setPlans((rows) =>
+            withCells(rows, repeatedFill(fill, (cell) => valueOf(rows, cell))),
+        )
+    }
+>
+    {/* … */}
+</DataGrid.Root>
+```
+
+`repeatedFill(fill, valueAt)`, from the opt-in `@fragiola/data-grid/fill`, is the usual fill: the
+source repeated over the target, row by row for a fill down (starting again after its last row),
+column by column for a fill across. It returns `{ rowIndex, columnIndex, value }` for each target
+cell, top to bottom, reading the source's values through `valueAt` (your rows, or
+`model.get("cell-value-by", cell)`). Anything else (a series, dates a week apart, a formula) is
+yours to compute from the same ranges, as the [example](/examples/fill)'s series does.
+
+## The handle
+
+The handle is an element of yours: render it in your cells with `useFillHandle(cell)`. It is
+visible in one cell only, the corner a fill drags from: the selected range's last row and last
+column, else the active cell (a body cell), and never while a cell is
+[edited](/docs/concepts/editing). There, its props mark it for the grid
+(`data-grid-fill-handle`, `data-grid-part="fill-handle"`, `data-filling` during a drag);
+elsewhere it has none: render nothing.
+
+```tsx title="handle.tsx"
+function FillHandle({ cell }: { cell: CellInfo<Plan> }) {
+    const { state, props } = useFillHandle(cell);
+    if (!state.visible) return null;
+    return <span {...props} aria-hidden className="fill-handle" />;
+}
+
+<DataGrid.Cell cell={cell}>
+    {String(cell.value)}
+    <FillHandle cell={cell} />
+</DataGrid.Cell>
+```
+
+Its look and its place are yours: a small square at the cell's bottom-end corner (the cell is
+positioned, so `position: absolute; inset-inline-end: 0; bottom: 0` places it), a crosshair cursor,
+and `touch-action: none`, so a touch drags it instead of panning the grid. A cell given children
+renders only them: write its content and the handle together, or use `Cell`'s `render` to add the
+handle after its own content.
+
+## Dragging
+
+A press with the primary button on the handle reaches the grid after your own `onPointerDown`
+(`preventDefault` there keeps it from filling), and is a drag at once: no focus, no text selection,
+never a range, an edit or a sort. At most once a frame, the grid works out the target from the
+cell under the pointer: below the source, as wide as it, down to the pointer's row; or to its end,
+as tall, to the pointer's column; whichever the pointer went farther past (down on a tie). Over
+the source, above it or before its start, there is no target. Up and to the start do not fill.
+
+The cell comes from the rows' and columns' positions, not the elements, so far cells, measured
+rows and [scroll scaling](/docs/concepts/scroll-scaling) change nothing. Near the body's edges, or
+past them, the grid scrolls toward them, faster nearer the edge, as a
+[range's drag](/docs/concepts/cell-selection) does: never over a
+[pinned](/docs/concepts/pinned-columns) strip, only from the edges of the columns that scroll.
+
+The cells a fill would fill carry `data-fill-target` meanwhile (the part state of `DataGrid.Cell`
+has `fillTarget`), and `engine.get("fill")` (and its event) is `{ source, target }`, the target
+`null` while there is none. Nothing changes before the release: it tells `onFill` once, then, with
+[cell selection](/docs/concepts/cell-selection) on, the range becomes the source and the target
+together, anchored at the active cell's corner: the active cell stays where it is, unless it was
+at the source's bottom (or end) and the fill went down (or across), where it moves to the filled
+cells' last row (or column), the same corner of the larger range. Escape (after your own handlers,
+wherever focus is), a cancelled pointer or a lost capture end the drag telling nothing; new rows or
+columns, another selection (a key, your code) and an edit opening end it too.
+
+## What a fill reaches
+
+The target is body cells only: never the header nor the [summary rows](/docs/concepts/summary-rows).
+[Group rows](/docs/concepts/row-grouping), rows not loaded yet and cells that are not
+[editable](/docs/concepts/editing) are in it like any other: what a fill writes there, if
+anything, is your rule, as it is for a paste. Saving the values, undoing them and a keyboard fill
+(Ctrl+D) are yours too.

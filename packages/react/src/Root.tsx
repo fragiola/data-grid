@@ -19,6 +19,7 @@ import {
     keptOrder,
     keptRange,
     keptWidths,
+    type RangeFill,
     type RangePaste,
     type ResultOf,
     type RowHeight,
@@ -254,6 +255,13 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
             | ((paste: RangePaste) => boolean | undefined)
             | undefined;
         /**
+         * a fill handle was dropped (Epic #88): the range (or the active cell) and the cells it
+         * fills, below it or to its end. Given, cells fill: a `useFillHandle` element at the
+         * range's corner drags one. The app writes the values (`repeatedFill` in
+         * `@fragiola/data-grid/fill` repeats the source's); the grid writes no data
+         */
+        onFill?: ((fill: RangeFill) => void) | undefined;
+        /**
          * the resized columns' widths in pixels, by column key, controlled; pair it with
          * `onColumnWidthsChange`. On screen a column is the first of: its width here (when it is
          * resizable, within its limits), its automatic width (`autoSize`), its flex share
@@ -440,6 +448,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         onSelectedRangeChange,
         onRangePaste,
         onBeforeRangePaste,
+        onFill,
         columnWidths,
         defaultColumnWidths,
         onColumnWidthsChange,
@@ -719,6 +728,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             maxScrollSize,
             endReachedThreshold,
             reorderableRows: onRowMove !== undefined,
+            fillable: onFill !== undefined,
         });
         // subscribed before the viewport attaches, so the first windows are reported too
         engine.subscribe("row-window", (window) =>
@@ -739,6 +749,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
             if (row !== undefined)
                 latest.current.onCellEdit?.({ ...edit, row });
         });
+        // a fill (Epic #88): told
+        engine.subscribe("range-fill", (filled) =>
+            latest.current.onFill?.(filled),
+        );
         // a paste (Epic #88): asked first, then told
         engine.subscribe("range-paste", (paste) => {
             const { onBeforeRangePaste, onRangePaste } = latest.current;
@@ -948,12 +962,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
     const overscanColumns = overscan?.columns;
     // the rows move while the app takes their moves
     const reorderableRows = onRowMove !== undefined;
+    // cells fill while the app takes their fills
+    const fillable = onFill !== undefined;
     useLayoutEffect(() => {
         engine.adapter.setOptions({
             overscan: { rows: overscanRows, columns: overscanColumns },
             maxScrollSize,
             endReachedThreshold,
             reorderableRows,
+            fillable,
         });
     }, [
         engine,
@@ -962,6 +979,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         maxScrollSize,
         endReachedThreshold,
         reorderableRows,
+        fillable,
     ]);
 
     const ref = useCallback(

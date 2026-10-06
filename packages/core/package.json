@@ -32,6 +32,11 @@
             "types": "./dist/selection.d.ts",
             "import": "./dist/selection.js"
         },
+        "./fill": {
+            "development": "./src/fill/index.ts",
+            "types": "./dist/fill.d.ts",
+            "import": "./dist/fill.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [

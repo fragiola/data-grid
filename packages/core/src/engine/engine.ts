@@ -19,7 +19,13 @@ import {
     type Siblings,
     siblingsOf,
 } from "../model/order";
-import { isBodyCell, pastedRange, rangeStart, rangeText } from "../model/range";
+import {
+    pastedRange,
+    rangeText,
+    sameCellRange,
+    selectedArea,
+    spannedArea,
+} from "../model/range";
 import {
     groupExpanded,
     groupKeyAt,
@@ -92,6 +98,7 @@ import {
     CTRL_KEYS,
     cellSelector,
     EDITOR_ATTRIBUTE,
+    FILL_HANDLE_ATTRIBUTE,
     FOCUSABLE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
@@ -143,6 +150,7 @@ import type {
     EngineLayer,
     EngineQueryKey,
     EngineQueryMap,
+    FillDrag as FillState,
     GridView,
     RowMove,
     RowReorder,
@@ -271,11 +279,25 @@ interface RangeDrag extends PointerDrag {
     focus: CellPosition;
 }
 
+/**
+ * A fill handle's drag (Epic #88, E4.4): from the press on, the source (the range or the active
+ * cell when it started, widened to the spans it cuts) and the cell the selection is anchored at
+ * then, the target following the cell under the pointer.
+ */
+interface FillDrag extends PointerDrag {
+    readonly kind: "fill";
+    readonly source: CellRange;
+    readonly anchor: CellPosition;
+    /** the body cell the pointer was last over, `null` before a move */
+    cell: CellPosition | null;
+}
+
 type Drag<TRow, TNode> =
     | ResizeDrag
     | ReorderDrag<TRow, TNode>
     | RowDrag
-    | RangeDrag;
+    | RangeDrag
+    | FillDrag;
 
 /**
  * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
@@ -408,6 +430,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let columnResize: ColumnResize | null = null;
     let columnReorder: ColumnReorder | null = null;
     let rowReorder: RowReorder | null = null;
+    /** the fill a handle's drag is making (Epic #88, E4.4) */
+    let fill: FillState | null = null;
     let drag: Drag<TRow, TNode> | null = null;
     /** the last press the grid took (its drag, over or not): once it dragged, its click is its */
     let lastPress: Drag<TRow, TNode> | null = null;
@@ -454,6 +478,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "row-move": new Set(),
         "column-auto-widths": new Set(),
         "range-paste": new Set(),
+        fill: new Set(),
+        "range-fill": new Set(),
         "edit-draft": new Set(),
         "cell-edit": new Set(),
     };
@@ -498,6 +524,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             columnResize,
             columnReorder,
             reorderableRows: options.reorderableRows === true,
+            fillable: options.fillable === true,
+            fill,
             rowReorder,
             direction,
             headerRowsFor,
@@ -1324,7 +1352,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** A drag's state changed: a new view, and its event. */
     function publish<
-        K extends "column-resize" | "column-reorder" | "row-reorder",
+        K extends "column-resize" | "column-reorder" | "row-reorder" | "fill",
     >(event: K, value: EngineEventMap[K]) {
         viewStale = true;
         update();
@@ -1344,6 +1372,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function setRowReorder(next: RowReorder | null) {
         rowReorder = next;
         publish("row-reorder", next);
+    }
+
+    function setFill(next: FillState | null) {
+        fill = next;
+        publish("fill", next);
     }
 
     /**
@@ -1401,6 +1434,30 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             y: event.clientY,
             frame: null,
         };
+        // a fill handle (Epic #88, E4.4): a drag at once, prevented (no focus, no text selection,
+        // never a range, an edit or a sort), held by the viewport (its cell may scroll away)
+        const fillHandle = options.fillable
+            ? markedOf(event.target, FILL_HANDLE_ATTRIBUTE)
+            : null;
+        const source = fillHandle && fillSource();
+        const anchor = state.activePosition ?? state.selectedRange?.anchor;
+        if (source && anchor) {
+            event.preventDefault();
+            drag = {
+                ...press,
+                kind: "fill",
+                dragged: true,
+                source,
+                anchor,
+                cell: null,
+                element: viewport,
+            };
+            lastPress = drag;
+            listen(drag);
+            capture(drag);
+            setFill({ source, target: null });
+            return true;
+        }
         const handle = options.reorderableRows
             ? markedOf(event.target, ROW_DRAG_HANDLE_ATTRIBUTE)
             : null;
@@ -1508,7 +1565,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (
                 isControl(node) ||
                 isResizer(node) ||
-                node.hasAttribute(ROW_DRAG_HANDLE_ATTRIBUTE)
+                node.hasAttribute(ROW_DRAG_HANDLE_ATTRIBUTE) ||
+                node.hasAttribute(FILL_HANDLE_ATTRIBUTE)
             ) {
                 return null;
             }
@@ -1577,7 +1635,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (
             drag.kind === "row"
                 ? event.clientY === drag.y
-                : drag.kind === "range"
+                : drag.kind === "range" || drag.kind === "fill"
                   ? event.clientX === drag.x && event.clientY === drag.y
                   : event.clientX === drag.x
         ) {
@@ -1624,8 +1682,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function dragTo(current: Drag<TRow, TNode>) {
         if (current.kind === "resize") resizeTo(current);
-        else if (current.kind === "range") rangeStep(current);
-        else reorderStep(current);
+        else if (current.kind === "range" || current.kind === "fill") {
+            cellDragStep(current);
+        } else reorderStep(current);
     }
 
     /** The drag's element lost the pointer (removed, or taken by the page). */
@@ -1731,8 +1790,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         } else if (ended?.kind === "range" && ended.dragged) {
             if (how === "cancel") model.run("selected-range.clear", {});
             else if (how === "release") {
-                rangeTo(ended, viewXOf(ended.x), viewYOf(ended.y));
+                const cell = cellAtView(
+                    viewXOf(ended.x),
+                    viewYOf(ended.y),
+                    ended.focus,
+                );
+                if (cell) rangeTo(ended, cell);
             }
+        } else if (ended?.kind === "fill") {
+            // released: the cell under it fills, once; cancelled or lost, nothing
+            const cell =
+                how === "release"
+                    ? cellAtView(viewXOf(ended.x), viewYOf(ended.y), ended.cell)
+                    : null;
+            const target = cell ? fillTargetOf(ended.source, cell) : null;
+            setFill(null);
+            if (target) fillRange(ended, target);
         } else if (ended?.kind === "row" && ended.dragged) {
             const target =
                 how === "release"
@@ -2524,7 +2597,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const value = model.get("cell-value-by", state.editingCell);
         editDraft = { value, initialValue: value };
         editorFocus = editCellAsked ? "anywhere" : "grid";
-        if (drag?.kind === "range") stopDrag();
+        // a range's or a fill's drag ends, telling nothing
+        if (drag?.kind === "range" || drag?.kind === "fill") endDrag("lost");
         if (interaction.cell) interaction.leaveCell(false);
         listenEditPresses();
         emit("edit-draft", editDraft);
@@ -2622,7 +2696,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function startRangeDrag(current: RangeDrag) {
         current.dragged = true;
         capture(current);
-        rangeStep(current);
+        cellDragStep(current);
     }
 
     /**
@@ -2632,7 +2706,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * among the pinned columns scrolls nothing sideways), then the cell under the pointer; held
      * near an edge, it scrolls on, a frame at a time.
      */
-    function rangeStep(current: RangeDrag) {
+    function cellDragStep(current: RangeDrag | FillDrag) {
         const x = viewXOf(current.x);
         const y = viewYOf(current.y);
         const part = columnPartAt(x);
@@ -2642,7 +2716,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 ? edgeStep(x, pinnedWidth, width - pinnedWidth - pinnedEndWidth)
                 : 0,
         );
-        rangeTo(current, x, y, part);
+        if (current.kind === "range") {
+            const cell = cellAtView(x, y, current.focus, part);
+            if (cell) rangeTo(current, cell);
+        } else {
+            const cell = cellAtView(x, y, current.cell, part);
+            if (cell) fillTo(current, cell);
+        }
         if (scrolled) askFrame(current);
     }
 
@@ -2656,32 +2736,143 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * A range's focus at the pointer, `x` and `y` in the view: the body cell under it, from the
-     * axes (not the DOM: rows and columns off screen, measured or scaled alike), the pointer kept
-     * over the body and the part of the view it is over; a `selected-range.set` when that cell
-     * changed, at most once a frame.
+     * The body cell under a pointer at `x` and `y` in the view, from the axes (not the DOM: rows
+     * and columns off screen, measured or scaled alike), the pointer kept over the body and the
+     * part of the view it is over: `known` itself when it is that cell (a drag frame allocates
+     * only when the cell changes); `null` without rows or columns.
      */
-    function rangeTo(
-        current: RangeDrag,
+    function cellAtView(
         x: number,
         y: number,
+        known: CellPosition | null,
         part = columnPartAt(x),
-    ) {
-        if (state.rowCount === 0 || columnAxis.count === 0) return;
+    ): CellPosition | null {
+        if (state.rowCount === 0 || columnAxis.count === 0) return null;
         const rowIndex = rowAxis.indexAt(
             rowsY.virtual + clamp(y - bodyTop(), 0, bodyHeight()),
         );
         const columnIndex = columnAxis.indexAt(partOffsetAt(part, x));
-        if (
-            rowIndex === current.focus.rowIndex &&
-            columnIndex === current.focus.columnIndex
-        ) {
-            return;
-        }
-        current.focus = { rowIndex, columnIndex };
+        return known &&
+            known.rowIndex === rowIndex &&
+            known.columnIndex === columnIndex
+            ? known
+            : { rowIndex, columnIndex };
+    }
+
+    /**
+     * A range's focus at the pointer's cell (`cellAtView`, its focus when unchanged): a
+     * `selected-range.set` when that cell changed, at most once a frame.
+     */
+    function rangeTo(current: RangeDrag, cell: CellPosition) {
+        if (cell === current.focus) return;
+        current.focus = cell;
         model.run("selected-range.set", {
             anchor: current.anchor,
             focus: current.focus,
+        });
+    }
+
+    // ── fill: the handle's drag (Epic #88, E4.4) ─────────────────────────────
+
+    /**
+     * What a fill starts from: the selected range, else the active body cell, as its first and
+     * last cells; `null` without one (or while a cell is edited: its handle shows nothing then).
+     */
+    function fillSource(): CellRange | null {
+        const area = state.editingCell ? null : selectedArea(state);
+        return area && spannedArea(state, area);
+    }
+
+    /**
+     * The cells a fill from `source` reaches with the pointer over `cell` (E4.4): below it, as
+     * wide, down to the cell's row; or to its end, as tall, to the cell's column; whichever the
+     * pointer went farther past (down on a tie); `null` over the source, above it or before it.
+     */
+    function fillTargetOf(
+        source: CellRange,
+        cell: CellPosition,
+    ): CellRange | null {
+        const { anchor: first, focus: last } = source;
+        const down = cell.rowIndex - last.rowIndex;
+        const across = cell.columnIndex - last.columnIndex;
+        if (down <= 0 && across <= 0) return null;
+        return down >= across
+            ? {
+                  anchor: {
+                      rowIndex: last.rowIndex + 1,
+                      columnIndex: first.columnIndex,
+                  },
+                  focus: {
+                      rowIndex: cell.rowIndex,
+                      columnIndex: last.columnIndex,
+                  },
+              }
+            : {
+                  anchor: {
+                      rowIndex: first.rowIndex,
+                      columnIndex: last.columnIndex + 1,
+                  },
+                  focus: {
+                      rowIndex: last.rowIndex,
+                      columnIndex: cell.columnIndex,
+                  },
+              };
+    }
+
+    /**
+     * A fill's drag at the pointer's cell (`cellAtView`, the last one when unchanged): its
+     * target, a new state when it changed.
+     */
+    function fillTo(current: FillDrag, cell: CellPosition) {
+        if (cell === current.cell) return;
+        current.cell = cell;
+        const target = fillTargetOf(current.source, cell);
+        if (
+            target === fill?.target ||
+            (target && fill?.target && sameCellRange(target, fill.target))
+        ) {
+            return;
+        }
+        setFill({ source: current.source, target });
+    }
+
+    /**
+     * A fill released past its source: told once (`range-fill`, the app writes the values), then,
+     * cells selectable, the range is the source and the target together, from the press's values
+     * (a selection changing during the drag ends it). Its anchor stays the active cell's corner of
+     * the source, on the same sides: the active cell moves only when it was at the source's bottom
+     * or end and the fill reached past that side (to the filled cells' last row or column), and
+     * an active cell between the source's edges (in a span it was widened to) takes its first
+     * side.
+     */
+    function fillRange(current: FillDrag, target: CellRange) {
+        const { source, anchor: was } = current;
+        emit("range-fill", { source, target });
+        if (!state.cellSelection) return;
+        const first = source.anchor;
+        const last = source.focus;
+        const bottom = Math.max(last.rowIndex, target.focus.rowIndex);
+        const end = Math.max(last.columnIndex, target.focus.columnIndex);
+        const atBottom =
+            was.rowIndex === last.rowIndex && was.rowIndex !== first.rowIndex;
+        const atEnd =
+            was.columnIndex === last.columnIndex &&
+            was.columnIndex !== first.columnIndex;
+        const anchor = {
+            rowIndex: atBottom ? bottom : first.rowIndex,
+            columnIndex: atEnd ? end : first.columnIndex,
+        };
+        if (!same(state.activePosition, anchor)) {
+            model.run("active-position.set", anchor);
+            // refused, or snapped into a span: the selection stays as the model left it
+            if (!same(state.activePosition, anchor)) return;
+        }
+        model.run("selected-range.set", {
+            anchor,
+            focus: {
+                rowIndex: atBottom ? first.rowIndex : bottom,
+                columnIndex: atEnd ? first.columnIndex : end,
+            },
         });
     }
 
@@ -2749,13 +2940,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return null;
         }
-        const active = state.activePosition;
-        return (
-            state.selectedRange ??
-            (active && isBodyCell(state, active)
-                ? { anchor: active, focus: active }
-                : null)
-        );
+        return selectedArea(state);
     }
 
     /** A copy in the grid (E4.2): its range's cells as TSV, on the clipboard. */
@@ -2825,7 +3010,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const values = range
             ? parseTsv(event.clipboardData?.getData("text/plain") ?? "")
             : [];
-        const pasted = range && pastedRange(state, rangeStart(range), values);
+        const pasted = range && pastedRange(state, range.anchor, values);
         if (!pasted) return false;
         event.preventDefault();
         emit("range-paste", pasted);
@@ -3398,7 +3583,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             state.cellSelection &&
             isElement(target) &&
             isCellElement(target) &&
-            (state.selectedRange || isBodyCell(state, state.activePosition))
+            selectedArea(state)
         ) {
             selectForCopy(target);
             return false;
@@ -3996,6 +4181,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             stopDrag();
         }
+        // and a fill's (E4.4), filling nothing: its source's indexes would point elsewhere, and a
+        // selection changing (a key, the app) is no longer the one it fills from
+        if (
+            drag?.kind === "fill" &&
+            (after.source !== before.source ||
+                after.columns !== before.columns ||
+                after.selectedRange !== before.selectedRange ||
+                after.activePosition !== before.activePosition)
+        ) {
+            endDrag("lost");
+        }
         // the physical scroll follows even when the total did not change (no remap moved it)
         if (anchored) followRowAnchor();
         if (anchor) followColumnAnchor();
@@ -4251,10 +4447,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 next.overscan?.rows !== options.overscan?.rows ||
                 next.overscan?.columns !== options.overscan?.columns ||
                 next.endReachedThreshold !== options.endReachedThreshold ||
-                next.reorderableRows !== options.reorderableRows;
+                next.reorderableRows !== options.reorderableRows ||
+                next.fillable !== options.fillable;
             options = next;
-            // rows that stop moving end a row's drag, moving nothing
+            // rows that stop moving end a row's drag, moving nothing; cells that stop filling, a fill's
             if (!next.reorderableRows && drag?.kind === "row") endDrag("lost");
+            if (!next.fillable && drag?.kind === "fill") endDrag("lost");
             if (changed) relayout(true);
         },
     };
@@ -4277,6 +4475,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "row-reorder": () => rowReorder,
         "column-auto-widths": () => autoWidths,
         "edit-draft": () => editDraft,
+        fill: () => fill,
     };
 
     const actions: {

@@ -15,7 +15,8 @@ with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), `gr
 group's label you render with `useGroupLabel`
 ([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)), and `row-drag-handle`
 on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)), and `group-toggle` on a
-group row's toggle you render with `useGroupToggle` ([Row grouping](/docs/concepts/row-grouping)). Rows and cells carry
+group row's toggle you render with `useGroupToggle` ([Row grouping](/docs/concepts/row-grouping)), and
+`fill-handle` on a fill handle you render with `useFillHandle` ([Fill handle](/docs/concepts/fill)). Rows and cells carry
 their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
 its top one; the top summary rows are before the header's, the bottom ones after the body's) and `data-column-index` (a header cell spanning columns is at its first). Tests
 select by them, never by class names.
@@ -29,6 +30,8 @@ select by them, never by class names.
 | `data-summary` | summary, summary row, summary cell | `top` or `bottom`: where its summary rows stay ([Summary rows](/docs/concepts/summary-rows)) |
 | `data-interacting` | cell, header cell | its controls have the keys ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)) |
 | `data-editing` | cell | it is being edited: it shows its editor ([Editing](/docs/concepts/editing)) |
+| `data-fill-target` | cell | a fill's drag would fill it ([Fill handle](/docs/concepts/fill)) |
+| `data-filling` | fill handle | a drag on it is filling |
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |

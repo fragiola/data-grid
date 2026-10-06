@@ -1,3 +1,4 @@
+import { repeatedFill } from "@fragiola/data-grid/fill";
 import { moveRow } from "@fragiola/data-grid/local";
 import {
     type CellEditEvent,
@@ -14,6 +15,7 @@ import {
     type HeaderCellInfo,
     type HeaderRowInfo,
     headerCellContent,
+    type RangeFill,
     type RangePaste,
     type RowKey,
     type RowMove,
@@ -21,6 +23,7 @@ import {
     useColumnResizer,
     useDataGrid,
     useDataGridRef,
+    useFillHandle,
     useGridView,
     useGroupLabel,
     useGroupToggle,
@@ -123,6 +126,10 @@ import { createRoot } from "react-dom/client";
 //                        (`option-<value>`) are portalled to the page's body, marked as the
 //                        edit's (`data-grid-editor`); the fixture keeps the values edited and
 //                        tells the grid (`rows.changed`)
+//   &fill=1              a fill handle (`fill-handle`) in the cell at the range's corner (or the
+//                        active cell's); a fill repeats the source's values into the fixture's
+//                        values (`repeatedFill`), the grid told (`rows.changed`); the target
+//                        marked by the fixture's own CSS
 //   &tree=1              tree data in memory (`useLocalRows`'s `getSubRows`): 100 top rows, each
 //                        with 3 rows, each of those with 2 (1,000 in all), a row's index its
 //                        place in the whole tree read top to bottom (its key); a parent's C0
@@ -134,8 +141,8 @@ import { createRoot } from "react-dom/client";
 // `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups,
 // `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups,
 // `window.rangeChanges` the selected ranges, `window.rangePastes` the pastes,
-// `window.cellEdits` the edits committed, `window.editingChanges` the edited cells, and a
-// button before and after the grid take Tab.
+// `window.cellEdits` the edits committed, `window.editingChanges` the edited cells,
+// `window.fills` the fills, and a button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -155,6 +162,7 @@ declare global {
         rangeChanges: (CellRange | null)[];
         rangePastes: RangePaste[];
         cellEdits: { rowIndex: number; columnKey: string; value: unknown }[];
+        fills: RangeFill[];
         editingChanges: unknown[];
     }
 }
@@ -272,6 +280,30 @@ function editColumn(columnIndex: number): Partial<Column<FixtureRow>> {
           }
         : {};
 }
+
+/** A cell's fill handle with `&fill=1`, as an app writes it: a square at its bottom-end corner. */
+function FillHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
+    const { state, props } = useFillHandle(cell);
+    if (!state.visible) return null;
+    return (
+        <span {...props} data-testid="fill-handle" style={FILL_HANDLE_STYLE} />
+    );
+}
+
+// a fill handle's look and place are the app's: a square at the cell's bottom-end corner
+const FILL_HANDLE_STYLE = {
+    position: "absolute",
+    insetInlineEnd: 0,
+    bottom: 0,
+    width: 8,
+    height: 8,
+    background: "blue",
+    cursor: "crosshair",
+    touchAction: "none",
+} as const;
+
+// the fill's target is the app's to mark
+const FILL_CSS = `[data-fill-target] { background: #ffd; }`;
 
 /** What `&groupBy` aggregates: C4, the sum of a group's rows' indexes. */
 const AGGREGATES = {
@@ -911,6 +943,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const grouping = groupByParam > 0;
     const tree = params.get("tree") === "1";
     const edit = params.get("edit") === "1";
+    const fill = params.get("fill") === "1";
     const cellsParam = params.get("cells");
     const cells = cellsParam === "1" || cellsParam === "controlled";
     const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
@@ -1070,6 +1103,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             {reorder ? <style>{DROP_TARGET_CSS}</style> : null}
             {rowReorder ? <style>{ROW_DROP_CSS}</style> : null}
             {cells ? <style>{RANGE_CSS}</style> : null}
+            {fill ? <style>{FILL_CSS}</style> : null}
             <button type="button" data-testid="before">
                 before
             </button>
@@ -1146,6 +1180,29 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         }
                     }}
                     onRangePaste={(paste) => window.rangePastes.push(paste)}
+                    onFill={
+                        fill
+                            ? (filled) => {
+                                  window.fills.push(filled);
+                                  const model = gridRef.current?.model;
+                                  if (!model) return;
+                                  // the source repeated into the fixture's values
+                                  for (const cell of repeatedFill(
+                                      filled,
+                                      (at) => model.get("cell-value-by", at),
+                                  )) {
+                                      editedValues.set(
+                                          `${cell.rowIndex}:${cell.columnIndex}`,
+                                          String(cell.value),
+                                      );
+                                  }
+                                  model.run("rows.changed", {
+                                      start: filled.target.anchor.rowIndex,
+                                      end: filled.target.focus.rowIndex + 1,
+                                  });
+                              }
+                            : undefined
+                    }
                     onEditingCellChange={(editing) =>
                         window.editingChanges.push(editing)
                     }
@@ -1249,6 +1306,16 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                                 </>
                                                             ) : null}
                                                         </>
+                                                    ) : fill ? (
+                                                        <>
+                                                            {String(
+                                                                cell.value ??
+                                                                    "",
+                                                            )}
+                                                            <FillHandle
+                                                                cell={cell}
+                                                            />
+                                                        </>
                                                     ) : undefined}
                                                 </DataGrid.Cell>
                                             )}
@@ -1342,6 +1409,7 @@ export function mountGridFixture(kind: "table" | "div") {
     window.rangeChanges = [];
     window.rangePastes = [];
     window.cellEdits = [];
+    window.fills = [];
     window.editingChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");

@@ -34,6 +34,12 @@ export interface DataGridEngineOptions {
     /** `rows-end-reached` fires when the view's last row is this close to the end (default 10) */
     endReachedThreshold?: number;
     /**
+     * cells fill (Epic #88, E4.4): a press on a fill handle drags the range (or the active cell)
+     * down or right, the release a `range-fill` event the app applies (the grid writes no data).
+     * Default off
+     */
+    fillable?: boolean;
+    /**
      * the rows move (Epic #86, E2.3): a press on a row's drag handle drags it, Ctrl/⌘+Shift+↑/↓
      * on a body cell move its row, each drop or key a `row-move` event the app applies (the grid
      * never orders the rows). Refused while the grid is sorted. Default off
@@ -182,6 +188,10 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly cellSelection: CellSelection | undefined;
     /** the cell being edited (Epic #88, E4.3): its part is `editing`, its editor rendered */
     readonly editingCell: EditingCell | null;
+    /** cells fill by a handle (`fillable`, Epic #88, E4.4) */
+    readonly fillable: boolean;
+    /** the fill a handle's drag is making, or `null` */
+    readonly fill: FillDrag | null;
     /** the selected range of body cells, or `null` (a cell's part tells whether it is in it) */
     readonly selectedRange: CellRange | null;
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
@@ -287,6 +297,27 @@ export interface CellEdit {
     readonly value: unknown;
 }
 
+/**
+ * A fill a handle's drag is making (Epic #88, E4.4): the cells it fills from (`source`, the range
+ * or the active cell, its first cell `anchor`, its last `focus`) and the cells it would fill
+ * (`target`, below the source or to its end, never including it), `null` while the pointer is
+ * over the source or above it, or before its start.
+ */
+export interface FillDrag {
+    readonly source: CellRange;
+    readonly target: CellRange | null;
+}
+
+/**
+ * A fill (E4.4): the cells it fills from and the cells to fill (below the source, as wide; or to
+ * its end, as tall), each with its first cell as `anchor` and its last as `focus`. The app writes
+ * the values (`repeatedFill` in `@fragiola/data-grid/fill` repeats the source's).
+ */
+export interface RangeFill {
+    readonly source: CellRange;
+    readonly target: CellRange;
+}
+
 /** What `engine.get` reads. */
 export interface EngineQueryMap {
     "row-window": AxisWindow;
@@ -317,6 +348,8 @@ export interface EngineQueryMap {
     "column-auto-widths": ColumnWidths;
     /** the edit's draft (Epic #88), or `null` while no cell is edited */
     "edit-draft": EditDraft | null;
+    /** the fill a handle's drag is making (Epic #88, E4.4), or `null` */
+    fill: FillDrag | null;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
@@ -393,6 +426,10 @@ export interface EngineEventMap {
     "edit-draft": EditDraft | null;
     /** an edit was committed with a new value (Epic #88, E4.3): the app writes it */
     "cell-edit": CellEdit;
+    /** a fill's drag started, changed its target, or ended (`null`) (E4.4) */
+    fill: FillDrag | null;
+    /** a fill handle was dropped past its source (E4.4): the app fills the target */
+    "range-fill": RangeFill;
     /**
      * values were pasted into the grid (Epic #88, E4.2: Ctrl/⌘+V on one of its cells, cells
      * selectable): the range they land in and the values, parsed from the clipboard's text (TSV).

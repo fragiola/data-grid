@@ -26,7 +26,7 @@ into it; or a function, which receives the props and the part's state.
 - `ref` is a plain prop, merged with the part's own.
 - A handler you pass runs after the part's own, with four exceptions: `Root` runs the grid's keys
   **after** your `onKeyDown`, its header clicks (sorting) **after** your `onClick`, a press
-  on a column resizer, a reorderable header cell, a row's drag handle or a body cell with
+  on a column resizer, a reorderable header cell, a row's drag handle, a fill handle or a body cell with
   [cell selection](/docs/concepts/cell-selection) on (a drag) **after** your `onPointerDown`, and
   a copy or a paste on a cell **after** your `onCopy` or `onPaste`, on `Root` or on its `render`
   element; a cell's handlers run before them, so `preventDefault` cancels a key, a sort, a drag
@@ -75,7 +75,8 @@ name the grid yourself (`<DataGrid.Grid aria-label="People">`). A
 name, a place or a look, and so does `useRowDragHandle` for a
 [row's drag handle](/docs/concepts/row-reordering) (hidden from screen readers: the keys move a
 row from its cells), and `useGroupToggle` for a [group row's toggle](/docs/concepts/row-grouping)
-(its `aria-expanded`, never a name).
+(its `aria-expanded`, never a name), and `useFillHandle` for a
+[fill handle](/docs/concepts/fill) (its mark, at a range's corner only).
 
 ## The recursion is yours
 

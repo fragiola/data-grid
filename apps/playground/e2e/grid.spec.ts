@@ -5738,6 +5738,141 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("fill handle", () => {
+            const FILL = {
+                rows: 1_000,
+                columns: 20,
+                cells: 1,
+                fill: 1,
+            } as const;
+
+            const fills = (page: Page) => page.evaluate(() => window.fills);
+
+            const range = (
+                anchor: [number, number],
+                focus: [number, number],
+            ) => ({
+                anchor: { rowIndex: anchor[0], columnIndex: anchor[1] },
+                focus: { rowIndex: focus[0], columnIndex: focus[1] },
+            });
+
+            /** Presses the fill handle and moves to a point, held. */
+            async function dragHandle(page: Page, x: number, y: number) {
+                const box = await boxOf(page.getByTestId("fill-handle"));
+                await page.mouse.move(
+                    box.x + box.width / 2,
+                    box.y + box.height / 2,
+                );
+                await page.mouse.down();
+                await page.mouse.move(x, y, { steps: 6 });
+                await settle(page);
+            }
+
+            /** A cell's centre on the page. */
+            async function centreOf(target: Locator) {
+                const box = await boxOf(target);
+                return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+            }
+
+            test("fills down from the range, the target marked, once on release, the range grown", async ({
+                page,
+            }) => {
+                await open(page, kind, FILL);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowRight");
+                await settle(page);
+                // in the range's last cell only
+                await expect(page.getByTestId("fill-handle")).toHaveCount(1);
+                await expect(
+                    cell(page, 2, 2).getByTestId("fill-handle"),
+                ).toHaveAttribute("data-grid-part", "fill-handle");
+                const target = await centreOf(cell(page, 5, 2));
+                await dragHandle(page, target.x, target.y);
+                await expect(page.getByTestId("fill-handle")).toHaveAttribute(
+                    "data-filling",
+                    "",
+                );
+                await expect(cell(page, 4, 1)).toHaveAttribute(
+                    "data-fill-target",
+                    "",
+                );
+                await expect(cell(page, 2, 1)).not.toHaveAttribute(
+                    "data-fill-target",
+                );
+                await expect(cell(page, 4, 1)).toHaveCSS(
+                    "background-color",
+                    "rgb(255, 255, 221)",
+                );
+                expect(await fills(page)).toEqual([]);
+                await page.mouse.up();
+                await settle(page);
+                expect(await fills(page)).toEqual([
+                    {
+                        source: range([1, 1], [2, 2]),
+                        target: range([3, 1], [5, 2]),
+                    },
+                ]);
+                await expect(page.locator("[data-fill-target]")).toHaveCount(0);
+                // the fixture repeats the source: rows 1 and 2 in turn
+                await expect(cell(page, 3, 1)).toHaveText("1:1");
+                await expect(cell(page, 4, 2)).toHaveText("2:2");
+                await expect(cell(page, 5, 1)).toHaveText("1:1");
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.get("selected-range"),
+                    ),
+                ).toEqual(range([1, 1], [5, 2]));
+                await expect(cell(page, 1, 1)).toBeFocused();
+            });
+
+            test("fills to the end when the pointer goes farther across, from the active cell", async ({
+                page,
+            }) => {
+                await open(page, kind, FILL);
+                await cell(page, 3, 1).click();
+                const target = await centreOf(cell(page, 3, 4));
+                await dragHandle(page, target.x, target.y + 5);
+                await page.mouse.up();
+                await settle(page);
+                expect(await fills(page)).toEqual([
+                    {
+                        source: range([3, 1], [3, 1]),
+                        target: range([3, 2], [3, 4]),
+                    },
+                ]);
+                await expect(cell(page, 3, 4)).toHaveText("3:1");
+            });
+
+            test("cancels on Escape, and scrolls at the body's edge", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, FILL);
+                await cell(page, 1, 1).click();
+                const target = await centreOf(cell(page, 4, 1));
+                await dragHandle(page, target.x, target.y);
+                await page.keyboard.press("Escape");
+                await settle(page);
+                await expect(page.locator("[data-fill-target]")).toHaveCount(0);
+                await page.mouse.up();
+                await settle(page);
+                expect(await fills(page)).toEqual([]);
+                // held at the bottom edge: the rows scroll
+                const body = await bodyBox(viewport);
+                await dragHandle(page, target.x, body.bottom - 3);
+                await page.waitForFunction(
+                    () =>
+                        (window.grid?.engine.get("scroll-position").top ?? 0) >
+                        300,
+                );
+                await page.mouse.up();
+                await settle(page);
+                const [filled] = await fills(page);
+                expect(filled?.source).toEqual(range([1, 1], [1, 1]));
+                expect(filled?.target.focus.rowIndex).toBeGreaterThan(15);
+            });
+        });
+
         test.describe("tree data", () => {
             // 100 top rows, each with 3 rows, each of those with 2: a row's index is its place in
             // the whole tree (the top rows 0, 10, 20, …); a parent's C0 holds its toggle
