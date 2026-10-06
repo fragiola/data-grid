@@ -21,7 +21,7 @@ import { CATEGORIES } from "../src/examples/meta-types.ts";
 const ALLOWED = [
     /^react$/,
     /^react-dom$/,
-    /^@fragiola\/data-grid(\/(local|selection))?$/,
+    /^@fragiola\/data-grid(\/(local|selection|fill))?$/,
     /^@fragiola\/data-grid-react(\/(local|selection))?$/,
     /^lucide-react$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,

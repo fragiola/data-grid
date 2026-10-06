@@ -12,7 +12,10 @@ import {
     columnResizerPart,
     dataRowAt,
     depthOf,
+    type EditCellRenderProps,
     EMPTY_WINDOW,
+    type FillHandleState,
+    fillHandlePart,
     GROUP_LABEL_ATTRIBUTE,
     type GridDirection,
     type GridView,
@@ -24,6 +27,7 @@ import {
     headerCellBox,
     headerCellPart,
     inlineStart,
+    isHeldCell,
     measuredRow,
     type RowDetailState,
     type RowDragHandleState,
@@ -51,6 +55,7 @@ import {
 import type * as React from "react";
 import {
     type ReactNode,
+    useCallback,
     useContext,
     useMemo,
     useSyncExternalStore,
@@ -77,6 +82,7 @@ import { dataAttributes } from "./utils/useRender";
 export type {
     CellState,
     ColumnResizerState,
+    FillHandleState,
     GroupToggleState,
     HeaderCellState,
     RowDetailState,
@@ -329,6 +335,9 @@ function cellProps<TRow>(
     const summary = "position" in state ? state.position : undefined;
     const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
     const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
+    // a body or summary row cell's (Epic #88): in the range, its edges, edited
+    const ariaSelected = "ariaSelected" in part ? part.ariaSelected : undefined;
+    const body = "rangeEdges" in state ? state : undefined;
     const { pinned } = state;
     const { width, height } = box;
     return {
@@ -337,6 +346,9 @@ function cellProps<TRow>(
         ...(header ? ariaHeaderCellSpans(header) : undefined),
         ...(ariaColSpan ? { "aria-colspan": ariaColSpan } : undefined),
         ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
+        ...(ariaSelected === undefined
+            ? undefined
+            : { "aria-selected": ariaSelected }),
         tabIndex: part.tabIndex,
         ...dataAttributes({
             "grid-part": header
@@ -363,6 +375,10 @@ function cellProps<TRow>(
             reorderable: header?.reorderable,
             dragging: header?.dragging,
             "drop-target": header?.dropTarget ?? undefined,
+            "selected-cell": body?.selected,
+            "range-edge": body?.rangeEdges,
+            editing: body?.editing,
+            "fill-target": body?.fillTarget,
         }),
         style: measured
             ? {
@@ -435,6 +451,56 @@ function cellPartProps<TRow, P extends CellPart | SummaryCellPart>(
         ),
         columnSpan,
         measured,
+    };
+}
+
+/**
+ * An edit's editor props (Epic #88, E4.3), for the cell being edited (`state.editing`): its row,
+ * column and indexes, the draft (`value`, the engine's, this hook re-rendering as it changes), the
+ * value it started from, the key that started it, `onChange`, `onCommit` and `onCancel`, and
+ * `editorProps` (spread on an element outside the cell that is the editor's: a popover);
+ * `null` for any other cell. What a column's `renderEditCell` receives: call it in an editor of
+ * your own rendered in a cell's children while it is edited (subscribe only there: every cell
+ * subscribing would re-render with every keystroke).
+ */
+export function useCellEdit<TRow>(
+    cell: CellInfo<TRow>,
+): EditCellRenderProps<TRow, ReactNode> | null {
+    const { engine } = useRootGrid();
+    const subscribe = useCallback(
+        (listener: () => void) => engine.subscribe("edit-draft", listener),
+        [engine],
+    );
+    const read = () => engine.get("edit-draft");
+    const draft = useSyncExternalStore(subscribe, read, read);
+    const ways = useMemo(
+        () => ({
+            onChange: (value: unknown) => engine.run("change-edit", { value }),
+            onCommit: (...value: [] | [value: unknown]) =>
+                engine.run(
+                    "commit-edit",
+                    value.length > 0 ? { value: value[0] } : {},
+                ),
+            onCancel: () => engine.run("cancel-edit", {}),
+        }),
+        [engine],
+    );
+    // the edited cell is the view's: the draft has no position of its own
+    const editing = useGridView<TRow>().editingCell;
+    const { row, rowIndex, column, columnIndex } = cell;
+    if (!draft || row === undefined || !editing || !isHeldCell(editing, cell)) {
+        return null;
+    }
+    return {
+        row,
+        rowIndex,
+        column,
+        columnIndex,
+        value: draft.value,
+        initialValue: draft.initialValue,
+        startKey: editing.startKey,
+        editorProps: draft.editorProps,
+        ...ways,
     };
 }
 
@@ -621,6 +687,36 @@ export function useRowDragHandle(row: {
                 "grid-part": "row-drag-handle",
                 reorderable: state.reorderable,
                 dragging: state.dragging,
+            }),
+            style: {},
+        },
+    };
+}
+
+/**
+ * A fill handle (Epic #88, E4.4): the state and props of an element the app renders in a cell
+ * (a cell's info, or its position), visible in the cell at the corner a fill drags from (the
+ * selected range's last row and column, else the active cell) while cells fill (`onFill` on
+ * `DataGrid.Root`) and none is edited. A press on it drags the fill (the engine's, after the
+ * app's own `onPointerDown`). The props mark it (`data-grid-fill-handle`,
+ * `data-grid-part="fill-handle"`, `data-filling` during a drag); its look, its place at the
+ * corner (a cell is positioned), its cursor and `touch-action: none` are the app's: it has no
+ * style of its own. Not visible (`state.visible` false), it has no props: render none.
+ */
+export function useFillHandle(cell: {
+    readonly rowIndex: number;
+    readonly columnIndex: number;
+}): PartHookResult<FillHandleState> {
+    const view = useGridView();
+    const { state, attributes } = fillHandlePart(view, cell);
+    if (!attributes) return { state, props: { style: {} } };
+    return {
+        state,
+        props: {
+            ...attributes,
+            ...dataAttributes({
+                "grid-part": "fill-handle",
+                filling: state.filling,
             }),
             style: {},
         },

@@ -37,6 +37,27 @@ export const CTRL_KEYS: Record<string, Direction> = {
 /** The pixels a wheel "line" or "page" stands for (`deltaMode` 1 and 2). */
 export const LINE_HEIGHT = 40;
 
+/**
+ * Whether a key is part of a composition (an IME): `isComposing`, or the key code browsers give
+ * its keys (229), which Safari's confirming Enter carries with `isComposing` false.
+ */
+export function isComposing(event: KeyboardEvent): boolean {
+    return event.isComposing || event.keyCode === 229;
+}
+
+/**
+ * Whether a key with Alt types a character: AltGr (Ctrl and Alt, on Windows) or macOS's Option
+ * alone, a printable key other than Space; never with ⌘.
+ */
+export function isAltCharacter(event: KeyboardEvent): boolean {
+    return (
+        event.altKey &&
+        !event.metaKey &&
+        event.key !== " " &&
+        [...event.key].length === 1
+    );
+}
+
 export function isEditable(element: Element): boolean {
     const tag = element.tagName;
     return (
@@ -149,6 +170,35 @@ export const GROUP_LABEL_ATTRIBUTE = "data-grid-group-label";
  * expands), its value the row's index. A click on it toggles the row's group (`row-groups.toggle`).
  */
 export const GROUP_TOGGLE_ATTRIBUTE = "data-grid-group-toggle";
+
+/**
+ * A fill handle (Epic #88, E4.4): an element the app renders in the cell at the corner of the
+ * range (or the active cell), its value that cell's row index. A press on it drags a fill.
+ */
+export const FILL_HANDLE_ATTRIBUTE = "data-grid-fill-handle";
+
+/**
+ * What belongs to an edit outside its cell (Epic #88, E4.3): an element the app marks with the
+ * edit's `editorProps` (a select's or a date picker's popover, portalled out of the grid), its
+ * value naming that edit of that grid. A press or focus there keeps the edit open; anywhere else
+ * outside the edited cell, it commits.
+ */
+export const EDITOR_ATTRIBUTE = "data-grid-editor";
+
+/** The grid's own controls an app renders in cells: a group's toggle, a row's drag handle, a fill handle, a resizer. */
+const GRID_CONTROLS = [
+    GROUP_TOGGLE_ATTRIBUTE,
+    ROW_DRAG_HANDLE_ATTRIBUTE,
+    FILL_HANDLE_ATTRIBUTE,
+    COLUMN_RESIZER_ATTRIBUTE,
+]
+    .map((attribute) => `[${attribute}]`)
+    .join(",");
+
+/** Whether an element is (or is inside) one of the grid's own controls (`GRID_CONTROLS`): no editor. */
+export function isGridControl(element: Element): boolean {
+    return element.closest(GRID_CONTROLS) !== null;
+}
 
 /** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
 export function isResizer(element: Element): boolean {

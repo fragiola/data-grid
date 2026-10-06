@@ -1,11 +1,16 @@
 import type { Axis } from "../axis/axis";
 import type {
     CellPosition,
+    CellRange,
+    CellSelection,
     Column,
     ColumnWidths,
+    EditingCell,
+    EditorProps,
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
+    RangePaste,
     ReorderSide,
     RowKey,
     RowKeyGetter,
@@ -29,6 +34,12 @@ export interface DataGridEngineOptions {
     maxScrollSize?: number;
     /** `rows-end-reached` fires when the view's last row is this close to the end (default 10) */
     endReachedThreshold?: number;
+    /**
+     * cells fill (Epic #88, E4.4): a press on a fill handle drags the range (or the active cell)
+     * down or right, the release a `range-fill` event the app applies (the grid writes no data).
+     * Default off
+     */
+    fillable?: boolean;
     /**
      * the rows move (Epic #86, E2.3): a press on a row's drag handle drags it, Ctrl/⌘+Shift+↑/↓
      * on a body cell move its row, each drop or key a `row-move` event the app applies (the grid
@@ -174,6 +185,22 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly selectedRowKeys: readonly RowKey[];
     /** whether a loaded row can be selected; `undefined`: every row can */
     readonly isRowSelectable: RowSelectable<TRow> | undefined;
+    /** how cells are selected (Epic #88); `undefined` when they are not */
+    readonly cellSelection: CellSelection | undefined;
+    /** the cell being edited (Epic #88, E4.3): its part is `editing`, its editor rendered */
+    readonly editingCell: EditingCell | null;
+    /** cells fill by a handle (`fillable`, Epic #88, E4.4) */
+    readonly fillable: boolean;
+    /** the fill a handle's drag is making, or `null` */
+    readonly fill: FillDrag | null;
+    /**
+     * the cells a fill drags from (E4.4): the selected range, else the active body cell, widened
+     * to the column spans it cuts, as its first and last cells; its handle at the last one.
+     * `null` without one, cells not filling, or while a cell is edited
+     */
+    readonly fillSource: CellRange | null;
+    /** the selected range of body cells, or `null` (a cell's part tells whether it is in it) */
+    readonly selectedRange: CellRange | null;
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
     readonly collapsedGroupKeys: readonly string[];
     /**
@@ -255,6 +282,51 @@ export interface RowMove {
     readonly rowKey: RowKey;
 }
 
+/**
+ * An edit's draft (Epic #88, E4.3): what its editor shows (`value`, the cell's value until the
+ * editor changes it) and the value it started from (the value a commit last told). The engine's:
+ * an editor reads it, `change-edit` replaces it, `commit-edit` tells it. The cell is the model's
+ * `editingCell`.
+ */
+export interface EditDraft {
+    readonly value: unknown;
+    readonly initialValue: unknown;
+    /** what marks an element outside the cell as this edit's editor (the same for the edit) */
+    readonly editorProps: EditorProps;
+}
+
+/**
+ * An edit committed (E4.3): the cell, its column's key and the value, which the app writes into
+ * its row (`onCellEdit`): the grid writes no data. Told only when the value changed.
+ */
+export interface CellEdit {
+    readonly rowIndex: number;
+    readonly columnIndex: number;
+    readonly columnKey: string;
+    readonly value: unknown;
+}
+
+/**
+ * A fill a handle's drag is making (Epic #88, E4.4): the cells it fills from (`source`, the range
+ * or the active cell, its first cell `anchor`, its last `focus`) and the cells it would fill
+ * (`target`, below the source or to its end, never including it), `null` while the pointer is
+ * over the source or above it, or before its start.
+ */
+export interface FillDrag {
+    readonly source: CellRange;
+    readonly target: CellRange | null;
+}
+
+/**
+ * A fill (E4.4): the cells it fills from and the cells to fill (below the source, as wide; or to
+ * its end, as tall), each with its first cell as `anchor` and its last as `focus`. The app writes
+ * the values (`repeatedFill` in `@fragiola/data-grid/fill` repeats the source's).
+ */
+export interface RangeFill {
+    readonly source: CellRange;
+    readonly target: CellRange;
+}
+
 /** What `engine.get` reads. */
 export interface EngineQueryMap {
     "row-window": AxisWindow;
@@ -283,6 +355,10 @@ export interface EngineQueryMap {
      * reported to the model: a reset gives a column its one back
      */
     "column-auto-widths": ColumnWidths;
+    /** the edit's draft (Epic #88), or `null` while no cell is edited */
+    "edit-draft": EditDraft | null;
+    /** the fill a handle's drag is making (Epic #88, E4.4), or `null` */
+    fill: FillDrag | null;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
@@ -314,6 +390,20 @@ export interface EngineActionMap {
      * not rendered is not measured
      */
     "fit-columns": { readonly columnKeys?: readonly string[] | undefined };
+    /**
+     * makes a cell active and edits it (Epic #88, E4.3: `editing-cell.set`), its editor taking
+     * focus once rendered; refused for a cell that cannot be edited
+     */
+    "edit-cell": EditingCell;
+    /** replaces the edit's draft (an editor's `onChange`) */
+    "change-edit": { readonly value: unknown };
+    /**
+     * ends the edit, telling its draft (`value`, when given, replaces it first) as a `cell-edit`
+     * when it changed; the cell keeps focus
+     */
+    "commit-edit": { readonly value?: unknown };
+    /** ends the edit telling nothing, the cell keeping focus (as Escape does) */
+    "cancel-edit": Record<string, never>;
 }
 
 export type EngineActionKey = keyof EngineActionMap;
@@ -341,6 +431,20 @@ export interface EngineEventMap {
     "row-move": RowMove;
     /** the automatic widths or the flex shares changed (see `column-auto-widths`) */
     "column-auto-widths": ColumnWidths;
+    /** the edit's draft changed: an edit started, its editor changed it, or it ended (`null`) */
+    "edit-draft": EditDraft | null;
+    /** an edit was committed with a new value (Epic #88, E4.3): the app writes it */
+    "cell-edit": CellEdit;
+    /** a fill's drag started, changed its target, or ended (`null`) (E4.4) */
+    fill: FillDrag | null;
+    /** a fill handle was dropped past its source (E4.4): the app fills the target */
+    "range-fill": RangeFill;
+    /**
+     * values were pasted into the grid (Epic #88, E4.2: Ctrl/⌘+V on one of its cells, cells
+     * selectable): the range they land in and the values, parsed from the clipboard's text (TSV).
+     * The app writes them into its rows: the grid writes nothing
+     */
+    "range-paste": RangePaste;
 }
 
 export type EngineEventKey = keyof EngineEventMap;
@@ -407,6 +511,21 @@ export interface EngineAdapter<TRow = unknown, TNode = unknown> {
      * calls it after the consumer's own handlers, so `preventDefault` cancels it.
      */
     pointerdown(event: PointerEvent): boolean;
+    /**
+     * Handles a copy in the grid (Epic #88, E4.2), cells selectable: on one of its cells itself
+     * (not a field inside it), the selected range, else the active body cell, goes to the
+     * clipboard as TSV (`event.clipboardData`, the page's own copy event: no permission asked),
+     * and the event is prevented. Returns whether it did. Like `keydown`, an adapter calls it
+     * after the consumer's own handlers (`onCopy`), so `preventDefault` cancels it.
+     */
+    copy(event: ClipboardEvent): boolean;
+    /**
+     * Handles a paste in the grid (E4.2), cells selectable: on one of its cells itself, the
+     * clipboard's text (TSV) is parsed and told as a `range-paste` event, landing at the selected
+     * range's first cell (else the active body cell), and the event is prevented. Returns whether
+     * it did. Called after the consumer's own handlers (`onPaste`), like `copy`.
+     */
+    paste(event: ClipboardEvent): boolean;
     /** changes the options */
     setOptions(options: DataGridEngineOptions): void;
 }

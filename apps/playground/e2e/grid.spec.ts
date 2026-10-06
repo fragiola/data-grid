@@ -5104,6 +5104,775 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("cell ranges", () => {
+            const CELLS = { rows: 1_000, columns: 20, cells: 1 } as const;
+
+            const selectedRange = (page: Page) =>
+                page.evaluate(() => window.grid?.model.get("selected-range"));
+
+            const range = (
+                anchor: [number, number],
+                focus: [number, number],
+            ) => ({
+                anchor: { rowIndex: anchor[0], columnIndex: anchor[1] },
+                focus: { rowIndex: focus[0], columnIndex: focus[1] },
+            });
+
+            /** A cell's centre on the page. */
+            async function centreOf(target: Locator) {
+                const box = await boxOf(target);
+                return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+            }
+
+            /** Presses `from`'s centre and moves through the slop to `to` (a point), held. */
+            async function pressAndMove(
+                page: Page,
+                from: Locator,
+                to: { x: number; y: number },
+            ) {
+                const start = await centreOf(from);
+                await page.mouse.move(start.x, start.y);
+                await page.mouse.down();
+                await page.mouse.move(to.x, to.y, { steps: 6 });
+                await settle(page);
+            }
+
+            test("Shift with the keys extends from the active cell, marked by state attributes", async ({
+                page,
+            }) => {
+                await open(page, kind, CELLS);
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowRight");
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([2, 1], [4, 2]),
+                );
+                // the active cell stays, focused
+                await expect(cell(page, 2, 1)).toBeFocused();
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 1,
+                });
+                await expect(cell(page, 2, 1)).toHaveAttribute(
+                    "data-range-edge",
+                    "top start",
+                );
+                await expect(cell(page, 3, 2)).toHaveAttribute(
+                    "data-range-edge",
+                    "end",
+                );
+                await expect(cell(page, 4, 2)).toHaveAttribute(
+                    "data-range-edge",
+                    "bottom end",
+                );
+                await expect(cell(page, 3, 1)).toHaveAttribute(
+                    "data-selected-cell",
+                    "",
+                );
+                await expect(cell(page, 3, 1)).toHaveAttribute(
+                    "aria-selected",
+                    "true",
+                );
+                await expect(cell(page, 5, 1)).toHaveAttribute(
+                    "aria-selected",
+                    "false",
+                );
+                await expect(
+                    page.locator('[data-grid-part="grid"]'),
+                ).toHaveAttribute("aria-multiselectable", "true");
+                // the fixture's own CSS draws the edges
+                await expect(cell(page, 2, 1)).toHaveCSS(
+                    "border-top-width",
+                    "2px",
+                );
+                // PageDown pages the focus, scrolled into view
+                await page.keyboard.press("Shift+PageDown");
+                await settle(page);
+                const paged = await selectedRange(page);
+                expect(paged?.focus.rowIndex).toBeGreaterThan(15);
+                await expectFullyInBody(
+                    page.getByTestId("viewport"),
+                    cell(page, paged?.focus.rowIndex ?? 0, 2),
+                );
+                // Escape clears; a plain move clears and moves
+                await page.keyboard.press("Escape");
+                await settle(page);
+                expect(await selectedRange(page)).toBeNull();
+                await expect(page.locator("[data-selected-cell]")).toHaveCount(
+                    0,
+                );
+                await page.keyboard.press("Shift+ArrowRight");
+                await page.keyboard.press("ArrowLeft");
+                await settle(page);
+                expect(await selectedRange(page)).toBeNull();
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 0,
+                });
+                expect(
+                    await page.evaluate(() => window.rangeChanges.length),
+                ).toBe(7);
+            });
+
+            test("Ctrl/⌘+A selects every body cell", async ({ page }) => {
+                await open(page, kind, CELLS);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("ControlOrMeta+a");
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([0, 0], [999, 19]),
+                );
+                await expect(cell(page, 0, 0)).toHaveAttribute(
+                    "data-range-edge",
+                    "top start",
+                );
+                // the page's text is never selected instead
+                expect(
+                    await page.evaluate(() =>
+                        String(document.getSelection() ?? ""),
+                    ),
+                ).toBe("");
+            });
+
+            test("drags a range across cells, from the pressed one", async ({
+                page,
+            }) => {
+                await open(page, kind, CELLS);
+                await pressAndMove(
+                    page,
+                    cell(page, 1, 1),
+                    await centreOf(cell(page, 4, 3)),
+                );
+                expect(await selectedRange(page)).toEqual(
+                    range([1, 1], [4, 3]),
+                );
+                await expect(cell(page, 1, 1)).toBeFocused();
+                await page.mouse.up();
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([1, 1], [4, 3]),
+                );
+                // no text selected on the way
+                expect(
+                    await page.evaluate(() =>
+                        String(document.getSelection() ?? ""),
+                    ),
+                ).toBe("");
+                // Shift+click reaches a cell from the anchor, the active cell staying
+                await cell(page, 6, 0).click({ modifiers: ["Shift"] });
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([1, 1], [6, 0]),
+                );
+                await expect(cell(page, 1, 1)).toBeFocused();
+                // a plain click clears it
+                await cell(page, 8, 2).click();
+                await settle(page);
+                expect(await selectedRange(page)).toBeNull();
+                expect(await active(page)).toEqual({
+                    rowIndex: 8,
+                    columnIndex: 2,
+                });
+            });
+
+            test("scrolls the rows and the columns at the view's edges while dragging", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, CELLS);
+                const body = await bodyBox(viewport);
+                await pressAndMove(page, cell(page, 2, 2), {
+                    x: body.right - 5,
+                    y: body.bottom - 5,
+                });
+                await page.waitForFunction(() => {
+                    const position = window.grid?.engine.get("scroll-position");
+                    return (
+                        (position?.top ?? 0) > 300 &&
+                        (position?.left ?? 0) > 300
+                    );
+                });
+                const far = await selectedRange(page);
+                expect(far?.anchor).toEqual({ rowIndex: 2, columnIndex: 2 });
+                expect(far?.focus.rowIndex).toBeGreaterThan(20);
+                expect(far?.focus.columnIndex).toBeGreaterThan(8);
+                await page.mouse.up();
+                await settle(page);
+                // stopped with the release
+                const stopped = await page.evaluate(() =>
+                    window.grid?.engine.get("scroll-position"),
+                );
+                await settle(page);
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.engine.get("scroll-position"),
+                    ),
+                ).toEqual(stopped);
+                // the range's focus on screen, marked
+                const focus = (await selectedRange(page))?.focus;
+                await expect(
+                    cell(page, focus?.rowIndex ?? 0, focus?.columnIndex ?? 0),
+                ).toHaveAttribute("data-range-edge", "bottom end");
+            });
+
+            test("selects across pinned columns, scrolling only from the scrolling columns' edges", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...CELLS,
+                    pinned: 1,
+                    pinnedEnd: 1,
+                });
+                await scroll(page, viewport, 0, 600);
+                const left = () =>
+                    page.evaluate(
+                        () => window.grid?.engine.get("scroll-position").left,
+                    );
+                const pinnedEnd = await centreOf(cell(page, 3, 19));
+                await pressAndMove(page, cell(page, 1, 8), pinnedEnd);
+                expect(await selectedRange(page)).toEqual(
+                    range([1, 8], [3, 19]),
+                );
+                // over a pinned strip: its column, nothing scrolls sideways (held there)
+                const held = await left();
+                await settle(page);
+                expect(await left()).toBe(held);
+                const pinnedStart = await centreOf(cell(page, 3, 0));
+                await page.mouse.move(pinnedStart.x, pinnedStart.y);
+                await settle(page);
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([1, 8], [3, 0]),
+                );
+                expect(await left()).toBe(held);
+                // the scrolling columns' end zone, beside the strip pinned at the end: they scroll
+                const body = await bodyBox(viewport);
+                await page.mouse.move(body.right - 110, pinnedStart.y, {
+                    steps: 4,
+                });
+                await page.waitForFunction(
+                    (from) =>
+                        (window.grid?.engine.get("scroll-position").left ?? 0) >
+                        from + 100,
+                    held ?? 0,
+                );
+                await page.mouse.up();
+                await settle(page);
+                const focus = (await selectedRange(page))?.focus;
+                expect(focus?.columnIndex).toBeGreaterThan(8);
+                expect(focus?.columnIndex).toBeLessThan(19);
+            });
+
+            test("selects the virtual cells under scroll scaling", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, {
+                    ...CELLS,
+                    rows: 1_000_000,
+                    maxScrollSize: 1_000_000,
+                });
+                await scroll(page, viewport, 500_000);
+                const first = await page.evaluate(
+                    () => window.grid?.engine.get("row-window").visible.start,
+                );
+                expect(first).toBeGreaterThan(100_000);
+                const from = (first ?? 0) + 2;
+                await pressAndMove(
+                    page,
+                    cell(page, from, 1),
+                    await centreOf(cell(page, from + 3, 2)),
+                );
+                await page.mouse.up();
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([from, 1], [from + 3, 2]),
+                );
+                await expect(cell(page, from + 3, 2)).toHaveAttribute(
+                    "data-range-edge",
+                    "bottom end",
+                );
+            });
+
+            test("copies the range as TSV with Ctrl/⌘+C, no permission asked", async ({
+                page,
+                browserName,
+            }) => {
+                await open(page, kind, CELLS);
+                await page.evaluate(() => {
+                    document.addEventListener("copy", (event) => {
+                        Object.assign(window, {
+                            copied: {
+                                text: event.clipboardData?.getData(
+                                    "text/plain",
+                                ),
+                                prevented: event.defaultPrevented,
+                            },
+                        });
+                    });
+                });
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowRight");
+                await page.keyboard.press("ControlOrMeta+c");
+                await settle(page);
+                expect(
+                    await page.evaluate(
+                        () => (window as unknown as { copied: unknown }).copied,
+                    ),
+                ).toEqual({ text: "1:1\t1:2\n2:1\t2:2", prevented: true });
+                if (browserName === "chromium") {
+                    // on the system clipboard itself
+                    await page
+                        .context()
+                        .grantPermissions([
+                            "clipboard-read",
+                            "clipboard-write",
+                        ]);
+                    expect(
+                        await page.evaluate(() =>
+                            navigator.clipboard.readText(),
+                        ),
+                    ).toBe("1:1\t1:2\n2:1\t2:2");
+                }
+            });
+
+            test("pastes once with Ctrl/⌘+V, the values parsed, from the range's first cell", async ({
+                page,
+                browserName,
+            }) => {
+                await open(page, kind, CELLS);
+                // what the grid copied is on the clipboard: a real paste of it
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowRight");
+                await page.keyboard.press("ControlOrMeta+c");
+                await cell(page, 5, 2).click();
+                await page.keyboard.press("Shift+ArrowUp");
+                await page.keyboard.press("ControlOrMeta+v");
+                await settle(page);
+                expect(await page.evaluate(() => window.rangePastes)).toEqual([
+                    {
+                        range: range([4, 2], [5, 3]),
+                        values: [
+                            ["1:1", "1:2"],
+                            ["2:1", "2:2"],
+                        ],
+                    },
+                ]);
+                // the grid writes nothing
+                await expect(cell(page, 4, 2)).toHaveText("4:2");
+                if (browserName !== "chromium") return;
+                // a spreadsheet's text, quoted values and CRLF included (a page-made paste: Firefox
+                // gives such an event no clipboard)
+                const prevented = await page.evaluate(() => {
+                    const data = new DataTransfer();
+                    data.setData("text/plain", 'a\t"b\tc"\r\nd\te\r\n');
+                    const event = new ClipboardEvent("paste", {
+                        clipboardData: data,
+                        bubbles: true,
+                        cancelable: true,
+                    });
+                    document.activeElement?.dispatchEvent(event);
+                    return event.defaultPrevented;
+                });
+                expect(prevented).toBe(true);
+                expect(
+                    await page.evaluate(() => window.rangePastes.at(-1)),
+                ).toEqual({
+                    range: range([4, 2], [5, 3]),
+                    values: [
+                        ["a", "b\tc"],
+                        ["d", "e"],
+                    ],
+                });
+            });
+
+            test("asks a controlled parent and follows its range", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...CELLS, cells: "controlled" });
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await settle(page);
+                await expect(cell(page, 2, 1)).toHaveAttribute(
+                    "data-range-edge",
+                    "bottom start end",
+                );
+                await pressAndMove(
+                    page,
+                    cell(page, 5, 1),
+                    await centreOf(cell(page, 6, 3)),
+                );
+                await page.mouse.up();
+                await settle(page);
+                expect(await selectedRange(page)).toEqual(
+                    range([5, 1], [6, 3]),
+                );
+            });
+
+            test("leaves a grid without cell selection as it was", async ({
+                page,
+            }) => {
+                await open(page, kind, { rows: 1_000, columns: 20 });
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await pressAndMove(
+                    page,
+                    cell(page, 3, 1),
+                    await centreOf(cell(page, 5, 3)),
+                );
+                await page.mouse.up();
+                await settle(page);
+                await expect(
+                    page.locator(
+                        "[data-selected-cell], [data-range-edge], [aria-selected]",
+                    ),
+                ).toHaveCount(0);
+                await expect(
+                    page.locator('[data-grid-part="grid"]'),
+                ).not.toHaveAttribute("aria-multiselectable");
+            });
+        });
+
+        test.describe("cell editing", () => {
+            const EDIT = { rows: 200, columns: 8, edit: 1 } as const;
+
+            const editingCell = (page: Page) =>
+                page.evaluate(() => window.grid?.model.get("editing-cell"));
+
+            const cellEdits = (page: Page) =>
+                page.evaluate(() => window.cellEdits);
+
+            test("Enter, F2, typing and a double click edit, the editor focused", async ({
+                page,
+            }) => {
+                await open(page, kind, EDIT);
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Enter");
+                await expect(page.getByTestId("editor-2")).toBeFocused();
+                await expect(cell(page, 2, 1)).toHaveAttribute(
+                    "data-editing",
+                    "",
+                );
+                await expect(page.getByTestId("editor-2")).toHaveValue("2:1");
+                await page.keyboard.press("Escape");
+                await expect(cell(page, 2, 1)).toBeFocused();
+                await expect(cell(page, 2, 1)).not.toHaveAttribute(
+                    "data-editing",
+                );
+                await page.keyboard.press("F2");
+                await expect(page.getByTestId("editor-2")).toBeFocused();
+                await page.keyboard.press("Escape");
+                // typing: the editor starts from the key typed
+                await page.keyboard.press("k");
+                await expect(page.getByTestId("editor-2")).toHaveValue("k");
+                await page.keyboard.type("ey");
+                await expect(page.getByTestId("editor-2")).toHaveValue("key");
+                await page.keyboard.press("Escape");
+                await expect(cell(page, 2, 1)).toHaveText("2:1");
+                await cell(page, 4, 1).dblclick();
+                await expect(page.getByTestId("editor-4")).toBeFocused();
+                expect(await editingCell(page)).toEqual({
+                    rowIndex: 4,
+                    columnIndex: 1,
+                });
+                expect(await cellEdits(page)).toEqual([]);
+            });
+
+            test("Enter and Tab commit and move, Shift moving back; the app writes the value", async ({
+                page,
+            }) => {
+                await open(page, kind, EDIT);
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-2").fill("first");
+                await page.keyboard.press("Enter");
+                await settle(page);
+                await expect(cell(page, 2, 1)).toHaveText("first");
+                await expect(cell(page, 3, 1)).toBeFocused();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-3").fill("second");
+                await page.keyboard.press("Shift+Enter");
+                await settle(page);
+                await expect(cell(page, 3, 1)).toHaveText("second");
+                await expect(cell(page, 2, 1)).toBeFocused();
+                await page.keyboard.press("F2");
+                await page.getByTestId("editor-2").fill("third");
+                await page.keyboard.press("Tab");
+                await settle(page);
+                await expect(cell(page, 2, 1)).toHaveText("third");
+                await expect(cell(page, 2, 2)).toBeFocused();
+                // Shift+Tab in an edit (C5's picker, unchanged: nothing told) moves back
+                for (let i = 0; i < 3; i++) {
+                    await page.keyboard.press("ArrowRight");
+                }
+                await page.keyboard.press("F2");
+                await expect(page.getByTestId("picker-2")).toBeFocused();
+                await page.keyboard.press("Shift+Tab");
+                await expect(cell(page, 2, 4)).toBeFocused();
+                expect(await cellEdits(page)).toEqual([
+                    { rowIndex: 2, columnKey: "c1", value: "first" },
+                    { rowIndex: 3, columnKey: "c1", value: "second" },
+                    { rowIndex: 2, columnKey: "c1", value: "third" },
+                ]);
+            });
+
+            test("a click outside commits; a portalled picker marked as the edit's does not", async ({
+                page,
+            }) => {
+                await open(page, kind, EDIT);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-1").fill("clicked out");
+                await page.getByTestId("after").click();
+                await settle(page);
+                await expect(cell(page, 1, 1)).toHaveText("clicked out");
+                expect(await editingCell(page)).toBeNull();
+                // C5 edits even rows, by a picker whose options are outside the grid
+                await cell(page, 2, 5).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("picker-2").click();
+                await page.getByTestId("option-blue").click();
+                await settle(page);
+                await expect(cell(page, 2, 5)).toHaveText("blue");
+                await expect(cell(page, 2, 5)).toBeFocused();
+                expect((await cellEdits(page)).at(-1)).toEqual({
+                    rowIndex: 2,
+                    columnKey: "c5",
+                    value: "blue",
+                });
+            });
+
+            test("keeps the editable rules: a column by the row, a cell with controls, a summary row and a group row", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...EDIT, controls: 1, summaryTop: 1 });
+                // C5 edits even rows only
+                await cell(page, 3, 5).click();
+                await page.keyboard.press("Enter");
+                expect(await editingCell(page)).toBeNull();
+                // a cell with controls and no edit: Enter is its interaction, as before
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("ArrowLeft");
+                await expect(cell(page, 3, 2)).toBeFocused();
+                await page.keyboard.press("Enter");
+                await expect(page.getByTestId("edit-3")).toBeFocused();
+                await page.keyboard.press("Escape");
+                // a summary row's cell is never edited
+                const summary = page.locator(
+                    '[data-grid-part="summary-cell"][data-column-index="1"]',
+                );
+                await summary.first().click();
+                await page.keyboard.press("Enter");
+                await page.keyboard.press("x");
+                expect(await editingCell(page)).toBeNull();
+                // a group row's: Enter toggles its group, typing edits nothing
+                await open(page, kind, { ...EDIT, rows: 50, groupBy: 1 });
+                await cell(page, 0, 1).click();
+                await page.keyboard.press("x");
+                expect(await editingCell(page)).toBeNull();
+            });
+
+            test("keeps the editor's keys, copy and paste its own", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...EDIT, cells: 1 });
+                await page.evaluate(() => {
+                    document.addEventListener("copy", (event) => {
+                        Object.assign(window, {
+                            copied: event.clipboardData?.getData("text/plain"),
+                            copyPrevented: event.defaultPrevented,
+                        });
+                    });
+                });
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Enter");
+                const editor = page.getByTestId("editor-2");
+                await editor.fill("words");
+                // the arrows and Shift+arrows are the field's: no move, no range
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("Shift+ArrowLeft");
+                await page.keyboard.press("ArrowDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 1,
+                });
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.get("selected-range"),
+                    ),
+                ).toBeNull();
+                await page.keyboard.press("ControlOrMeta+a");
+                await page.keyboard.press("ControlOrMeta+c");
+                expect(
+                    await page.evaluate(() => ({
+                        copied: (window as unknown as { copied: unknown })
+                            .copied,
+                        prevented: (
+                            window as unknown as { copyPrevented: unknown }
+                        ).copyPrevented,
+                    })),
+                ).toEqual({ copied: "", prevented: false });
+                await expect(editor).toHaveValue("words");
+                await editor.press("Escape");
+                expect(await cellEdits(page)).toEqual([]);
+            });
+
+            test("keeps the edited cell rendered while the grid scrolls", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, EDIT);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-1").fill("far");
+                await scroll(page, viewport, 3_000);
+                await expect(page.getByTestId("editor-1")).toBeAttached();
+                await expect(page.getByTestId("editor-1")).toHaveValue("far");
+                await page.getByTestId("editor-1").press("Enter");
+                await settle(page);
+                expect(await cellEdits(page)).toEqual([
+                    { rowIndex: 1, columnKey: "c1", value: "far" },
+                ]);
+            });
+        });
+
+        test.describe("fill handle", () => {
+            const FILL = {
+                rows: 1_000,
+                columns: 20,
+                cells: 1,
+                fill: 1,
+            } as const;
+
+            const fills = (page: Page) => page.evaluate(() => window.fills);
+
+            const range = (
+                anchor: [number, number],
+                focus: [number, number],
+            ) => ({
+                anchor: { rowIndex: anchor[0], columnIndex: anchor[1] },
+                focus: { rowIndex: focus[0], columnIndex: focus[1] },
+            });
+
+            /** Presses the fill handle and moves to a point, held. */
+            async function dragHandle(page: Page, x: number, y: number) {
+                const box = await boxOf(page.getByTestId("fill-handle"));
+                await page.mouse.move(
+                    box.x + box.width / 2,
+                    box.y + box.height / 2,
+                );
+                await page.mouse.down();
+                await page.mouse.move(x, y, { steps: 6 });
+                await settle(page);
+            }
+
+            /** A cell's centre on the page. */
+            async function centreOf(target: Locator) {
+                const box = await boxOf(target);
+                return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+            }
+
+            test("fills down from the range, the target marked, once on release, the range grown", async ({
+                page,
+            }) => {
+                await open(page, kind, FILL);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Shift+ArrowDown");
+                await page.keyboard.press("Shift+ArrowRight");
+                await settle(page);
+                // in the range's last cell only
+                await expect(page.getByTestId("fill-handle")).toHaveCount(1);
+                await expect(
+                    cell(page, 2, 2).getByTestId("fill-handle"),
+                ).toHaveAttribute("data-grid-part", "fill-handle");
+                const target = await centreOf(cell(page, 5, 2));
+                await dragHandle(page, target.x, target.y);
+                await expect(page.getByTestId("fill-handle")).toHaveAttribute(
+                    "data-filling",
+                    "",
+                );
+                await expect(cell(page, 4, 1)).toHaveAttribute(
+                    "data-fill-target",
+                    "",
+                );
+                await expect(cell(page, 2, 1)).not.toHaveAttribute(
+                    "data-fill-target",
+                );
+                await expect(cell(page, 4, 1)).toHaveCSS(
+                    "background-color",
+                    "rgb(255, 255, 221)",
+                );
+                expect(await fills(page)).toEqual([]);
+                await page.mouse.up();
+                await settle(page);
+                expect(await fills(page)).toEqual([
+                    {
+                        source: range([1, 1], [2, 2]),
+                        target: range([3, 1], [5, 2]),
+                    },
+                ]);
+                await expect(page.locator("[data-fill-target]")).toHaveCount(0);
+                // the fixture repeats the source: rows 1 and 2 in turn
+                await expect(cell(page, 3, 1)).toHaveText("1:1");
+                await expect(cell(page, 4, 2)).toHaveText("2:2");
+                await expect(cell(page, 5, 1)).toHaveText("1:1");
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.get("selected-range"),
+                    ),
+                ).toEqual(range([1, 1], [5, 2]));
+                await expect(cell(page, 1, 1)).toBeFocused();
+            });
+
+            test("fills to the end when the pointer goes farther across, from the active cell", async ({
+                page,
+            }) => {
+                await open(page, kind, FILL);
+                await cell(page, 3, 1).click();
+                const target = await centreOf(cell(page, 3, 4));
+                await dragHandle(page, target.x, target.y + 5);
+                await page.mouse.up();
+                await settle(page);
+                expect(await fills(page)).toEqual([
+                    {
+                        source: range([3, 1], [3, 1]),
+                        target: range([3, 2], [3, 4]),
+                    },
+                ]);
+                await expect(cell(page, 3, 4)).toHaveText("3:1");
+            });
+
+            test("cancels on Escape, and scrolls at the body's edge", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, FILL);
+                await cell(page, 1, 1).click();
+                const target = await centreOf(cell(page, 4, 1));
+                await dragHandle(page, target.x, target.y);
+                await page.keyboard.press("Escape");
+                await settle(page);
+                await expect(page.locator("[data-fill-target]")).toHaveCount(0);
+                await page.mouse.up();
+                await settle(page);
+                expect(await fills(page)).toEqual([]);
+                // held at the bottom edge: the rows scroll
+                const body = await bodyBox(viewport);
+                await dragHandle(page, target.x, body.bottom - 3);
+                await page.waitForFunction(
+                    () =>
+                        (window.grid?.engine.get("scroll-position").top ?? 0) >
+                        300,
+                );
+                await page.mouse.up();
+                await settle(page);
+                const [filled] = await fills(page);
+                expect(filled?.source).toEqual(range([1, 1], [1, 1]));
+                expect(filled?.target.focus.rowIndex).toBeGreaterThan(15);
+            });
+        });
+
         test.describe("tree data", () => {
             // 100 top rows, each with 3 rows, each of those with 2: a row's index is its place in
             // the whole tree (the top rows 0, 10, 20, …); a parent's C0 holds its toggle

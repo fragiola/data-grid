@@ -18,6 +18,14 @@ it, the grid scrolls it into view and focuses it.
 | Shift+Space | selects the active row, or clears it ([row selection](/docs/concepts/row-selection) on) |
 | Shift+↑, Shift+↓ | the next row, selecting from the anchor (many rows selectable) |
 | Ctrl+A, ⌘+A | selects every row (many rows selectable) |
+| Shift+arrows, Shift+Home, Shift+End, Shift+PageUp, Shift+PageDown | move the selected range's focus, the active cell staying its anchor ([cell selection](/docs/concepts/cell-selection) on; then Shift+↑, Shift+↓ and Ctrl+A are the cells', Shift+Space stays the row's) |
+| Ctrl+Shift+Home, Ctrl+Shift+End | take the range's focus to the first or the last cell (cell selection on) |
+| Ctrl+A, ⌘+A | selects every body cell (cell selection on) |
+| Escape | clears the selected range; a plain move clears it too |
+| Ctrl+C, Ctrl+V | copy the range (or the active cell) as tab-separated text, paste into it (cell selection on; ⌘ on a Mac) |
+| Enter, F2, a printable key | on an [editable](/docs/concepts/editing) cell, edit it (the printable key starts the editor; a character typed with AltGr or Option too) |
+| Enter, Shift+Enter, Tab, Shift+Tab | in an edit, commit it and move down, up, to the next or the previous column |
+| Escape | in an edit, cancel it, focus back on the cell; during a [fill](/docs/concepts/fill)'s drag, cancel it |
 | Ctrl+Shift+←, Ctrl+Shift+→ | moves a reorderable header cell's column or group, the active cell following it (⌘ on a Mac) |
 | Ctrl+Shift+↑, Ctrl+Shift+↓ | moves the active cell's row up or down, the active cell following it ([row reordering](/docs/concepts/row-reordering) on; ⌘ on a Mac) |
 | Enter, Space | on a group row, expands or collapses it ([row grouping](/docs/concepts/row-grouping)); Space on a tree's parent too ([tree data](/docs/concepts/tree-data)) |

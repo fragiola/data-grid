@@ -154,6 +154,30 @@ export interface Column<TRow, TNode = unknown> {
         | ((value: unknown, filterValue: unknown, row: TRow) => boolean)
         | undefined;
     /**
+     * whether a person can edit its cells (Epic #88, E4.3): all of them, or a loaded data row's by
+     * the row (never a group row's nor a summary row's). Enter, F2, typing or a double click on
+     * one edits it; the app writes the value (`onCellEdit`): the grid writes no data
+     */
+    readonly editable?:
+        | boolean
+        | ((row: TRow, rowIndex: number) => boolean)
+        | undefined;
+    /**
+     * what an edited cell shows when it is given no children (E4.3): the app's editor, given the
+     * draft and the ways to change, commit and cancel it
+     */
+    readonly renderEditCell?:
+        | ((props: EditCellRenderProps<TRow, TNode>) => TNode)
+        | undefined;
+    /**
+     * a loaded row's cell as text on the clipboard (Epic #88, E4.2: a copied range's values,
+     * as TSV); without one, its value as text (a string, a number or a boolean; anything else
+     * copies empty). A group row's cell copies its value as text
+     */
+    readonly getCopyText?:
+        | ((props: CellRenderProps<TRow, TNode>) => string)
+        | undefined;
+    /**
      * under a collapsible group (Epic #85, E1.3): shown only while it is expanded, or only while
      * it is collapsed; without it, in both states
      */
@@ -218,6 +242,11 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     /** a group neither sorts nor filters: its columns do */
     readonly compare?: never;
     readonly filter?: never;
+    /** a group has no cells to copy: its columns do */
+    readonly getCopyText?: never;
+    /** a group has no cells to edit: its columns do */
+    readonly editable?: never;
+    readonly renderEditCell?: never;
 }
 
 /** Which state of its collapsible group an entry shows in (E1.3): expanded only, or collapsed only. */
@@ -332,6 +361,105 @@ export type DetailHeight<TRow> =
  * How rows are selected (R2): one at a time, or many. A grid without it selects nothing.
  */
 export type RowSelection = "single" | "multiple";
+
+/**
+ * What a column's `renderEditCell` receives (Epic #88, E4.3): the edited cell, its draft (what the
+ * editor shows, the grid's until the edit ends), the value it started from, the key that started
+ * it, and the edit's three ways out.
+ */
+export interface EditCellRenderProps<TRow, TNode = unknown> {
+    readonly row: TRow;
+    readonly rowIndex: number;
+    readonly column: Column<TRow, TNode>;
+    readonly columnIndex: number;
+    /** the draft: the cell's value at first, then what `onChange` made it */
+    readonly value: unknown;
+    /** the cell's value when the edit started */
+    readonly initialValue: unknown;
+    /**
+     * the printable key that started the edit (typing on the cell), else `undefined` (Enter, F2,
+     * a double click): a text editor starts from it, as a spreadsheet does
+     */
+    readonly startKey: string | undefined;
+    /** replaces the draft */
+    readonly onChange: (value: unknown) => void;
+    /**
+     * ends the edit, telling the draft (`value`, when given, replaces it first): the app's
+     * `onCellEdit`, the cell keeping focus
+     */
+    readonly onCommit: (...value: [] | [value: unknown]) => void;
+    /** ends the edit, telling nothing: the draft is dropped */
+    readonly onCancel: () => void;
+    /**
+     * what marks an element outside the cell as this edit's (a select's or a date picker's
+     * popover, portalled out of the grid): spread it on that element; a press or focus there
+     * keeps the edit open
+     */
+    readonly editorProps: EditorProps;
+}
+
+/**
+ * The attribute marking an element as one edit's editor (Epic #88, E4.3): `data-grid-editor`, its
+ * value naming that edit of that grid (another grid's popover, or an earlier edit's, is not it).
+ */
+export interface EditorProps {
+    readonly "data-grid-editor": string;
+}
+
+/**
+ * The cell being edited (Epic #88, E4.3): always the active cell, a body cell of a loaded data row
+ * whose column is editable for it, and the printable key that started it (typing), if any.
+ */
+export interface EditingCell extends CellPosition {
+    readonly startKey?: string | undefined;
+}
+
+/**
+ * What is at a body cell (Epic #88): its row's key (`rowKey`, else its index) and its column's
+ * key. An edit and a range last while they are still at their positions: other rows or columns
+ * there (a sort, rows inserted above, a column hidden or new) end them.
+ */
+export interface CellKeys {
+    readonly rowKey: RowKey;
+    readonly columnKey: string;
+}
+
+/**
+ * The keys at a range's corners (E4.1), taken when it is set; `undefined` for a corner on a row
+ * not loaded (kept by index until it is).
+ */
+export interface RangeKeys {
+    readonly anchor: CellKeys | undefined;
+    readonly focus: CellKeys | undefined;
+}
+
+/**
+ * How cells are selected (Epic #88, E4.1): a range of them, from an anchor to a focus. A grid
+ * without it selects no cells.
+ */
+export type CellSelection = "range";
+
+/**
+ * A range of body cells (E4.1): every cell from `anchor`'s row and column to `focus`'s, both
+ * included, whichever comes first. The anchor is where it started (the active cell, as a rule);
+ * the focus is the corner the keys and the pointer move.
+ */
+export interface CellRange {
+    readonly anchor: CellPosition;
+    readonly focus: CellPosition;
+}
+
+/**
+ * A paste into a range (E4.2): the values the clipboard holds, as rows of text (TSV parsed,
+ * every row as long as the longest), and the range they land in: from the selected range's first
+ * cell (its top and start), else the active cell, as many rows and columns as the values, cut at
+ * the grid's last row and column (`values` cut with it). `anchor` is its first cell, `focus` its
+ * last. The grid writes nothing: the app does.
+ */
+export interface RangePaste {
+    readonly range: CellRange;
+    readonly values: readonly (readonly string[])[];
+}
 
 /** Where a pinned column stays: at the view's start, or at its end (Epic #85, E1.1). */
 export type PinnedSide = "start" | "end";
@@ -450,6 +578,22 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly isRowSelectable: RowSelectable<TRow> | undefined;
     /** where a range starts: the row last toggled without `extend` (R3) */
     readonly selectionAnchor: SelectionAnchor | null;
+    /**
+     * the cell being edited (Epic #88, E4.3), the active one; `null` for none. The draft is an
+     * engine's (`edit-draft`)
+     */
+    readonly editingCell: EditingCell | null;
+    /** the keys the edit started on (`null` without one): its row and column, kept by them */
+    readonly editingKeys: CellKeys | null;
+    /** how cells are selected; `undefined`: they are not (Epic #88, E4.1) */
+    readonly cellSelection: CellSelection | undefined;
+    /**
+     * the selected range of body cells, inside the grid's rows and columns; `null` for none (the
+     * active cell alone is what a copy copies)
+     */
+    readonly selectedRange: CellRange | null;
+    /** the keys at the range's corners (`null` without one): new rows or columns there end it */
+    readonly selectedRangeKeys: RangeKeys | null;
     /** the resized columns' widths, over their `width` (a resizable column's only count) */
     readonly columnWidths: ColumnWidths;
     /** the order columns and groups take among their siblings (empty: as declared) */
@@ -509,6 +653,12 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     selectedRowKeys?: readonly RowKey[];
     /** whether a loaded row can be selected (default: every row can) */
     isRowSelectable?: RowSelectable<TRow> | undefined;
+    /** the cell being edited to start with: the active one, an editable cell (default none) */
+    editingCell?: EditingCell | null | undefined;
+    /** how cells are selected: a range of them (default: not at all) */
+    cellSelection?: CellSelection | undefined;
+    /** the range of cells selected to start with (kept inside the grid's body; default none) */
+    selectedRange?: CellRange | null | undefined;
     /** the resized columns' widths to start with (an entry that is not a size is dropped) */
     columnWidths?: ColumnWidths;
     /** the column order to start with (an entry that is not a string is dropped) */
@@ -685,6 +835,67 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly rowSelection?: RowSelection | null | undefined;
             readonly isRowSelectable?: RowSelectable<TRow> | null | undefined;
         };
+        result: undefined;
+    };
+    /**
+     * edits a cell (Epic #88, E4.3): the active one, a loaded data row's cell whose column is
+     * editable for it (`refused` otherwise, `not_loaded` for a row not loaded yet; a header, a
+     * summary row's or a group row's cell never is), with the printable key that started it.
+     * A position inside a cell's span edits that cell. Returns the edited cell
+     */
+    "editing-cell.set": {
+        payload: EditingCell;
+        result: EditingCell;
+    };
+    /** ends the edit, if any (its draft is an engine's: `commit-edit` tells it first) */
+    "editing-cell.clear": {
+        payload: NoPayload;
+        result: undefined;
+    };
+    /**
+     * changes how cells are selected (Epic #88): a range of them, or `null` for not at all (the
+     * range goes). Returns it
+     */
+    "cell-selection.set": {
+        payload: { readonly cellSelection: CellSelection | null };
+        result: CellSelection | undefined;
+    };
+    /**
+     * selects the body cells from `anchor` to `focus` (cells selectable, both body cells: rows 0
+     * to the last, columns of the grid). Returns the range
+     */
+    "selected-range.set": {
+        payload: CellRange;
+        result: CellRange;
+    };
+    /**
+     * moves the range's focus, its anchor staying: to a body cell, or a move from the focus
+     * (`direction`, as `active-position.move`'s, kept in the body; `pageSize` rows a page). Without
+     * a range, it starts at the active cell (a body cell), else at the cell given. Returns the range
+     */
+    "selected-range.extend": {
+        payload:
+            | {
+                  readonly rowIndex: number;
+                  readonly columnIndex: number;
+                  readonly direction?: undefined;
+              }
+            | {
+                  readonly direction: Direction;
+                  readonly pageSize?: number | undefined;
+                  readonly rowIndex?: undefined;
+                  readonly columnIndex?: undefined;
+              };
+        result: CellRange;
+    };
+    /** selects every body cell, from the first to the last. Returns the range */
+    "selected-range.select-all": {
+        payload: NoPayload;
+        result: CellRange;
+    };
+    /** leaves no range selected */
+    "selected-range.clear": {
+        payload: NoPayload;
         result: undefined;
     };
     /**
@@ -1029,6 +1240,12 @@ export interface QueryMap<TRow, TNode = unknown> {
     "selected-row-keys": { payload: undefined; result: readonly RowKey[] };
     /** where the next range starts: the anchor, while its key is still at its index */
     "selection-anchor": { payload: undefined; result: SelectionAnchor | null };
+    /** the cell being edited (Epic #88), or `null` */
+    "editing-cell": { payload: undefined; result: EditingCell | null };
+    /** how cells are selected (Epic #88); `undefined` when they are not */
+    "cell-selection": { payload: undefined; result: CellSelection | undefined };
+    /** the selected range of cells, or `null` */
+    "selected-range": { payload: undefined; result: CellRange | null };
 }
 
 export type QueryKey = keyof QueryMap<unknown>;
@@ -1059,6 +1276,16 @@ export interface QuestionMap {
     "row-selected": { readonly rowIndex: number };
     /** whether the row can be selected: rows are selectable, it is loaded and not refused */
     "row-selectable": { readonly rowIndex: number };
+    /**
+     * whether a body cell is in the selected range (Epic #88): a cell spanning columns is while
+     * any of its columns is
+     */
+    "cell-selected": CellPosition;
+    /**
+     * whether a cell can be edited (Epic #88): a loaded data row's body cell whose column is
+     * editable for it (the active one or not)
+     */
+    "cell-editable": CellPosition;
 }
 
 export type QuestionKey = keyof QuestionMap;

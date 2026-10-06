@@ -287,6 +287,9 @@ export interface ViewInputs<TRow, TNode>
         | "columnReorder"
         | "reorderableRows"
         | "rowReorder"
+        | "fillable"
+        | "fill"
+        | "fillSource"
         | "direction"
     > {
     readonly state: DataGridState<TRow, TNode>;
@@ -395,6 +398,9 @@ export function buildView<TRow, TNode>({
         rowSelection: state.rowSelection,
         selectedRowKeys: state.selectedRowKeys,
         isRowSelectable: state.isRowSelectable,
+        cellSelection: state.cellSelection,
+        selectedRange: state.selectedRange,
+        editingCell: state.editingCell,
         collapsedGroupKeys: state.collapsedGroupKeys,
         expandedGroupKeys: state.expandedGroupKeys,
         givenDirection: state.direction,
@@ -429,6 +435,12 @@ const VIEW_KEYS = [
     "rowSelection",
     "selectedRowKeys",
     "isRowSelectable",
+    "cellSelection",
+    "selectedRange",
+    "editingCell",
+    "fillable",
+    "fill",
+    "fillSource",
     "collapsedGroupKeys",
     "expandedGroupKeys",
     "interaction",

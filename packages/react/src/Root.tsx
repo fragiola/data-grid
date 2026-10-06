@@ -1,6 +1,8 @@
 import {
     type AxisWindow,
     type CellPosition,
+    type CellRange,
+    type CellSelection,
     type ColumnOrder,
     type ColumnWidths,
     type CommandName,
@@ -11,10 +13,14 @@ import {
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
+    type EditingCell,
     type GridDirection,
     type GridView,
     keptOrder,
+    keptRange,
     keptWidths,
+    type RangeFill,
+    type RangePaste,
     type ResultOf,
     type RowHeight,
     type RowKey,
@@ -24,6 +30,8 @@ import {
     type RowSelectable,
     type RowSelection,
     type SortColumn,
+    sameCellRange,
+    sameEditingCell,
     sameKeys,
     sameOrder,
     sameRowKeys,
@@ -42,6 +50,7 @@ import {
     useSyncExternalStore,
 } from "react";
 import {
+    type CellEditEvent,
     type ColumnOrGroup,
     DataGridContext,
     type DataGridContextValue,
@@ -195,6 +204,63 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onSelectedRowKeysChange?:
             | ((selectedRowKeys: readonly RowKey[]) => void)
             | undefined;
+        /**
+         * the cell being edited (Epic #88): the active one, of a column `editable` for its row;
+         * controlled (`null` for none), paired with `onEditingCellChange`
+         */
+        editingCell?: EditingCell | null | undefined;
+        /** the cell being edited to start with, uncontrolled */
+        defaultEditingCell?: EditingCell | null | undefined;
+        /**
+         * an edit started or ended (or, controlled, asks to): Enter, F2, typing or a double click
+         * on an editable cell; a commit (Enter, Tab, a click outside) or a cancel (Escape)
+         */
+        onEditingCellChange?:
+            | ((editingCell: EditingCell | null) => void)
+            | undefined;
+        /**
+         * an edit was committed with a new value (Epic #88): the cell, its column's key, the value
+         * and the row. Write it into your rows: the grid writes no data
+         */
+        onCellEdit?: ((edit: CellEditEvent<TRow>) => void) | undefined;
+        /**
+         * how cells are selected (Epic #88): a range of body cells (default: not at all). Shift
+         * with the navigation keys, a press dragged across cells and Shift+click select one; its
+         * cells carry `data-selected-cell` and `aria-selected`, its edges' cells
+         * `data-range-edge`; Ctrl/⌘+C copies it as TSV and Ctrl/⌘+V pastes into it
+         * (`onRangePaste`)
+         */
+        cellSelection?: CellSelection | undefined;
+        /**
+         * the selected range of cells (`{ anchor, focus }`, body cells), controlled (`null` for
+         * none); pair it with `onSelectedRangeChange`
+         */
+        selectedRange?: CellRange | null | undefined;
+        /** the selected range to start with, uncontrolled */
+        defaultSelectedRange?: CellRange | null | undefined;
+        /** the selected range changed (or, controlled, asks to): a key, a drag, a click or a command */
+        onSelectedRangeChange?: ((range: CellRange | null) => void) | undefined;
+        /**
+         * values were pasted into the grid (Ctrl/⌘+V on one of its cells, `cellSelection` set): the
+         * range they land in, from the selected range's first cell (else the active cell), and
+         * the values parsed from the clipboard's text (TSV), as many as land. The app writes them
+         * into its rows: the grid writes nothing
+         */
+        onRangePaste?: ((paste: RangePaste) => void) | undefined;
+        /**
+         * asked before `onRangePaste`, with the same paste: `false` refuses it (`onRangePaste` is
+         * not called), as a middleware would
+         */
+        onBeforeRangePaste?:
+            | ((paste: RangePaste) => boolean | undefined)
+            | undefined;
+        /**
+         * a fill handle was dropped (Epic #88): the range (or the active cell) and the cells it
+         * fills, below it or to its end. Given, cells fill: a `useFillHandle` element at the
+         * range's corner drags one. The app writes the values (`repeatedFill` in
+         * `@fragiola/data-grid/fill` repeats the source's); the grid writes no data
+         */
+        onFill?: ((fill: RangeFill) => void) | undefined;
         /**
          * the resized columns' widths in pixels, by column key, controlled; pair it with
          * `onColumnWidthsChange`. On screen a column is the first of: its width here (when it is
@@ -372,6 +438,17 @@ export function Root<TRow>(props: RootProps<TRow>) {
         selectedRowKeys,
         defaultSelectedRowKeys,
         onSelectedRowKeysChange,
+        editingCell,
+        defaultEditingCell,
+        onEditingCellChange,
+        onCellEdit,
+        cellSelection,
+        selectedRange,
+        defaultSelectedRange,
+        onSelectedRangeChange,
+        onRangePaste,
+        onBeforeRangePaste,
+        onFill,
         columnWidths,
         defaultColumnWidths,
         onColumnWidthsChange,
@@ -421,6 +498,13 @@ export function Root<TRow>(props: RootProps<TRow>) {
             rowSelection,
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
+            editingCell:
+                editingCell !== undefined ? editingCell : defaultEditingCell,
+            cellSelection,
+            selectedRange:
+                selectedRange !== undefined
+                    ? selectedRange
+                    : defaultSelectedRange,
             columnWidths: columnWidths ?? defaultColumnWidths,
             columnOrder: columnOrder ?? defaultColumnOrder,
             collapsedGroupKeys: collapsedGroupKeys ?? defaultCollapsedGroupKeys,
@@ -537,6 +621,52 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const editing = bind(
+            propsState<TRow, EditingCell | null>(latest, {
+                prefix: "editing-cell.",
+                prop: (props) => props.editingCell,
+                onChange: (props) => props.onEditingCellChange,
+                start: (props) => props.defaultEditingCell,
+                read: (state) => state.editingCell,
+                same: sameEditingCell,
+                fromCommand: (command, value) =>
+                    command === "editing-cell.clear"
+                        ? null
+                        : (value as EditingCell),
+                // an edit the grid cannot take (not the active cell, not editable) settles told
+                apply: (value) => {
+                    if (value === null) model.run("editing-cell.clear", {});
+                    else model.run("editing-cell.set", value);
+                },
+            }),
+        );
+        const range = bind(
+            propsState<TRow, CellRange | null>(latest, {
+                prefix: "selected-range.",
+                // the range follows the prop while cells are selectable; off, there is none
+                prop: (props) =>
+                    props.cellSelection ? props.selectedRange : undefined,
+                onChange: (props) => props.onSelectedRangeChange,
+                // a range to start with the body could not hold (cells outside it) starts
+                // inside it: the app is told the range the grid holds
+                start: (props) =>
+                    props.cellSelection
+                        ? props.defaultSelectedRange
+                        : undefined,
+                read: (state) => state.selectedRange,
+                same: sameCellRange,
+                fromCommand: (command, value) =>
+                    command === "selected-range.clear"
+                        ? null
+                        : (value as CellRange),
+                // kept inside the body, as at mount, and the parent told the range as it settled
+                apply: (value) => {
+                    const kept = keptRange(model.state, value);
+                    if (kept) model.run("selected-range.set", kept);
+                    else model.run("selected-range.clear", {});
+                },
+            }),
+        );
         const widths = bind(
             propsState<TRow, ColumnWidths>(latest, {
                 prefix: "column-widths.",
@@ -598,6 +728,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             maxScrollSize,
             endReachedThreshold,
             reorderableRows: onRowMove !== undefined,
+            fillable: onFill !== undefined,
         });
         // subscribed before the viewport attaches, so the first windows are reported too
         engine.subscribe("row-window", (window) =>
@@ -612,6 +743,22 @@ export function Root<TRow>(props: RootProps<TRow>) {
         engine.subscribe("row-move", (move) =>
             latest.current.onRowMove?.(move),
         );
+        // an edit committed (Epic #88): told with its row, loaded while it is edited
+        engine.subscribe("cell-edit", (edit) => {
+            const row = model.get("row-by", { index: edit.rowIndex });
+            if (row !== undefined)
+                latest.current.onCellEdit?.({ ...edit, row });
+        });
+        // a fill (Epic #88): told
+        engine.subscribe("range-fill", (filled) =>
+            latest.current.onFill?.(filled),
+        );
+        // a paste (Epic #88): asked first, then told
+        engine.subscribe("range-paste", (paste) => {
+            const { onBeforeRangePaste, onRangePaste } = latest.current;
+            if (onBeforeRangePaste?.(paste) === false) return;
+            onRangePaste?.(paste);
+        });
         const context: DataGridContextValue<TRow> = { model, engine };
         // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
         // consumer's onKeyDown, onClick and onPointerDown, on the root or on its render element,
@@ -623,6 +770,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 engine.adapter.click(event.nativeEvent),
             onPointerDown: (event: React.PointerEvent) =>
                 engine.adapter.pointerdown(event.nativeEvent),
+            // the clipboard, cells selectable (Epic #88): after the consumer's onCopy and onPaste
+            onCopy: (event: React.ClipboardEvent) =>
+                engine.adapter.copy(event.nativeEvent),
+            onPaste: (event: React.ClipboardEvent) =>
+                engine.adapter.paste(event.nativeEvent),
         };
         return {
             context,
@@ -641,7 +793,9 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 order,
                 collapsed,
                 position,
+                editing,
                 selection,
+                range,
                 sort,
                 expanded,
                 groups,
@@ -774,6 +928,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
     }, [model, rowSelection, isRowSelectable]);
 
     useLayoutEffect(() => {
+        // a prop removed turns it off (Epic #88): the range goes
+        if (cellSelection !== model.state.cellSelection) {
+            model.run("cell-selection.set", {
+                cellSelection: cellSelection ?? null,
+            });
+        }
+    }, [model, cellSelection]);
+
+    useLayoutEffect(() => {
         // a prop removed goes back to the page's direction (the engine reads the viewport's)
         if (direction !== model.state.direction) {
             model.run("direction.set", { direction: direction ?? null });
@@ -799,12 +962,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
     const overscanColumns = overscan?.columns;
     // the rows move while the app takes their moves
     const reorderableRows = onRowMove !== undefined;
+    // cells fill while the app takes their fills
+    const fillable = onFill !== undefined;
     useLayoutEffect(() => {
         engine.adapter.setOptions({
             overscan: { rows: overscanRows, columns: overscanColumns },
             maxScrollSize,
             endReachedThreshold,
             reorderableRows,
+            fillable,
         });
     }, [
         engine,
@@ -813,6 +979,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         maxScrollSize,
         endReachedThreshold,
         reorderableRows,
+        fillable,
     ]);
 
     const ref = useCallback(

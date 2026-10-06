@@ -37,9 +37,10 @@ describe("the grid's own entry", () => {
         );
         expect(files.length).toBeGreaterThan(5);
         expect(files.filter((file) => file.startsWith("local"))).toEqual([]);
-        // the selection's extras (Epic #57, R8) are opt-in the same way
+        // the selection's extras (Epic #57, R8) are opt-in the same way, and the fill's (Epic #88)
         expect(files.filter((file) => file.startsWith("selection"))).toEqual(
             [],
         );
+        expect(files.filter((file) => file.startsWith("fill"))).toEqual([]);
     });
 });

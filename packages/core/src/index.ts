@@ -1,8 +1,11 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
 export type { Axis, Size } from "./axis/axis";
+export { parseTsv, toTsv } from "./clipboard";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
+    EDITOR_ATTRIBUTE,
+    FILL_HANDLE_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
@@ -45,12 +48,16 @@ export {
     cellBox,
     cellPart,
     columnResizerPart,
+    type FillHandlePart,
+    type FillHandleState,
+    fillHandlePart,
     type GroupTogglePart,
     type GroupToggleState,
     groupTogglePart,
     type HeaderCellPart,
     type HeaderCellState,
     headerCellPart,
+    isHeldCell,
     type RowDetailPart,
     type RowDetailState,
     type RowDragHandlePart,
@@ -68,10 +75,12 @@ export {
     summaryRowPart,
 } from "./engine/parts";
 export type {
+    CellEdit,
     ColumnReorder,
     ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
+    EditDraft,
     EngineActionKey,
     EngineActionMap,
     EngineAdapter,
@@ -80,12 +89,15 @@ export type {
     EngineLayer,
     EngineQueryKey,
     EngineQueryMap,
+    FillDrag,
     GridView,
     HeaderRowView,
+    RangeFill,
     RowMove,
     RowReorder,
     RowSpans,
 } from "./engine/types";
+export { sameEditingCell } from "./model/editing";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
     createDataGridModel,
@@ -94,6 +106,7 @@ export {
     DEFAULT_ROW_HEIGHT,
 } from "./model/model";
 export { keptOrder, sameOrder } from "./model/order";
+export { keptRange, sameCellRange, valueText } from "./model/range";
 export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
 export {
@@ -113,8 +126,11 @@ export {
     summaryRowsOf,
 } from "./model/summary";
 export type {
+    CellKeys,
     CellPosition,
+    CellRange,
     CellRenderProps,
+    CellSelection,
     ColSpanArgs,
     Column,
     ColumnGroup,
@@ -135,6 +151,9 @@ export type {
     DataGridState,
     DataSetPayload,
     DetailHeight,
+    EditCellRenderProps,
+    EditingCell,
+    EditorProps,
     GridDirection,
     GroupCellRenderProps,
     GroupColSpanArgs,
@@ -153,6 +172,8 @@ export type {
     QueryMap,
     QuestionKey,
     QuestionMap,
+    RangeKeys,
+    RangePaste,
     ReorderSide,
     ResultOf,
     RowHeight,

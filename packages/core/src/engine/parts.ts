@@ -1,4 +1,5 @@
 import { isReorderable } from "../model/order";
+import { inRange, rangeEdgesOf } from "../model/range";
 import { rowSelectableWith, rowSelectedWith } from "../model/selection";
 import {
     dataRowAt,
@@ -32,6 +33,7 @@ import { sameCell } from "../navigation/navigation";
 import { keySet } from "../utils";
 import {
     COLUMN_RESIZER_ATTRIBUTE,
+    FILL_HANDLE_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
 } from "./dom";
@@ -104,6 +106,43 @@ export interface CellState {
     readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
+    /**
+     * it is in the selected range of cells (Epic #88, E4.1; a cell spanning columns while any of
+     * them is); `undefined` while cells are not selectable (`cellSelection`), and in a summary row
+     */
+    readonly selected: boolean | undefined;
+    /**
+     * the range's edges it sits on, for its borders: `top`, `bottom`, `start`, `end`, those that
+     * apply, space-separated in that order (`start` is the right edge right to left); `undefined`
+     * for a cell inside the range or outside it, and while cells are not selectable
+     */
+    readonly rangeEdges: string | undefined;
+    /** it is the cell being edited (Epic #88, E4.3): it shows its editor */
+    readonly editing: boolean;
+    /**
+     * a fill's drag would fill it (Epic #88, E4.4: in its target); `undefined` while cells do not
+     * fill (`fillable` off)
+     */
+    readonly fillTarget: boolean | undefined;
+}
+
+/** The state of a fill handle (Epic #88, E4.4): the element the app renders at a range's corner. */
+export interface FillHandleState {
+    /**
+     * its cell is the corner a fill drags from: the last row's last cell of the selected range,
+     * else the active body cell; cells fill and no cell is edited. Else render none
+     */
+    readonly visible: boolean;
+    /** a drag on it is filling */
+    readonly filling: boolean;
+}
+
+/** A fill handle's state and its attributes (the mark the engine finds it by), when visible. */
+export interface FillHandlePart {
+    readonly state: FillHandleState;
+    readonly attributes:
+        | { readonly [FILL_HANDLE_ATTRIBUTE]: number }
+        | undefined;
 }
 
 /** The state of a summary row (Epic #86, E2.1). */
@@ -275,11 +314,17 @@ export interface GroupTogglePart {
         | undefined;
 }
 
-/** A body cell's state, its `tabIndex` and its `aria-colspan`. */
+/** A body cell's state, its `tabIndex`, its `aria-colspan` and its `aria-selected`. */
 export interface CellPart {
     readonly state: CellState;
     /** the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others */
     readonly tabIndex: 0 | -1;
+    /**
+     * `aria-selected` (Epic #88), in ARIA's own vocabulary while cells are selectable: `true` in
+     * the selected range, `false` ("selectable, not selected") elsewhere; `undefined` (none)
+     * while they are not, and in a summary row
+     */
+    readonly ariaSelected: boolean | undefined;
     /**
      * how many columns it spans, when more than one (a column's `colSpan`, E1.2): its
      * `aria-colspan` (and a table cell's `colSpan`); `undefined` for a cell of one column
@@ -346,12 +391,15 @@ export interface RowDetailPart {
     readonly box: ReturnType<typeof rowDetailBox>;
 }
 
-/** Whether a cell (at its element's position) is the one whose controls have the keys. */
-function interacting<TRow, TNode>(
-    view: GridView<TRow, TNode>,
+/**
+ * Whether a cell (at its element's position) is the one a view's state holds, if any: the one
+ * whose controls have the keys (`interaction`), the one being edited (`editingCell`, Epic #88).
+ */
+export function isHeldCell(
+    held: CellPosition | null,
     cell: CellPosition,
 ): boolean {
-    return view.interaction !== null && sameCell(view.interaction, cell);
+    return held !== null && sameCell(held, cell);
 }
 
 /** A body row's state, and its `aria-selected`. */
@@ -470,6 +518,11 @@ export function cellPart<TRow, TNode>(
         cell.columnIndex,
         span,
     );
+    // in the selected range (Epic #88): nothing asked while cells are not selectable
+    const range = view.selectedRange;
+    const selected = view.cellSelection
+        ? inRange(range, cell.rowIndex, cell.columnIndex, span)
+        : undefined;
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -479,10 +532,24 @@ export function cellPart<TRow, TNode>(
             pinned,
             pinnedEdge,
             pinnedSide,
-            interacting: interacting(view, cell),
+            interacting: isHeldCell(view.interaction, cell),
+            selected,
+            rangeEdges: selected
+                ? rangeEdgesOf(range, cell.rowIndex, cell.columnIndex, span)
+                : undefined,
+            editing: isHeldCell(view.editingCell, cell),
+            fillTarget: view.fillable
+                ? inRange(
+                      view.fill?.target ?? null,
+                      cell.rowIndex,
+                      cell.columnIndex,
+                      span,
+                  )
+                : undefined,
         },
         tabIndex: active ? 0 : -1,
         ariaColSpan: span > 1 ? span : undefined,
+        ariaSelected: selected,
     };
 }
 
@@ -543,8 +610,12 @@ export function summaryCellPart<TRow, TNode>(
     });
     return {
         ...part,
+        // a summary row's cells are never selected (Epic #88): the range is the body's
+        ariaSelected: undefined,
         state: {
             ...part.state,
+            selected: undefined,
+            fillTarget: undefined,
             position: cell.position,
             summaryIndex: cell.summaryIndex,
         },
@@ -591,7 +662,7 @@ export function headerCellPart<TRow, TNode>(
             pinned,
             pinnedEdge,
             pinnedSide,
-            interacting: interacting(view, cell),
+            interacting: isHeldCell(view.interaction, cell),
         },
         tabIndex: active ? 0 : -1,
         ariaSort: sort.ariaSort,
@@ -642,6 +713,44 @@ export function columnResizerPart<TRow, TNode>(
         },
     };
 }
+
+/**
+ * A cell's fill handle (Epic #88, E4.4): visible in the cell at the last cell of what a fill
+ * drags from (`view.fillSource`, worked out once a view: the selected range's last row and last
+ * column, widened to the spans it cuts, else the active body cell; a cell spanning columns when
+ * it reaches it), while cells fill and none is edited; its attributes then.
+ */
+export function fillHandlePart<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: CellPosition,
+): FillHandlePart {
+    const filling = view.fill !== null;
+    const corner = view.fillSource?.focus;
+    const visible =
+        corner !== undefined &&
+        corner.rowIndex === cell.rowIndex &&
+        corner.columnIndex >= cell.columnIndex &&
+        corner.columnIndex <
+            cell.columnIndex + cellSpan(view, cell.rowIndex, cell.columnIndex);
+    return visible
+        ? {
+              state: { visible, filling },
+              attributes: { [FILL_HANDLE_ATTRIBUTE]: cell.rowIndex },
+          }
+        : filling
+          ? HIDDEN_FILLING
+          : HIDDEN;
+}
+
+/** A fill handle not shown (the one part for every other cell: nothing allocated). */
+const HIDDEN: FillHandlePart = {
+    state: { visible: false, filling: false },
+    attributes: undefined,
+};
+const HIDDEN_FILLING: FillHandlePart = {
+    state: { visible: false, filling: true },
+    attributes: undefined,
+};
 
 /**
  * Whether a grid's rows move now (E2.3): they move (`reorderableRows`), the grid is not sorted

@@ -1,6 +1,9 @@
+import { repeatedFill } from "@fragiola/data-grid/fill";
 import { moveRow } from "@fragiola/data-grid/local";
 import {
+    type CellEditEvent,
     type CellInfo,
+    type CellRange,
     type ColSpanArgs,
     type Column,
     type ColumnOrder,
@@ -8,15 +11,19 @@ import {
     type ColumnWidths,
     DataGrid,
     type DataGridContextValue,
+    type EditCellRenderProps,
     type HeaderCellInfo,
     type HeaderRowInfo,
     headerCellContent,
+    type RangeFill,
+    type RangePaste,
     type RowKey,
     type RowMove,
     type SortColumn,
     useColumnResizer,
     useDataGrid,
     useDataGridRef,
+    useFillHandle,
     useGridView,
     useGroupLabel,
     useGroupToggle,
@@ -27,11 +34,14 @@ import { useLocalRows } from "@fragiola/data-grid-react/local";
 import {
     Profiler,
     type ReactElement,
+    type ReactNode,
     StrictMode,
     useCallback,
+    useLayoutEffect,
     useMemo,
     useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
@@ -107,6 +117,19 @@ import { createRoot } from "react-dom/client";
 //                        (<count>)`, its C4 the sum of its rows' indexes (an aggregate), its C1
 //                        a checkbox with &selection=multiple; keyed by index, the expanded
 //                        groups uncontrolled
+//   &cells=1             cell ranges (`cellSelection`), uncontrolled: a cell in the range is
+//                        marked by the fixture's own CSS (an outline on its edges, from
+//                        `data-range-edge`); `controlled` holds the range in the fixture's
+//                        state; the pastes are kept, never written
+//   &edit=1              editable cells: C1 with a text field (`editor-<row>`; typing starts it
+//                        with the key typed), C5 on even rows only with a picker whose options
+//                        (`option-<value>`) are portalled to the page's body, marked as the
+//                        edit's (`editorProps`); the fixture keeps the values edited and
+//                        tells the grid (`rows.changed`)
+//   &fill=1              a fill handle (`fill-handle`) in the cell at the range's corner (or the
+//                        active cell's); a fill repeats the source's values into the fixture's
+//                        values (`repeatedFill`), the grid told (`rows.changed`); the target
+//                        marked by the fixture's own CSS
 //   &tree=1              tree data in memory (`useLocalRows`'s `getSubRows`): 100 top rows, each
 //                        with 3 rows, each of those with 2 (1,000 in all), a row's index its
 //                        place in the whole tree read top to bottom (its key); a parent's C0
@@ -116,8 +139,10 @@ import { createRoot } from "react-dom/client";
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
 // `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups,
-// `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups, and a button
-// before and after the grid take Tab.
+// `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups,
+// `window.rangeChanges` the selected ranges, `window.rangePastes` the pastes,
+// `window.cellEdits` the edits committed, `window.editingChanges` the edited cells,
+// `window.fills` the fills, and a button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -134,6 +159,11 @@ declare global {
         collapseChanges: (readonly string[])[];
         rowMoves: RowMove[];
         groupChanges: (readonly RowKey[])[];
+        rangeChanges: (CellRange | null)[];
+        rangePastes: RangePaste[];
+        cellEdits: { rowIndex: number; columnKey: string; value: unknown }[];
+        fills: RangeFill[];
+        editingChanges: unknown[];
     }
 }
 
@@ -163,6 +193,118 @@ const linesColumn: Partial<Column<FixtureRow>> = {
             (_, line) => `${row.index}:1 line ${line}`,
         ).map((text) => <div key={text}>{text}</div>),
 };
+
+/** The values `&edit=1` edited, by `<row>:<column>`: the fixture's data, never the grid's. */
+const editedValues = new Map<string, string>();
+
+/** A value `&edit=1` edited, else the column's own. */
+function editedValue(
+    columnIndex: number,
+    base: (row: FixtureRow) => string,
+): (row: FixtureRow) => string {
+    return (row) =>
+        editedValues.get(`${row.index}:${columnIndex}`) ?? base(row);
+}
+
+/** C1's editor with `&edit=1`: a field, starting from the key typed, as an app writes one. */
+function TextEditor({
+    value,
+    startKey,
+    rowIndex,
+    onChange,
+}: EditCellRenderProps<FixtureRow, ReactNode>) {
+    // typing started it: the field starts from that key
+    useLayoutEffect(() => {
+        if (startKey !== undefined) onChange(startKey);
+    }, [startKey, onChange]);
+    return (
+        <input
+            aria-label="Edit"
+            data-testid={`editor-${rowIndex}`}
+            value={String(value)}
+            onChange={(event) => onChange(event.target.value)}
+            style={{ width: "100%", boxSizing: "border-box" }}
+        />
+    );
+}
+
+/** C5's editor with `&edit=1`: a picker whose options are portalled out of the grid. */
+function PickEditor({
+    value,
+    rowIndex,
+    onCommit,
+    editorProps,
+}: EditCellRenderProps<FixtureRow, ReactNode>) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button
+                type="button"
+                data-testid={`picker-${rowIndex}`}
+                onClick={() => setOpen((was) => !was)}
+            >
+                {String(value)}
+            </button>
+            {open
+                ? createPortal(
+                      <div {...editorProps} data-testid="picker-options">
+                          {["red", "green", "blue"].map((option) => (
+                              <button
+                                  key={option}
+                                  type="button"
+                                  data-testid={`option-${option}`}
+                                  onClick={() => onCommit(option)}
+                              >
+                                  {option}
+                              </button>
+                          ))}
+                      </div>,
+                      document.body,
+                  )
+                : null}
+        </>
+    );
+}
+
+/** What `&edit=1` makes C1 and C5: editable, C5 on even rows only. */
+function editColumn(columnIndex: number): Partial<Column<FixtureRow>> {
+    if (columnIndex === 1) {
+        return {
+            editable: true,
+            renderEditCell: (props) => <TextEditor {...props} />,
+        };
+    }
+    return columnIndex === 5
+        ? {
+              editable: (row) => row.index % 2 === 0,
+              renderEditCell: (props) => <PickEditor {...props} />,
+          }
+        : {};
+}
+
+/** A cell's fill handle with `&fill=1`, as an app writes it: a square at its bottom-end corner. */
+function FillHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
+    const { state, props } = useFillHandle(cell);
+    if (!state.visible) return null;
+    return (
+        <span {...props} data-testid="fill-handle" style={FILL_HANDLE_STYLE} />
+    );
+}
+
+// a fill handle's look and place are the app's: a square at the cell's bottom-end corner
+const FILL_HANDLE_STYLE = {
+    position: "absolute",
+    insetInlineEnd: 0,
+    bottom: 0,
+    width: 8,
+    height: 8,
+    background: "blue",
+    cursor: "crosshair",
+    touchAction: "none",
+} as const;
+
+// the fill's target is the app's to mark
+const FILL_CSS = `[data-fill-target] { background: #ffd; }`;
 
 /** What `&groupBy` aggregates: C4, the sum of a group's rows' indexes. */
 const AGGREGATES = {
@@ -515,6 +657,16 @@ function GroupContent({
     );
 }
 
+// A range's look is the app's (Epic #88): a tint on its cells, a line on its edges (logical
+// sides, so it mirrors right to left)
+const RANGE_CSS = `
+[data-selected-cell] { background: #def; }
+[data-range-edge~="top"] { border-top: 2px solid blue; }
+[data-range-edge~="bottom"] { border-bottom: 2px solid blue; }
+[data-range-edge~="start"] { border-inline-start: 2px solid blue; }
+[data-range-edge~="end"] { border-inline-end: 2px solid blue; }
+`;
+
 // The empty state's content, centred in it (the part's own display is structural: a block)
 const EMPTY_ROW = { display: "block", height: "100%" } as const;
 const EMPTY_CONTENT = {
@@ -791,6 +943,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const groupByParam = numberParam(params, "groupBy", 0);
     const grouping = groupByParam > 0;
     const tree = params.get("tree") === "1";
+    const edit = params.get("edit") === "1";
+    const fill = params.get("fill") === "1";
+    const cellsParam = params.get("cells");
+    const cells = cellsParam === "1" || cellsParam === "controlled";
+    const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
     const treeData = useMemo(() => (tree ? fixtureTree() : null), [tree]);
     const getSubRows = useMemo(
         () =>
@@ -839,11 +996,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     key: `c${columnIndex}`,
                     name: `C${columnIndex}`,
                     width: 100,
-                    getValue: cellValue(
+                    getValue: editedValue(
                         columnIndex,
-                        resize,
-                        autoSize,
-                        grouping,
+                        cellValue(columnIndex, resize, autoSize, grouping),
                     ),
                     ...(sort && columnIndex < 2 ? { sortable: true } : {}),
                     ...(columnIndex < pinnedCount
@@ -860,6 +1015,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         ? summaryColumn(columnIndex, controls, span)
                         : {}),
                     ...(autoRows && columnIndex === 1 ? linesColumn : {}),
+                    ...(edit ? editColumn(columnIndex) : {}),
                     ...(reorder &&
                     reorderColumn(columnIndex, pinnedCount, pinnedEnd)
                         ? { reorderable: true }
@@ -904,6 +1060,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         summary,
         autoRows,
         grouping,
+        edit,
     ]);
     // `&groupBy`: the rows in memory, grouped by the pipeline
     const groupBy = useMemo(
@@ -946,6 +1103,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         <>
             {reorder ? <style>{DROP_TARGET_CSS}</style> : null}
             {rowReorder ? <style>{ROW_DROP_CSS}</style> : null}
+            {cells ? <style>{RANGE_CSS}</style> : null}
+            {fill ? <style>{FILL_CSS}</style> : null}
             <button type="button" data-testid="before">
                 before
             </button>
@@ -1011,6 +1170,60 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     onCollapsedGroupKeysChange={(keys) =>
                         window.collapseChanges.push(keys)
                     }
+                    cellSelection={cells ? "range" : undefined}
+                    selectedRange={
+                        cellsParam === "controlled" ? selectedRange : undefined
+                    }
+                    onSelectedRangeChange={(range) => {
+                        window.rangeChanges.push(range);
+                        if (cellsParam === "controlled") {
+                            setSelectedRange(range);
+                        }
+                    }}
+                    onRangePaste={(paste) => window.rangePastes.push(paste)}
+                    onFill={
+                        fill
+                            ? (filled) => {
+                                  window.fills.push(filled);
+                                  const model = gridRef.current?.model;
+                                  if (!model) return;
+                                  // the source repeated into the fixture's values
+                                  for (const cell of repeatedFill(
+                                      filled,
+                                      (at) => model.get("cell-value-by", at),
+                                  )) {
+                                      editedValues.set(
+                                          `${cell.rowIndex}:${cell.columnIndex}`,
+                                          String(cell.value),
+                                      );
+                                  }
+                                  model.run("rows.changed", {
+                                      start: filled.target.anchor.rowIndex,
+                                      end: filled.target.focus.rowIndex + 1,
+                                  });
+                              }
+                            : undefined
+                    }
+                    onEditingCellChange={(editing) =>
+                        window.editingChanges.push(editing)
+                    }
+                    onCellEdit={({
+                        rowIndex,
+                        columnIndex,
+                        columnKey,
+                        value,
+                    }: CellEditEvent<FixtureRow>) => {
+                        window.cellEdits.push({ rowIndex, columnKey, value });
+                        // the fixture's data: kept, and the grid told its row changed
+                        editedValues.set(
+                            `${rowIndex}:${columnIndex}`,
+                            String(value),
+                        );
+                        gridRef.current?.model.run("rows.changed", {
+                            start: rowIndex,
+                            end: rowIndex + 1,
+                        });
+                    }}
                     gridRef={gridRef}
                     direction={rtl ? "rtl" : undefined}
                     data-testid="viewport"
@@ -1093,6 +1306,16 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                                     />
                                                                 </>
                                                             ) : null}
+                                                        </>
+                                                    ) : fill ? (
+                                                        <>
+                                                            {String(
+                                                                cell.value ??
+                                                                    "",
+                                                            )}
+                                                            <FillHandle
+                                                                cell={cell}
+                                                            />
                                                         </>
                                                     ) : undefined}
                                                 </DataGrid.Cell>
@@ -1184,6 +1407,11 @@ export function mountGridFixture(kind: "table" | "div") {
     window.collapseChanges = [];
     window.rowMoves = [];
     window.groupChanges = [];
+    window.rangeChanges = [];
+    window.rangePastes = [];
+    window.cellEdits = [];
+    window.fills = [];
+    window.editingChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

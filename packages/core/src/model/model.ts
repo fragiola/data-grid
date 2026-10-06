@@ -20,6 +20,7 @@ import {
     groupByKey,
     isGroupCollapsed,
 } from "./collapse";
+import { editRefusal, isCellEditable, sameEditingCell } from "./editing";
 import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
@@ -41,6 +42,7 @@ import {
     siblingOrder,
     siblingsOf,
 } from "./order";
+import { isBodyCell, isCellSelected, keptRange, sameCellRange } from "./range";
 import { done, fail, veto } from "./result";
 import {
     allKeys,
@@ -65,6 +67,7 @@ import {
     validSortColumns,
 } from "./sort";
 import {
+    cellKeysAt,
     cellValue,
     dataRowAt,
     groupAt,
@@ -79,6 +82,8 @@ import {
     rowKeyAt,
     rowLoaded,
     rowMetaAt,
+    sameCellKeys,
+    sameKnownKeys,
 } from "./source";
 import { activeInCell, coveringCell, hasColumnSpans, spanAt } from "./spans";
 import {
@@ -89,6 +94,8 @@ import {
 } from "./summary";
 import type {
     CellPosition,
+    CellRange,
+    CellSelection,
     Column,
     ColumnOrder,
     ColumnOrGroup,
@@ -102,6 +109,7 @@ import type {
     CommandResult,
     DataGridModelOptions,
     DataGridState,
+    EditingCell,
     GridDirection,
     GroupRow,
     Middleware,
@@ -223,6 +231,168 @@ function selectionOff(): CommandFailure {
 }
 
 /**
+ * The state after a command, its range and its edit kept to their rules (Epic #88). A range's
+ * anchor is the active cell where it started, so the active cell moving elsewhere (a click, a
+ * Tab, a control taking focus, the keys, the app's `active-position.set`, a new order) leaves no
+ * range; a range the active cell did not start (select-all) stays until it moves. A range and an
+ * edit stay on the cells they were set on, by key (`withRangeKeys`, `withKeptEditing`); both are
+ * looked at only when what they depend on changed (the rows, or `rows.changed` over their rows,
+ * the columns, the active cell, the range or the edit), never after an unrelated command.
+ */
+function withActiveRules<TRow, TNode>(
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): DataGridState<TRow, TNode> {
+    const range = after.selectedRange;
+    const active = after.activePosition;
+    const shaped =
+        after.source !== before.source || after.columns !== before.columns;
+    /** rows told changed behind the same `getRow`: what holds one of them looks again */
+    const changed =
+        after.rowsChanged !== before.rowsChanged ? after.rowsChanged : null;
+    const reread = (position: CellPosition) =>
+        changed !== null &&
+        overlaps(changed, position.rowIndex, position.rowIndex + 1);
+    let next =
+        !range ||
+        active === before.activePosition ||
+        (active !== null && sameCell(active, range.anchor))
+            ? after
+            : { ...after, selectedRange: null };
+    const kept = next.selectedRange;
+    const rangeShaped =
+        shaped ||
+        (kept !== null && (reread(kept.anchor) || reread(kept.focus)));
+    if (rangeShaped || kept !== before.selectedRange) {
+        next = withRangeKeys(next, rangeShaped ? before : null);
+    }
+    const editing = next.editingCell;
+    return editing &&
+        (shaped ||
+            reread(editing) ||
+            active !== before.activePosition ||
+            editing !== before.editingCell)
+        ? withKeptEditing(next)
+        : next;
+}
+
+/**
+ * The state with its range's keys (E4.1): taken at its corners when it is set; after new rows or
+ * columns (`before`, the state the range's keys were taken in), other keys at a corner (a sort,
+ * rows inserted above, a column hidden or moved) leave no range, the same ones keep it (rows
+ * growing at the end). A corner on a row not loaded is kept by index, its keys taken once it is.
+ */
+function withRangeKeys<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    before: DataGridState<TRow, TNode> | null,
+): DataGridState<TRow, TNode> {
+    const range = state.selectedRange;
+    if (!range) {
+        return state.selectedRangeKeys
+            ? { ...state, selectedRangeKeys: null }
+            : state;
+    }
+    const was = before?.selectedRange ? before.selectedRangeKeys : null;
+    const anchor = cellKeysAt(state, range.anchor);
+    const focus = cellKeysAt(state, range.focus);
+    if (
+        was &&
+        (!sameKnownKeys(was.anchor, anchor) || !sameKnownKeys(was.focus, focus))
+    ) {
+        return { ...state, selectedRange: null, selectedRangeKeys: null };
+    }
+    const keys = state.selectedRangeKeys;
+    const next = {
+        anchor: anchor ?? was?.anchor,
+        focus: focus ?? was?.focus,
+    };
+    return keys &&
+        sameCellKeys(keys.anchor, next.anchor) &&
+        sameCellKeys(keys.focus, next.focus)
+        ? state
+        : { ...state, selectedRangeKeys: next };
+}
+
+/**
+ * The state with its edit kept to its rule (E4.3): the edited cell is the active one and stays
+ * editable (its row loaded, a data row, its column editable for it); else no edit (its draft
+ * dropped by the engine: nothing is told). The same object when it holds.
+ */
+function withKeptEditing<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+): DataGridState<TRow, TNode> {
+    const editing = state.editingCell;
+    if (!editing) return state;
+    const active = state.activePosition;
+    // the keys at its position: another row or column there (a new order of the rows, rows
+    // inserted above, new columns) ends it
+    const keys =
+        active !== null &&
+        sameCell(active, editing) &&
+        isCellEditable(state, editing)
+            ? cellKeysAt(state, editing)
+            : undefined;
+    if (keys && (!state.editingKeys || sameCellKeys(keys, state.editingKeys))) {
+        // an edit given to start with takes the keys it finds
+        return state.editingKeys ? state : { ...state, editingKeys: keys };
+    }
+    return { ...state, editingCell: null, editingKeys: null };
+}
+
+/** The cell selection modes, for validation. */
+const CELL_SELECTIONS: readonly CellSelection[] = ["range"];
+
+/** Every range command's refusal while cells are not selectable (Epic #88). */
+function cellsOff(): CommandFailure {
+    return fail("refused", "cells are not selectable (no cellSelection)");
+}
+
+/** The refusal of a range corner that is no body cell. */
+function noBodyCell(position: CellPosition): CommandFailure {
+    return fail(
+        "not_found",
+        `no body cell at row ${position?.rowIndex}, column ${position?.columnIndex}`,
+    );
+}
+
+/** The state with a selected range (the same object when it is the same cells), and it. */
+function withRange<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    range: CellRange,
+): Applied<TRow, TNode, CellRange> {
+    if (sameCellRange(range, state.selectedRange) && state.selectedRange) {
+        return done(state, state.selectedRange);
+    }
+    const kept = {
+        anchor: {
+            rowIndex: range.anchor.rowIndex,
+            columnIndex: range.anchor.columnIndex,
+        },
+        focus: {
+            rowIndex: range.focus.rowIndex,
+            columnIndex: range.focus.columnIndex,
+        },
+    };
+    return done({ ...state, selectedRange: kept }, kept);
+}
+
+/**
+ * What the keys move a range's focus in (E4.1): the body's rows only (no header, no summary rows),
+ * the columns, and their spans (E1.2).
+ */
+function bodyBoundsOf<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+): GridBounds {
+    const bounds = boundsOf(state);
+    return {
+        rowCount: bounds.rowCount,
+        columnCount: bounds.columnCount,
+        headerRowCount: 0,
+        cellSpanAt: bounds.cellSpanAt,
+    };
+}
+
+/**
  * What moves in the grid are bounded by: its rows, its columns, its header's cells, its summary
  * rows (E2.1) and, with column spans, its body and summary rows' cells (E1.2).
  */
@@ -303,11 +473,25 @@ function keptActiveRow<TRow, TNode>(
 
 /**
  * The active position kept inside the grid after its shape changed from `before`'s (or none
- * left): on the same row where it can be (`keptActiveRow`), and column.
+ * left): on the same row where it can be (`keptActiveRow`), and column; and the selected range
+ * inside its body (`keptRange`, Epic #88). Its keys and the edit's are the command's rules'
+ * (`withActiveRules`).
  */
 function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     before: DataGridState<TRow, TNode> = state,
+): DataGridState<TRow, TNode> {
+    const next = keptActive(state, before);
+    const range = keptRange(next, next.selectedRange);
+    return range === next.selectedRange
+        ? next
+        : { ...next, selectedRange: range };
+}
+
+/** `reconcile`'s active position. */
+function keptActive<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    before: DataGridState<TRow, TNode>,
 ): DataGridState<TRow, TNode> {
     const active = state.activePosition;
     if (!active) return state;
@@ -524,7 +708,7 @@ function withLayout<TRow, TNode>(
         columnIndex !== active.columnIndex
             ? { rowIndex: active.rowIndex, columnIndex }
             : active;
-    // in its new place, a span may cover it (E1.2)
+    // in its new place, a span may cover it (E1.2); a range's columns are others now (Epic #88)
     return reconcile(
         {
             ...state,
@@ -533,6 +717,7 @@ function withLayout<TRow, TNode>(
             columns,
             header,
             activePosition,
+            selectedRange: null,
         },
         state,
     );
@@ -989,6 +1174,135 @@ function createHandlers<TRow, TNode>(
                       };
             return done(next, undefined);
         },
+        "editing-cell.set": (state, payload) => {
+            if (
+                !Number.isInteger(payload?.rowIndex) ||
+                !Number.isInteger(payload?.columnIndex)
+            ) {
+                return invalid(
+                    "rowIndex and columnIndex must be whole numbers",
+                );
+            }
+            const { startKey } = payload;
+            if (startKey !== undefined && typeof startKey !== "string") {
+                return invalid("startKey must be a string");
+            }
+            // a position inside a span edits that cell (E1.2)
+            const position = isIndex(payload.columnIndex, state.columns.length)
+                ? cellPosition(state, payload)
+                : payload;
+            const refusal = editRefusal(state, position);
+            if (refusal) return refusal;
+            const active = state.activePosition;
+            if (!active || !sameCell(active, position)) {
+                return fail("refused", "only the active cell is edited");
+            }
+            const editing: EditingCell = {
+                rowIndex: position.rowIndex,
+                columnIndex: position.columnIndex,
+                ...(startKey === undefined ? {} : { startKey }),
+            };
+            const next = sameEditingCell(editing, state.editingCell)
+                ? state
+                : {
+                      ...state,
+                      editingCell: editing,
+                      editingKeys: cellKeysAt(state, position) ?? null,
+                  };
+            return done(next, next.editingCell ?? editing);
+        },
+        "editing-cell.clear": (state) =>
+            done(
+                state.editingCell
+                    ? { ...state, editingCell: null, editingKeys: null }
+                    : state,
+                undefined,
+            ),
+        "cell-selection.set": (state, { cellSelection }) => {
+            if (
+                cellSelection !== null &&
+                !CELL_SELECTIONS.includes(cellSelection)
+            ) {
+                return notOneOf("cellSelection", CELL_SELECTIONS);
+            }
+            const mode = cellSelection ?? undefined;
+            // off, no range survives
+            const next =
+                mode === state.cellSelection
+                    ? state
+                    : {
+                          ...state,
+                          cellSelection: mode,
+                          selectedRange: mode ? state.selectedRange : null,
+                      };
+            return done(next, next.cellSelection);
+        },
+        "selected-range.set": (state, { anchor, focus }) => {
+            if (!state.cellSelection) return cellsOff();
+            for (const corner of [anchor, focus]) {
+                if (!isBodyCell(state, corner)) return noBodyCell(corner);
+            }
+            return withRange(state, { anchor, focus });
+        },
+        "selected-range.extend": (state, payload) => {
+            if (!state.cellSelection) return cellsOff();
+            const range = state.selectedRange;
+            const active = isBodyCell(state, state.activePosition)
+                ? state.activePosition
+                : null;
+            if (payload.direction !== undefined) {
+                const { direction, pageSize } = payload;
+                if (!DIRECTIONS.includes(direction)) {
+                    return notOneOf("direction", DIRECTIONS);
+                }
+                if (pageSize !== undefined && !Number.isFinite(pageSize)) {
+                    return invalid("pageSize must be a number");
+                }
+                const from =
+                    range ?? (active && { anchor: active, focus: active });
+                if (!from) {
+                    return fail(
+                        "refused",
+                        "no range, nor an active body cell, to extend",
+                    );
+                }
+                // in the body: never into the header nor the summary rows
+                const focus = nextPosition(
+                    from.focus,
+                    direction,
+                    bodyBoundsOf(state),
+                    pageSize,
+                );
+                return withRange(state, { anchor: from.anchor, focus });
+            }
+            const cell = {
+                rowIndex: payload.rowIndex,
+                columnIndex: payload.columnIndex,
+            };
+            if (!isBodyCell(state, cell)) return noBodyCell(cell);
+            return withRange(state, {
+                anchor: range?.anchor ?? active ?? cell,
+                focus: cell,
+            });
+        },
+        "selected-range.select-all": (state) => {
+            if (!state.cellSelection) return cellsOff();
+            if (state.rowCount === 0 || state.columns.length === 0) {
+                return fail("refused", "the grid has no body cells");
+            }
+            return withRange(state, {
+                anchor: { rowIndex: 0, columnIndex: 0 },
+                focus: {
+                    rowIndex: state.rowCount - 1,
+                    columnIndex: state.columns.length - 1,
+                },
+            });
+        },
+        "selected-range.clear": (state) =>
+            done(
+                state.selectedRange ? { ...state, selectedRange: null } : state,
+                undefined,
+            ),
         "column-widths.set": (state, { columnWidths }) => {
             const kept = keptWidths(columnWidths);
             if (
@@ -1325,6 +1639,10 @@ export function createDataGridModel<TRow, TNode = unknown>(
         options.rowSelection && ROW_SELECTIONS.includes(options.rowSelection)
             ? options.rowSelection
             : undefined;
+    const cellMode =
+        options.cellSelection && CELL_SELECTIONS.includes(options.cellSelection)
+            ? options.cellSelection
+            : undefined;
     const blank: DataGridState<TRow, TNode> = {
         columns,
         columnEntries: entries,
@@ -1363,6 +1681,13 @@ export function createDataGridModel<TRow, TNode = unknown>(
         ),
         isRowSelectable: options.isRowSelectable,
         selectionAnchor: null,
+        // kept once the rows are given (`withSource`): the active cell, an editable one
+        editingCell: options.editingCell ?? null,
+        editingKeys: null,
+        cellSelection: cellMode,
+        // kept inside the body once the rows are given (`withSource`)
+        selectedRange: options.selectedRange ?? null,
+        selectedRangeKeys: null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
         collapsedGroupKeys,
@@ -1387,6 +1712,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
         // the position given is for these rows
         false,
     );
+    // a range and an edit given to start with take the keys they find
+    state = withKeptEditing(withRangeKeys(state, null));
     const middlewares: Middleware<TRow, TNode>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
     const queue: Queued[] = [];
@@ -1418,6 +1745,16 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 ) => Applied<TRow, TNode, unknown>;
                 try {
                     applied = handler(state, ctx.payload);
+                    // the range follows the active cell's rule, whatever moved it (Epic #88)
+                    if (applied.ok) {
+                        const kept = withActiveRules(
+                            state,
+                            applied.value.state,
+                        );
+                        if (kept !== applied.value.state) {
+                            applied = done(kept, applied.value.value);
+                        }
+                    }
                 } catch (error) {
                     // a payload of the wrong shape: the command never throws on bad input
                     applied = invalid(messageOf(error));
@@ -1570,6 +1907,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "row-selection": () => state.rowSelection,
         "selected-row-keys": () => state.selectedRowKeys,
         "selection-anchor": () => validAnchor(state),
+        "editing-cell": () => state.editingCell,
+        "cell-selection": () => state.cellSelection,
+        "selected-range": () => state.selectedRange,
     };
 
     const questions: {
@@ -1604,6 +1944,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
             isGroupExpanded(state, rowIndex),
         "row-selected": ({ rowIndex }) => isRowSelected(state, rowIndex),
         "row-selectable": ({ rowIndex }) => isRowSelectable(state, rowIndex),
+        "cell-selected": (position) => isCellSelected(state, position),
+        "cell-editable": (position) => isCellEditable(state, position),
     };
 
     const model: DataGridModel<TRow, TNode> = {
@@ -1667,6 +2009,13 @@ export const COMMANDS = [
     "selection-anchor.set",
     "selection-anchor.clear",
     "row-selection.set",
+    "editing-cell.set",
+    "editing-cell.clear",
+    "cell-selection.set",
+    "selected-range.set",
+    "selected-range.extend",
+    "selected-range.select-all",
+    "selected-range.clear",
     "column-widths.set",
     "column-widths.resize",
     "column-widths.reset",

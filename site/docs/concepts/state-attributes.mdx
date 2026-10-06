@@ -15,7 +15,8 @@ with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), `gr
 group's label you render with `useGroupLabel`
 ([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)), and `row-drag-handle`
 on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)), and `group-toggle` on a
-group row's toggle you render with `useGroupToggle` ([Row grouping](/docs/concepts/row-grouping)). Rows and cells carry
+group row's toggle you render with `useGroupToggle` ([Row grouping](/docs/concepts/row-grouping)), and
+`fill-handle` on a fill handle you render with `useFillHandle` ([Fill handle](/docs/concepts/fill)). Rows and cells carry
 their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
 its top one; the top summary rows are before the header's, the bottom ones after the body's) and `data-column-index` (a header cell spanning columns is at its first). Tests
 select by them, never by class names.
@@ -28,6 +29,9 @@ select by them, never by class names.
 | `data-active` | row, summary row | it holds the active cell |
 | `data-summary` | summary, summary row, summary cell | `top` or `bottom`: where its summary rows stay ([Summary rows](/docs/concepts/summary-rows)) |
 | `data-interacting` | cell, header cell | its controls have the keys ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)) |
+| `data-editing` | cell | it is being edited: it shows its editor ([Editing](/docs/concepts/editing)) |
+| `data-fill-target` | cell | a fill's drag would fill it ([Fill handle](/docs/concepts/fill)) |
+| `data-filling` | fill handle | a drag on it is filling |
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
@@ -39,6 +43,8 @@ select by them, never by class names.
 | `data-depth` | row | its depth in the tree, 0 at the top, while the rows have kinds (`getRowMeta`) |
 | `data-expanded` | group toggle | its row's group is expanded |
 | `data-selected` | row | it is selected ([Row selection](/docs/concepts/row-selection)) |
+| `data-selected-cell` | cell | it is in the selected range ([Cell selection](/docs/concepts/cell-selection)) |
+| `data-range-edge` | cell | the range's edges it sits on, space-separated: `top`, `bottom`, `start`, `end` (match one with `~=`) |
 | `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `data-pinned-edge` | cell, header cell | its pinned part's edge: it ends at the last column pinned at the start, or starts at the first pinned at the end |
 | `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
@@ -68,8 +74,9 @@ select by them, never by class names.
 | `aria-colspan` | cell, header cell, row detail | the columns a group or a [spanning cell](/docs/concepts/column-spanning) covers, when more than one; a detail spans every column |
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |
 | `aria-sort` | header cell | the first sorted column's direction |
-| `aria-multiselectable` | grid | `true` when many rows can be selected |
+| `aria-multiselectable` | grid | `true` when many rows can be selected, or ranges of cells |
 | `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected"); a group row's, `true` while every one of its rows is |
+| `aria-selected` | cell | `true` in the selected range, `false` outside it, while cells are selectable ([Cell selection](/docs/concepts/cell-selection)); none on header and summary cells |
 | `role` | resize handle | `separator`, with `aria-orientation="vertical"`; its name (`aria-label`) is yours |
 | `aria-valuenow` | resize handle | its column's width on screen in pixels (a group's: its columns') |
 | `aria-valuemin`, `aria-valuemax` | resize handle | the narrowest and widest it resizes to; without a maximum, the view's width (at least the width) |

@@ -25,6 +25,10 @@ const REPRESENTATIVE: string[] = [
     "row-reordering", // the rows' handles, the dragged row and the drop indicator, drawn with the theme's tokens
     "row-grouping", // group rows tinted, their toggles and counts, an indented tree, checkboxes on groups
     "tree-data", // folders and files indented, their toggles and icons, rows loading in place
+    "cell-selection", // a range's tint and edge lines over pinned and scrolling cells, the toolbar's sum
+    "editing", // editors filling their cells, the edited cell's outline, a select's list portalled out
+    "fill", // the handle at a range's corner, the fill's dashed target, the mode buttons
+    "all-features", // editors, ranges, the fill handle, sort icons and resizers together
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));
