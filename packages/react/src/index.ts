@@ -3,6 +3,8 @@
 export type {
     AxisWindow,
     CellPosition,
+    CellRange,
+    CellSelection,
     ColSpanArgs,
     ColumnOrder,
     ColumnWidths,
@@ -16,6 +18,7 @@ export type {
     GroupShow,
     PinnedSide,
     Range,
+    RangePaste,
     ReorderSide,
     RowHeight,
     RowKey,

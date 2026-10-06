@@ -1,4 +1,5 @@
 import type { Axis } from "../axis/axis";
+import { parseTsv } from "../clipboard";
 import {
     columnPart,
     headerRowCount,
@@ -17,6 +18,7 @@ import {
     type Siblings,
     siblingsOf,
 } from "../model/order";
+import { isBodyCell, pastedRange, rangeStart, rangeText } from "../model/range";
 import {
     groupExpanded,
     groupKeyAt,
@@ -30,11 +32,13 @@ import { hasColumnSpans, spanAt } from "../model/spans";
 import { summaryRowAt } from "../model/summary";
 import type {
     CellPosition,
+    CellRange,
     Column,
     ColumnWidths,
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
+    PinnedSide,
     ReorderSide,
     RowKey,
 } from "../model/types";
@@ -192,7 +196,10 @@ interface PointerDrag {
     readonly pointerId: number;
     readonly startX: number;
     readonly startY: number;
-    /** what holds the pointer: the resizer, the dragged header cell, or the row's handle */
+    /**
+     * what holds the pointer: the resizer, the dragged header cell, the row's handle, or the
+     * viewport (a range's: the cells it was pressed in may scroll out of the rendered ones)
+     */
     readonly element: Element;
     readonly doc: Document;
     /** the pointer's last place */
@@ -246,7 +253,23 @@ interface RowDrag extends PointerDrag {
     viewY: number;
 }
 
-type Drag<TRow, TNode> = ResizeDrag | ReorderDrag<TRow, TNode> | RowDrag;
+/**
+ * A drag selecting a range of cells (Epic #88, E4.1): a press on a body cell that drags once it
+ * moves past a click's slop, from its anchor to the cell under the pointer.
+ */
+interface RangeDrag extends PointerDrag {
+    readonly kind: "range";
+    /** the range's anchor: the pressed cell, or with Shift the range's own */
+    readonly anchor: CellPosition;
+    /** the cell the range reaches, as last set */
+    focus: CellPosition;
+}
+
+type Drag<TRow, TNode> =
+    | ResizeDrag
+    | ReorderDrag<TRow, TNode>
+    | RowDrag
+    | RangeDrag;
 
 /**
  * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
@@ -274,6 +297,21 @@ const RESIZE_KEYS: ReadonlySet<string> = new Set([
 /** The resizer keys' steps in pixels (W6): an arrow, and Shift with it. */
 const RESIZE_STEP = 10;
 const RESIZE_SHIFT_STEP = 50;
+
+/**
+ * The style of the node a copy selects (`selectForCopy`, Epic #88): out of the cell's layout,
+ * unseen, and selectable whatever the cell's `user-select`.
+ */
+const COPY_NODE_STYLE: readonly (readonly [string, string])[] = [
+    ["position", "absolute"],
+    ["width", "1px"],
+    ["height", "1px"],
+    ["overflow", "hidden"],
+    ["opacity", "0"],
+    ["pointer-events", "none"],
+    ["user-select", "text"],
+    ["-webkit-user-select", "text"],
+];
 
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
@@ -409,6 +447,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "row-reorder": new Set(),
         "row-move": new Set(),
         "column-auto-widths": new Set(),
+        "range-paste": new Set(),
     };
 
     function emit<K extends EngineEventKey>(
@@ -1379,19 +1418,92 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 hasReorderable(state.columnEntries) && inViewport(event.target)
                     ? headerCellOf(event.target)
                     : null;
-            if (!header || !isReorderable(header.cell)) return false;
-            drag = {
-                ...press,
-                kind: "reorder",
-                columnKey: header.cell.key,
-                element: header.element,
-                header: null,
-                siblings: null,
-            };
+            if (header && isReorderable(header.cell)) {
+                drag = {
+                    ...press,
+                    kind: "reorder",
+                    columnKey: header.cell.key,
+                    element: header.element,
+                    header: null,
+                    siblings: null,
+                };
+            } else {
+                // a body cell's press, cells selectable (Epic #88): a range
+                const range = rangePress(event, press, viewport);
+                if (!range) return false;
+                drag = range;
+            }
         }
         lastPress = drag;
         listen(drag);
         return true;
+    }
+
+    /**
+     * A press on a body cell, cells selectable (Epic #88, E4.1): a new range starts there (the
+     * last one cleared; the press is not prevented, so it focuses the cell, the active one and
+     * the range's anchor), or with Shift the range reaches the cell from its anchor (the active
+     * cell, without one), prevented (the active cell and focus stay); past the slop, the range
+     * follows the pointer (a touch's press drags nothing: it scrolls). Not on a control inside the
+     * cell, nor with Ctrl, ⌘ or Alt: `null`.
+     */
+    function rangePress(
+        event: PointerEvent,
+        press: Omit<RangeDrag, "kind" | "anchor" | "focus" | "element">,
+        element: HTMLElement,
+    ): RangeDrag | null {
+        if (
+            !state.cellSelection ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.altKey
+        ) {
+            return null;
+        }
+        const cell = rangeCellOf(event.target);
+        if (!cell) return null;
+        let anchor = cell;
+        if (event.shiftKey) {
+            event.preventDefault();
+            // refused (a middleware, cells no longer selectable): no range, no drag
+            const extended = model.check("selected-range.extend", cell);
+            if (!extended.ok) return null;
+            anchor = extended.value.anchor;
+            model.run("selected-range.extend", cell);
+        } else if (state.selectedRange) {
+            model.run("selected-range.clear", {});
+        }
+        // a touch dragged scrolls the grid: it selects no range
+        if (event.pointerType === "touch") return null;
+        return { ...press, kind: "range", anchor, focus: cell, element };
+    }
+
+    /**
+     * The body cell of this grid a press happened in (E4.1), at its element's position: `null`
+     * outside one (a header, a summary row, a detail, a nested grid's cell), and on a control
+     * inside it (it acts on its own), a column resizer or a row's drag handle.
+     */
+    function rangeCellOf(target: EventTarget | null): CellPosition | null {
+        if (!isElement(target) || !inViewport(target)) return null;
+        const element = cellNodeOf(target);
+        const position = element && positionOf(element);
+        if (!position || !isIndex(position.rowIndex, state.rowCount)) {
+            return null;
+        }
+        for (
+            let node: Element | null = target;
+            node && node !== element;
+            node = node.parentElement
+        ) {
+            if (
+                isControl(node) ||
+                isResizer(node) ||
+                node.hasAttribute(ROW_DRAG_HANDLE_ATTRIBUTE)
+            ) {
+                return null;
+            }
+        }
+        return position;
     }
 
     /**
@@ -1447,14 +1559,17 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 drag.y = event.clientY;
                 if (drag.kind === "row") startRowDrag(drag);
                 else if (drag.kind === "reorder") startReorder(drag);
+                else if (drag.kind === "range") startRangeDrag(drag);
             }
             return;
         }
-        // a column's drags follow the pointer's x, a row's its y
+        // a column's drags follow the pointer's x, a row's its y, a range's both
         if (
             drag.kind === "row"
                 ? event.clientY === drag.y
-                : event.clientX === drag.x
+                : drag.kind === "range"
+                  ? event.clientX === drag.x && event.clientY === drag.y
+                  : event.clientX === drag.x
         ) {
             return;
         }
@@ -1493,9 +1608,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         dragTo(drag);
     }
 
-    /** A drag's step to its pointer: a resize, or a reorder's target (a column's, a row's). */
+    /**
+     * A drag's step to its pointer: a resize, a reorder's target (a column's, a row's), or a
+     * range's focus.
+     */
     function dragTo(current: Drag<TRow, TNode>) {
         if (current.kind === "resize") resizeTo(current);
+        else if (current.kind === "range") rangeStep(current);
         else reorderStep(current);
     }
 
@@ -1577,7 +1696,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * now), or on a cancel back to the width it started from: a resize like the drag's own, only
      * its columns change (the others' widths stay as they are now), and what lets the drag
      * resize lets it restore. A header cell's drag moves its column or group on a release only,
-     * once, and not when it would land where it is; a row's tells the move the same way.
+     * once, and not when it would land where it is; a row's tells the move the same way. A
+     * range's (Epic #88) reaches the cell under the release, and a cancel (Escape) clears it.
      */
     function endDrag(how: DragEnd) {
         const ended = stopDrag();
@@ -1597,6 +1717,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     targetKey: target.targetKey,
                     side: target.side,
                 });
+            }
+        } else if (ended?.kind === "range" && ended.dragged) {
+            if (how === "cancel") model.run("selected-range.clear", {});
+            else if (how === "release") {
+                rangeTo(ended, viewXOf(ended.x), viewYOf(ended.y));
             }
         } else if (ended?.kind === "row" && ended.dragged) {
             const target =
@@ -1955,20 +2080,31 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * The virtual offset under a pointer at `x` in the view, kept over the part its siblings show
-     * in: the strip pinned at the start, the one pinned at the end (at the view's end, or where the
-     * columns end in a narrower grid), or the columns that scroll between them.
+     * The virtual column offset under a pointer at `x` in the view, kept over a part of it: the
+     * strip pinned at the start, the one pinned at the end (at the view's end, or where the
+     * columns end in a narrower grid), or (`undefined`) the columns that scroll between them.
      */
-    function offsetAt(siblings: Siblings<TRow, TNode>, x: number): number {
-        if (!inPinnedStrip(siblings)) {
+    function partOffsetAt(part: PinnedSide | undefined, x: number): number {
+        if (part === undefined) {
             return (
                 columnsX.virtual + clamp(x, pinnedWidth, width - pinnedEndWidth)
             );
         }
-        if (siblings.pinned === "start") return clamp(x, 0, pinnedWidth);
+        if (part === "start") return clamp(x, 0, pinnedWidth);
         const end = columnAxis.totalSize;
         const shown = Math.min(width, end) - pinnedEndWidth;
         return end - pinnedEndWidth + clamp(x - shown, 0, pinnedEndWidth);
+    }
+
+    /**
+     * The virtual offset under a pointer at `x` in the view, kept over the part its siblings show
+     * in (`partOffsetAt`).
+     */
+    function offsetAt(siblings: Siblings<TRow, TNode>, x: number): number {
+        return partOffsetAt(
+            inPinnedStrip(siblings) ? siblings.pinned : undefined,
+            x,
+        );
     }
 
     /**
@@ -2029,7 +2165,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const step = row
             ? edgeStep(at, bodyTop(), bodyHeight())
             : columnEdgeStep(current, at);
-        const scrolled = step !== 0 && edgeScrollBy(row, step);
+        const scrolled = edgeScrollBy(row ? step : 0, row ? 0 : step);
         if (row) {
             const target = rowReorderTarget(current, at);
             if (target !== rowReorder) setRowReorder(target);
@@ -2084,14 +2220,19 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * Scrolls the rows (`vertical`) or the columns by an edge scroll's step, through the engine's
-     * own scroll (scaled or not); returns whether they moved.
+     * Scrolls the rows by an edge scroll's step (`top`) and the columns by another (`left`; 0 for
+     * none), in one move through the engine's own scroll (scaled or not); returns whether they
+     * moved.
      */
-    function edgeScrollBy(vertical: boolean, step: number): boolean {
-        const axis = vertical ? rowsY : columnsX;
-        const before = axis.virtual;
-        scrollTo(vertical ? { top: before + step } : { left: before + step });
-        return axis.virtual !== before;
+    function edgeScrollBy(top: number, left: number): boolean {
+        if (top === 0 && left === 0) return false;
+        const y = rowsY.virtual;
+        const x = columnsX.virtual;
+        scrollTo({
+            top: top === 0 ? undefined : y + top,
+            left: left === 0 ? undefined : x + left,
+        });
+        return rowsY.virtual !== y || columnsX.virtual !== x;
     }
 
     /**
@@ -2165,6 +2306,222 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             scrollToCell(scrollPayloadFor(state.activePosition));
         }
+        return true;
+    }
+
+    // ── cell ranges: the drag, the edge scroll, the keys, the clipboard (Epic #88) ─
+
+    /** A press on a body cell moved past the slop: the range follows the pointer, held by the viewport. */
+    function startRangeDrag(current: RangeDrag) {
+        current.dragged = true;
+        capture(current);
+        rangeStep(current);
+    }
+
+    /**
+     * A frame of a range's drag (E4.1): the pointer's place in the view read once, the edge
+     * scroll on both axes in one move (near the body's top or bottom edge, or past it; near the
+     * scrolling columns' start or end edge, or past it, but never over a pinned strip: a range
+     * among the pinned columns scrolls nothing sideways), then the cell under the pointer; held
+     * near an edge, it scrolls on, a frame at a time.
+     */
+    function rangeStep(current: RangeDrag) {
+        const x = viewXOf(current.x);
+        const y = viewYOf(current.y);
+        const part = columnPartAt(x);
+        const scrolled = edgeScrollBy(
+            edgeStep(y, bodyTop(), bodyHeight()),
+            part === undefined
+                ? edgeStep(x, pinnedWidth, width - pinnedWidth - pinnedEndWidth)
+                : 0,
+        );
+        rangeTo(current, x, y, part);
+        if (scrolled) askFrame(current);
+    }
+
+    /** The part of the view a pointer at `x` is over: a pinned strip, or the columns that scroll. */
+    function columnPartAt(x: number): PinnedSide | undefined {
+        if (pinnedCount > 0 && x < pinnedWidth) return "start";
+        return pinnedEndCount > 0 &&
+            x >= Math.min(width, columnAxis.totalSize) - pinnedEndWidth
+            ? "end"
+            : undefined;
+    }
+
+    /**
+     * A range's focus at the pointer, `x` and `y` in the view: the body cell under it, from the
+     * axes (not the DOM: rows and columns off screen, measured or scaled alike), the pointer kept
+     * over the body and the part of the view it is over; a `selected-range.set` when that cell
+     * changed, at most once a frame.
+     */
+    function rangeTo(
+        current: RangeDrag,
+        x: number,
+        y: number,
+        part = columnPartAt(x),
+    ) {
+        if (state.rowCount === 0 || columnAxis.count === 0) return;
+        const rowIndex = rowAxis.indexAt(
+            rowsY.virtual + clamp(y - bodyTop(), 0, bodyHeight()),
+        );
+        const columnIndex = columnAxis.indexAt(partOffsetAt(part, x));
+        if (
+            rowIndex === current.focus.rowIndex &&
+            columnIndex === current.focus.columnIndex
+        ) {
+            return;
+        }
+        current.focus = { rowIndex, columnIndex };
+        model.run("selected-range.set", {
+            anchor: current.anchor,
+            focus: current.focus,
+        });
+    }
+
+    /**
+     * The range's keys (E4.1), cells selectable: Ctrl/⌘+A on any of the grid's cells selects
+     * every body cell (once per press); on a body cell in navigation, Shift with an arrow, Home,
+     * End, PageUp or PageDown (Ctrl/⌘+Shift+Home/End: the grid's corners) moves the range's
+     * focus, the active cell staying where it is (the anchor), the focus scrolled into view;
+     * Escape clears a range. One command a key, which a middleware can refuse. Before the rows'
+     * selection keys: Shift+↑/↓ and Ctrl/⌘+A are the cells' while cells are selectable,
+     * Shift+Space stays the rows'.
+     */
+    function rangeKey(event: KeyboardEvent, target: Element): boolean {
+        if (!state.cellSelection) return false;
+        const ctrl = event.ctrlKey || event.metaKey;
+        if (event.key === "Escape" && !ctrl && state.selectedRange) {
+            event.preventDefault();
+            model.run("selected-range.clear", {});
+            return true;
+        }
+        if (
+            ctrl &&
+            !event.shiftKey &&
+            event.key.toLowerCase() === "a" &&
+            isCellElement(target)
+        ) {
+            // handled even when refused: the page's text is never selected instead
+            event.preventDefault();
+            if (!event.repeat) model.run("selected-range.select-all", {});
+            return true;
+        }
+        if (!event.shiftKey || !bodyCellOf(target)) return false;
+        const move =
+            (ctrl ? CTRL_KEYS[event.key] : undefined) ??
+            KEYS[inlineKey(event.key, direction)];
+        if (!move) return false;
+        event.preventDefault();
+        const payload = { direction: move, pageSize: pageSize() };
+        // a move refused selects nothing; a controlled parent answers it later, scrolled to now
+        const asked = model.check("selected-range.extend", payload);
+        if (!asked.ok) return true;
+        model.run("selected-range.extend", payload);
+        scrollToCell(scrollPayloadFor(asked.value.focus));
+        return true;
+    }
+
+    /**
+     * The cells a copy or a paste is for (E4.2), cells selectable: the selected range, else the
+     * active body cell, when the event comes from one of the grid's cells itself (a field inside
+     * one keeps its own clipboard; a nested grid's cell is that grid's); else `null`.
+     */
+    function clipboardRange(event: ClipboardEvent): CellRange | null {
+        // a copy's own selection (`selectForCopy`): the event comes from its node, in the cell
+        const held = copySelection?.node;
+        const target =
+            held && isElement(event.target) && held.contains(event.target)
+                ? held.parentElement
+                : event.target;
+        if (
+            !state.cellSelection ||
+            event.defaultPrevented ||
+            !event.clipboardData ||
+            !isElement(target) ||
+            !isCellElement(target)
+        ) {
+            return null;
+        }
+        const active = state.activePosition;
+        return (
+            state.selectedRange ??
+            (active && isBodyCell(state, active)
+                ? { anchor: active, focus: active }
+                : null)
+        );
+    }
+
+    /** A copy in the grid (E4.2): its range's cells as TSV, on the clipboard. */
+    function copy(event: ClipboardEvent): boolean {
+        const range = clipboardRange(event);
+        endCopySelection();
+        if (!range) return false;
+        event.clipboardData?.setData("text/plain", rangeText(state, range));
+        event.preventDefault();
+        return true;
+    }
+
+    /**
+     * the node a copy selects while the page's selection is collapsed (`selectForCopy`), and the
+     * selection's ranges before it
+     */
+    let copySelection: {
+        readonly node: Element;
+        readonly ranges: readonly ReturnType<Selection["getRangeAt"]>[];
+    } | null = null;
+
+    /**
+     * Ctrl/⌘+C on one of the grid's cells (E4.2), its keydown never prevented: the page's own
+     * `copy` follows, which WebKit fires only while something is selected. With the selection
+     * collapsed (as the grid keeps it: no text is selected by a press), a node of the cell's own,
+     * hidden and selectable, holds the selection until the copy (`copy`) or, without one, the
+     * next task (`endCopySelection`, which puts the selection back). No permission, every engine.
+     */
+    function selectForCopy(cell: Element) {
+        const doc = cell.ownerDocument;
+        const selection = doc.getSelection();
+        if (!selection?.isCollapsed) return;
+        endCopySelection();
+        const ranges = Array.from(
+            { length: selection.rangeCount },
+            (_, index) => selection.getRangeAt(index),
+        );
+        const node = doc.createElement("span");
+        node.textContent = "\u200b";
+        node.setAttribute("aria-hidden", "true");
+        for (const [property, value] of COPY_NODE_STYLE) {
+            node.style.setProperty(property, value);
+        }
+        cell.append(node);
+        selection.selectAllChildren(node);
+        copySelection = { node, ranges };
+        doc.defaultView?.setTimeout(endCopySelection, 0);
+    }
+
+    /** Puts the selection back as it was before `selectForCopy`, and removes its node. */
+    function endCopySelection() {
+        const held = copySelection;
+        if (!held) return;
+        copySelection = null;
+        const selection = held.node.ownerDocument.getSelection();
+        selection?.removeAllRanges();
+        for (const range of held.ranges) selection?.addRange(range);
+        held.node.remove();
+    }
+
+    /**
+     * A paste in the grid (E4.2): the clipboard's text parsed, landing at the range's first cell
+     * (else the active cell), told as a `range-paste` event; nothing for no text.
+     */
+    function paste(event: ClipboardEvent): boolean {
+        const range = clipboardRange(event);
+        const values = range
+            ? parseTsv(event.clipboardData?.getData("text/plain") ?? "")
+            : [];
+        const pasted = range && pastedRange(state, rangeStart(range), values);
+        if (!pasted) return false;
+        event.preventDefault();
+        emit("range-paste", pasted);
         return true;
     }
 
@@ -2688,9 +3045,30 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** the column the grid's group toggles were last found in, while the columns stay (Epic #87) */
     let treeColumn: number | null = null;
 
+    /** A page of rows for the keys: the rows in view less one, at least one. */
+    function pageSize(): number {
+        return Math.max(1, rowWindow.visible.end - rowWindow.visible.start - 1);
+    }
+
     function keydown(event: KeyboardEvent): boolean {
         const target = event.target;
         const ctrl = event.ctrlKey || event.metaKey;
+        // Ctrl/⌘+C on one of its cells, something to copy (Epic #88): the page's own copy follows,
+        // with a selection for WebKit to fire it (`selectForCopy`); the key is never the grid's
+        if (
+            ctrl &&
+            !event.shiftKey &&
+            !event.altKey &&
+            !event.defaultPrevented &&
+            event.key.toLowerCase() === "c" &&
+            state.cellSelection &&
+            isElement(target) &&
+            isCellElement(target) &&
+            (state.selectedRange || isBodyCell(state, state.activePosition))
+        ) {
+            selectForCopy(target);
+            return false;
+        }
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
         // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
         // and neither is one from the app's content beside the cells (an empty state's action)
@@ -2788,6 +3166,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (reorderKey(event, target)) return true;
         if (rowMoveKey(event, target)) return true;
+        if (rangeKey(event, target)) return true;
         if (selectionKey(event, target)) return true;
         if (event.key === " " && !ctrl && rowsY.mapping.scaled) {
             // the browser would page the container natively, a far jump under scaling
@@ -2807,10 +3186,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             focusFirstVisibleCell();
             return true;
         }
-        const visible = rowWindow.visible.end - rowWindow.visible.start;
+        // a move to another cell leaves the range (Epic #88: the model's rule, its anchor is the
+        // active cell)
         model.run("active-position.move", {
             direction: move,
-            pageSize: Math.max(1, visible - 1),
+            pageSize: pageSize(),
             visibleColumns: columnWindow.visible,
         });
         // the move may have been refused or landed where it was: focus stays where it is
@@ -3230,7 +3610,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // a drag follows its column or group (W4, O3)
         if (
             drag?.dragged &&
-            drag.kind !== "row" &&
+            (drag.kind === "resize" || drag.kind === "reorder") &&
             (columnsChanged || after.header !== before.header)
         ) {
             followDrag(drag);
@@ -3258,6 +3638,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         // a row's drag follows its row (E2.3), on the rows as laid out now
         if (drag?.kind === "row" && drag.dragged) followRowDrag(drag);
+        // cells no longer selectable, or other rows or columns under its anchor, end a range's
+        // drag (Epic #88): its indexes would point elsewhere
+        if (
+            drag?.kind === "range" &&
+            (!after.cellSelection ||
+                after.source !== before.source ||
+                after.columns !== before.columns)
+        ) {
+            stopDrag();
+        }
         // the physical scroll follows even when the total did not change (no remap moved it)
         if (anchored) followRowAnchor();
         if (anchor) followColumnAnchor();
@@ -3381,6 +3771,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 endDrag("lost");
                 // a move told is no longer followed (E2.3)
                 movedRow = null;
+                // a copy's selection never outlives the viewport (Epic #88)
+                endCopySelection();
                 stopMeasuring();
                 pointerDown = false;
                 pendingFocus = false;
@@ -3493,6 +3885,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         keydown,
         click,
         pointerdown,
+        copy,
+        paste,
         setOptions(next) {
             const changed =
                 next.maxScrollSize !== options.maxScrollSize ||

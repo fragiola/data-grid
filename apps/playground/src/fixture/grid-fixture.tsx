@@ -1,6 +1,7 @@
 import { moveRow } from "@fragiola/data-grid/local";
 import {
     type CellInfo,
+    type CellRange,
     type ColSpanArgs,
     type Column,
     type ColumnOrder,
@@ -11,6 +12,7 @@ import {
     type HeaderCellInfo,
     type HeaderRowInfo,
     headerCellContent,
+    type RangePaste,
     type RowKey,
     type RowMove,
     type SortColumn,
@@ -107,6 +109,10 @@ import { createRoot } from "react-dom/client";
 //                        (<count>)`, its C4 the sum of its rows' indexes (an aggregate), its C1
 //                        a checkbox with &selection=multiple; keyed by index, the expanded
 //                        groups uncontrolled
+//   &cells=1             cell ranges (`cellSelection`), uncontrolled: a cell in the range is
+//                        marked by the fixture's own CSS (an outline on its edges, from
+//                        `data-range-edge`); `controlled` holds the range in the fixture's
+//                        state; the pastes are kept, never written
 //   &tree=1              tree data in memory (`useLocalRows`'s `getSubRows`): 100 top rows, each
 //                        with 3 rows, each of those with 2 (1,000 in all), a row's index its
 //                        place in the whole tree read top to bottom (its key); a parent's C0
@@ -116,7 +122,8 @@ import { createRoot } from "react-dom/client";
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
 // `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups,
-// `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups, and a button
+// `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups,
+// `window.rangeChanges` the selected ranges, `window.rangePastes` the pastes, and a button
 // before and after the grid take Tab.
 
 interface FixtureRow {
@@ -134,6 +141,8 @@ declare global {
         collapseChanges: (readonly string[])[];
         rowMoves: RowMove[];
         groupChanges: (readonly RowKey[])[];
+        rangeChanges: (CellRange | null)[];
+        rangePastes: RangePaste[];
     }
 }
 
@@ -515,6 +524,16 @@ function GroupContent({
     );
 }
 
+// A range's look is the app's (Epic #88): a tint on its cells, a line on its edges (logical
+// sides, so it mirrors right to left)
+const RANGE_CSS = `
+[data-selected-cell] { background: #def; }
+[data-range-edge~="top"] { border-top: 2px solid blue; }
+[data-range-edge~="bottom"] { border-bottom: 2px solid blue; }
+[data-range-edge~="start"] { border-inline-start: 2px solid blue; }
+[data-range-edge~="end"] { border-inline-end: 2px solid blue; }
+`;
+
 // The empty state's content, centred in it (the part's own display is structural: a block)
 const EMPTY_ROW = { display: "block", height: "100%" } as const;
 const EMPTY_CONTENT = {
@@ -791,6 +810,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const groupByParam = numberParam(params, "groupBy", 0);
     const grouping = groupByParam > 0;
     const tree = params.get("tree") === "1";
+    const cellsParam = params.get("cells");
+    const cells = cellsParam === "1" || cellsParam === "controlled";
+    const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
     const treeData = useMemo(() => (tree ? fixtureTree() : null), [tree]);
     const getSubRows = useMemo(
         () =>
@@ -946,6 +968,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         <>
             {reorder ? <style>{DROP_TARGET_CSS}</style> : null}
             {rowReorder ? <style>{ROW_DROP_CSS}</style> : null}
+            {cells ? <style>{RANGE_CSS}</style> : null}
             <button type="button" data-testid="before">
                 before
             </button>
@@ -1011,6 +1034,17 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     onCollapsedGroupKeysChange={(keys) =>
                         window.collapseChanges.push(keys)
                     }
+                    cellSelection={cells ? "range" : undefined}
+                    selectedRange={
+                        cellsParam === "controlled" ? selectedRange : undefined
+                    }
+                    onSelectedRangeChange={(range) => {
+                        window.rangeChanges.push(range);
+                        if (cellsParam === "controlled") {
+                            setSelectedRange(range);
+                        }
+                    }}
+                    onRangePaste={(paste) => window.rangePastes.push(paste)}
                     gridRef={gridRef}
                     direction={rtl ? "rtl" : undefined}
                     data-testid="viewport"
@@ -1184,6 +1218,8 @@ export function mountGridFixture(kind: "table" | "div") {
     window.collapseChanges = [];
     window.rowMoves = [];
     window.groupChanges = [];
+    window.rangeChanges = [];
+    window.rangePastes = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

@@ -1,0 +1,166 @@
+---
+title: Cell selection and the clipboard
+description: Ranges of cells selected with the keys or by dragging, copied as tab-separated text, and pastes told to you to write into your data.
+---
+
+A person selects a range of cells with Shift and the keys, by dragging across cells, or with a
+Shift+click, copies it with Ctrl+C (⌘+C on a Mac) as tab-separated text, the format every
+spreadsheet reads, and pastes with Ctrl+V. The grid keeps the range, takes the keys and the
+pointer, writes the clipboard and reads it. Your data stays yours: a paste is an event, and you
+write the values into your rows. The range's look is yours too, from its cells' attributes.
+
+<Example id="cell-selection" />
+
+## Turning it on
+
+Give `DataGrid.Root` `cellSelection="range"`. The range is `{ anchor, focus }`, two body cells:
+every cell from the anchor's row and column to the focus's, whichever comes first. The anchor is
+where it started, the active cell; the focus is the corner the keys and the pointer move. Keep it
+yourself, as any other state of the grid, or let the grid keep it.
+
+```tsx title="budget.tsx"
+const [range, setRange] = useState<CellRange | null>(null);
+
+<DataGrid.Root
+    columns={columns}
+    rows={lines}
+    cellSelection="range"
+    selectedRange={range}
+    onSelectedRangeChange={setRange}
+>
+    {/* … */}
+</DataGrid.Root>
+```
+
+Uncontrolled, `defaultSelectedRange` starts it. `null` is no range: the active cell alone is what
+a copy takes. From outside the root, a [`gridRef`](/docs/concepts/model-and-engine) reads it with
+`model.get("selected-range")` and changes it with the commands `selected-range.set`
+(`{ anchor, focus }`), `selected-range.extend` (a cell, or a `direction`), `selected-range.select-all`
+and `selected-range.clear`, which a [middleware](/docs/concepts/model-and-engine) can refuse.
+`model.is("cell-selected", { rowIndex, columnIndex })` tells whether a cell is in it. Removing
+`cellSelection` takes the range away.
+
+The range covers body cells only: the header and the [summary rows](/docs/concepts/summary-rows)
+are never in it. A [group row](/docs/concepts/row-grouping)'s cells are cells of the range like
+any other. When rows or columns go (new data, a filter), the range stays inside the ones left,
+cut at the last row and column; when the columns are laid out again (a new
+[order](/docs/concepts/column-reordering), a [group](/docs/concepts/collapsible-groups) opened or
+closed), it goes.
+
+A range belongs to the active cell it started from: when the active cell moves anywhere else (a
+click, a Tab back into the grid, a control in a cell taking focus, a plain key, your own
+`active-position.set`), the range goes. A range selected whole (Ctrl+A) stays until the active cell
+moves.
+
+## The keys
+
+On a body cell, Shift with an arrow, Home, End, PageUp or PageDown moves the focus, and
+Ctrl+Shift+Home and Ctrl+Shift+End (⌘ on a Mac) take it to the first or the last cell. The active
+cell stays where it is: the focus moves and is scrolled into view, never into the header or the
+summary rows. Ctrl+A selects every body cell. Escape clears the range, and so does a plain move
+of the active cell to another cell (an arrow, Home, a page key).
+
+With [row selection](/docs/concepts/row-selection) on too, Shift+↑, Shift+↓ and Ctrl+A select
+cells, and Shift+Space still selects the row. Each key runs one command after your own
+`onKeyDown`, so `preventDefault` there cancels it. See [the keyboard](/docs/concepts/keyboard).
+
+## The pointer
+
+A press with the primary button on a body cell starts a new range there: the last one goes, and
+the cell becomes the active one, as any click makes it. Dragged past a click's few pixels, the
+range follows the pointer, at most once a frame. Near the edges of the body or of the columns that
+scroll, or past them, the grid scrolls toward them, faster nearer the edge, on both axes at once:
+a far cell comes into reach. Over a [pinned](/docs/concepts/pinned-columns) column the range takes
+it, and nothing scrolls sideways: only the edges of the columns that scroll scroll them, so a range
+among the pinned columns leaves them where they are. The cell under the pointer comes from the rows'
+and columns' positions, not the elements, so [scroll scaling](/docs/concepts/scroll-scaling) and
+[measured heights](/docs/concepts/measured-heights) change nothing. Escape during a drag clears
+the range.
+
+A Shift+click reaches the clicked cell from the range's anchor (the active cell without a range),
+the active cell and focus staying; dragged on, it goes on from there. A press on a control inside
+a cell (a button, a field, a link) is the control's, and Ctrl, ⌘ or Alt with a press start
+nothing. The page's text is not selected while a press is held. A touch dragged across cells
+scrolls the grid, as it always does: it selects no range (its tap clears one, as a click does).
+
+## How the range looks
+
+The grid styles nothing. Each cell in the range carries `data-selected-cell`, and `aria-selected`
+(`true`, `false` on the cells outside: a screen reader hears which are selected; the grid has
+`aria-multiselectable`). A cell on the range's edges carries `data-range-edge` with the edges it
+sits on, space-separated: `top`, `bottom`, `start` and `end` (logical: `start` is the right edge
+right to left). Match one with `~=`:
+
+```css title="range.css"
+[data-selected-cell] {
+    background: color-mix(in oklch, var(--accent) 14%, transparent);
+}
+[data-range-edge~="top"] { box-shadow: inset 0 2px 0 var(--accent); }
+```
+
+Several edges on one cell need their lines together: a layer over the cell (`::after`, absolute
+and as large as the cell) with a border per edge does it, `border-inline-start` and
+`border-inline-end` mirroring right to left, and it tints a pinned cell's opaque background too.
+The part state of `DataGrid.Cell` has the same: `selected` and `rangeEdges` (both `undefined`
+while cells are not selectable). A cell [spanning columns](/docs/concepts/column-spanning) is in the
+range while any of its columns is, and on its start or end edge when it reaches it.
+
+## Copying
+
+Ctrl+C on one of the grid's cells puts the range (or, without one, the active cell) on the
+clipboard as tab-separated text: a row per line, a tab between values, a value holding a tab, a
+line break or a double quote quoted. It uses the page's own copy event, so the browser asks for no
+permission, and it reaches the grid after your own `onCopy` on the root: `preventDefault` there
+keeps the grid out. A field inside a cell keeps its own copy. Safari fires a copy only while
+something is selected: on Ctrl+C (⌘+C) the grid selects a hidden node of the focused cell for the
+copy, when nothing else is, and puts the page's selection back right after.
+
+Each cell's text is its column's `getCopyText({ row, rowIndex, column, columnIndex, value })`,
+else its value as text: a string, a number or a boolean as it is, anything else (an object, a
+date) empty. Give `getCopyText` to a column whose value is not text, or whose text should differ
+from what it shows:
+
+```tsx title="columns.tsx"
+{
+    key: "owner",
+    width: 150,
+    getValue: (line) => line.owner,
+    renderCell: ({ row }) => <Avatar person={row.owner} />,
+    getCopyText: ({ row }) => row.owner.name,
+}
+```
+
+A group row's cells copy their value. A row not loaded copies empty cells. Under a span, its value
+is at its first column in the range and the columns it covers are empty. A copy reads every cell
+of the range: a range of millions of cells makes a text that large.
+
+## Pasting
+
+Ctrl+V on one of the grid's cells parses the clipboard's text (what Excel, Google Sheets and the
+grid's own copy write: CRLF or LF lines, quoted values, one line break at the end dropped; a
+quote never closed is text, as the spreadsheets read it) and
+tells `onRangePaste({ range, values })`. The values land from the selected range's first cell
+(its top row and first column), else the active cell, as many rows and columns as they are, cut
+at the grid's last row and column: `range` is where they land, `values` the text of each cell
+(every row as long as the longest). The grid writes nothing: you convert each value and write it
+into your rows.
+
+```tsx title="paste.tsx"
+<DataGrid.Root
+    cellSelection="range"
+    onBeforeRangePaste={({ range }) => !touchesTotals(range)}
+    onRangePaste={({ range, values }) =>
+        setLines((lines) => withValues(lines, range.anchor, values))
+    }
+/>
+```
+
+`onBeforeRangePaste`, asked first with the same paste, refuses it when it returns `false`, as a
+middleware would: the totals of the [example](/examples/cell-selection) are worked out, so a
+paste reaching them is refused whole. One value over a larger range lands in its first cell: to
+fill the range with it, read the range (`selectedRange`) in `onRangePaste`. The paste reaches the
+grid after your own `onPaste` on the root, and a field inside a cell keeps its own. Empty text
+pastes nothing.
+
+The parser and the writer are yours to use too: `parseTsv(text)` and `toTsv(rows)` from
+`@fragiola/data-grid`.

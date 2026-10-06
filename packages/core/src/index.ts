@@ -1,6 +1,7 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
 export type { Axis, Size } from "./axis/axis";
+export { parseTsv, toTsv } from "./clipboard";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
@@ -94,6 +95,7 @@ export {
     DEFAULT_ROW_HEIGHT,
 } from "./model/model";
 export { keptOrder, sameOrder } from "./model/order";
+export { keptRange, sameCellRange, valueText } from "./model/range";
 export { veto } from "./model/result";
 export { sameSortColumns, validSortColumns } from "./model/sort";
 export {
@@ -114,7 +116,9 @@ export {
 } from "./model/summary";
 export type {
     CellPosition,
+    CellRange,
     CellRenderProps,
+    CellSelection,
     ColSpanArgs,
     Column,
     ColumnGroup,
@@ -153,6 +157,7 @@ export type {
     QueryMap,
     QuestionKey,
     QuestionMap,
+    RangePaste,
     ReorderSide,
     ResultOf,
     RowHeight,

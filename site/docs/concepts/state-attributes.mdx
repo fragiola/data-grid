@@ -39,6 +39,8 @@ select by them, never by class names.
 | `data-depth` | row | its depth in the tree, 0 at the top, while the rows have kinds (`getRowMeta`) |
 | `data-expanded` | group toggle | its row's group is expanded |
 | `data-selected` | row | it is selected ([Row selection](/docs/concepts/row-selection)) |
+| `data-selected-cell` | cell | it is in the selected range ([Cell selection](/docs/concepts/cell-selection)) |
+| `data-range-edge` | cell | the range's edges it sits on, space-separated: `top`, `bottom`, `start`, `end` (match one with `~=`) |
 | `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `data-pinned-edge` | cell, header cell | its pinned part's edge: it ends at the last column pinned at the start, or starts at the first pinned at the end |
 | `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
@@ -68,8 +70,9 @@ select by them, never by class names.
 | `aria-colspan` | cell, header cell, row detail | the columns a group or a [spanning cell](/docs/concepts/column-spanning) covers, when more than one; a detail spans every column |
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |
 | `aria-sort` | header cell | the first sorted column's direction |
-| `aria-multiselectable` | grid | `true` when many rows can be selected |
+| `aria-multiselectable` | grid | `true` when many rows can be selected, or ranges of cells |
 | `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected"); a group row's, `true` while every one of its rows is |
+| `aria-selected` | cell | `true` in the selected range, `false` outside it, while cells are selectable ([Cell selection](/docs/concepts/cell-selection)); none on header and summary cells |
 | `role` | resize handle | `separator`, with `aria-orientation="vertical"`; its name (`aria-label`) is yours |
 | `aria-valuenow` | resize handle | its column's width on screen in pixels (a group's: its columns') |
 | `aria-valuemin`, `aria-valuemax` | resize handle | the narrowest and widest it resizes to; without a maximum, the view's width (at least the width) |

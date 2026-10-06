@@ -1,6 +1,8 @@
 import {
     type AxisWindow,
     type CellPosition,
+    type CellRange,
+    type CellSelection,
     type ColumnOrder,
     type ColumnWidths,
     type CommandName,
@@ -14,7 +16,9 @@ import {
     type GridDirection,
     type GridView,
     keptOrder,
+    keptRange,
     keptWidths,
+    type RangePaste,
     type ResultOf,
     type RowHeight,
     type RowKey,
@@ -24,6 +28,7 @@ import {
     type RowSelectable,
     type RowSelection,
     type SortColumn,
+    sameCellRange,
     sameKeys,
     sameOrder,
     sameRowKeys,
@@ -194,6 +199,37 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         /** the selection changed (or, controlled, asks to): a row was toggled, or a command ran */
         onSelectedRowKeysChange?:
             | ((selectedRowKeys: readonly RowKey[]) => void)
+            | undefined;
+        /**
+         * how cells are selected (Epic #88): a range of body cells (default: not at all). Shift
+         * with the navigation keys, a press dragged across cells and Shift+click select one; its
+         * cells carry `data-selected-cell` and `aria-selected`, its edges' cells
+         * `data-range-edge`; Ctrl/⌘+C copies it as TSV and Ctrl/⌘+V pastes into it
+         * (`onRangePaste`)
+         */
+        cellSelection?: CellSelection | undefined;
+        /**
+         * the selected range of cells (`{ anchor, focus }`, body cells), controlled (`null` for
+         * none); pair it with `onSelectedRangeChange`
+         */
+        selectedRange?: CellRange | null | undefined;
+        /** the selected range to start with, uncontrolled */
+        defaultSelectedRange?: CellRange | null | undefined;
+        /** the selected range changed (or, controlled, asks to): a key, a drag, a click or a command */
+        onSelectedRangeChange?: ((range: CellRange | null) => void) | undefined;
+        /**
+         * values were pasted into the grid (Ctrl/⌘+V on one of its cells, `cellSelection` set): the
+         * range they land in, from the selected range's first cell (else the active cell), and
+         * the values parsed from the clipboard's text (TSV), as many as land. The app writes them
+         * into its rows: the grid writes nothing
+         */
+        onRangePaste?: ((paste: RangePaste) => void) | undefined;
+        /**
+         * asked before `onRangePaste`, with the same paste: `false` refuses it (`onRangePaste` is
+         * not called), as a middleware would
+         */
+        onBeforeRangePaste?:
+            | ((paste: RangePaste) => boolean | undefined)
             | undefined;
         /**
          * the resized columns' widths in pixels, by column key, controlled; pair it with
@@ -372,6 +408,12 @@ export function Root<TRow>(props: RootProps<TRow>) {
         selectedRowKeys,
         defaultSelectedRowKeys,
         onSelectedRowKeysChange,
+        cellSelection,
+        selectedRange,
+        defaultSelectedRange,
+        onSelectedRangeChange,
+        onRangePaste,
+        onBeforeRangePaste,
         columnWidths,
         defaultColumnWidths,
         onColumnWidthsChange,
@@ -421,6 +463,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
             rowSelection,
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
+            cellSelection,
+            selectedRange:
+                selectedRange !== undefined
+                    ? selectedRange
+                    : defaultSelectedRange,
             columnWidths: columnWidths ?? defaultColumnWidths,
             columnOrder: columnOrder ?? defaultColumnOrder,
             collapsedGroupKeys: collapsedGroupKeys ?? defaultCollapsedGroupKeys,
@@ -537,6 +584,33 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const range = bind(
+            propsState<TRow, CellRange | null>(latest, {
+                prefix: "selected-range.",
+                // the range follows the prop while cells are selectable; off, there is none
+                prop: (props) =>
+                    props.cellSelection ? props.selectedRange : undefined,
+                onChange: (props) => props.onSelectedRangeChange,
+                // a range to start with the body could not hold (cells outside it) starts
+                // inside it: the app is told the range the grid holds
+                start: (props) =>
+                    props.cellSelection
+                        ? props.defaultSelectedRange
+                        : undefined,
+                read: (state) => state.selectedRange,
+                same: sameCellRange,
+                fromCommand: (command, value) =>
+                    command === "selected-range.clear"
+                        ? null
+                        : (value as CellRange),
+                // kept inside the body, as at mount, and the parent told the range as it settled
+                apply: (value) => {
+                    const kept = keptRange(model.state, value);
+                    if (kept) model.run("selected-range.set", kept);
+                    else model.run("selected-range.clear", {});
+                },
+            }),
+        );
         const widths = bind(
             propsState<TRow, ColumnWidths>(latest, {
                 prefix: "column-widths.",
@@ -612,6 +686,12 @@ export function Root<TRow>(props: RootProps<TRow>) {
         engine.subscribe("row-move", (move) =>
             latest.current.onRowMove?.(move),
         );
+        // a paste (Epic #88): asked first, then told
+        engine.subscribe("range-paste", (paste) => {
+            const { onBeforeRangePaste, onRangePaste } = latest.current;
+            if (onBeforeRangePaste?.(paste) === false) return;
+            onRangePaste?.(paste);
+        });
         const context: DataGridContextValue<TRow> = { model, engine };
         // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
         // consumer's onKeyDown, onClick and onPointerDown, on the root or on its render element,
@@ -623,6 +703,11 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 engine.adapter.click(event.nativeEvent),
             onPointerDown: (event: React.PointerEvent) =>
                 engine.adapter.pointerdown(event.nativeEvent),
+            // the clipboard, cells selectable (Epic #88): after the consumer's onCopy and onPaste
+            onCopy: (event: React.ClipboardEvent) =>
+                engine.adapter.copy(event.nativeEvent),
+            onPaste: (event: React.ClipboardEvent) =>
+                engine.adapter.paste(event.nativeEvent),
         };
         return {
             context,
@@ -642,6 +727,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 collapsed,
                 position,
                 selection,
+                range,
                 sort,
                 expanded,
                 groups,
@@ -772,6 +858,15 @@ export function Root<TRow>(props: RootProps<TRow>) {
             });
         }
     }, [model, rowSelection, isRowSelectable]);
+
+    useLayoutEffect(() => {
+        // a prop removed turns it off (Epic #88): the range goes
+        if (cellSelection !== model.state.cellSelection) {
+            model.run("cell-selection.set", {
+                cellSelection: cellSelection ?? null,
+            });
+        }
+    }, [model, cellSelection]);
 
     useLayoutEffect(() => {
         // a prop removed goes back to the page's direction (the engine reads the viewport's)

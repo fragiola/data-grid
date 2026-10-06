@@ -132,7 +132,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    a click in one task) never has the layers written against the scroll the engine last knew.
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, renderSummaryCell?, renderGroupCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
-    flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, meta? }`. Without children, a header cell renders
+    flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, getCopyText?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
     no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
@@ -478,6 +478,92 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `toggledRowKeys`) and `@fragiola/data-grid-react/selection` (`useSelectAll(rowKeys,
    gridRef?)` → `{ status, count, toggle, canToggle }`); `useLocalRows` returns `filteredRows`. The
    checkbox is always the app's.
+   **Cell ranges and the clipboard (Epic #88, E4.1–E4.2):** headless first: the grid keeps one
+   range, its keys, its pointer and the clipboard; its look, any figure worked out of it and the
+   data are the app's. The model keeps `cellSelection: CellSelection | undefined` (`"range"`;
+   option, `cell-selection.set { cellSelection }`, `null` turns it off and the range goes,
+   `get("cell-selection")`) and `selectedRange: CellRange | null` (`{ anchor, focus }`, two body
+   cells: rows 0 … rowCount - 1 and the grid's columns, never the header nor the summary rows; a
+   group row's cells are cells of it; the anchor where it started, the active cell, the focus the
+   corner the keys and the pointer move), kept inside the body by `reconcile` (`keptRange`: each
+   corner clamped to the last row and column; none without rows, columns or cell selection),
+   cleared by `withLayout` (a new order or collapse: its columns are others) and after any
+   command that moves the active cell off its anchor (`withAnchoredRange`, run on every handler's
+   state in `execute`: a click, a Tab, a control taking focus, a plain key, the app's
+   `active-position.set`; one model rule, so a controlled range is told by the cross-piece rule,
+   never by a second command; a range the active cell did not start, select-all's, stays until
+   it moves), controlled or not on
+   `Root` through the controlled factory (`selectedRange`/`defaultSelectedRange`/
+   `onSelectedRangeChange`, prefix `selected-range.`, settled after the rows' selection, the prop
+   applied through `keptRange`). Commands, `refused` while cells are not selectable:
+   `selected-range.set { anchor, focus }` (body cells, else `not_found`; the model's own copy; the
+   same cells commit nothing), `selected-range.extend { rowIndex, columnIndex } | { direction,
+   pageSize? }` (the focus to a body cell, or `nextPosition` from the focus over the body only:
+   `bodyBoundsOf`, no header, no summary rows, spans kept; the anchor stays: without a range the
+   active body cell, else the cell itself; a move with neither `refused`),
+   `selected-range.select-all` (the first body cell to the last; `refused` without one),
+   `selected-range.clear`; `get("selected-range")`, `is("cell-selected", { rowIndex,
+   columnIndex })` (`isCellSelected`: a cell spanning columns while any of them is). The pure
+   helpers are `model/range.ts` (`sameCellRange`, `isBodyCell`, `rangeBounds`, `keptRange`,
+   `inRange` and `rangeEdgesOf`, which allocate nothing (the edges' 16 strings made once),
+   `valueText`, `rangeText`, `pastedRange`, `rangeStart`). The view carries `cellSelection` and
+   `selectedRange` (`VIEW_KEYS`: a new view per range change, never per scroll frame). Parts:
+   `CellState.selected` (`boolean | undefined`: `undefined` while cells are not selectable and in
+   a summary row, so a grid without it reads as before) and `rangeEdges` (`"top bottom start
+   end"`, the ones it sits on in that order, logical; `undefined` inside the range or outside),
+   `CellPart.ariaSelected` (`true`/`false` on a body cell while cells are selectable, ARIA's
+   "selectable, not selected"; none otherwise, nor on a summary cell); React renders
+   `data-selected-cell`, `data-range-edge` and `aria-selected` on cells and `aria-multiselectable`
+   on the grid. A spanning cell is in the range while any of its columns is, on its start edge
+   when it starts at or before it, its end edge when it reaches it. The keys are D11's
+   (`rangeKey`). The pointer: a primary press on a body cell of this grid (`rangeCellOf`: not a
+   control inside it, a resizer or a row's drag handle; not a nested grid's; no Ctrl, ⌘ or Alt),
+   after the consumer's `onPointerDown` (a prevented one vetoes), clears the range and is not
+   prevented (it focuses the cell: the active cell, the anchor); with Shift, one
+   `selected-range.extend` to the cell (`check` first: the drag's anchor), prevented (the active
+   cell and focus stay; refused, no range and no drag); a touch's press drags nothing (it
+   scrolls). Past `CLICK_SLOP` the press drags (`RangeDrag` on the shared
+   `PointerDrag` machinery: `listen`, `capture` on the viewport, as the pressed cell may scroll
+   out of the rendered ones, `askFrame`, `endDrag`): once a frame `rangeStep` reads the pointer's
+   place once (`viewXOf`, `viewYOf`), scrolls both axes in one move near the body's edges and the
+   scrolling columns' (or past them; never over a pinned strip, `columnPartAt`: a range among
+   pinned columns scrolls nothing sideways; `edgeStep`, `edgeScrollBy(top, left)`, shared with
+   the reorders) and `rangeTo` takes the cell under it from the axes (the row
+   axis over the body; `partOffsetAt(columnPartAt(x), x)`, the pinned strips or the columns that
+   scroll, shared with the column reorder's `offsetAt`; scaling, measured rows and RTL alike),
+   running one `selected-range.set` when that cell changed; a scroll during the drag works it
+   out again once a frame; the release takes the cell under it, Escape clears the range, cells
+   no longer selectable, a new source or new columns end the drag (its indexes would point
+   elsewhere; the range set so far stays); the click ending it is the drag's. The clipboard: `Root`
+   hands its element's `copy` and `paste` events to `engine.adapter.copy`/`paste` after the
+   consumer's `onCopy`/`onPaste` (a prevented one is the app's), taken only from one of this
+   grid's cells itself (`isCellElement`: a field inside one keeps its own clipboard, a nested
+   grid's cell is that grid's) while cells are selectable. WebKit fires `copy` only while
+   something is selected: Ctrl/⌘+C on one of the grid's cells, with something to copy and the
+   page's selection collapsed, selects a hidden node appended to the cell (`selectForCopy`,
+   through the viewport document's Selection, the keydown never prevented); the copy takes the
+   event from that node as from its cell and `endCopySelection` removes it and puts the selection
+   back (else the next task does, through the view's `setTimeout`). A copy writes the range, else the
+   active body cell, as TSV into `event.clipboardData` and is prevented: the page's own event, no
+   permission (`rangeText`: a loaded row's cell through `Column.getCopyText(CellRenderProps)`,
+   else `valueText` (a string, number, big integer or boolean as text, anything else empty;
+   React's `plain` renders it, nothing for an empty one but a string); a group row's value as
+   text; a row not loaded empty; a span's value at its first column in the range, the columns it
+   covers there empty; each row's kind and data row read once and its spans walked once
+   (`cellCovering`, as `rowSpansOf`); every cell read). A paste parses
+   `text/plain` (`parseTsv`) and tells the engine's `range-paste` event (`RangePaste { range,
+   values }`), prevented: from the range's first cell (`rangeStart`), else the active body cell,
+   as many rows and columns as the values (each row padded to the longest), cut at the last row
+   and column (`pastedRange`); no text, nothing. `Root` asks `onBeforeRangePaste(paste)` (`false`
+   refuses) and then tells `onRangePaste(paste)` (named apart from the DOM's `onPaste`, which stays
+   the root element's handler). The grid writes no data and selects nothing new. `parseTsv` and
+   `toTsv` (`src/clipboard.ts`, pure, exported): a tab between values, a line feed between rows, a
+   value holding a tab, a line break or a double quote quoted (its quotes doubled); parsing reads
+   LF, CRLF and CR lines, quoted values (what follows one before the tab kept; one never closed
+   is text, its quote included, the tabs and line breaks splitting), drops one line break at the
+   end, and makes no rows of empty text. A grid without `cellSelection` is unchanged:
+   no attribute, part state `undefined`, the keys, presses and clipboard as before. Several ranges,
+   selecting a column or a row by its header, editing (#99) and fill (#100) are not this one's.
    **Column resizing (Epic #70, W1–W8):** the model keeps `columnWidths` (`{ [columnKey]: px }`,
    over each column's `width`; a key that is not a column is kept: it may come back),
    controlled or not on `Root` like the sort (`columnWidths`/`defaultColumnWidths`/
@@ -616,7 +702,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    shares the column reorder's machinery (`PointerDrag` with both coordinates, `listen`,
    `capture`, `askFrame`, `endDrag`, `markedOf`, one frame step for both axes (`reorderStep`:
    the view coordinate read once, `edgeStep(at, start, length)` (`columnEdgeStep` for a header
-   cell, its siblings' reach), `edgeScrollBy(vertical, step)`, which tells whether anything moved
+   cell, its siblings' reach), `edgeScrollBy(top, left)` (one axis's step, the other 0; a range's
+   drag both, Epic #88), which tells whether anything moved
    (none past the first or last row), the target, `askFrame`) and one target tail
    (`dropTargetOf`: the side of the item's middle, `landingIndex`, `keptIfSame`, so a target
    worked out again unchanged keeps its object)): a primary press on an own
@@ -684,7 +771,17 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     guard too) emit one `row-move` by ∓1, once per press (a repeat moves nothing; handled at the
     first or last row, next to a row not loaded and while sorted too, moving nothing; RTL the
     same), after the consumer's handlers; with `rowKey` the active cell follows the row once the
-    app moved it; without `onRowMove` they are plain arrows. A consumer can
+    app moved it; without `onRowMove` they are plain arrows. With `cellSelection` (Epic #88,
+    `rangeKey`, after the row move's keys and before the rows' selection keys): on a body cell in
+    navigation, Shift with an arrow (`inlineKey`), Home, End, PageUp or PageDown
+    (Ctrl/⌘+Shift+Home/End: the first and last cells) runs one `selected-range.extend { direction,
+    pageSize }` (a refused one, `check`, does nothing), the active cell staying (the anchor), the
+    asked focus scrolled into view; Ctrl/⌘+A on any of the grid's cells one
+    `selected-range.select-all`, once per press; Escape with a range one `selected-range.clear`;
+    a plain move to another cell leaves no range (the model's anchor rule, rule 10; one command:
+    `active-position.move`). The page size of PageUp/PageDown is one helper (`pageSize`). While cells are selectable, Shift+↑/↓ and
+    Ctrl/⌘+A are the cells' and Shift+Space stays the row's; Ctrl/⌘+C and Ctrl/⌘+V are the
+    page's own copy and paste (never prevented on keydown), which the grid takes (rule 10). A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. With row kinds (Epic
     #87, `rowGroupKey`, the APG treegrid, on a body cell in navigation, no modifier): Enter on a
     group row and Space on any row that expands (a tree's parent too) run one `row-groups.toggle`
@@ -827,7 +924,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   given, is structural: `Root` renders `view.givenDirection`.)
 - **State only through `data-*` and ARIA**, present or absent (never `"false"`; a selectable
   row's `aria-selected="false"` is ARIA's own "selectable, not selected"; a row's drag handle's
-  `aria-hidden="true"`; a group row's and its toggle's `aria-expanded="false"`, ARIA's collapsed): `data-active`,
+  `aria-hidden="true"`; a group row's and its toggle's `aria-expanded="false"`, ARIA's collapsed;
+  a body cell's `aria-selected="false"` while cells are selectable, Epic #88): `data-active`,
   `data-loading`, `data-empty`, … Every part carries `data-grid-part` and, for rows and cells,
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
@@ -868,8 +966,10 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   a header cell's or a handle's once past the click slop, the press not prevented so a click
   still focuses and sorts) after the consumer's `onPointerDown`; during a drag, Escape goes to the engine's `keydown` the same way,
   and from outside the grid to a listener on the document's bubble phase, after the app's own
-  handlers (a prevented Escape keeps the drag); the click ending a drag is the drag's.
-  Keys from outside the
+  handlers (a prevented Escape keeps the drag); the click ending a drag is the drag's. **Copies
+  and pastes too (Epic #88):** `Root` calls the engine's `copy` and `paste` after the consumer's
+  `onCopy` and `onPaste`, the same way, and a press on a body cell with `cellSelection` (a range's
+  drag) after its `onPointerDown`. Keys from outside the
   viewport (a menu portalled out of a cell) and from the app's content beside the cells (a
   control in `Empty`) are never the grid's: only its cells, its layers and its viewport.
 - **The layers' `transform` is the engine's**: `Body`, `HeaderRow` and `SummaryRow` drop a

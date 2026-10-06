@@ -41,6 +41,7 @@ import {
     siblingOrder,
     siblingsOf,
 } from "./order";
+import { isBodyCell, isCellSelected, keptRange, sameCellRange } from "./range";
 import { done, fail, veto } from "./result";
 import {
     allKeys,
@@ -89,6 +90,8 @@ import {
 } from "./summary";
 import type {
     CellPosition,
+    CellRange,
+    CellSelection,
     Column,
     ColumnOrder,
     ColumnOrGroup,
@@ -223,6 +226,81 @@ function selectionOff(): CommandFailure {
 }
 
 /**
+ * The state after a command, its range kept to its rule (Epic #88): a range's anchor is the
+ * active cell where it started, so the active cell moving elsewhere (a click, a Tab, a control
+ * taking focus, the keys, the app's `active-position.set`, a new order) leaves no range; a range
+ * the active cell did not start (select-all) stays until it moves.
+ */
+function withAnchoredRange<TRow, TNode>(
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): DataGridState<TRow, TNode> {
+    const range = after.selectedRange;
+    const active = after.activePosition;
+    if (
+        !range ||
+        active === before.activePosition ||
+        (active !== null && sameCell(active, range.anchor))
+    ) {
+        return after;
+    }
+    return { ...after, selectedRange: null };
+}
+
+/** The cell selection modes, for validation. */
+const CELL_SELECTIONS: readonly CellSelection[] = ["range"];
+
+/** Every range command's refusal while cells are not selectable (Epic #88). */
+function cellsOff(): CommandFailure {
+    return fail("refused", "cells are not selectable (no cellSelection)");
+}
+
+/** The refusal of a range corner that is no body cell. */
+function noBodyCell(position: CellPosition): CommandFailure {
+    return fail(
+        "not_found",
+        `no body cell at row ${position?.rowIndex}, column ${position?.columnIndex}`,
+    );
+}
+
+/** The state with a selected range (the same object when it is the same cells), and it. */
+function withRange<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    range: CellRange,
+): Applied<TRow, TNode, CellRange> {
+    if (sameCellRange(range, state.selectedRange) && state.selectedRange) {
+        return done(state, state.selectedRange);
+    }
+    const kept = {
+        anchor: {
+            rowIndex: range.anchor.rowIndex,
+            columnIndex: range.anchor.columnIndex,
+        },
+        focus: {
+            rowIndex: range.focus.rowIndex,
+            columnIndex: range.focus.columnIndex,
+        },
+    };
+    return done({ ...state, selectedRange: kept }, kept);
+}
+
+/**
+ * What the keys move a range's focus in (E4.1): the body's rows only (no header, no summary rows),
+ * the columns, and their spans (E1.2).
+ */
+function bodyBoundsOf<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+): GridBounds {
+    const bounds = boundsOf(state);
+    return {
+        rowCount: bounds.rowCount,
+        columnCount: bounds.columnCount,
+        headerRowCount: 0,
+        cellSpanAt: bounds.cellSpanAt,
+    };
+}
+
+/**
  * What moves in the grid are bounded by: its rows, its columns, its header's cells, its summary
  * rows (E2.1) and, with column spans, its body and summary rows' cells (E1.2).
  */
@@ -303,11 +381,24 @@ function keptActiveRow<TRow, TNode>(
 
 /**
  * The active position kept inside the grid after its shape changed from `before`'s (or none
- * left): on the same row where it can be (`keptActiveRow`), and column.
+ * left): on the same row where it can be (`keptActiveRow`), and column; and the selected range
+ * inside its body (`keptRange`, Epic #88).
  */
 function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     before: DataGridState<TRow, TNode> = state,
+): DataGridState<TRow, TNode> {
+    const next = keptActive(state, before);
+    const range = keptRange(next, next.selectedRange);
+    return range === next.selectedRange
+        ? next
+        : { ...next, selectedRange: range };
+}
+
+/** `reconcile`'s active position. */
+function keptActive<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    before: DataGridState<TRow, TNode>,
 ): DataGridState<TRow, TNode> {
     const active = state.activePosition;
     if (!active) return state;
@@ -524,7 +615,7 @@ function withLayout<TRow, TNode>(
         columnIndex !== active.columnIndex
             ? { rowIndex: active.rowIndex, columnIndex }
             : active;
-    // in its new place, a span may cover it (E1.2)
+    // in its new place, a span may cover it (E1.2); a range's columns are others now (Epic #88)
     return reconcile(
         {
             ...state,
@@ -533,6 +624,7 @@ function withLayout<TRow, TNode>(
             columns,
             header,
             activePosition,
+            selectedRange: null,
         },
         state,
     );
@@ -989,6 +1081,91 @@ function createHandlers<TRow, TNode>(
                       };
             return done(next, undefined);
         },
+        "cell-selection.set": (state, { cellSelection }) => {
+            if (
+                cellSelection !== null &&
+                !CELL_SELECTIONS.includes(cellSelection)
+            ) {
+                return notOneOf("cellSelection", CELL_SELECTIONS);
+            }
+            const mode = cellSelection ?? undefined;
+            // off, no range survives
+            const next =
+                mode === state.cellSelection
+                    ? state
+                    : {
+                          ...state,
+                          cellSelection: mode,
+                          selectedRange: mode ? state.selectedRange : null,
+                      };
+            return done(next, next.cellSelection);
+        },
+        "selected-range.set": (state, { anchor, focus }) => {
+            if (!state.cellSelection) return cellsOff();
+            for (const corner of [anchor, focus]) {
+                if (!isBodyCell(state, corner)) return noBodyCell(corner);
+            }
+            return withRange(state, { anchor, focus });
+        },
+        "selected-range.extend": (state, payload) => {
+            if (!state.cellSelection) return cellsOff();
+            const range = state.selectedRange;
+            const active = isBodyCell(state, state.activePosition)
+                ? state.activePosition
+                : null;
+            if (payload.direction !== undefined) {
+                const { direction, pageSize } = payload;
+                if (!DIRECTIONS.includes(direction)) {
+                    return notOneOf("direction", DIRECTIONS);
+                }
+                if (pageSize !== undefined && !Number.isFinite(pageSize)) {
+                    return invalid("pageSize must be a number");
+                }
+                const from =
+                    range ?? (active && { anchor: active, focus: active });
+                if (!from) {
+                    return fail(
+                        "refused",
+                        "no range, nor an active body cell, to extend",
+                    );
+                }
+                // in the body: never into the header nor the summary rows
+                const focus = nextPosition(
+                    from.focus,
+                    direction,
+                    bodyBoundsOf(state),
+                    pageSize,
+                );
+                return withRange(state, { anchor: from.anchor, focus });
+            }
+            const cell = {
+                rowIndex: payload.rowIndex,
+                columnIndex: payload.columnIndex,
+            };
+            if (!isBodyCell(state, cell)) return noBodyCell(cell);
+            return withRange(state, {
+                anchor: range?.anchor ?? active ?? cell,
+                focus: cell,
+            });
+        },
+        "selected-range.select-all": (state) => {
+            if (!state.cellSelection) return cellsOff();
+            if (state.rowCount === 0 || state.columns.length === 0) {
+                return fail("refused", "the grid has no body cells");
+            }
+            return withRange(state, {
+                anchor: { rowIndex: 0, columnIndex: 0 },
+                focus: {
+                    rowIndex: state.rowCount - 1,
+                    columnIndex: state.columns.length - 1,
+                },
+            });
+        },
+        "selected-range.clear": (state) =>
+            done(
+                state.selectedRange ? { ...state, selectedRange: null } : state,
+                undefined,
+            ),
         "column-widths.set": (state, { columnWidths }) => {
             const kept = keptWidths(columnWidths);
             if (
@@ -1325,6 +1502,10 @@ export function createDataGridModel<TRow, TNode = unknown>(
         options.rowSelection && ROW_SELECTIONS.includes(options.rowSelection)
             ? options.rowSelection
             : undefined;
+    const cellMode =
+        options.cellSelection && CELL_SELECTIONS.includes(options.cellSelection)
+            ? options.cellSelection
+            : undefined;
     const blank: DataGridState<TRow, TNode> = {
         columns,
         columnEntries: entries,
@@ -1363,6 +1544,9 @@ export function createDataGridModel<TRow, TNode = unknown>(
         ),
         isRowSelectable: options.isRowSelectable,
         selectionAnchor: null,
+        cellSelection: cellMode,
+        // kept inside the body once the rows are given (`withSource`)
+        selectedRange: options.selectedRange ?? null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
         collapsedGroupKeys,
@@ -1418,6 +1602,16 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 ) => Applied<TRow, TNode, unknown>;
                 try {
                     applied = handler(state, ctx.payload);
+                    // the range follows the active cell's rule, whatever moved it (Epic #88)
+                    if (applied.ok) {
+                        const kept = withAnchoredRange(
+                            state,
+                            applied.value.state,
+                        );
+                        if (kept !== applied.value.state) {
+                            applied = done(kept, applied.value.value);
+                        }
+                    }
                 } catch (error) {
                     // a payload of the wrong shape: the command never throws on bad input
                     applied = invalid(messageOf(error));
@@ -1570,6 +1764,8 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "row-selection": () => state.rowSelection,
         "selected-row-keys": () => state.selectedRowKeys,
         "selection-anchor": () => validAnchor(state),
+        "cell-selection": () => state.cellSelection,
+        "selected-range": () => state.selectedRange,
     };
 
     const questions: {
@@ -1604,6 +1800,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
             isGroupExpanded(state, rowIndex),
         "row-selected": ({ rowIndex }) => isRowSelected(state, rowIndex),
         "row-selectable": ({ rowIndex }) => isRowSelectable(state, rowIndex),
+        "cell-selected": (position) => isCellSelected(state, position),
     };
 
     const model: DataGridModel<TRow, TNode> = {
@@ -1667,6 +1864,11 @@ export const COMMANDS = [
     "selection-anchor.set",
     "selection-anchor.clear",
     "row-selection.set",
+    "cell-selection.set",
+    "selected-range.set",
+    "selected-range.extend",
+    "selected-range.select-all",
+    "selected-range.clear",
     "column-widths.set",
     "column-widths.resize",
     "column-widths.reset",

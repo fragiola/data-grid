@@ -87,6 +87,10 @@
                     "path": "concepts/row-selection"
                 },
                 {
+                    "label": "Cell selection",
+                    "path": "concepts/cell-selection"
+                },
+                {
                     "label": "Row reordering",
                     "path": "concepts/row-reordering"
                 },

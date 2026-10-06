@@ -329,6 +329,9 @@ function cellProps<TRow>(
     const summary = "position" in state ? state.position : undefined;
     const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
     const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
+    // a body cell's, cells selectable (Epic #88): in the range, its edges
+    const ariaSelected = "ariaSelected" in part ? part.ariaSelected : undefined;
+    const range = "rangeEdges" in state ? state : undefined;
     const { pinned } = state;
     const { width, height } = box;
     return {
@@ -337,6 +340,9 @@ function cellProps<TRow>(
         ...(header ? ariaHeaderCellSpans(header) : undefined),
         ...(ariaColSpan ? { "aria-colspan": ariaColSpan } : undefined),
         ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
+        ...(ariaSelected === undefined
+            ? undefined
+            : { "aria-selected": ariaSelected }),
         tabIndex: part.tabIndex,
         ...dataAttributes({
             "grid-part": header
@@ -363,6 +369,8 @@ function cellProps<TRow>(
             reorderable: header?.reorderable,
             dragging: header?.dragging,
             "drop-target": header?.dropTarget ?? undefined,
+            "selected-cell": range?.selected,
+            "range-edge": range?.rangeEdges,
         }),
         style: measured
             ? {

@@ -5,6 +5,7 @@ import {
     gridRole,
     type SummaryPosition,
     summaryHeight,
+    valueText,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -150,8 +151,8 @@ export function Grid(props: GridProps) {
             role: gridRole(view),
             "aria-rowcount": ariaRowCount(view),
             "aria-colcount": view.columnCount,
-            // many rows selectable (R7)
-            ...(view.rowSelection === "multiple"
+            // many rows selectable (R7), or ranges of cells (Epic #88)
+            ...(view.rowSelection === "multiple" || view.cellSelection
                 ? { "aria-multiselectable": true }
                 : {}),
             // the grid's tab stop until a cell is active (roving: then that cell is)
@@ -487,15 +488,13 @@ function useCellElement<State extends { readonly pinned: boolean }>(
     });
 }
 
-/** A value rendered as text when the cell has no children and its column no `renderCell`. */
+/**
+ * A value rendered as text when the cell has no children and its column no `renderCell`: a string
+ * as it is, a number, a big integer or a boolean written out (`valueText`, what a copy takes,
+ * Epic #88); nothing for anything else.
+ */
 function plain(value: unknown): ReactNode {
-    const type = typeof value;
-    return type === "string" ||
-        type === "number" ||
-        type === "bigint" ||
-        type === "boolean"
-        ? String(value)
-        : null;
+    return typeof value === "string" ? value : valueText(value) || null;
 }
 
 export type CellProps<TRow> = DivPrimitiveProps<CellState> & {

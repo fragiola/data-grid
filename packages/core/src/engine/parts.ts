@@ -1,4 +1,5 @@
 import { isReorderable } from "../model/order";
+import { inRange, rangeEdgesOf } from "../model/range";
 import { rowSelectableWith, rowSelectedWith } from "../model/selection";
 import {
     dataRowAt,
@@ -104,6 +105,17 @@ export interface CellState {
     readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
+    /**
+     * it is in the selected range of cells (Epic #88, E4.1; a cell spanning columns while any of
+     * them is); `undefined` while cells are not selectable (`cellSelection`), and in a summary row
+     */
+    readonly selected: boolean | undefined;
+    /**
+     * the range's edges it sits on, for its borders: `top`, `bottom`, `start`, `end`, those that
+     * apply, space-separated in that order (`start` is the right edge right to left); `undefined`
+     * for a cell inside the range or outside it, and while cells are not selectable
+     */
+    readonly rangeEdges: string | undefined;
 }
 
 /** The state of a summary row (Epic #86, E2.1). */
@@ -275,11 +287,17 @@ export interface GroupTogglePart {
         | undefined;
 }
 
-/** A body cell's state, its `tabIndex` and its `aria-colspan`. */
+/** A body cell's state, its `tabIndex`, its `aria-colspan` and its `aria-selected`. */
 export interface CellPart {
     readonly state: CellState;
     /** the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others */
     readonly tabIndex: 0 | -1;
+    /**
+     * `aria-selected` (Epic #88), in ARIA's own vocabulary while cells are selectable: `true` in
+     * the selected range, `false` ("selectable, not selected") elsewhere; `undefined` (none)
+     * while they are not, and in a summary row
+     */
+    readonly ariaSelected: boolean | undefined;
     /**
      * how many columns it spans, when more than one (a column's `colSpan`, E1.2): its
      * `aria-colspan` (and a table cell's `colSpan`); `undefined` for a cell of one column
@@ -470,6 +488,11 @@ export function cellPart<TRow, TNode>(
         cell.columnIndex,
         span,
     );
+    // in the selected range (Epic #88): nothing asked while cells are not selectable
+    const range = view.selectedRange;
+    const selected = view.cellSelection
+        ? inRange(range, cell.rowIndex, cell.columnIndex, span)
+        : undefined;
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -480,9 +503,14 @@ export function cellPart<TRow, TNode>(
             pinnedEdge,
             pinnedSide,
             interacting: interacting(view, cell),
+            selected,
+            rangeEdges: selected
+                ? rangeEdgesOf(range, cell.rowIndex, cell.columnIndex, span)
+                : undefined,
         },
         tabIndex: active ? 0 : -1,
         ariaColSpan: span > 1 ? span : undefined,
+        ariaSelected: selected,
     };
 }
 
@@ -543,8 +571,11 @@ export function summaryCellPart<TRow, TNode>(
     });
     return {
         ...part,
+        // a summary row's cells are never selected (Epic #88): the range is the body's
+        ariaSelected: undefined,
         state: {
             ...part.state,
+            selected: undefined,
             position: cell.position,
             summaryIndex: cell.summaryIndex,
         },
