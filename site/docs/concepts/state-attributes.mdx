@@ -14,7 +14,8 @@ Every part carries `data-grid-part`: `root`, `grid`, `header`, `header-row`, `he
 with `useColumnResizer` ([Column resizing](/docs/concepts/column-resizing)), `group-label` on a
 group's label you render with `useGroupLabel`
 ([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)), and `row-drag-handle`
-on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)). Rows and cells carry
+on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)), and `group-toggle` on a
+group row's toggle you render with `useGroupToggle` ([Row grouping](/docs/concepts/row-grouping)). Rows and cells carry
 their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
 its top one; the top summary rows are before the header's, the bottom ones after the body's) and `data-column-index` (a header cell spanning columns is at its first). Tests
 select by them, never by class names.
@@ -33,6 +34,10 @@ select by them, never by class names.
 | `data-collapsible` | header cell | it is a collapsible group's ([Collapsible groups](/docs/concepts/collapsible-groups)) |
 | `data-collapsed` | header cell | its collapsible group is closed |
 | `data-expanded` | row | it shows its detail ([Master-detail](/docs/guides/master-detail)) |
+| `data-group-row` | row | it is a group row ([Row grouping](/docs/concepts/row-grouping)) |
+| `data-group-expanded` | row | it heads an expanded row group |
+| `data-depth` | row | its depth in the tree, 0 at the top, while the rows have kinds (`getRowMeta`) |
+| `data-expanded` | group toggle | its row's group is expanded |
 | `data-selected` | row | it is selected ([Row selection](/docs/concepts/row-selection)) |
 | `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `data-pinned-edge` | cell, header cell | its pinned part's edge: it ends at the last column pinned at the start, or starts at the first pinned at the end |
@@ -52,7 +57,10 @@ select by them, never by class names.
 
 | attribute | on | value |
 | --- | --- | --- |
-| `role` | grid, rowgroup, row, columnheader, gridcell | the grid pattern |
+| `role` | grid, rowgroup, row, columnheader, gridcell | the grid pattern; `treegrid` on the grid while the rows have kinds ([Row grouping](/docs/concepts/row-grouping)) |
+| `aria-level` | row | its depth + 1, in a `treegrid` |
+| `aria-expanded` | row, group toggle | whether a group row (or a row that expands) shows its rows |
+| `aria-setsize`, `aria-posinset` | row | its siblings' count and its place among them, from 1, when its meta says |
 | `aria-rowcount` | grid | every row, header and summary rows included, rendered or not |
 | `aria-colcount` | grid | every column |
 | `aria-rowindex` | row, summary row | 1-based, as they show: the header rows, the top summary rows, the body rows, the bottom summary rows |
@@ -61,7 +69,7 @@ select by them, never by class names.
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |
 | `aria-sort` | header cell | the first sorted column's direction |
 | `aria-multiselectable` | grid | `true` when many rows can be selected |
-| `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected") |
+| `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected"); a group row's, `true` while every one of its rows is |
 | `role` | resize handle | `separator`, with `aria-orientation="vertical"`; its name (`aria-label`) is yours |
 | `aria-valuenow` | resize handle | its column's width on screen in pixels (a group's: its columns') |
 | `aria-valuemin`, `aria-valuemax` | resize handle | the narrowest and widest it resizes to; without a maximum, the view's width (at least the width) |

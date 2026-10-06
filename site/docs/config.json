@@ -95,6 +95,10 @@
                     "path": "concepts/summary-rows"
                 },
                 {
+                    "label": "Row grouping",
+                    "path": "concepts/row-grouping"
+                },
+                {
                     "label": "Measured heights",
                     "path": "concepts/measured-heights"
                 },

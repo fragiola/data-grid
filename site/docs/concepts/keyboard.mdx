@@ -20,6 +20,8 @@ it, the grid scrolls it into view and focuses it.
 | Ctrl+A, ⌘+A | selects every row (many rows selectable) |
 | Ctrl+Shift+←, Ctrl+Shift+→ | moves a reorderable header cell's column or group, the active cell following it (⌘ on a Mac) |
 | Ctrl+Shift+↑, Ctrl+Shift+↓ | moves the active cell's row up or down, the active cell following it ([row reordering](/docs/concepts/row-reordering) on; ⌘ on a Mac) |
+| Enter, Space | on a group row, expands or collapses it ([row grouping](/docs/concepts/row-grouping)) |
+| →, ← | on a row's first column in a `treegrid`, expands a collapsed group, collapses an expanded one, or goes to the row it is under |
 
 Moves stop at the edges. In a [right-to-left](/docs/concepts/right-to-left) grid the arrows
 mirror: ← moves to the next column and → to the previous one, as they point; Home and End stay the
@@ -41,6 +43,11 @@ across the cells of a header row. A cell [spanning columns](/docs/concepts/colum
 cell to the keys: an arrow into a column it covers lands on it, and the arrows leaving it go to
 the column past its span. The [summary rows](/docs/concepts/summary-rows) are rows to the keys:
 Up from the first body row reaches the top ones, Down from the last the bottom ones.
+
+With [row groups](/docs/concepts/row-grouping) the grid is a `treegrid` and the keys are the APG
+treegrid's: Enter and Space on a group row toggle it (F2 hands its controls the keys), and on a
+row's first column → expands a collapsed group (then moves, as anywhere else), ← collapses an
+expanded one, else goes to the row it is under. Shift+Space on a group row selects its rows.
 
 ## One tab stop
 

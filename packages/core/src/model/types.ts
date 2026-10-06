@@ -33,11 +33,13 @@ export interface CellRenderProps<TRow, TNode = unknown> {
 
 /**
  * What a column's `colSpan` is asked with (E1.2): which cell, by the kind of row it is in. Its
- * header cell (on the header's last row, -1), a loaded body row's cell with its row, or a summary
- * row's cell (Epic #86, E2.1) with its position and index.
+ * header cell (on the header's last row, -1), a loaded body row's cell with its row, a summary
+ * row's cell (Epic #86, E2.1) with its position and index, or a group row's cell (Epic #87, E3.1)
+ * with its group.
  */
 export type ColSpanArgs<TRow> =
     | SummaryColSpanArgs
+    | GroupColSpanArgs
     | {
           readonly type: "header";
           readonly rowIndex: number;
@@ -79,6 +81,14 @@ export interface Column<TRow, TNode = unknown> {
      */
     readonly renderSummaryCell?:
         | ((props: SummaryCellRenderProps<TRow, TNode>) => TNode)
+        | undefined;
+    /**
+     * what a group row's cell shows when it is given no children (Epic #87, E3.1): the group's
+     * value in the column it groups by, else its aggregate for this column (`value`), as the app
+     * wants it shown; without it, `value` as text
+     */
+    readonly renderGroupCell?:
+        | ((props: GroupCellRenderProps<TRow, TNode>) => TNode)
         | undefined;
     /**
      * whether its header cell sorts the grid (a click, Enter or Space toggles it). The grid keeps
@@ -186,6 +196,7 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     readonly getValue?: never;
     readonly renderCell?: never;
     readonly renderSummaryCell?: never;
+    readonly renderGroupCell?: never;
     /** a group is never sorted: its columns are */
     readonly sortable?: never;
     /** a group is pinned by its columns */
@@ -349,14 +360,22 @@ export interface SelectionAnchor {
 /**
  * Where the rows come from (D6): every row at once (fixed, or growing for infinite loading), or a
  * count and a getter answering `undefined` for a row not loaded yet. A row not loaded keeps its
- * place and its size.
+ * place and its size. Either may say what kind of row each index is (`getRowMeta`, Epic #87).
  */
-export type RowSource<TRow> =
+export type RowSource<TRow> = (
     | { readonly rows: readonly TRow[] }
     | {
           readonly rowCount: number;
           readonly getRow: (index: number) => TRow | undefined;
-      };
+      }
+) & {
+    /**
+     * what kind of row an index is and where it sits in a tree (Epic #87, E3.1): a group row
+     * (`group`), never read as a data row, or a data row at a depth. Given, the grid is a
+     * `treegrid`; without it, every row is a data row at the top
+     */
+    readonly getRowMeta?: RowMetaGetter | undefined;
+};
 
 /** The model's state: immutable, replaced on every committed command. */
 export interface DataGridState<TRow, TNode = unknown> {
@@ -412,6 +431,12 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** an expanded row's detail height */
     readonly detailHeight: DetailHeight<TRow>;
+    /**
+     * the keys of the expanded row groups (Epic #87, E3.1): group rows (`GroupRow.key`) and rows
+     * that expand (`RowMeta.expandable`, by their key), in the order expanded. The app's rows
+     * follow them: the grid shows the rows it is given, and tells ARIA and the keys which expand
+     */
+    readonly expandedGroupKeys: readonly RowKey[];
     /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
     readonly estimatedDetailHeight: number;
     /** how rows are selected; `undefined`: they are not (R2) */
@@ -448,6 +473,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     rows?: readonly TRow[];
     rowCount?: number;
     getRow?: (index: number) => TRow | undefined;
+    /** what kind of row an index is (Epic #87): a group row, or a data row at a depth */
+    getRowMeta?: RowMetaGetter | undefined;
     rowKey?: RowKeyGetter<TRow>;
     /**
      * a row's height in pixels, or a function of its index (default 35); `"auto"`: as tall as its
@@ -467,6 +494,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     sortColumns?: readonly SortColumn[];
     /** the keys of the rows expanded to start with (a key given twice counts once) */
     expandedRowKeys?: readonly RowKey[];
+    /** the keys of the row groups expanded to start with (a key given twice counts once) */
+    expandedGroupKeys?: readonly RowKey[];
     /**
      * an expanded row's detail height in pixels, or a function of the row (default 300); `"auto"`:
      * as tall as its content, measured by an engine once rendered
@@ -564,6 +593,24 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: readonly RowKey[];
     };
     /**
+     * replaces the expanded row groups' keys (Epic #87, each once): group rows' keys and the keys
+     * of rows that expand. A key no row has is kept: its row may come. Returns them
+     */
+    "row-groups.set": {
+        payload: { readonly groupKeys: readonly RowKey[] };
+        result: readonly RowKey[];
+    };
+    /**
+     * expands a row group, or collapses it when it is expanded: by its row's index (a group row,
+     * or a loaded row that expands) or by its key. Returns the expanded row groups' keys
+     */
+    "row-groups.toggle": {
+        payload:
+            | { readonly rowIndex: number; readonly groupKey?: undefined }
+            | { readonly groupKey: RowKey; readonly rowIndex?: undefined };
+        result: readonly RowKey[];
+    };
+    /**
      * replaces the selected rows' keys (each once; in single mode, the last one only): the app's
      * keys, as given (`isRowSelectable` is not asked: a key's row may not be loaded). Returns them
      */
@@ -573,6 +620,8 @@ export interface CommandMap<TRow, TNode = unknown> {
     };
     /**
      * selects a row, or clears it when it is selected: by its index (a loaded row) or by its key.
+     * A group row (Epic #87, multiple mode) selects its rows' keys (`GroupRow.rowKeys`), or clears
+     * them all when every one is selected; with `extend`, a range from the anchor to it.
      * By index, the row becomes the anchor; a row that cannot be selected is never added (it can
      * be cleared). By key, the row is not looked for: the key is the app's, as with `set`. With
      * `extend` (multiple mode; single mode toggles), every selectable row from the anchor to it
@@ -906,12 +955,18 @@ export interface QueryMap<TRow, TNode = unknown> {
     };
     /** a row by its index; `undefined` while it is not loaded */
     "row-by": { payload: { readonly index: number }; result: TRow | undefined };
-    /** a row's key: `rowKey(row, index)`, or its index when there is no getter or no row yet */
+    /**
+     * a row's key: `rowKey(row, index)`, or its index when there is no getter or no row yet; a
+     * group row's `GroupRow.key` (Epic #87)
+     */
     "row-key-by": {
         payload: { readonly rowIndex: number };
         result: string | number;
     };
-    /** a cell's value: `column.getValue`, or `row[column.key]`; `undefined` while not loaded */
+    /**
+     * a cell's value: `column.getValue`, or `row[column.key]`; `undefined` while not loaded. On a
+     * group row (Epic #87), the group's value in its column, else its aggregate for the column
+     */
     "cell-value-by": {
         payload: CellPosition;
         result: unknown;
@@ -953,6 +1008,13 @@ export interface QueryMap<TRow, TNode = unknown> {
     direction: { payload: undefined; result: GridDirection | undefined };
     /** the expanded rows' keys, in the order they were expanded */
     "expanded-row-keys": { payload: undefined; result: readonly RowKey[] };
+    /** the expanded row groups' keys (Epic #87), in the order they were expanded */
+    "expanded-group-keys": { payload: undefined; result: readonly RowKey[] };
+    /** what kind of row a row index is (Epic #87): `getRowMeta`'s answer, `undefined` without */
+    "row-meta-by": {
+        payload: { readonly rowIndex: number };
+        result: RowMeta | undefined;
+    };
     /** the indexes of the rows shown expanded (loaded, their key expanded), ascending */
     "expanded-rows": { payload: undefined; result: readonly number[] };
     /** an expanded row's detail height: a number, or a function of the row */
@@ -976,7 +1038,7 @@ export interface QuestionMap {
     "cell-active": CellPosition;
     /** whether the row holds the active cell */
     "row-active": { readonly rowIndex: number };
-    /** whether the row is loaded (its getter answered a row) */
+    /** whether the row is loaded (its getter answered a row), or a group row (Epic #87) */
     "row-loaded": { readonly rowIndex: number };
     /** whether a column sorts the grid (a column, `sortable`) */
     "column-sortable": { readonly columnKey: string };
@@ -984,6 +1046,11 @@ export interface QuestionMap {
     "group-collapsed": { readonly groupKey: string };
     /** whether the row shows its detail: loaded, and its key expanded */
     "row-expanded": { readonly rowIndex: number };
+    /**
+     * whether the row heads an expanded row group (Epic #87): a group row, or a row that expands,
+     * its key among the expanded group keys
+     */
+    "row-group-expanded": { readonly rowIndex: number };
     /** whether the row is selected: rows are selectable, it is loaded and its key selected */
     "row-selected": { readonly rowIndex: number };
     /** whether the row can be selected: rows are selectable, it is loaded and not refused */
@@ -1050,5 +1117,77 @@ export interface SummaryColSpanArgs {
     readonly rowIndex: number;
     readonly position: SummaryPosition;
     readonly summaryIndex: number;
+    readonly row?: undefined;
+}
+
+// ── row kinds and groups (Epic #87, E3.1) ────────────────────────────────────
+
+/**
+ * A group row (E3.1): the rows sharing a value of a column, shown as one row the grid never reads
+ * a data row for. The app (or `@fragiola/data-grid/local`, or a server) makes it; the grid shows
+ * it, expands it by its key and selects its rows by theirs.
+ */
+export interface GroupRow {
+    /** unique among the grid's rows: what expands it (`expandedGroupKeys`) */
+    readonly key: RowKey;
+    /** the column its rows are grouped by */
+    readonly columnKey: string;
+    /** the value its rows share in that column */
+    readonly value: unknown;
+    /** its depth: 0 for a group at the top, 1 inside another, … */
+    readonly depth: number;
+    /** how many data rows it holds, at every depth below it (what a count shows) */
+    readonly childCount: number;
+    /** each column's aggregate over its rows, by column key (the app's figures) */
+    readonly aggregates: Readonly<Record<string, unknown>>;
+    /**
+     * the keys of its data rows (the grid's row keys): what selecting it, a range over it and
+     * select-all select, as given. List only the rows that can be selected: the grid cannot ask
+     * `isRowSelectable` of rows it does not have (a collapsed group's). Without them, the group
+     * row cannot be selected
+     */
+    readonly rowKeys?: readonly RowKey[] | undefined;
+}
+
+/**
+ * What kind of row an index is (E3.1), and where it sits: `getRowMeta(index)`'s answer. Every
+ * field is optional; a row without one is a data row at the top.
+ */
+export interface RowMeta {
+    /** its depth in the tree: 0 at the top (default: a group's own, else 0) */
+    readonly depth?: number | undefined;
+    /** a group row: the grid reads no data row at its index (`getRow` may answer anything there) */
+    readonly group?: GroupRow | undefined;
+    /**
+     * a data row with rows of its own under it (a tree's parent, Epic #87, E3.3): it expands by
+     * its key, as a group row does by its group's
+     */
+    readonly expandable?: boolean | undefined;
+    /** the index of the row it is under (← goes there); none at the top */
+    readonly parentIndex?: number | undefined;
+    /** how many rows share its parent (its `aria-setsize`) */
+    readonly setSize?: number | undefined;
+    /** its place among them, from 1 (its `aria-posinset`) */
+    readonly posInSet?: number | undefined;
+}
+
+/** What kind of row an index is: `undefined` for a data row at the top. */
+export type RowMetaGetter = (index: number) => RowMeta | undefined;
+
+/** What a column's `renderGroupCell` receives (E3.1): a group row's cell. */
+export interface GroupCellRenderProps<TRow, TNode = unknown> {
+    readonly group: GroupRow;
+    readonly rowIndex: number;
+    readonly column: Column<TRow, TNode>;
+    readonly columnIndex: number;
+    /** the group's value in the column it groups by, else its aggregate for this column */
+    readonly value: unknown;
+}
+
+/** What a column's `colSpan` is asked with for a group row's cell (E3.1). */
+export interface GroupColSpanArgs {
+    readonly type: "group";
+    readonly rowIndex: number;
+    readonly group: GroupRow;
     readonly row?: undefined;
 }

@@ -4,6 +4,7 @@ import type {
     DataGridEngine,
     DataGridModel,
     GridView,
+    GroupRow,
     HeaderCellLayout,
     HeaderRowView,
     SummaryPosition,
@@ -30,11 +31,16 @@ export interface DataGridContextValue<TRow = unknown> {
 /** A body row, as `DataGrid.Rows` hands it to its children. */
 export interface RowInfo<TRow = unknown> {
     readonly rowIndex: number;
-    /** `undefined` while the row is not loaded */
+    /** `undefined` while the row is not loaded, and for a group row (it has none) */
     readonly row: TRow | undefined;
+    /** a data row loaded, or a group row (Epic #87: nothing to wait for) */
     readonly loaded: boolean;
-    /** the row's key: `rowKey(row, index)`, or its index */
+    /** the row's key: `rowKey(row, index)`, or its index; a group row's group key */
     readonly key: string | number;
+    /** a group row's group (Epic #87, `getRowMeta`); `undefined` for a data row */
+    readonly group: GroupRow | undefined;
+    /** its depth in the grid's tree (Epic #87): 0 at the top, and without row kinds */
+    readonly depth: number;
 }
 
 /** A body cell, as `DataGrid.Cells` hands it to its children. */
@@ -42,11 +48,16 @@ export interface CellInfo<TRow = unknown> {
     readonly rowIndex: number;
     readonly columnIndex: number;
     readonly column: Column<TRow>;
-    /** `undefined` while the row is not loaded */
+    /** `undefined` while the row is not loaded, and on a group row */
     readonly row: TRow | undefined;
     readonly loaded: boolean;
-    /** `column.getValue(row)`, or `row[column.key]`; `undefined` while the row is not loaded */
+    /**
+     * `column.getValue(row)`, or `row[column.key]`; `undefined` while the row is not loaded. On a
+     * group row (Epic #87), the group's value in the column it groups by, else its aggregate
+     */
     readonly value: unknown;
+    /** its row's group, on a group row (Epic #87) */
+    readonly group: GroupRow | undefined;
 }
 
 /**

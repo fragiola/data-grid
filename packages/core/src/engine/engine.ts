@@ -17,7 +17,15 @@ import {
     type Siblings,
     siblingsOf,
 } from "../model/order";
-import { loadedRowKey, rowAt } from "../model/source";
+import {
+    groupAt,
+    groupExpanded,
+    groupKeyAt,
+    loadedRowKey,
+    rowKeyAt,
+    rowLoaded,
+    rowMetaAt,
+} from "../model/source";
 import { hasColumnSpans, spanAt } from "../model/spans";
 import { summaryRowAt } from "../model/summary";
 import type {
@@ -78,6 +86,7 @@ import {
     CTRL_KEYS,
     cellSelector,
     GROUP_LABEL_ATTRIBUTE,
+    GROUP_TOGGLE_ATTRIBUTE,
     inlineKey,
     isCellNode,
     isControl,
@@ -1354,7 +1363,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const rowKey = loadedRowKey(state, rowIndex);
             if (
                 rowKey === undefined ||
-                !rowsMove(options.reorderableRows, state.sortColumns)
+                !rowsMove(options.reorderableRows, state)
             )
                 return false;
             drag = {
@@ -1712,15 +1721,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 if (
                     Number.isInteger(rowIndex) &&
                     ownerViewport(element) === viewport &&
-                    // a body cell of a loaded row, a summary row's cell, or the column's own
-                    // header cell (not a group's starting at it); never a cell spanning columns
-                    // (E1.2): wider than its column
+                    // a body cell of a loaded row (a group row's, Epic #87), a summary row's
+                    // cell, or the column's own header cell (not a group's starting at it);
+                    // never a cell spanning columns (E1.2): wider than its column
                     (header
                         ? header.key === key && header.columnSpan === 1
                         : (summaryRowAt(shown, rowIndex) !== undefined ||
                               (rowIndex >= 0 &&
-                                  rowAt(shown.source, rowIndex) !==
-                                      undefined)) &&
+                                  rowLoaded(shown.source, rowIndex))) &&
                           cellSpan(shown, rowIndex, columnIndex) === 1)
                 ) {
                     elements.push(element);
@@ -1875,9 +1883,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (
             indexes.length === 0 ||
-            !shown.rows.some(
-                (rowIndex) => rowAt(shown.source, rowIndex) !== undefined,
-            )
+            !shown.rows.some((rowIndex) => rowLoaded(shown.source, rowIndex))
         ) {
             return;
         }
@@ -2225,7 +2231,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function followRowDrag(current: RowDrag) {
         if (
-            !rowsMove(options.reorderableRows, state.sortColumns) ||
+            !rowsMove(options.reorderableRows, state) ||
             loadedRowKey(state, current.rowIndex) !== current.rowKey
         ) {
             stopDrag();
@@ -2333,7 +2339,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (
             rowKey !== undefined &&
             loadedRowKey(state, toIndex) !== undefined &&
-            rowsMove(options.reorderableRows, state.sortColumns)
+            rowsMove(options.reorderableRows, state)
         ) {
             moveRow(rowIndex, toIndex, rowKey);
         }
@@ -2384,8 +2390,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (
             event.defaultPrevented ||
             event.button !== 0 ||
-            event.altKey ||
-            event.shiftKey ||
             !inViewport(event.target)
         ) {
             return false;
@@ -2412,6 +2416,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return false;
         }
+        // a row group's toggle (Epic #87): a control of its cell, never a sort or a selection,
+        // whatever the modifiers
+        const toggle = markedOf(event.target, GROUP_TOGGLE_ATTRIBUTE);
+        if (toggle) {
+            model.run("row-groups.toggle", { rowIndex: Number(toggle.value) });
+            return true;
+        }
+        if (event.altKey || event.shiftKey) return false;
         const column = sortableColumnOf(event.target);
         if (!column) return false;
         model.run("sort-columns.toggle", {
@@ -2568,6 +2580,65 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return true;
     }
 
+    /**
+     * A row group's keys on a body cell in navigation (Epic #87, the APG treegrid), rows having
+     * kinds: Enter or Space on a group row toggles it, once per press; on a row's first column, →
+     * expands a collapsed row group and ← collapses an expanded one, or, from a row that is not
+     * an expanded group, goes to the row it is under (its first column). Each through a command,
+     * so a middleware can refuse it; any other arrow, or one with nothing to do here, moves.
+     */
+    function rowGroupKey(event: KeyboardEvent, target: Element): boolean {
+        if (
+            !state.source.getRowMeta ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
+        ) {
+            return false;
+        }
+        const position = bodyCellOf(target);
+        if (!position) return false;
+        const { rowIndex } = position;
+        if (event.key === "Enter" || event.key === " ") {
+            if (!groupAt(state.source, rowIndex)) return false;
+            event.preventDefault();
+            // a held key repeats: it would open and close the group
+            if (!event.repeat) model.run("row-groups.toggle", { rowIndex });
+            return true;
+        }
+        const move = KEYS[inlineKey(event.key, direction)];
+        if ((move !== "left" && move !== "right") || position.columnIndex > 0) {
+            return false;
+        }
+        const meta = rowMetaAt(state.source, rowIndex);
+        const groupKey = groupKeyAt(state, rowIndex, meta);
+        // → on a collapsed row group expands it, ← on an expanded one collapses it
+        if (
+            groupKey !== undefined &&
+            groupExpanded(state, groupKey) === (move === "left")
+        ) {
+            event.preventDefault();
+            model.run("row-groups.toggle", { rowIndex });
+            return true;
+        }
+        const parentIndex = meta?.parentIndex;
+        if (
+            move === "right" ||
+            parentIndex === undefined ||
+            !isIndex(parentIndex, state.rowCount)
+        ) {
+            return false;
+        }
+        event.preventDefault();
+        pendingFocus = true;
+        model.run("active-position.set", {
+            rowIndex: parentIndex,
+            columnIndex: 0,
+        });
+        flushFocus();
+        return true;
+    }
+
     function keydown(event: KeyboardEvent): boolean {
         const target = event.target;
         const ctrl = event.ctrlKey || event.metaKey;
@@ -2644,6 +2715,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return true;
             }
         }
+        // a row group's keys (Epic #87): Enter and Space toggle a group row (its controls get the
+        // keys by F2), the arrows on a row's first column expand, collapse or go up the tree
+        if (rowGroupKey(event, target)) return true;
         // Enter or F2 on a cell itself hand the keys to its controls (a sortable header cell's
         // Enter sorted above: F2 enters it); a cell without controls lets the key through
         if (
@@ -2820,7 +2894,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function takeRow(element: HTMLElement) {
         const index = rowIndexOf(element);
-        const key = loadedRowKey(state, index);
+        // a group row's key is its group's (Epic #87)
+        const key = rowKeyAt(state, index);
         if (key === undefined) return;
         detailsInRow = 0;
         layers.detail.forEach(addDetailIn, element);
@@ -2899,7 +2974,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         before: DataGridModel<TRow, TNode>["state"],
         after: DataGridModel<TRow, TNode>["state"],
     ): boolean {
-        const keyAt = (index: number) => loadedRowKey(after, index);
+        const keyAt = (index: number) => rowKeyAt(after, index);
         const newSource =
             after.source !== before.source || after.rowKey !== before.rowKey;
         const changed = after.rowsChanged !== before.rowsChanged;

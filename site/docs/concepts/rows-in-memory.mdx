@@ -56,9 +56,10 @@ as `DataGrid.Root` wants its columns: the hook works again when they change.
 
 ## In stages
 
-The rows are filtered, then searched, then sorted, then paged. Each stage is worked out again only
-when its own inputs change: turning a page sorts nothing again, and a new sort filters nothing
-again.
+The rows are filtered, then searched, then sorted, then grouped (with `groupBy`,
+[Row grouping](/docs/concepts/row-grouping)), then paged. Each stage is worked out again only
+when its own inputs change: turning a page sorts nothing again, a new sort filters nothing
+again, and expanding a group groups nothing again.
 
 ## Sorting
 
@@ -113,7 +114,8 @@ The hook never changes the rows you give it. When people [move rows](/docs/conce
 `moveRow(move)` returns your rows with a move the grid told (`onRowMove`) applied: the moved row
 goes beside the row it lands next to on screen, a filtered or paged grid's included. Set it as your
 rows. It is stable (a function that never changes, reading your latest rows), and two moves told
-before a render apply one after the other. The grid moves no row while it is sorted.
+before a render apply one after the other. The grid moves no row while it is sorted, nor while
+the rows are grouped.
 
 ```tsx title="backlog.tsx"
 const [tasks, setTasks] = useState(initialTasks);
@@ -129,7 +131,8 @@ const local = useLocalRows(tasks, columns);
 ## Without React
 
 The same pipeline is framework-free in `@fragiola/data-grid/local`: `createLocalRows(options)`
-keeps the state and `derive(rows, columns)` returns the page and the counts, and `sortRows`,
+keeps the state and `derive(rows, columns, grouping?)` returns the page and the counts (grouped,
+its `groups`: the rows shown, their kinds and their keys), and `sortRows`,
 `filterRows`, `searchRows` and `pageRows` work on any array, as `moveRow(rows, fromIndex,
 toIndex)` and `moveShownRow(rows, rowIndexes, fromIndex, toIndex)` do for a move (the rows
 shown by their places among your rows, a view's `rowIndexes`, so equal rows are told apart).

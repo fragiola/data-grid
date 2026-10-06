@@ -10,10 +10,15 @@ import {
     cellPart,
     cellValue,
     columnResizerPart,
+    dataRowAt,
+    depthOf,
     EMPTY_WINDOW,
     GROUP_LABEL_ATTRIBUTE,
     type GridDirection,
     type GridView,
+    type GroupToggleState,
+    groupCellValue,
+    groupTogglePart,
     type HeaderCellPart,
     type HeaderCellState,
     headerCellBox,
@@ -24,12 +29,13 @@ import {
     type RowDragHandleState,
     type RowState,
     renderedWidth,
-    rowAt,
     rowColumns,
     rowDetailPart,
     rowDisplay,
     rowDragHandlePart,
+    rowKeyOf,
     rowLeft,
+    rowMetaAt,
     rowPart,
     rowTop,
     rowWidth,
@@ -70,6 +76,7 @@ import { dataAttributes } from "./utils/useRender";
 export type {
     CellState,
     ColumnResizerState,
+    GroupToggleState,
     HeaderCellState,
     RowDetailState,
     RowDragHandleState,
@@ -127,19 +134,25 @@ export function useColumnWindow<TRow>(gridRef?: DataGridRef<TRow>): AxisWindow {
     return useWindow("column-window", gridRef);
 }
 
-/** The rows a render shows, with their data and keys. */
+/** The rows a render shows, with their data, keys and kinds (Epic #87: a group row, a depth). */
 export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
     // outside a `Root`, the grid's own error first
     useRootGrid();
     const view = useGridView<TRow>();
-    const { rowKey } = view;
+    const { source } = view;
     return view.rows.map((rowIndex) => {
-        const row = rowAt(view.source, rowIndex);
+        // read once: its kind (a grid without them asks for none), its data row, and its key by
+        // the core's one rule (the engine's measured keys share it)
+        const meta = rowMetaAt(source, rowIndex);
+        const row = dataRowAt(source, rowIndex, meta);
+        const group = meta?.group;
         return {
             rowIndex,
             row,
-            loaded: row !== undefined,
-            key: row !== undefined && rowKey ? rowKey(row, rowIndex) : rowIndex,
+            loaded: row !== undefined || group !== undefined,
+            key: rowKeyOf(view, rowIndex, meta, row) ?? rowIndex,
+            group,
+            depth: depthOf(meta),
         };
     });
 }
@@ -205,7 +218,11 @@ export function useRowPart<TRow>(
 } {
     const view = useGridView<TRow>();
     const { engine } = useRootGrid();
-    const { state, ariaSelected } = rowPart(view, row.rowIndex, row.loaded);
+    const { state, ariaSelected, ariaTree } = rowPart(
+        view,
+        row.rowIndex,
+        row.loaded,
+    );
     const measured = measuredRow(view, row.loaded);
     return {
         state,
@@ -216,6 +233,8 @@ export function useRowPart<TRow>(
             ...(ariaSelected === undefined
                 ? {}
                 : { "aria-selected": ariaSelected }),
+            // a treegrid's row (Epic #87): its level, expansion and set
+            ...ariaTree,
             ...dataAttributes({
                 "grid-part": "row",
                 "row-index": row.rowIndex,
@@ -226,6 +245,10 @@ export function useRowPart<TRow>(
                 // while a drag moves it, or would drop beside it (Epic #86)
                 dragging: state.dragging,
                 "drop-target": state.dropTarget ?? undefined,
+                // its kind (Epic #87): a group row, a row group expanded, its depth
+                "group-row": state.group !== undefined,
+                "group-expanded": state.groupExpanded,
+                depth: state.depth,
             }),
             // an expanded row's box holds its detail, below its cells
             style: rowStyle(
@@ -245,16 +268,19 @@ export function useRowPart<TRow>(
  */
 export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
     const view = useGridView<TRow>();
+    const { group } = row;
     return cellsOf(view, row.rowIndex, (columnIndex, column) => ({
         rowIndex: row.rowIndex,
         columnIndex,
         column,
         row: row.row,
         loaded: row.loaded,
-        value:
-            row.row === undefined
-                ? undefined
-                : cellValue(column, row.row, row.rowIndex),
+        value: group
+            ? groupCellValue(group, column)
+            : row.row === undefined
+              ? undefined
+              : cellValue(column, row.row, row.rowIndex),
+        group,
     }));
 }
 
@@ -590,6 +616,33 @@ export function useRowDragHandle(row: {
                 "grid-part": "row-drag-handle",
                 reorderable: state.reorderable,
                 dragging: state.dragging,
+            }),
+            style: {},
+        },
+    };
+}
+
+/**
+ * A row group's toggle (Epic #87): the state and props of a control the app renders in a group
+ * row (or a row that expands; `row` is a row's or a cell's info), which expands and collapses it:
+ * a click on it runs `row-groups.toggle` (the engine's, after the app's own `onClick`; a control of
+ * its cell, never a sort or a selection). The props are its `aria-expanded` and its mark; its
+ * element (a `button`), name (`aria-label`), look and place are the app's. Under a row that does
+ * not expand (`state.expandable` false) it has no props: render none there.
+ */
+export function useGroupToggle(row: {
+    readonly rowIndex: number;
+}): PartHookResult<GroupToggleState> {
+    const view = useGridView();
+    const { state, attributes } = groupTogglePart(view, row.rowIndex);
+    if (!attributes) return { state, props: { style: {} } };
+    return {
+        state,
+        props: {
+            ...attributes,
+            ...dataAttributes({
+                "grid-part": "group-toggle",
+                expanded: state.expanded,
             }),
             style: {},
         },

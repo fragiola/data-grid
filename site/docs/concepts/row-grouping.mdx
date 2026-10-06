@@ -1,0 +1,232 @@
+---
+title: Row grouping
+description: Group rows by one or more columns, with expandable group rows, counts and aggregates, treegrid keys and ARIA, and selection by group.
+---
+
+Grouping shows the rows sharing a column's value under one **group row**, nested by the next
+column, each with a count and figures over its rows. The grid shows the rows it is given, as
+always: it never groups them itself. It knows what kind of row each index is, which group rows
+are expanded, and what that means for ARIA, the keys and the selection. The grouping is your
+data's, done in memory by `useLocalRows`, or by a server.
+
+<Example id="row-grouping" />
+
+## Rows in memory
+
+`useLocalRows` groups by the columns in `groupBy`, the outer one first, and keeps which groups
+are expanded. Spread its `props` on the root: grouped, they are the rows shown (`rowCount`,
+`getRow`), their kinds (`getRowMeta`), their keys (`rowKey`) and the expanded groups.
+
+```tsx title="people.tsx"
+import { type Column, DataGrid, useGroupToggle } from "@fragiola/data-grid-react";
+import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
+
+const columns: Column<Person>[] = [
+    { key: "name", name: "Name", width: 220 },
+    { key: "team", name: "Team", width: 120, sortable: true },
+    { key: "salary", name: "Salary", width: 120, sortable: true },
+];
+
+// each group's figures over its rows, by column key (keep it the same object between renders)
+const aggregates = {
+    salary: (rows: readonly Person[]) =>
+        rows.reduce((sum, person) => sum + person.salary, 0),
+};
+
+function People({ people }: { people: Person[] }) {
+    const local = useLocalRows(people, columns, {
+        groupBy: ["team"],
+        aggregates,
+        rowKey: (person) => person.id,
+        defaultExpandedGroupKeys: [groupKeyOf([["team", "Design"]])],
+    });
+    return (
+        <DataGrid.Root {...local.props} columns={columns}>
+            <DataGrid.Grid aria-label="People">
+                <DataGrid.Header />
+                <DataGrid.Body>
+                    <DataGrid.Rows<Person>>
+                        {(row) => (
+                            <DataGrid.Row row={row}>
+                                <DataGrid.Cells<Person>>
+                                    {(cell) => (
+                                        <DataGrid.Cell cell={cell}>
+                                            {cell.group && cell.column.key === "name" ? (
+                                                <GroupLabel cell={cell} />
+                                            ) : undefined}
+                                        </DataGrid.Cell>
+                                    )}
+                                </DataGrid.Cells>
+                            </DataGrid.Row>
+                        )}
+                    </DataGrid.Rows>
+                </DataGrid.Body>
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
+```
+
+The filters and the search apply first: a group holds the rows they leave, and a group with none
+left is gone. The sort orders the rows inside each group, and the groups by their value: by the
+sort's direction when it sorts their column, else ascending, an empty value last. `aggregates`
+are your functions over a group's rows, by column key; give `rowKey` to the hook, not the root:
+the props carry it, grouped or not (called with a row and its index among the rows you pass;
+grouped without one, that index is the key), so the selection holds the same keys with the
+grouping on or off. With a `pageSize`, a page is of the rows shown, group rows included.
+
+`local.group` is for your controls: `by` (the columns), `expandedKeys`, `setExpandedKeys(keys)`,
+`expandAll()` and `collapseAll()`. The expanded groups are the hook's own, or yours with
+`expandedGroupKeys` and `onExpandedGroupKeysChange`. A group's key is the path to it, the outer
+column first: `groupKeyOf([["team", "Design"], ["city", "Lisbon"]])`. Without `groupBy`, the hook
+gives the root the plain rows, as before.
+
+## Group rows
+
+A group row is a `GroupRow`, the core's own type: one generic still, the row type. It has no data
+row: `row.row` is `undefined` and `row.group` holds it.
+
+| field | what it is |
+| --- | --- |
+| `key` | what expands it: unique among the grid's rows |
+| `columnKey`, `value` | the column its rows are grouped by, and the value they share |
+| `depth` | 0 at the top, 1 inside another group, … |
+| `childCount` | how many data rows it holds, at every depth below it |
+| `aggregates` | the figures over its rows, by column key |
+| `rowKeys` | its data rows' keys: what selecting it selects |
+
+A group row's cells are cells: by default a cell shows the group's value in its column, else the
+group's aggregate for the cell's column, as text (`cell.value` holds it, `cell.group` the group).
+A column's `renderGroupCell({ group, rowIndex, column, columnIndex, value })` draws them its own
+way, a figure as money for one; `renderCell` is never called for a group row. A row's `depth`
+(0 at the top) and its `group` are on its info, for indenting a name or tinting a group.
+
+### The toggle
+
+The control that expands a group is yours, with `useGroupToggle(row)` (a row's or a cell's info):
+
+```tsx
+function GroupLabel({ cell }: { cell: CellInfo<Person> }) {
+    const { state, props } = useGroupToggle(cell);
+    const group = cell.group;
+    if (!group) return null;
+    return (
+        <>
+            <button type="button" {...props} aria-label={state.expanded ? "Collapse" : "Expand"}>
+                {state.expanded ? "▾" : "▸"}
+            </button>
+            {String(group.value)} ({group.childCount})
+        </>
+    );
+}
+```
+
+Its props are its `aria-expanded` and the mark the engine finds it by: a click on it runs
+`row-groups.toggle`, after your own `onClick`, with Shift or Alt held too. It is a control of its
+cell, never a sort or a selection. Its state is `rowIndex`, `groupKey`, `expandable`, `expanded` and `depth`; under a row
+that does not expand it has no props: render none there.
+
+## The model
+
+The expanded groups are grid state: `expandedGroupKeys`, a set of keys, controlled or not on the
+root (`expandedGroupKeys`, `defaultExpandedGroupKeys`, `onExpandedGroupKeysChange`).
+
+- `model.run("row-groups.toggle", { rowIndex })` toggles a group row (or a row that expands), and
+  `{ groupKey }` by its key.
+- `model.run("row-groups.set", { groupKeys })` replaces them; the same keys in another order change
+  nothing, and a key no row has is kept.
+- `model.get("expanded-group-keys")` reads them, `model.is("row-group-expanded", { rowIndex })`
+  tells a row's, and `model.get("row-meta-by", { rowIndex })` its kind.
+
+The grid shows the rows it is given: toggling a group changes the keys, and your rows follow them
+(`useLocalRows` does). The active cell stays at its index when your rows change under it: a group
+toggled from its own row keeps it there, one expanded above it from elsewhere (a toolbar's "expand
+all") moves what it holds. Group rows have no detail and never move by drag: while rows have
+kinds, `onRowMove` moves nothing. A fit to content measures group rows' cells as it measures
+data rows'.
+
+## Keys
+
+The keys are the APG treegrid's, on a body cell in navigation:
+
+| key | on |
+| --- | --- |
+| Enter, Space | a group row: toggle it, once per press (F2 hands a cell's controls the keys) |
+| → | a collapsed group's first column: expand it; anywhere else, the next cell |
+| ← | an expanded group's first column: collapse it; another row's first column: go to the row it is under |
+| Shift+Space | a group row: select its rows, or clear them all when every one is selected |
+
+Right to left, ← and → swap, as everywhere. Each key runs one command, after your own handlers: a
+`preventDefault` cancels it, and a middleware can refuse it.
+
+## Selection
+
+With `rowSelection="multiple"`, a group row selects its rows' keys (`rowKeys`): Shift+Space, or
+`model.run("selected-rows.toggle", { rowIndex })` from your checkbox, selects every one of them,
+or clears them all when every one is selected. A group row is `aria-selected` while every one of
+its rows is: `useSelectAll(group.rowKeys)` tells "some" for a checkbox's indeterminate state. A
+range (Shift+↑/↓, a Shift+click) and select-all (Ctrl+A) take a group row's `rowKeys` too, so the
+rows of a collapsed group are selected with the others; a Shift+click on a group row with no
+anchor toggles it. In single mode a group row cannot be selected.
+
+`rowKeys` are taken as given, as `selected-rows.set` takes keys: the grid cannot ask
+`isRowSelectable` of rows it does not have (a collapsed group's). List only the rows that can be
+selected: `useLocalRows`'s `isRowSelectable` option (the root's predicate, called with a row's
+index among the rows you pass) leaves the ones it refuses out of every group's `rowKeys`. Give it
+to the root too, for the rows' own checkboxes.
+
+## ARIA
+
+With row kinds the grid is a `treegrid`. Each row carries `aria-level` (its depth + 1), a group
+row `aria-expanded`, and `aria-setsize`/`aria-posinset` when its meta says. `aria-rowcount` and
+`aria-rowindex` count the rows shown, group rows included. A group row carries
+`data-group-row`, an expanded one `data-group-expanded`, every row `data-depth`; a grid without
+row kinds carries none of them and stays a `grid`.
+
+## Columns, summary rows and heights
+
+Group rows are rows: pinned columns pin their cells, a column's `colSpan` is asked for them with
+`{ type: "group", group, rowIndex }` (a group's label can span the row), summary rows stay where
+they are and count them, measured heights measure them (keyed by their group's key), and scroll
+scaling reaches the last of millions.
+
+## A server's rows
+
+A server groups the same way and sends the rows shown: a count, a getter and each row's kind.
+Give the root `rowCount`, `getRow` and `getRowMeta` yourself, with the expanded keys controlled,
+and fetch again when they change:
+
+```tsx
+const getRowMeta = (index: number): RowMeta | undefined => {
+    const item = page.items[index];
+    return item?.kind === "group"
+        ? {
+              group: {
+                  key: item.key,
+                  columnKey: "team",
+                  value: item.team,
+                  depth: 0,
+                  childCount: item.count,
+                  aggregates: { salary: item.payroll },
+                  rowKeys: item.memberIds,
+              },
+              setSize: page.groupCount,
+              posInSet: item.position,
+          }
+        : { depth: 1, parentIndex: item?.parentIndex };
+};
+
+<DataGrid.Root
+    columns={columns}
+    rowCount={page.rowCount}
+    getRow={(index) => page.items[index]?.person}
+    getRowMeta={getRowMeta}
+    rowKey={(person) => person.id}
+    expandedGroupKeys={expanded}
+    onExpandedGroupKeysChange={setExpanded}
+/>
+```
+
+`getRow` answers anything at a group row's index: the grid never reads it there. A row still
+loading answers `undefined` from `getRow` and from `getRowMeta` (a data row at the top). A group
+without `rowKeys` (a server that does not send them) cannot be selected.

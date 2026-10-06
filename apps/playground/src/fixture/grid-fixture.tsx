@@ -19,9 +19,11 @@ import {
     useDataGridRef,
     useGridView,
     useGroupLabel,
+    useGroupToggle,
     useHeaderCell,
     useRowDragHandle,
 } from "@fragiola/data-grid-react";
+import { useLocalRows } from "@fragiola/data-grid-react/local";
 import {
     Profiler,
     type ReactElement,
@@ -99,12 +101,19 @@ import { createRoot } from "react-dom/client";
 //                        being the row's index before any move); the fixture keeps the rows'
 //                        order in its state and applies each move (`moveRow`), keyed by id; a
 //                        drop target is marked by the fixture's own CSS
+//   &groupBy=1           the rows in memory (`useLocalRows`), grouped by C2 (`g<index % 5>`);
+//                        2 groups by C2 then C3 (`h<index % 2>`): a group row's C0 cell holds
+//                        its toggle (`group-toggle-<row>`, `useGroupToggle`) and `<value>
+//                        (<count>)`, its C4 the sum of its rows' indexes (an aggregate), its C1
+//                        a checkbox with &selection=multiple; keyed by index, the expanded
+//                        groups uncontrolled
 //
 // For the spec: `window.grid` is the grid's model and engine, `window.commits` counts React
 // commits of the grid (a Profiler), `window.sortChanges` the sorts reported,
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
 // `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups,
-// `window.rowMoves` the rows moved, and a button before and after the grid take Tab.
+// `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups, and a button
+// before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -120,6 +129,7 @@ declare global {
         orderChanges: ColumnOrder[];
         collapseChanges: (readonly string[])[];
         rowMoves: RowMove[];
+        groupChanges: (readonly RowKey[])[];
     }
 }
 
@@ -149,6 +159,48 @@ const linesColumn: Partial<Column<FixtureRow>> = {
             (_, line) => `${row.index}:1 line ${line}`,
         ).map((text) => <div key={text}>{text}</div>),
 };
+
+/** What `&groupBy` aggregates: C4, the sum of a group's rows' indexes. */
+const AGGREGATES = {
+    c4: (rows: readonly FixtureRow[]) =>
+        rows.reduce((total, row) => total + row.index, 0),
+};
+
+/** No rows in memory: the fixture's rows come from their index unless it groups them. */
+const NO_ROWS: readonly FixtureRow[] = [];
+
+/** A group row's toggle, as an app writes it: the hook's props on a button of its own. */
+function GroupToggle({ cell }: { cell: CellInfo<FixtureRow> }) {
+    const { state, props } = useGroupToggle(cell);
+    if (!state.expandable) return null;
+    return (
+        <button
+            type="button"
+            {...props}
+            data-testid={`group-toggle-${cell.rowIndex}`}
+            aria-label={state.expanded ? "Collapse" : "Expand"}
+        >
+            {state.expanded ? "-" : "+"}
+        </button>
+    );
+}
+
+/** A group row's cell content: C0 its toggle and its value and count, C1 its checkbox. */
+function groupCellContent(cell: CellInfo<FixtureRow>, selection: boolean) {
+    const { group } = cell;
+    if (!group) return undefined;
+    if (cell.columnIndex === 0) {
+        return (
+            <>
+                <GroupToggle cell={cell} /> {String(group.value)} (
+                {group.childCount})
+            </>
+        );
+    }
+    return selection && cell.columnIndex === 1 ? (
+        <SelectBox rowIndex={cell.rowIndex} />
+    ) : undefined;
+}
 
 /** A row's drag handle, as an app writes it: the hook's props on an element of its own. */
 function RowHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
@@ -517,12 +569,18 @@ function summaryColumn(
     };
 }
 
-/** A cell's value: C1's wider with `&resize=1`, C3's wider still with `&autosize=1`. */
+/**
+ * A cell's value: C1's wider with `&resize=1`, C3's wider still with `&autosize=1`; with
+ * `&groupBy`, C2's and C3's the values the rows are grouped by.
+ */
 function cellValue(
     columnIndex: number,
     resize: boolean,
     autoSize: boolean,
+    grouping: boolean,
 ): (row: FixtureRow) => string {
+    if (grouping && columnIndex === 2) return (row) => `g${row.index % 5}`;
+    if (grouping && columnIndex === 3) return (row) => `h${row.index % 2}`;
     if (resize && columnIndex === 1) return (row) => `${row.index}:1 wide`;
     if (autoSize && columnIndex === 3) {
         return (row) => `${row.index}:3, a value wider than its column`;
@@ -706,6 +764,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const summaryBottom = numberParam(params, "summaryBottom", 0);
     const summary = summaryTop + summaryBottom > 0;
     const rowReorder = params.get("rowReorder") === "1";
+    const groupByParam = numberParam(params, "groupBy", 0);
+    const grouping = groupByParam > 0;
     // the rows' order, by id (the index each row had first): the app's, moved on each move
     const [rowOrder, setRowOrder] = useState<readonly number[]>(() =>
         rowReorder ? Array.from({ length: rowCount }, (_, index) => index) : [],
@@ -746,7 +806,12 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     key: `c${columnIndex}`,
                     name: `C${columnIndex}`,
                     width: 100,
-                    getValue: cellValue(columnIndex, resize, autoSize),
+                    getValue: cellValue(
+                        columnIndex,
+                        resize,
+                        autoSize,
+                        grouping,
+                    ),
                     ...(sort && columnIndex < 2 ? { sortable: true } : {}),
                     ...(columnIndex < pinnedCount
                         ? { pinned: "start" as const }
@@ -768,8 +833,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         : {}),
                     ...(rowSelection && columnIndex === 1
                         ? {
-                              renderCell: ({ row }) => (
-                                  <SelectBox rowIndex={row.index} />
+                              renderCell: ({ rowIndex }) => (
+                                  <SelectBox rowIndex={rowIndex} />
                               ),
                           }
                         : {}),
@@ -805,7 +870,28 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         rowSelection,
         summary,
         autoRows,
+        grouping,
     ]);
+    // `&groupBy`: the rows in memory, grouped by the pipeline
+    const groupBy = useMemo(
+        () => (grouping ? ["c2", "c3"].slice(0, groupByParam) : []),
+        [grouping, groupByParam],
+    );
+    const memoryRows = useMemo(
+        () =>
+            grouping
+                ? Array.from({ length: rowCount }, (_, index) => ({ index }))
+                : NO_ROWS,
+        [grouping, rowCount],
+    );
+    const local = useLocalRows(memoryRows, columns, {
+        groupBy,
+        aggregates: AGGREGATES,
+        rowKey: rowId,
+        onExpandedGroupKeysChange: (keys) => window.groupChanges.push(keys),
+    });
+    const groupedProps =
+        grouping && local.props.rows === undefined ? local.props : undefined;
     const rowHeight = useMemo(
         () =>
             autoRows
@@ -833,9 +919,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
             >
                 <DataGrid.Root<FixtureRow>
                     columns={columns}
-                    rowCount={rowCount}
-                    getRow={rowReorder ? getOrderedRow : getRow}
-                    rowKey={rowReorder ? rowId : undefined}
+                    {...(groupedProps ?? {
+                        rowCount,
+                        getRow: rowReorder ? getOrderedRow : getRow,
+                        rowKey: rowReorder ? rowId : undefined,
+                    })}
                     onRowMove={
                         rowReorder
                             ? (move) => {
@@ -862,9 +950,11 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         autoDetails ? detailEstimate : undefined
                     }
                     maxScrollSize={maxScrollSize}
-                    onSortColumnsChange={(sortColumns) =>
-                        window.sortChanges.push(sortColumns)
-                    }
+                    onSortColumnsChange={(sortColumns) => {
+                        window.sortChanges.push(sortColumns);
+                        // grouped, the pipeline sorts the rows (inside their groups)
+                        groupedProps?.onSortColumnsChange(sortColumns);
+                    }}
                     rowSelection={rowSelection}
                     isRowSelectable={isRowSelectable}
                     onSelectedRowKeysChange={(keys) =>
@@ -930,8 +1020,15 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                     render={tag.cell}
                                                     style={pinnedStyle}
                                                 >
-                                                    {(details || rowReorder) &&
-                                                    cell.columnIndex === 0 ? (
+                                                    {cell.group ? (
+                                                        groupCellContent(
+                                                            cell,
+                                                            rowSelection ===
+                                                                "multiple",
+                                                        )
+                                                    ) : (details ||
+                                                          rowReorder) &&
+                                                      cell.columnIndex === 0 ? (
                                                         <>
                                                             {rowReorder &&
                                                             cell.loaded ? (
@@ -1040,6 +1137,7 @@ export function mountGridFixture(kind: "table" | "div") {
     window.orderChanges = [];
     window.collapseChanges = [];
     window.rowMoves = [];
+    window.groupChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(
