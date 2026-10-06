@@ -116,6 +116,8 @@ export interface CellState {
      * for a cell inside the range or outside it, and while cells are not selectable
      */
     readonly rangeEdges: string | undefined;
+    /** it is the cell being edited (Epic #88, E4.3): it shows its editor */
+    readonly editing: boolean;
 }
 
 /** The state of a summary row (Epic #86, E2.1). */
@@ -364,12 +366,15 @@ export interface RowDetailPart {
     readonly box: ReturnType<typeof rowDetailBox>;
 }
 
-/** Whether a cell (at its element's position) is the one whose controls have the keys. */
-function interacting<TRow, TNode>(
-    view: GridView<TRow, TNode>,
+/**
+ * Whether a cell (at its element's position) is the one a view's state holds, if any: the one
+ * whose controls have the keys (`interaction`), the one being edited (`editingCell`, Epic #88).
+ */
+export function isHeldCell(
+    held: CellPosition | null,
     cell: CellPosition,
 ): boolean {
-    return view.interaction !== null && sameCell(view.interaction, cell);
+    return held !== null && sameCell(held, cell);
 }
 
 /** A body row's state, and its `aria-selected`. */
@@ -502,11 +507,12 @@ export function cellPart<TRow, TNode>(
             pinned,
             pinnedEdge,
             pinnedSide,
-            interacting: interacting(view, cell),
+            interacting: isHeldCell(view.interaction, cell),
             selected,
             rangeEdges: selected
                 ? rangeEdgesOf(range, cell.rowIndex, cell.columnIndex, span)
                 : undefined,
+            editing: isHeldCell(view.editingCell, cell),
         },
         tabIndex: active ? 0 : -1,
         ariaColSpan: span > 1 ? span : undefined,
@@ -622,7 +628,7 @@ export function headerCellPart<TRow, TNode>(
             pinned,
             pinnedEdge,
             pinnedSide,
-            interacting: interacting(view, cell),
+            interacting: isHeldCell(view.interaction, cell),
         },
         tabIndex: active ? 0 : -1,
         ariaSort: sort.ariaSort,

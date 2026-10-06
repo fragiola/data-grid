@@ -5,6 +5,7 @@ import type {
     CellSelection,
     Column,
     ColumnWidths,
+    EditingCell,
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
@@ -179,6 +180,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly isRowSelectable: RowSelectable<TRow> | undefined;
     /** how cells are selected (Epic #88); `undefined` when they are not */
     readonly cellSelection: CellSelection | undefined;
+    /** the cell being edited (Epic #88, E4.3): its part is `editing`, its editor rendered */
+    readonly editingCell: EditingCell | null;
     /** the selected range of body cells, or `null` (a cell's part tells whether it is in it) */
     readonly selectedRange: CellRange | null;
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
@@ -262,6 +265,28 @@ export interface RowMove {
     readonly rowKey: RowKey;
 }
 
+/**
+ * An edit's draft (Epic #88, E4.3): what its editor shows (`value`, the cell's value until the
+ * editor changes it) and the value it started from (the value a commit last told). The engine's:
+ * an editor reads it, `change-edit` replaces it, `commit-edit` tells it. The cell is the model's
+ * `editingCell`.
+ */
+export interface EditDraft {
+    readonly value: unknown;
+    readonly initialValue: unknown;
+}
+
+/**
+ * An edit committed (E4.3): the cell, its column's key and the value, which the app writes into
+ * its row (`onCellEdit`): the grid writes no data. Told only when the value changed.
+ */
+export interface CellEdit {
+    readonly rowIndex: number;
+    readonly columnIndex: number;
+    readonly columnKey: string;
+    readonly value: unknown;
+}
+
 /** What `engine.get` reads. */
 export interface EngineQueryMap {
     "row-window": AxisWindow;
@@ -290,6 +315,8 @@ export interface EngineQueryMap {
      * reported to the model: a reset gives a column its one back
      */
     "column-auto-widths": ColumnWidths;
+    /** the edit's draft (Epic #88), or `null` while no cell is edited */
+    "edit-draft": EditDraft | null;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
@@ -321,6 +348,20 @@ export interface EngineActionMap {
      * not rendered is not measured
      */
     "fit-columns": { readonly columnKeys?: readonly string[] | undefined };
+    /**
+     * makes a cell active and edits it (Epic #88, E4.3: `editing-cell.set`), its editor taking
+     * focus once rendered; refused for a cell that cannot be edited
+     */
+    "edit-cell": EditingCell;
+    /** replaces the edit's draft (an editor's `onChange`) */
+    "change-edit": { readonly value: unknown };
+    /**
+     * ends the edit, telling its draft (`value`, when given, replaces it first) as a `cell-edit`
+     * when it changed; the cell keeps focus
+     */
+    "commit-edit": { readonly value?: unknown };
+    /** ends the edit telling nothing, the cell keeping focus (as Escape does) */
+    "cancel-edit": Record<string, never>;
 }
 
 export type EngineActionKey = keyof EngineActionMap;
@@ -348,6 +389,10 @@ export interface EngineEventMap {
     "row-move": RowMove;
     /** the automatic widths or the flex shares changed (see `column-auto-widths`) */
     "column-auto-widths": ColumnWidths;
+    /** the edit's draft changed: an edit started, its editor changed it, or it ended (`null`) */
+    "edit-draft": EditDraft | null;
+    /** an edit was committed with a new value (Epic #88, E4.3): the app writes it */
+    "cell-edit": CellEdit;
     /**
      * values were pasted into the grid (Epic #88, E4.2: Ctrl/⌘+V on one of its cells, cells
      * selectable): the range they land in and the values, parsed from the clipboard's text (TSV).

@@ -26,6 +26,7 @@ const REPRESENTATIVE: string[] = [
     "row-grouping", // group rows tinted, their toggles and counts, an indented tree, checkboxes on groups
     "tree-data", // folders and files indented, their toggles and icons, rows loading in place
     "cell-selection", // a range's tint and edge lines over pinned and scrolling cells, the toolbar's sum
+    "editing", // editors filling their cells, the edited cell's outline, a select's list portalled out
 ];
 
 const slugs = new Set(EXAMPLES.map((example) => example.slug));

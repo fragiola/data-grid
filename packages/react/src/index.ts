@@ -2,6 +2,7 @@
 
 export type {
     AxisWindow,
+    CellEdit,
     CellPosition,
     CellRange,
     CellSelection,
@@ -11,6 +12,9 @@ export type {
     DataGridEngine,
     DataGridModel,
     DetailHeight,
+    EditCellRenderProps,
+    EditDraft,
+    EditingCell,
     GridDirection,
     GroupCellRenderProps,
     GroupColSpanArgs,
@@ -37,6 +41,7 @@ export type {
     SummaryRowCounts,
 } from "@fragiola/data-grid";
 export {
+    type CellEditEvent,
     type CellInfo,
     type Column,
     type ColumnGroup,
@@ -67,6 +72,7 @@ export {
     type SummaryCellState,
     type SummaryRowState,
     useCell,
+    useCellEdit,
     useCells,
     useColumnResizer,
     useColumnWindow,

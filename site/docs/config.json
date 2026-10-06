@@ -91,6 +91,10 @@
                     "path": "concepts/cell-selection"
                 },
                 {
+                    "label": "Editing",
+                    "path": "concepts/editing"
+                },
+                {
                     "label": "Row reordering",
                     "path": "concepts/row-reordering"
                 },

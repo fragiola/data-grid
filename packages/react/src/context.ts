@@ -1,4 +1,5 @@
 import type {
+    CellEdit,
     Column as CoreColumn,
     ColumnGroup as CoreColumnGroup,
     DataGridEngine,
@@ -22,6 +23,14 @@ export type ColumnGroup<TRow> = CoreColumnGroup<TRow, ReactNode>;
 
 /** An entry of `columns`: a column, or a group of them. */
 export type ColumnOrGroup<TRow> = Column<TRow> | ColumnGroup<TRow>;
+
+/**
+ * An edit committed (Epic #88, E4.3), as `onCellEdit` tells it: the cell, its column's key, the
+ * value, and the row (loaded: a cell is edited only then), which the app writes it into.
+ */
+export interface CellEditEvent<TRow> extends CellEdit {
+    readonly row: TRow;
+}
 
 /** What `useDataGrid()` returns: the grid's model and its engine. */
 export interface DataGridContextValue<TRow = unknown> {

@@ -150,6 +150,13 @@ export const GROUP_LABEL_ATTRIBUTE = "data-grid-group-label";
  */
 export const GROUP_TOGGLE_ATTRIBUTE = "data-grid-group-toggle";
 
+/**
+ * What belongs to an edit outside its cell (Epic #88, E4.3): an element the app marks (a select's
+ * or a date picker's popover, portalled out of the grid). A press or focus there keeps the edit
+ * open; anywhere else outside the edited cell, it commits.
+ */
+export const EDITOR_ATTRIBUTE = "data-grid-editor";
+
 /** Whether an element is a column resizer: a control of its header cell, with keys of its own. */
 export function isResizer(element: Element): boolean {
     return element.hasAttribute(COLUMN_RESIZER_ATTRIBUTE);

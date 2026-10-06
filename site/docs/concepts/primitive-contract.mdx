@@ -67,7 +67,8 @@ merged under these keys, which always win. Nothing cosmetic is ever set: see the
 
 ## No text and no names
 
-Parts render their children, or the column's renderer. They set no `aria-label` of their own:
+Parts render their children, or the column's renderer (an
+[edited](/docs/concepts/editing) cell its column's `renderEditCell`, your editor). They set no `aria-label` of their own:
 name the grid yourself (`<DataGrid.Grid aria-label="People">`). A
 [column's resize handle](/docs/concepts/column-resizing) is an element of yours too:
 `useColumnResizer` gives it its props (ARIA, `data-*`, the marker the grid finds it by), never a

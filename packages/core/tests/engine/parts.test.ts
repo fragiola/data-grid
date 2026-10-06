@@ -111,6 +111,7 @@ describe("cellPart", () => {
                 pinned: false,
                 pinnedEdge: false,
                 interacting: true,
+                editing: false,
             },
             tabIndex: 0,
         });

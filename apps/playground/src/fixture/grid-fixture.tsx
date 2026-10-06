@@ -1,5 +1,6 @@
 import { moveRow } from "@fragiola/data-grid/local";
 import {
+    type CellEditEvent,
     type CellInfo,
     type CellRange,
     type ColSpanArgs,
@@ -9,6 +10,7 @@ import {
     type ColumnWidths,
     DataGrid,
     type DataGridContextValue,
+    type EditCellRenderProps,
     type HeaderCellInfo,
     type HeaderRowInfo,
     headerCellContent,
@@ -29,11 +31,14 @@ import { useLocalRows } from "@fragiola/data-grid-react/local";
 import {
     Profiler,
     type ReactElement,
+    type ReactNode,
     StrictMode,
     useCallback,
+    useLayoutEffect,
     useMemo,
     useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
@@ -113,6 +118,11 @@ import { createRoot } from "react-dom/client";
 //                        marked by the fixture's own CSS (an outline on its edges, from
 //                        `data-range-edge`); `controlled` holds the range in the fixture's
 //                        state; the pastes are kept, never written
+//   &edit=1              editable cells: C1 with a text field (`editor-<row>`; typing starts it
+//                        with the key typed), C5 on even rows only with a picker whose options
+//                        (`option-<value>`) are portalled to the page's body, marked as the
+//                        edit's (`data-grid-editor`); the fixture keeps the values edited and
+//                        tells the grid (`rows.changed`)
 //   &tree=1              tree data in memory (`useLocalRows`'s `getSubRows`): 100 top rows, each
 //                        with 3 rows, each of those with 2 (1,000 in all), a row's index its
 //                        place in the whole tree read top to bottom (its key); a parent's C0
@@ -123,8 +133,9 @@ import { createRoot } from "react-dom/client";
 // `window.selectionChanges` the selections, `window.widthChanges` the widths,
 // `window.orderChanges` the column orders, `window.collapseChanges` the collapsed groups,
 // `window.rowMoves` the rows moved, `window.groupChanges` the expanded row groups,
-// `window.rangeChanges` the selected ranges, `window.rangePastes` the pastes, and a button
-// before and after the grid take Tab.
+// `window.rangeChanges` the selected ranges, `window.rangePastes` the pastes,
+// `window.cellEdits` the edits committed, `window.editingChanges` the edited cells, and a
+// button before and after the grid take Tab.
 
 interface FixtureRow {
     index: number;
@@ -143,6 +154,8 @@ declare global {
         groupChanges: (readonly RowKey[])[];
         rangeChanges: (CellRange | null)[];
         rangePastes: RangePaste[];
+        cellEdits: { rowIndex: number; columnKey: string; value: unknown }[];
+        editingChanges: unknown[];
     }
 }
 
@@ -172,6 +185,93 @@ const linesColumn: Partial<Column<FixtureRow>> = {
             (_, line) => `${row.index}:1 line ${line}`,
         ).map((text) => <div key={text}>{text}</div>),
 };
+
+/** The values `&edit=1` edited, by `<row>:<column>`: the fixture's data, never the grid's. */
+const editedValues = new Map<string, string>();
+
+/** A value `&edit=1` edited, else the column's own. */
+function editedValue(
+    columnIndex: number,
+    base: (row: FixtureRow) => string,
+): (row: FixtureRow) => string {
+    return (row) =>
+        editedValues.get(`${row.index}:${columnIndex}`) ?? base(row);
+}
+
+/** C1's editor with `&edit=1`: a field, starting from the key typed, as an app writes one. */
+function TextEditor({
+    value,
+    startKey,
+    rowIndex,
+    onChange,
+}: EditCellRenderProps<FixtureRow, ReactNode>) {
+    // typing started it: the field starts from that key
+    useLayoutEffect(() => {
+        if (startKey !== undefined) onChange(startKey);
+    }, [startKey, onChange]);
+    return (
+        <input
+            aria-label="Edit"
+            data-testid={`editor-${rowIndex}`}
+            value={String(value)}
+            onChange={(event) => onChange(event.target.value)}
+            style={{ width: "100%", boxSizing: "border-box" }}
+        />
+    );
+}
+
+/** C5's editor with `&edit=1`: a picker whose options are portalled out of the grid. */
+function PickEditor({
+    value,
+    rowIndex,
+    onCommit,
+}: EditCellRenderProps<FixtureRow, ReactNode>) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button
+                type="button"
+                data-testid={`picker-${rowIndex}`}
+                onClick={() => setOpen((was) => !was)}
+            >
+                {String(value)}
+            </button>
+            {open
+                ? createPortal(
+                      <div data-grid-editor="" data-testid="picker-options">
+                          {["red", "green", "blue"].map((option) => (
+                              <button
+                                  key={option}
+                                  type="button"
+                                  data-testid={`option-${option}`}
+                                  onClick={() => onCommit(option)}
+                              >
+                                  {option}
+                              </button>
+                          ))}
+                      </div>,
+                      document.body,
+                  )
+                : null}
+        </>
+    );
+}
+
+/** What `&edit=1` makes C1 and C5: editable, C5 on even rows only. */
+function editColumn(columnIndex: number): Partial<Column<FixtureRow>> {
+    if (columnIndex === 1) {
+        return {
+            editable: true,
+            renderEditCell: (props) => <TextEditor {...props} />,
+        };
+    }
+    return columnIndex === 5
+        ? {
+              editable: (row) => row.index % 2 === 0,
+              renderEditCell: (props) => <PickEditor {...props} />,
+          }
+        : {};
+}
 
 /** What `&groupBy` aggregates: C4, the sum of a group's rows' indexes. */
 const AGGREGATES = {
@@ -810,6 +910,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const groupByParam = numberParam(params, "groupBy", 0);
     const grouping = groupByParam > 0;
     const tree = params.get("tree") === "1";
+    const edit = params.get("edit") === "1";
     const cellsParam = params.get("cells");
     const cells = cellsParam === "1" || cellsParam === "controlled";
     const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
@@ -861,11 +962,9 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     key: `c${columnIndex}`,
                     name: `C${columnIndex}`,
                     width: 100,
-                    getValue: cellValue(
+                    getValue: editedValue(
                         columnIndex,
-                        resize,
-                        autoSize,
-                        grouping,
+                        cellValue(columnIndex, resize, autoSize, grouping),
                     ),
                     ...(sort && columnIndex < 2 ? { sortable: true } : {}),
                     ...(columnIndex < pinnedCount
@@ -882,6 +981,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         ? summaryColumn(columnIndex, controls, span)
                         : {}),
                     ...(autoRows && columnIndex === 1 ? linesColumn : {}),
+                    ...(edit ? editColumn(columnIndex) : {}),
                     ...(reorder &&
                     reorderColumn(columnIndex, pinnedCount, pinnedEnd)
                         ? { reorderable: true }
@@ -926,6 +1026,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         summary,
         autoRows,
         grouping,
+        edit,
     ]);
     // `&groupBy`: the rows in memory, grouped by the pipeline
     const groupBy = useMemo(
@@ -1045,6 +1146,26 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         }
                     }}
                     onRangePaste={(paste) => window.rangePastes.push(paste)}
+                    onEditingCellChange={(editing) =>
+                        window.editingChanges.push(editing)
+                    }
+                    onCellEdit={({
+                        rowIndex,
+                        columnIndex,
+                        columnKey,
+                        value,
+                    }: CellEditEvent<FixtureRow>) => {
+                        window.cellEdits.push({ rowIndex, columnKey, value });
+                        // the fixture's data: kept, and the grid told its row changed
+                        editedValues.set(
+                            `${rowIndex}:${columnIndex}`,
+                            String(value),
+                        );
+                        gridRef.current?.model.run("rows.changed", {
+                            start: rowIndex,
+                            end: rowIndex + 1,
+                        });
+                    }}
                     gridRef={gridRef}
                     direction={rtl ? "rtl" : undefined}
                     data-testid="viewport"
@@ -1220,6 +1341,8 @@ export function mountGridFixture(kind: "table" | "div") {
     window.groupChanges = [];
     window.rangeChanges = [];
     window.rangePastes = [];
+    window.cellEdits = [];
+    window.editingChanges = [];
     const root = document.getElementById("root");
     if (!root) throw new Error("#root is missing");
     createRoot(root).render(

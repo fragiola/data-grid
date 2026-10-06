@@ -8,6 +8,7 @@ import {
     pinnedPartsOf,
 } from "../header/header";
 import { shownColumnOf } from "../model/collapse";
+import { hasEditable } from "../model/editing";
 import { detailsChanged, newRowsOf } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import {
@@ -35,6 +36,7 @@ import type {
     CellRange,
     Column,
     ColumnWidths,
+    EditingKeys,
     GridDirection,
     HeaderCellLayout,
     HeaderLayout,
@@ -59,7 +61,7 @@ import {
     withinLimits,
     withoutWidths,
 } from "../model/widths";
-import { sameCell } from "../navigation/navigation";
+import { type Direction, sameCell } from "../navigation/navigation";
 import {
     clamp,
     indexAfterMove,
@@ -89,6 +91,8 @@ import {
     COLUMN_RESIZER_ATTRIBUTE,
     CTRL_KEYS,
     cellSelector,
+    EDITOR_ATTRIBUTE,
+    FOCUSABLE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     inlineKey,
@@ -123,12 +127,14 @@ import {
 } from "./geometry";
 import { createInteraction } from "./interaction";
 import { type HeightObserver, type Measure, MeasuredHeights } from "./measure";
-import { rowsMove } from "./parts";
+import { isHeldCell, rowsMove } from "./parts";
 import type {
+    CellEdit,
     ColumnReorder,
     ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
+    EditDraft,
     EngineActionKey,
     EngineActionMap,
     EngineAdapter,
@@ -448,6 +454,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "row-move": new Set(),
         "column-auto-widths": new Set(),
         "range-paste": new Set(),
+        "edit-draft": new Set(),
+        "cell-edit": new Set(),
     };
 
     function emit<K extends EngineEventKey>(
@@ -1460,7 +1468,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         ) {
             return null;
         }
-        const cell = rangeCellOf(event.target);
+        const cell = pressedBodyCellOf(event.target);
         if (!cell) return null;
         let anchor = cell;
         if (event.shiftKey) {
@@ -1483,7 +1491,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * outside one (a header, a summary row, a detail, a nested grid's cell), and on a control
      * inside it (it acts on its own), a column resizer or a row's drag handle.
      */
-    function rangeCellOf(target: EventTarget | null): CellPosition | null {
+    function pressedBodyCellOf(
+        target: EventTarget | null,
+    ): CellPosition | null {
         if (!isElement(target) || !inViewport(target)) return null;
         const element = cellNodeOf(target);
         const position = element && positionOf(element);
@@ -2309,6 +2319,303 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return true;
     }
 
+    // ── cell editing: the keys, the draft, the commit (Epic #88, E4.3) ─────
+
+    /** the edit's draft: the engine's while a cell is edited (`edit-draft`), else `null` */
+    let editDraft: EditDraft | null = null;
+    /** the keys the draft was made for (the model's `editingKeys`): other ones, another draft */
+    let draftFor: EditingKeys | null = null;
+    /**
+     * an edit started: its editor takes focus at the commit that renders it (`focusEditor`), while
+     * focus is in the grid, or (`edit-cell`, a toolbar's) wherever it is
+     */
+    let editorFocus: "grid" | "anywhere" | null = null;
+    /** `edit-cell` is starting an edit: its editor takes focus wherever focus is */
+    let editCellAsked = false;
+    /** the document whose presses an edit listens to (`onEditPress`), while one is open */
+    let editPressDoc: Document | null = null;
+    /** a press committed an edit holding focus: focus left nowhere goes back to the active cell */
+    let refocusAfterPress = false;
+    /** whether the grid's columns edit at all, worked out once per columns */
+    let editsFor: readonly Column<TRow, TNode>[] | null = null;
+    let edits = false;
+
+    /** Whether a column of the grid is editable: without one, no key or click asks anything. */
+    function editsCells(): boolean {
+        if (editsFor !== state.columns) {
+            editsFor = state.columns;
+            edits = hasEditable(state.columns);
+        }
+        return edits;
+    }
+
+    /**
+     * Whether an element belongs to the edit: inside the edited cell (the cell itself included),
+     * or inside an element the app marks as its editor's (`EDITOR_ATTRIBUTE`: a popover).
+     */
+    function partOfEdit(element: Element): boolean {
+        const editing = state.editingCell;
+        const cell = editing && cellElement(editing);
+        return Boolean(
+            cell?.contains(element) || element.closest(`[${EDITOR_ATTRIBUTE}]`),
+        );
+    }
+
+    /** The edited cell's controls (its editor's), its own: a nested grid's are that grid's. */
+    function editorControlsIn(cell: HTMLElement): HTMLElement[] {
+        return [...cell.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+            (control) => ownerViewport(control) === viewport,
+        );
+    }
+
+    /** Focuses the first control of the edited cell that takes focus; returns it, or `null`. */
+    function focusEditorIn(cell: HTMLElement): HTMLElement | null {
+        const doc = cell.ownerDocument;
+        for (const control of editorControlsIn(cell)) {
+            control.focus({ preventScroll: true });
+            if (doc.activeElement === control) return control;
+        }
+        return null;
+    }
+
+    /**
+     * Enter, F2 or a printable key on a body cell in navigation that can be edited (its column
+     * editable for its row): one `editing-cell.set` (a printable key its `startKey`; Enter and
+     * F2 once per press). Not with Ctrl, ⌘ or Alt, nor Shift+Space (the row's selection) or
+     * Shift+Enter; a cell that cannot be edited lets the key through (its controls, a move).
+     */
+    function editStartKey(event: KeyboardEvent, target: Element): boolean {
+        const { key } = event;
+        const printable =
+            [...key].length === 1 && !(key === " " && event.shiftKey);
+        if (
+            event.ctrlKey ||
+            event.metaKey ||
+            !(
+                printable ||
+                key === "F2" ||
+                (key === "Enter" && !event.shiftKey)
+            ) ||
+            !editsCells()
+        ) {
+            return false;
+        }
+        const position = bodyCellOf(target);
+        if (!position || !model.is("cell-editable", position)) return false;
+        event.preventDefault();
+        if (event.repeat && !printable) return true;
+        model.run(
+            "editing-cell.set",
+            printable ? { ...position, startKey: key } : position,
+        );
+        return true;
+    }
+
+    /**
+     * A key in an edit, from its editor or its cell: Enter commits and moves down (Shift: up),
+     * Tab commits and moves to the next column (Shift: the previous one), Escape cancels; the
+     * cell takes focus. After the consumer's handlers (an editor prevents one to keep the edit
+     * open: a value it refuses, a newline). On the edited cell itself (its editor without focus:
+     * a parent keeping the edit), any other key goes to its editor, focused now, and the page keys
+     * never scroll the grid natively. Any other key is the editor's.
+     */
+    function editKey(event: KeyboardEvent, target: Element): boolean {
+        if (event.ctrlKey || event.metaKey) return false;
+        const shift = event.shiftKey;
+        const move: Direction | null =
+            event.key === "Enter"
+                ? shift
+                    ? "up"
+                    : "down"
+                : event.key === "Tab"
+                  ? shift
+                      ? "left"
+                      : "right"
+                  : null;
+        if (move) {
+            event.preventDefault();
+            commitEdit(move, true);
+            return true;
+        }
+        if (event.key === "Escape") {
+            event.preventDefault();
+            endEdit(null, true);
+            return true;
+        }
+        const editing = state.editingCell;
+        const cell = editing && cellElement(editing);
+        if (!cell || target !== cell) return false;
+        const editor = focusEditorIn(cell);
+        if (PAGE_KEYS.has(event.key) || (event.key === " " && !editor)) {
+            event.preventDefault();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Commits the edit: its draft told as a `cell-edit` when it is not the value it started
+     * from (the app writes it; told, it is the value it starts from now, so an edit a controlled
+     * parent keeps open never tells it twice), then the edit ends (`endEdit`).
+     */
+    function commitEdit(
+        move: Direction | null | undefined,
+        focusCell: boolean,
+    ) {
+        const editing = state.editingCell;
+        const draft = editDraft;
+        if (!editing || !draft) return;
+        const column = state.columns[editing.columnIndex];
+        if (column && !Object.is(draft.value, draft.initialValue)) {
+            editDraft = { value: draft.value, initialValue: draft.value };
+            const edit: CellEdit = {
+                rowIndex: editing.rowIndex,
+                columnIndex: editing.columnIndex,
+                columnKey: column.key,
+                value: draft.value,
+            };
+            emit("cell-edit", edit);
+        }
+        endEdit(move ?? null, focusCell);
+    }
+
+    /**
+     * Ends the edit, the cell taking focus first (its editor's focus would fall to the page as it
+     * goes): with `move`, the active cell moves (focus following), which ends it by the model's
+     * rule; without one (or a move that stays: an edge, a parent keeping the cell),
+     * `editing-cell.clear`. One change of the edit a gesture: a controlled parent is asked once.
+     */
+    function endEdit(move: Direction | null, focusCell: boolean) {
+        const editing = state.editingCell;
+        if (!editing) return;
+        if (focusCell) cellElement(editing)?.focus({ preventScroll: true });
+        if (move) {
+            pendingFocus = true;
+            model.run("active-position.move", {
+                direction: move,
+                pageSize: pageSize(),
+                visibleColumns: columnWindow.visible,
+            });
+        }
+        if (state.editingCell === editing) model.run("editing-cell.clear", {});
+        if (move) flushFocus();
+    }
+
+    /**
+     * After a model change: an edit started (new keys) makes its draft (the cell's value) and
+     * listens to the page's presses; one ended (committed, cancelled, the active cell moved, its
+     * row or column gone from its place) drops it, telling nothing. A range's drag and an
+     * interaction end with it.
+     */
+    function followEdit() {
+        const keys = state.editingKeys;
+        if (!state.editingCell || !keys) {
+            if (!editDraft) return;
+            editDraft = null;
+            draftFor = null;
+            editorFocus = null;
+            editPressDoc?.removeEventListener("pointerdown", onEditPress, true);
+            editPressDoc = null;
+            emit("edit-draft", null);
+            return;
+        }
+        if (keys === draftFor) return;
+        draftFor = keys;
+        const value = model.get("cell-value-by", state.editingCell);
+        editDraft = { value, initialValue: value };
+        editorFocus = editCellAsked ? "anywhere" : "grid";
+        if (drag?.kind === "range") stopDrag();
+        if (interaction.cell) interaction.leaveCell(false);
+        listenEditPresses();
+        emit("edit-draft", editDraft);
+    }
+
+    /** Listens to the page's presses while an edit is open and the viewport attached. */
+    function listenEditPresses() {
+        if (!viewport || editPressDoc || !state.editingCell) return;
+        editPressDoc = viewport.ownerDocument;
+        editPressDoc.addEventListener("pointerdown", onEditPress, true);
+    }
+
+    /**
+     * A press while editing: outside the edited cell and anything the app marks as its editor's,
+     * it commits (before the press focuses or activates anything); the viewport itself (its
+     * scrollbars) keeps the edit open. Focus in the edit then, a press focusing nothing (a spot
+     * of the grid that takes no focus, the page's text, a touch scroll) gives it back to the
+     * active cell once it ends (`onPointerEnd`).
+     */
+    function onEditPress(event: PointerEvent) {
+        const { target } = event;
+        if (
+            !state.editingCell ||
+            !isElement(target) ||
+            target === viewport ||
+            partOfEdit(target)
+        ) {
+            return;
+        }
+        const focused = target.ownerDocument.activeElement;
+        const held = isElement(focused) && partOfEdit(focused);
+        commitEdit(undefined, false);
+        refocusAfterPress = held;
+    }
+
+    /** After a press that committed an edit: focus left nowhere goes back to the active cell. */
+    function refocusAfterEdit() {
+        if (!refocusAfterPress || !viewport) return;
+        refocusAfterPress = false;
+        const doc = viewport.ownerDocument;
+        const focused = doc.activeElement;
+        const active = state.activePosition;
+        if (
+            active &&
+            (!focused || focused === doc.body || focused === viewport)
+        ) {
+            cellElement(active)?.focus({ preventScroll: true });
+        }
+    }
+
+    /** Replaces the draft (`change-edit`, an editor's `onChange`). */
+    function changeEdit(value: unknown) {
+        if (!editDraft || Object.is(editDraft.value, value)) return;
+        editDraft = { ...editDraft, value };
+        emit("edit-draft", editDraft);
+    }
+
+    /**
+     * At the commit that renders an edit: its editor takes focus, the cell's first control (while
+     * focus is in the grid; started by `edit-cell`, wherever it is), unless the editor holds it
+     * already (its own `autoFocus`, its popover). A cell with no control to take it has no editor:
+     * the edit is cancelled, so an `editable` column without one traps no key.
+     */
+    function focusEditor(rendered: GridView<TRow, TNode>) {
+        const editing = state.editingCell;
+        if (
+            !editorFocus ||
+            !editing ||
+            !viewport ||
+            rendered.editingCell !== editing
+        ) {
+            return;
+        }
+        const cell = cellElement(editing);
+        if (!cell) return;
+        const anywhere = editorFocus === "anywhere";
+        editorFocus = null;
+        const doc = viewport.ownerDocument;
+        const focused = doc.activeElement;
+        const inGrid =
+            !focused || focused === doc.body || viewport.contains(focused);
+        if (isElement(focused) && focused !== cell && partOfEdit(focused)) {
+            return;
+        }
+        const focusedEditor =
+            anywhere || inGrid
+                ? focusEditorIn(cell)
+                : editorControlsIn(cell)[0];
+        if (!focusedEditor) endEdit(null, inGrid);
+    }
+
     // ── cell ranges: the drag, the edge scroll, the keys, the clipboard (Epic #88) ─
 
     /** A press on a body cell moved past the slop: the range follows the pointer, held by the viewport. */
@@ -2783,6 +3090,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             model.run("row-groups.toggle", { rowIndex: Number(toggle.value) });
             return true;
         }
+        // a double click on a cell that can be edited (not on a control inside it) edits it
+        // (Epic #88, E4.3); its first click made it active
+        if (
+            event.detail === 2 &&
+            !event.shiftKey &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !state.editingCell &&
+            editsCells()
+        ) {
+            const position = pressedBodyCellOf(event.target);
+            if (position && model.is("cell-editable", position)) {
+                activate(position);
+                model.run("editing-cell.set", position);
+                return true;
+            }
+        }
         if (event.altKey || event.shiftKey) return false;
         const column = sortableColumnOf(event.target);
         if (!column) return false;
@@ -2796,6 +3120,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** A release anywhere (or a pointer the browser took over for a scroll) ends the press. */
     function onPointerEnd(event: PointerEvent) {
         pointerDown = false;
+        // a press that committed an edit holding focus (Epic #88): focus nowhere comes back
+        refocusAfterEdit();
         const cancelled = event.type === "pointercancel";
         // a press the browser took over makes no click
         if (cancelled) pressedAt = null;
@@ -2811,6 +3137,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     function onFocusOut(event: FocusEvent) {
         const next = event.relatedTarget;
+        // focus leaving an edit for somewhere outside its cell and anything the app marks as its
+        // editor's (a popover): it commits, staying where it is (Epic #88, E4.3); focus going
+        // nowhere (a removed popover, the window) is a press's to tell (`onEditPress`)
+        if (state.editingCell && isElement(next) && !partOfEdit(next)) {
+            commitEdit(undefined, false);
+        }
         const inside = isElement(next) && viewport?.contains(next) === true;
         // focus leaving the cell in interaction (elsewhere in the page, a portal): navigation
         // focus gone from the grid: an entry waiting for its cell would pull it back, it is dropped
@@ -2840,6 +3172,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
             // a header cell spanning rows is already active on any of its rows
             activate(cell);
+            // the edited cell's editor took focus (Epic #88): an edit, never an interaction
+            if (state.editingCell && same(state.editingCell, cell)) return;
             if (
                 isElement(target) &&
                 !isCellElement(target) &&
@@ -3087,6 +3421,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             endDrag("cancel");
             return true;
         }
+        // in an edit (Epic #88, E4.3), its editor has the keys: the grid takes Enter, Tab (each
+        // a commit and a move) and Escape (a cancel) only, from the editor or its cell; nothing
+        // else in the edited cell ever reaches the grid's navigation
+        if (state.editingCell && partOfEdit(target)) {
+            return !event.isComposing && editKey(event, target);
+        }
         // in interaction, the cell's controls have the keys: the grid takes Escape (back to the
         // cell) and Tab (the cell's next control, wrapping) only, from a field too
         if (
@@ -3145,6 +3485,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // a row group's keys (Epic #87): Enter and Space toggle a group row (its controls get the
         // keys by F2), the arrows on a row's first column expand, collapse or go up the tree
         if (rowGroupKey(event, target)) return true;
+        // Enter, F2 or a printable key on a cell that can be edited edits it (Epic #88): before
+        // the interaction's Enter and F2, which stay a cell's without an edit
+        if (editStartKey(event, target)) return true;
         // Enter or F2 on a cell itself hand the keys to its controls (a sortable header cell's
         // Enter sorted above: F2 enters it); a cell without controls lets the key through
         if (
@@ -3535,9 +3878,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return next();
     });
 
+    // an edit given to start with (Epic #88): its draft
+    followEdit();
+
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
         if (before.direction !== after.direction) directionPending = true;
+        // an edit started or ended (Epic #88): its draft follows
+        if (after.editingCell !== before.editingCell) followEdit();
         // the app moved the rows a move told it of: the active cell follows its row (E2.3)
         followMovedRow(before, after);
         const changedDetails = detailsChanged(before, after);
@@ -3725,6 +4073,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             interaction.manageCellsUnder(element);
             // the rows and details measured (E2.2), from the next frame on
             observeRegistered();
+            // an edit given to start with listens to the page's presses (Epic #88)
+            listenEditPresses();
             // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("focusin", onFocusIn);
@@ -3773,6 +4123,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 movedRow = null;
                 // a copy's selection never outlives the viewport (Epic #88)
                 endCopySelection();
+                editPressDoc?.removeEventListener(
+                    "pointerdown",
+                    onEditPress,
+                    true,
+                );
+                editPressDoc = null;
                 stopMeasuring();
                 pointerDown = false;
                 pendingFocus = false;
@@ -3877,6 +4233,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             writeLayers();
             interaction.committed();
             flushFocus();
+            // an edit's editor, rendered now, takes focus (Epic #88)
+            focusEditor(rendered);
             autoSize(rendered);
             // the rows and details rendered for the first time, read before the browser paints;
             // not while a new view waits (widths an automatic width changed): its commit reads
@@ -3918,6 +4276,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         "column-reorder": () => columnReorder,
         "row-reorder": () => rowReorder,
         "column-auto-widths": () => autoWidths,
+        "edit-draft": () => editDraft,
     };
 
     const actions: {
@@ -3931,6 +4290,27 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             interaction.leaveCell(true);
         },
         "fit-columns": ({ columnKeys }) => fitColumns(columnKeys),
+        "edit-cell": (position) => {
+            // refused (a cell that cannot be edited): nothing changes
+            if (!model.is("cell-editable", position)) return;
+            const editing = state.editingCell;
+            if (isHeldCell(editing, position)) return;
+            // another edit open: committed first, told
+            if (editing) commitEdit(null, false);
+            editCellAsked = true;
+            try {
+                activate(position);
+                model.run("editing-cell.set", position);
+            } finally {
+                editCellAsked = false;
+            }
+        },
+        "change-edit": ({ value }) => changeEdit(value),
+        "commit-edit": (payload) => {
+            if ("value" in payload) changeEdit(payload.value);
+            commitEdit(null, true);
+        },
+        "cancel-edit": () => endEdit(null, true),
     };
 
     return {

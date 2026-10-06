@@ -12,6 +12,7 @@ import {
     columnResizerPart,
     dataRowAt,
     depthOf,
+    type EditCellRenderProps,
     EMPTY_WINDOW,
     GROUP_LABEL_ATTRIBUTE,
     type GridDirection,
@@ -24,6 +25,7 @@ import {
     headerCellBox,
     headerCellPart,
     inlineStart,
+    isHeldCell,
     measuredRow,
     type RowDetailState,
     type RowDragHandleState,
@@ -51,6 +53,7 @@ import {
 import type * as React from "react";
 import {
     type ReactNode,
+    useCallback,
     useContext,
     useMemo,
     useSyncExternalStore,
@@ -329,9 +332,9 @@ function cellProps<TRow>(
     const summary = "position" in state ? state.position : undefined;
     const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
     const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
-    // a body cell's, cells selectable (Epic #88): in the range, its edges
+    // a body or summary row cell's (Epic #88): in the range, its edges, edited
     const ariaSelected = "ariaSelected" in part ? part.ariaSelected : undefined;
-    const range = "rangeEdges" in state ? state : undefined;
+    const body = "rangeEdges" in state ? state : undefined;
     const { pinned } = state;
     const { width, height } = box;
     return {
@@ -369,8 +372,9 @@ function cellProps<TRow>(
             reorderable: header?.reorderable,
             dragging: header?.dragging,
             "drop-target": header?.dropTarget ?? undefined,
-            "selected-cell": range?.selected,
-            "range-edge": range?.rangeEdges,
+            "selected-cell": body?.selected,
+            "range-edge": body?.rangeEdges,
+            editing: body?.editing,
         }),
         style: measured
             ? {
@@ -443,6 +447,54 @@ function cellPartProps<TRow, P extends CellPart | SummaryCellPart>(
         ),
         columnSpan,
         measured,
+    };
+}
+
+/**
+ * An edit's editor props (Epic #88, E4.3), for the cell being edited (`state.editing`): its row,
+ * column and indexes, the draft (`value`, the engine's, this hook re-rendering as it changes), the
+ * value it started from, the key that started it, and `onChange`, `onCommit` and `onCancel`;
+ * `null` for any other cell. What a column's `renderEditCell` receives: call it in an editor of
+ * your own rendered in a cell's children while it is edited (subscribe only there: every cell
+ * subscribing would re-render with every keystroke).
+ */
+export function useCellEdit<TRow>(
+    cell: CellInfo<TRow>,
+): EditCellRenderProps<TRow, ReactNode> | null {
+    const { engine } = useRootGrid();
+    const subscribe = useCallback(
+        (listener: () => void) => engine.subscribe("edit-draft", listener),
+        [engine],
+    );
+    const read = () => engine.get("edit-draft");
+    const draft = useSyncExternalStore(subscribe, read, read);
+    const ways = useMemo(
+        () => ({
+            onChange: (value: unknown) => engine.run("change-edit", { value }),
+            onCommit: (...value: [] | [value: unknown]) =>
+                engine.run(
+                    "commit-edit",
+                    value.length > 0 ? { value: value[0] } : {},
+                ),
+            onCancel: () => engine.run("cancel-edit", {}),
+        }),
+        [engine],
+    );
+    // the edited cell is the view's: the draft has no position of its own
+    const editing = useGridView<TRow>().editingCell;
+    const { row, rowIndex, column, columnIndex } = cell;
+    if (!draft || row === undefined || !editing || !isHeldCell(editing, cell)) {
+        return null;
+    }
+    return {
+        row,
+        rowIndex,
+        column,
+        columnIndex,
+        value: draft.value,
+        initialValue: draft.initialValue,
+        startKey: editing.startKey,
+        ...ways,
     };
 }
 

@@ -13,6 +13,7 @@ import {
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
     type DetailHeight,
+    type EditingCell,
     type GridDirection,
     type GridView,
     keptOrder,
@@ -29,6 +30,7 @@ import {
     type RowSelection,
     type SortColumn,
     sameCellRange,
+    sameEditingCell,
     sameKeys,
     sameOrder,
     sameRowKeys,
@@ -47,6 +49,7 @@ import {
     useSyncExternalStore,
 } from "react";
 import {
+    type CellEditEvent,
     type ColumnOrGroup,
     DataGridContext,
     type DataGridContextValue,
@@ -200,6 +203,25 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
         onSelectedRowKeysChange?:
             | ((selectedRowKeys: readonly RowKey[]) => void)
             | undefined;
+        /**
+         * the cell being edited (Epic #88): the active one, of a column `editable` for its row;
+         * controlled (`null` for none), paired with `onEditingCellChange`
+         */
+        editingCell?: EditingCell | null | undefined;
+        /** the cell being edited to start with, uncontrolled */
+        defaultEditingCell?: EditingCell | null | undefined;
+        /**
+         * an edit started or ended (or, controlled, asks to): Enter, F2, typing or a double click
+         * on an editable cell; a commit (Enter, Tab, a click outside) or a cancel (Escape)
+         */
+        onEditingCellChange?:
+            | ((editingCell: EditingCell | null) => void)
+            | undefined;
+        /**
+         * an edit was committed with a new value (Epic #88): the cell, its column's key, the value
+         * and the row. Write it into your rows: the grid writes no data
+         */
+        onCellEdit?: ((edit: CellEditEvent<TRow>) => void) | undefined;
         /**
          * how cells are selected (Epic #88): a range of body cells (default: not at all). Shift
          * with the navigation keys, a press dragged across cells and Shift+click select one; its
@@ -408,6 +430,10 @@ export function Root<TRow>(props: RootProps<TRow>) {
         selectedRowKeys,
         defaultSelectedRowKeys,
         onSelectedRowKeysChange,
+        editingCell,
+        defaultEditingCell,
+        onEditingCellChange,
+        onCellEdit,
         cellSelection,
         selectedRange,
         defaultSelectedRange,
@@ -463,6 +489,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
             rowSelection,
             isRowSelectable,
             selectedRowKeys: selectedRowKeys ?? defaultSelectedRowKeys,
+            editingCell:
+                editingCell !== undefined ? editingCell : defaultEditingCell,
             cellSelection,
             selectedRange:
                 selectedRange !== undefined
@@ -584,6 +612,25 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 },
             }),
         );
+        const editing = bind(
+            propsState<TRow, EditingCell | null>(latest, {
+                prefix: "editing-cell.",
+                prop: (props) => props.editingCell,
+                onChange: (props) => props.onEditingCellChange,
+                start: (props) => props.defaultEditingCell,
+                read: (state) => state.editingCell,
+                same: sameEditingCell,
+                fromCommand: (command, value) =>
+                    command === "editing-cell.clear"
+                        ? null
+                        : (value as EditingCell),
+                // an edit the grid cannot take (not the active cell, not editable) settles told
+                apply: (value) => {
+                    if (value === null) model.run("editing-cell.clear", {});
+                    else model.run("editing-cell.set", value);
+                },
+            }),
+        );
         const range = bind(
             propsState<TRow, CellRange | null>(latest, {
                 prefix: "selected-range.",
@@ -686,6 +733,12 @@ export function Root<TRow>(props: RootProps<TRow>) {
         engine.subscribe("row-move", (move) =>
             latest.current.onRowMove?.(move),
         );
+        // an edit committed (Epic #88): told with its row, loaded while it is edited
+        engine.subscribe("cell-edit", (edit) => {
+            const row = model.get("row-by", { index: edit.rowIndex });
+            if (row !== undefined)
+                latest.current.onCellEdit?.({ ...edit, row });
+        });
         // a paste (Epic #88): asked first, then told
         engine.subscribe("range-paste", (paste) => {
             const { onBeforeRangePaste, onRangePaste } = latest.current;
@@ -726,6 +779,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
                 order,
                 collapsed,
                 position,
+                editing,
                 selection,
                 range,
                 sort,

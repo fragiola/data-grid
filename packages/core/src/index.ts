@@ -4,6 +4,7 @@ export type { Axis, Size } from "./axis/axis";
 export { parseTsv, toTsv } from "./clipboard";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
+    EDITOR_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
@@ -52,6 +53,7 @@ export {
     type HeaderCellPart,
     type HeaderCellState,
     headerCellPart,
+    isHeldCell,
     type RowDetailPart,
     type RowDetailState,
     type RowDragHandlePart,
@@ -69,10 +71,12 @@ export {
     summaryRowPart,
 } from "./engine/parts";
 export type {
+    CellEdit,
     ColumnReorder,
     ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
+    EditDraft,
     EngineActionKey,
     EngineActionMap,
     EngineAdapter,
@@ -87,6 +91,7 @@ export type {
     RowReorder,
     RowSpans,
 } from "./engine/types";
+export { sameEditingCell } from "./model/editing";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
     createDataGridModel,
@@ -139,6 +144,9 @@ export type {
     DataGridState,
     DataSetPayload,
     DetailHeight,
+    EditCellRenderProps,
+    EditingCell,
+    EditingKeys,
     GridDirection,
     GroupCellRenderProps,
     GroupColSpanArgs,

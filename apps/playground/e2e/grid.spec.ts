@@ -5535,6 +5535,209 @@ for (const kind of KINDS) {
             });
         });
 
+        test.describe("cell editing", () => {
+            const EDIT = { rows: 200, columns: 8, edit: 1 } as const;
+
+            const editingCell = (page: Page) =>
+                page.evaluate(() => window.grid?.model.get("editing-cell"));
+
+            const cellEdits = (page: Page) =>
+                page.evaluate(() => window.cellEdits);
+
+            test("Enter, F2, typing and a double click edit, the editor focused", async ({
+                page,
+            }) => {
+                await open(page, kind, EDIT);
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Enter");
+                await expect(page.getByTestId("editor-2")).toBeFocused();
+                await expect(cell(page, 2, 1)).toHaveAttribute(
+                    "data-editing",
+                    "",
+                );
+                await expect(page.getByTestId("editor-2")).toHaveValue("2:1");
+                await page.keyboard.press("Escape");
+                await expect(cell(page, 2, 1)).toBeFocused();
+                await expect(cell(page, 2, 1)).not.toHaveAttribute(
+                    "data-editing",
+                );
+                await page.keyboard.press("F2");
+                await expect(page.getByTestId("editor-2")).toBeFocused();
+                await page.keyboard.press("Escape");
+                // typing: the editor starts from the key typed
+                await page.keyboard.press("k");
+                await expect(page.getByTestId("editor-2")).toHaveValue("k");
+                await page.keyboard.type("ey");
+                await expect(page.getByTestId("editor-2")).toHaveValue("key");
+                await page.keyboard.press("Escape");
+                await expect(cell(page, 2, 1)).toHaveText("2:1");
+                await cell(page, 4, 1).dblclick();
+                await expect(page.getByTestId("editor-4")).toBeFocused();
+                expect(await editingCell(page)).toEqual({
+                    rowIndex: 4,
+                    columnIndex: 1,
+                });
+                expect(await cellEdits(page)).toEqual([]);
+            });
+
+            test("Enter and Tab commit and move, Shift moving back; the app writes the value", async ({
+                page,
+            }) => {
+                await open(page, kind, EDIT);
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-2").fill("first");
+                await page.keyboard.press("Enter");
+                await settle(page);
+                await expect(cell(page, 2, 1)).toHaveText("first");
+                await expect(cell(page, 3, 1)).toBeFocused();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-3").fill("second");
+                await page.keyboard.press("Shift+Enter");
+                await settle(page);
+                await expect(cell(page, 3, 1)).toHaveText("second");
+                await expect(cell(page, 2, 1)).toBeFocused();
+                await page.keyboard.press("F2");
+                await page.getByTestId("editor-2").fill("third");
+                await page.keyboard.press("Tab");
+                await settle(page);
+                await expect(cell(page, 2, 1)).toHaveText("third");
+                await expect(cell(page, 2, 2)).toBeFocused();
+                // Shift+Tab in an edit (C5's picker, unchanged: nothing told) moves back
+                for (let i = 0; i < 3; i++) {
+                    await page.keyboard.press("ArrowRight");
+                }
+                await page.keyboard.press("F2");
+                await expect(page.getByTestId("picker-2")).toBeFocused();
+                await page.keyboard.press("Shift+Tab");
+                await expect(cell(page, 2, 4)).toBeFocused();
+                expect(await cellEdits(page)).toEqual([
+                    { rowIndex: 2, columnKey: "c1", value: "first" },
+                    { rowIndex: 3, columnKey: "c1", value: "second" },
+                    { rowIndex: 2, columnKey: "c1", value: "third" },
+                ]);
+            });
+
+            test("a click outside commits; a portalled picker marked as the edit's does not", async ({
+                page,
+            }) => {
+                await open(page, kind, EDIT);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-1").fill("clicked out");
+                await page.getByTestId("after").click();
+                await settle(page);
+                await expect(cell(page, 1, 1)).toHaveText("clicked out");
+                expect(await editingCell(page)).toBeNull();
+                // C5 edits even rows, by a picker whose options are outside the grid
+                await cell(page, 2, 5).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("picker-2").click();
+                await page.getByTestId("option-blue").click();
+                await settle(page);
+                await expect(cell(page, 2, 5)).toHaveText("blue");
+                await expect(cell(page, 2, 5)).toBeFocused();
+                expect((await cellEdits(page)).at(-1)).toEqual({
+                    rowIndex: 2,
+                    columnKey: "c5",
+                    value: "blue",
+                });
+            });
+
+            test("keeps the editable rules: a column by the row, a cell with controls, a summary row and a group row", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...EDIT, controls: 1, summaryTop: 1 });
+                // C5 edits even rows only
+                await cell(page, 3, 5).click();
+                await page.keyboard.press("Enter");
+                expect(await editingCell(page)).toBeNull();
+                // a cell with controls and no edit: Enter is its interaction, as before
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("ArrowLeft");
+                await expect(cell(page, 3, 2)).toBeFocused();
+                await page.keyboard.press("Enter");
+                await expect(page.getByTestId("edit-3")).toBeFocused();
+                await page.keyboard.press("Escape");
+                // a summary row's cell is never edited
+                const summary = page.locator(
+                    '[data-grid-part="summary-cell"][data-column-index="1"]',
+                );
+                await summary.first().click();
+                await page.keyboard.press("Enter");
+                await page.keyboard.press("x");
+                expect(await editingCell(page)).toBeNull();
+                // a group row's: Enter toggles its group, typing edits nothing
+                await open(page, kind, { ...EDIT, rows: 50, groupBy: 1 });
+                await cell(page, 0, 1).click();
+                await page.keyboard.press("x");
+                expect(await editingCell(page)).toBeNull();
+            });
+
+            test("keeps the editor's keys, copy and paste its own", async ({
+                page,
+            }) => {
+                await open(page, kind, { ...EDIT, cells: 1 });
+                await page.evaluate(() => {
+                    document.addEventListener("copy", (event) => {
+                        Object.assign(window, {
+                            copied: event.clipboardData?.getData("text/plain"),
+                            copyPrevented: event.defaultPrevented,
+                        });
+                    });
+                });
+                await cell(page, 2, 1).click();
+                await page.keyboard.press("Enter");
+                const editor = page.getByTestId("editor-2");
+                await editor.fill("words");
+                // the arrows and Shift+arrows are the field's: no move, no range
+                await page.keyboard.press("ArrowLeft");
+                await page.keyboard.press("Shift+ArrowLeft");
+                await page.keyboard.press("ArrowDown");
+                expect(await active(page)).toEqual({
+                    rowIndex: 2,
+                    columnIndex: 1,
+                });
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.get("selected-range"),
+                    ),
+                ).toBeNull();
+                await page.keyboard.press("ControlOrMeta+a");
+                await page.keyboard.press("ControlOrMeta+c");
+                expect(
+                    await page.evaluate(() => ({
+                        copied: (window as unknown as { copied: unknown })
+                            .copied,
+                        prevented: (
+                            window as unknown as { copyPrevented: unknown }
+                        ).copyPrevented,
+                    })),
+                ).toEqual({ copied: "", prevented: false });
+                await expect(editor).toHaveValue("words");
+                await editor.press("Escape");
+                expect(await cellEdits(page)).toEqual([]);
+            });
+
+            test("keeps the edited cell rendered while the grid scrolls", async ({
+                page,
+            }) => {
+                const viewport = await open(page, kind, EDIT);
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("Enter");
+                await page.getByTestId("editor-1").fill("far");
+                await scroll(page, viewport, 3_000);
+                await expect(page.getByTestId("editor-1")).toBeAttached();
+                await expect(page.getByTestId("editor-1")).toHaveValue("far");
+                await page.getByTestId("editor-1").press("Enter");
+                await settle(page);
+                expect(await cellEdits(page)).toEqual([
+                    { rowIndex: 1, columnKey: "c1", value: "far" },
+                ]);
+            });
+        });
+
         test.describe("tree data", () => {
             // 100 top rows, each with 3 rows, each of those with 2: a row's index is its place in
             // the whole tree (the top rows 0, 10, 20, …); a parent's C0 holds its toggle

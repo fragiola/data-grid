@@ -1,0 +1,143 @@
+---
+title: Editing cells
+description: Cells edited in place with editors you write, started and ended by the keys and the pointer, each committed value told to you to write.
+---
+
+A person edits a cell in place: Enter, F2, typing or a double click start an edit, the cell shows
+your editor, Enter or Tab commit and Escape cancels. The grid owns the edit: which cell, its keys,
+its draft, its end. The editors are yours (a text field, a number, a select, a date picker, anything
+you render), and so is the data: a commit is an event, and you write the value into your rows.
+
+<Example id="editing" />
+
+## Editable columns
+
+A column's `editable` turns its cells into editable ones: `true` for every row, or a function of
+the row and its index (`(row, rowIndex) => boolean`). A cell is edited only on a loaded data row:
+never a header cell, a [summary row](/docs/concepts/summary-rows)'s or a
+[group row](/docs/concepts/row-grouping)'s, nor a row still loading.
+
+`renderEditCell` is what the edited cell shows instead of its content. It receives the row, the
+column and their indexes, the draft (`value`), the value the edit started from (`initialValue`),
+the key that started it (`startKey`) and three functions:
+
+- `onChange(value)` replaces the draft;
+- `onCommit(value?)` ends the edit and tells the draft (a value given replaces it first: a select
+  commits as a person chooses);
+- `onCancel()` ends it, telling nothing.
+
+```tsx title="columns.tsx"
+{
+    key: "name",
+    name: "Task",
+    width: 220,
+    editable: (task) => !task.archived,
+    renderEditCell: ({ value, startKey, onChange }) => (
+        <TextField
+            value={String(value)}
+            onChange={(event) => onChange(event.target.value)}
+        />
+    ),
+}
+```
+
+The draft is the grid's while the edit lasts: it starts as the cell's value, and only the edited
+cell renders as it changes. `startKey` is the printable key typed to start the edit, else
+`undefined`: a text field starts from it, as a spreadsheet replaces a cell's content with what is
+typed (`onChange(startKey)` when the editor mounts). The grid focuses the edited cell's first
+control once it renders, unless your editor took focus itself. A cell rendered with children of
+your own shows them while edited too: `useCellEdit(cell)` gives an editor in them the same props,
+`null` for any other cell.
+
+An edit needs an editor to take focus: when the edited cell renders no control (an `editable`
+column without `renderEditCell`, nor an editor in its children), the edit is cancelled as it
+renders, so it never holds the keys with nothing to type in.
+
+## Telling the edit
+
+`onCellEdit({ rowIndex, columnIndex, columnKey, value, row })` tells each commit whose value
+changed from the one it started from. Write it into your rows: the grid writes no data.
+
+```tsx title="tasks.tsx"
+<DataGrid.Root
+    columns={columns}
+    rows={tasks}
+    onCellEdit={({ row, columnKey, value }) =>
+        setTasks((rows) =>
+            rows.map((task) =>
+                task.id === row.id ? { ...task, [columnKey]: value } : task,
+            ),
+        )
+    }
+/>
+```
+
+The value is whatever your editor gave the draft, so check it where you write it. Rows behind a
+`getRow` are told with [`rows.changed`](/docs/concepts/data-loading) once you wrote them.
+
+## Starting and ending
+
+| key or pointer | in navigation, on an editable cell | in an edit |
+| --- | --- | --- |
+| Enter, F2 | edits it | Enter commits and moves down (Shift+Enter: up) |
+| A printable key | edits it, the key its `startKey` | the editor's |
+| Tab, Shift+Tab | leave the grid | commit and move to the next column, or the previous one |
+| Escape | — | cancels, focus back on the cell |
+| A double click | edits it | the editor's |
+| A press or focus outside the cell | — | commits, staying where it is |
+
+Inside an edit every other key is the editor's: the arrows, Home, End and the page keys move its
+caret, never the active cell; Ctrl+A, copy and paste are the field's own. The grid's keys run
+after your own handlers, so an editor that prevents Enter or Tab keeps the edit open: a value it
+refuses, a newline in a text area. Shift+Space stays the [row selection](/docs/concepts/row-selection)'s,
+and Ctrl, ⌘ or Alt with a key starts no edit.
+
+On a cell that is not editable, nothing changes: Enter and F2 on a cell holding controls still hand
+them the keys ([Controls in cells](/docs/concepts/keyboard#controls-in-cells)), and Enter on a
+sortable header cell still sorts. On an editable cell, they edit it.
+
+The active cell moving anywhere else (your own `active-position.set`, a new column order) ends the
+edit, dropping its draft and telling nothing. So does another row or column coming under it: the
+edit remembers its row's key (`rowKey`, else its index: give rows a key so a sort or a row inserted
+above is told apart) and its column's, and ends when they are no longer at its place. So does its
+row going (not loaded any more) or its column no longer editable for it. Scrolling keeps it: the
+edited cell is the active one, which the grid keeps rendered however far the grid scrolls.
+
+A press that commits the edit on a spot that takes no focus (the area below the rows, a detail's
+text, the page) gives focus back to the active cell, the grid's tab stop; a press that focuses
+something keeps it there.
+
+## Popovers outside the grid
+
+A select's list or a date picker's calendar is often rendered at the end of the page (a portal),
+outside the edited cell. A press or focus there would commit the edit as one outside the cell.
+Mark such an element with `data-grid-editor`: a press or focus inside it belongs to the edit.
+
+```tsx title="status-editor.tsx"
+<Select.Root value={String(value)} defaultOpen onValueChange={(status) => onCommit(status)}>
+    <Select.Trigger aria-label="Status" />
+    <Select.Content data-grid-editor="">{/* the options */}</Select.Content>
+</Select.Root>
+```
+
+A press on the grid's scrollbar keeps the edit open too.
+
+## Controlled
+
+The edited cell is `{ rowIndex, columnIndex, startKey? }`, controlled with `editingCell` and
+`onEditingCellChange` or not (`defaultEditingCell`), like any other state of the grid. It is
+always the active cell: the commands are `editing-cell.set` (refused for a cell that is not the
+active one, or cannot be edited) and `editing-cell.clear`, which a
+[middleware](/docs/concepts/model-and-engine) can refuse; `model.is("cell-editable", cell)` tells
+whether a cell can be. The engine's `edit-cell` makes a cell active and edits it (a toolbar's
+button: the editor takes focus, wherever focus was; another edit open is committed first, and a
+cell that cannot be edited changes nothing), `change-edit`, `commit-edit` and `cancel-edit` do
+what an editor's functions do, and `engine.get("edit-draft")` reads the draft
+(`{ value, initialValue }`). A controlled parent is asked once per gesture; a commit tells a value
+once, even when the parent keeps the edit open.
+
+## How it looks
+
+The edited cell carries `data-editing`, and the part state of `DataGrid.Cell` has `editing`. Its
+look, and the editors', are yours: an editor as large as its cell, an outline that says the cell
+is being edited.

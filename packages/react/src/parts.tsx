@@ -38,6 +38,7 @@ import {
     rowStyle,
     type SummaryCellState,
     type SummaryRowState,
+    useCellEdit,
     useCellPart,
     useCells,
     useGridView,
@@ -521,6 +522,9 @@ export function Cell<TRow>(props: CellProps<TRow>) {
     let content: ReactNode = null;
     if (children !== undefined) {
         content = children;
+    } else if (own.state.editing && cell.column.renderEditCell) {
+        // the cell being edited (Epic #88): its column's editor, the draft its own
+        content = <EditCell cell={cell} />;
     } else if (cell.group) {
         // a group row has no data row: its group's value and aggregates (Epic #87)
         content = cell.column.renderGroupCell
@@ -544,6 +548,15 @@ export function Cell<TRow>(props: CellProps<TRow>) {
             : plain(cell.value);
     }
     return useCellElement(rest, own, content);
+}
+
+/**
+ * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft. The one
+ * cell subscribing to the draft, so a keystroke renders it alone.
+ */
+function EditCell<TRow>({ cell }: { cell: CellInfo<TRow> }) {
+    const props = useCellEdit(cell);
+    return props ? cell.column.renderEditCell?.(props) : null;
 }
 
 export type RowDetailProps = DivPrimitiveProps<RowDetailState> & {
