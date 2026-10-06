@@ -2,6 +2,7 @@ import { keySet, toggledKey } from "../utils";
 import { fail } from "./result";
 import {
     dataRowAt,
+    groupExpanded,
     keyOf,
     type RowsState,
     rowKeyAt,
@@ -39,7 +40,7 @@ type RowSelectionState<TRow> = RowsState<TRow> &
     >;
 
 type Selecting<TRow> = RowSelectionState<TRow> &
-    Pick<DataGridState<TRow>, "selectionAnchor">;
+    Pick<DataGridState<TRow>, "selectionAnchor" | "expandedGroupKeys">;
 
 /** Whether two anchors are the same key, at the same index, giving the same state. */
 export function sameAnchor(
@@ -135,7 +136,8 @@ export function rowSelectableWith<TRow>(
 
 /**
  * Adds the keys a range or select-all takes from a row to `into` (Epic #87): a selectable data
- * row's key, a group row's rows' keys, none for a row that cannot be selected. False for a row not
+ * row's key, a collapsed group row's rows' keys, none for a row that cannot be selected (nor an
+ * expanded group row: its rows are rows of the range). False for a row not
  * loaded (its key is unknown): nothing added.
  */
 function keysOfRow<TRow>(
@@ -145,7 +147,11 @@ function keysOfRow<TRow>(
 ): boolean {
     const meta = rowMetaAt(state.source, index);
     if (meta?.group) {
-        if (meta.group.rowKeys) into.push(...meta.group.rowKeys);
+        // collapsed, its rows are not on the rows: its keys stand for them; expanded, they are
+        // walked as rows (a range never takes rows outside it)
+        if (meta.group.rowKeys && !groupExpanded(state, meta.group.key)) {
+            into.push(...meta.group.rowKeys);
+        }
         return true;
     }
     const row = dataRowAt(state.source, index, meta);

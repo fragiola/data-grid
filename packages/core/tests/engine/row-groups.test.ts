@@ -309,6 +309,60 @@ describe("the arrows on a row's first column", () => {
         });
     });
 
+    it("remember the toggles' column for a row whose toggle is not rendered", () => {
+        const { model, grid, activate, key } = setup();
+        cellElement(
+            grid,
+            0,
+            1,
+            `<button ${GROUP_TOGGLE_ATTRIBUTE}="0"></button>`,
+        );
+        // found once (on a row of the tree)
+        key(activate(2, 1), "ArrowLeft");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 0,
+            columnIndex: 1,
+        });
+        // scrolled out of view: no toggle rendered, the column remembered
+        for (const toggle of grid.querySelectorAll(
+            `[${GROUP_TOGGLE_ATTRIBUTE}]`,
+        )) {
+            toggle.remove();
+        }
+        key(activate(2, 1), "ArrowLeft");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 0,
+            columnIndex: 1,
+        });
+        // the first column is a plain one there
+        key(activate(2, 0), "ArrowLeft");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 2,
+            columnIndex: 0,
+        });
+        // new columns: found again (none rendered: the first column)
+        model.run("columns.set", {
+            columns: [
+                { key: "c0", width: 100 },
+                { key: "c1", width: 100 },
+            ],
+        });
+        key(activate(2, 0), "ArrowLeft");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 0,
+            columnIndex: 0,
+        });
+    });
+
+    it("are plain on a row that neither expands nor sits under one", () => {
+        const { model, activate, key } = setup();
+        key(activate(4, 1), "ArrowLeft");
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 4,
+            columnIndex: 0,
+        });
+    });
+
     it("mirror right to left: ArrowLeft expands", () => {
         const { activate, key, expanded } = setup({ direction: "rtl" });
         key(activate(3), "ArrowLeft");
@@ -351,12 +405,22 @@ describe("fitting columns", () => {
         expect(model.get("column-widths")).toEqual({ c0: 250 });
     });
 
-    it("fits an autoSize column over group rows alone", () => {
-        const { engine } = measured([50, 180, 999, 999, 999], {
+    it("waits for a loaded data row to fit an autoSize column, then measures group rows too", () => {
+        // every group collapsed: no data row yet, nothing fitted to the group cells
+        const collapsed = measured([50, 180, 999, 999, 999], {
             columns: [{ key: "c0", width: 100, autoSize: true }],
             rowCount: 1,
             getRow: () => undefined,
             getRowMeta: () => ({ group: group("only", []) }),
+        });
+        expect(collapsed.engine.get("column-auto-widths")).toEqual({});
+        // a group expanded: its data row loaded, the group row's cell measured with it
+        const { engine } = measured([50, 180, 90, 999, 999], {
+            columns: [{ key: "c0", width: 100, autoSize: true }],
+            rowCount: 2,
+            getRow: (id) => (id === 1 ? { id } : undefined),
+            getRowMeta: (index) =>
+                index === 0 ? { group: group("only", [1]) } : { depth: 1 },
         });
         expect(engine.get("column-auto-widths")).toEqual({ c0: 180 });
     });

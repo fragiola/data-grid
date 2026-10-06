@@ -537,7 +537,11 @@ export interface CommandMap<TRow, TNode = unknown> {
         payload: { readonly columns: readonly ColumnOrGroup<TRow, TNode>[] };
         result: { readonly columnCount: number };
     };
-    /** replaces where the rows come from */
+    /**
+     * replaces where the rows come from, and their kinds (`getRowMeta`, by index: it belongs to
+     * the source it comes with, so a payload without it has none; `rowKey`, a function of the row,
+     * is kept when left out)
+     */
     "data.set": {
         payload: DataSetPayload<TRow>;
         result: { readonly rowCount: number };
@@ -1128,7 +1132,12 @@ export interface SummaryColSpanArgs {
  * it, expands it by its key and selects its rows by theirs.
  */
 export interface GroupRow {
-    /** unique among the grid's rows: what expands it (`expandedGroupKeys`) */
+    /**
+     * unique among the grid's rows, data rows included: group keys and data row keys share one
+     * key space (expansion, measured heights, the rows' elements), so they must never collide
+     * (`@fragiola/data-grid/local`'s are JSON strings, apart from typical ids). What expands it
+     * (`expandedGroupKeys`)
+     */
     readonly key: RowKey;
     /** the column its rows are grouped by */
     readonly columnKey: string;
@@ -1151,7 +1160,8 @@ export interface GroupRow {
 
 /**
  * What kind of row an index is (E3.1), and where it sits: `getRowMeta(index)`'s answer. Every
- * field is optional; a row without one is a data row at the top.
+ * field is optional; a row without one is a data row at the top. A group row is keyed by its
+ * group's key, a data row by `rowKey`: one key space, never colliding.
  */
 export interface RowMeta {
     /** its depth in the tree: 0 at the top (default: a group's own, else 0) */

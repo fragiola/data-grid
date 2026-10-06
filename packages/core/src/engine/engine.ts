@@ -21,6 +21,7 @@ import {
     groupExpanded,
     groupKeyAt,
     loadedRowKey,
+    rowAt,
     rowKeyAt,
     rowLoaded,
     rowMetaAt,
@@ -1882,7 +1883,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         if (
             indexes.length === 0 ||
-            !shown.rows.some((rowIndex) => rowLoaded(shown.source, rowIndex))
+            // a loaded data row: group rows alone (all collapsed) would fit it to their cells
+            !shown.rows.some(
+                (rowIndex) => rowAt(shown.source, rowIndex) !== undefined,
+            )
         ) {
             return;
         }
@@ -2601,12 +2605,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (!position) return false;
         const { rowIndex } = position;
         const meta = rowMetaAt(state.source, rowIndex);
+        const groupKey = groupKeyAt(state, rowIndex, meta);
         // Enter on a group row only (a data row's Enter is its cell's: its controls, editing);
         // Space on any row that expands (a tree's parent too)
         if (
             (event.key === "Enter" && meta?.group) ||
-            (event.key === " " &&
-                groupKeyAt(state, rowIndex, meta) !== undefined)
+            (event.key === " " && groupKey !== undefined)
         ) {
             event.preventDefault();
             // a held key repeats: it would open and close the group
@@ -2614,15 +2618,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return true;
         }
         const move = KEYS[inlineKey(event.key, direction)];
-        // on the tree's column: the cell holding the row's toggle, else (a leaf, a row loading)
-        // the column the grid's toggles are in, else the first
+        const parentIndex = meta?.parentIndex;
+        // a row that neither expands nor sits under one: plain arrows, nothing looked for; else
+        // on its tree cell only (`onTreeColumn`)
         if (
             (move !== "left" && move !== "right") ||
+            (groupKey === undefined && parentIndex === undefined) ||
             !onTreeColumn(rowIndex, target, position.columnIndex)
         ) {
             return false;
         }
-        const groupKey = groupKeyAt(state, rowIndex, meta);
         // → on a collapsed row group expands it, ← on an expanded one collapses it
         if (
             groupKey !== undefined &&
@@ -2632,7 +2637,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             model.run("row-groups.toggle", { rowIndex });
             return true;
         }
-        const parentIndex = meta?.parentIndex;
         if (
             move === "right" ||
             parentIndex === undefined ||
@@ -2652,9 +2656,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * Whether a cell is on its row's tree column (Epic #87): the cell holding the row's group
+     * Whether a cell is on its row's tree cell (Epic #87): the cell holding the row's group
      * toggle; for a row rendering none (a leaf, a row loading), the column this grid's toggles are
-     * in, else the first column.
+     * in: one rendered now, else the one they were last found in (`treeColumn`, while the columns
+     * stay), else the first column. The app keeps its toggles in one column.
      */
     function onTreeColumn(
         rowIndex: number,
@@ -2662,10 +2667,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         columnIndex: number,
     ): boolean {
         const own = toggleCellOf(`="${rowIndex}"`);
+        const found = own ?? toggleCellOf("");
+        const column = found ? positionOf(found)?.columnIndex : undefined;
+        if (column !== undefined) treeColumn = column;
         if (own) return own === cell;
-        const any = toggleCellOf("");
-        const column = any ? positionOf(any)?.columnIndex : undefined;
-        return columnIndex === (column ?? 0);
+        return columnIndex === (treeColumn ?? 0);
     }
 
     /** The cell of this grid holding a group toggle (`value`: its attribute's, or any), or `null`. */
@@ -2678,6 +2684,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         return null;
     }
+
+    /** the column the grid's group toggles were last found in, while the columns stay (Epic #87) */
+    let treeColumn: number | null = null;
 
     function keydown(event: KeyboardEvent): boolean {
         const target = event.target;
@@ -3208,6 +3217,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 : after.collapsedGroupKeys !== before.collapsedGroupKeys
                   ? collapseAnchor(before, after)
                   : null;
+        // the toggles' column is found again in the new columns (Epic #87)
+        if (after.columns !== before.columns) treeColumn = null;
         if (columnsChanged) {
             // the flex shares follow the columns, their order and the overrides (A1)
             updateAutoWidths();

@@ -88,7 +88,7 @@ row: `row.row` is `undefined` and `row.group` holds it.
 
 | field | what it is |
 | --- | --- |
-| `key` | what expands it: unique among the grid's rows |
+| `key` | what expands it: unique among the grid's rows, data rows included (one key space: `/local`'s are JSON strings, apart from typical ids) |
 | `columnKey`, `value` | the column its rows are grouped by, and the value they share |
 | `depth` | 0 at the top, 1 inside another group, … |
 | `childCount` | how many data rows it holds, at every depth below it |
@@ -154,10 +154,12 @@ The keys are the APG treegrid's, on a body cell in navigation:
 | Enter, Space | a group row: toggle it, once per press (F2 hands a cell's controls the keys); Space a [tree's parent](/docs/concepts/tree-data) too |
 | → | a collapsed group's tree cell: expand it; anywhere else, the next cell |
 | ← | an expanded group's tree cell: collapse it; another row's tree cell: go to the row it is under, in that column |
-
-A row's tree cell is the one holding its toggle (`useGroupToggle`'s element); for a row with none,
-the cell in the column the grid's toggles are in, else the first column.
 | Shift+Space | a group row: select its rows, or clear them all when every one is selected |
+
+A row's tree cell is the one holding its toggle (`useGroupToggle`'s element); for a row with
+none (a leaf, a row loading), the cell in the column the grid's toggles are in (one rendered now,
+else the column they were last found in while the columns stay the same), else the first column.
+Keep the toggles in one column. A row that neither expands nor sits under one has plain arrows.
 
 Right to left, ← and → swap, as everywhere. Each key runs one command, after your own handlers: a
 `preventDefault` cancels it, and a middleware can refuse it.
@@ -168,8 +170,9 @@ With `rowSelection="multiple"`, a group row selects its rows' keys (`rowKeys`): 
 `model.run("selected-rows.toggle", { rowIndex })` from your checkbox, selects every one of them,
 or clears them all when every one is selected. A group row is `aria-selected` while every one of
 its rows is: `useSelectAll(group.rowKeys)` tells "some" for a checkbox's indeterminate state. A
-range (Shift+↑/↓, a Shift+click) and select-all (Ctrl+A) take a group row's `rowKeys` too, so the
-rows of a collapsed group are selected with the others; a Shift+click on a group row with no
+range (Shift+↑/↓, a Shift+click) and select-all (Ctrl+A) take a collapsed group row's `rowKeys`,
+so its rows, not on screen, are selected with the others; an expanded group's rows are taken as
+the rows they are (a range never reaches past its ends); a Shift+click on a group row with no
 anchor toggles it. In single mode a group row cannot be selected.
 
 `rowKeys` are taken as given, as `selected-rows.set` takes keys: the grid cannot ask

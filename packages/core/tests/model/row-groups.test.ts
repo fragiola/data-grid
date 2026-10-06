@@ -100,15 +100,13 @@ describe("rows with kinds", () => {
         expect(model.get("expanded-group-keys")).toEqual([]);
     });
 
-    it("takes getRowMeta with the data: left out, kept; given undefined, cleared (as rowKey)", () => {
+    it("takes getRowMeta with the data: by index, it belongs to its source (unlike rowKey)", () => {
         const model = setup();
         const rows = [{ id: "x", amount: 1 }];
-        const kept = model.state.source.getRowMeta;
+        // left out: the new source has no kinds, while the rows' key is kept
         expect(model.run("data.set", { rows }).ok).toBe(true);
-        expect(model.state.source.getRowMeta).toBe(kept);
-        expect(model.state.rowKey).toBeDefined();
-        model.run("data.set", { rows, getRowMeta: undefined });
         expect(model.state.source.getRowMeta).toBeUndefined();
+        expect(model.state.rowKey).toBeDefined();
         const getRowMeta = () => ({ depth: 2 });
         model.run("data.set", { rows, getRowMeta });
         expect(model.get("row-meta-by", { rowIndex: 0 })).toEqual({
@@ -282,6 +280,38 @@ describe("selecting a group row", () => {
             groupKeys: "a",
         });
         expect(result.ok || result.error.message).toMatch(/^groupKeys/);
+    });
+
+    it("takes an expanded group row's rows as rows, a collapsed one's by its keys", () => {
+        // "a" expanded shows r1 and r2 of its three keys (r9 on another page), "b" collapsed
+        const shown = [
+            { meta: { group: group("a", ["r1", "r2", "r9"]) } },
+            {
+                meta: { depth: 1, parentIndex: 0 },
+                row: { id: "r1", amount: 1 },
+            },
+            {
+                meta: { depth: 1, parentIndex: 0 },
+                row: { id: "r2", amount: 2 },
+            },
+            { meta: { group: group("b", ["r3"]) } },
+        ];
+        const model = createDataGridModel<Row>({
+            rowCount: shown.length,
+            getRow: (index) => shown[index]?.row,
+            getRowMeta: (index) => shown[index]?.meta,
+            rowKey: (row) => row.id,
+            rowSelection: "multiple",
+            expandedGroupKeys: ["a"],
+        });
+        // a range from r2 up across a's header takes no row outside it
+        model.run("selected-rows.toggle", { rowIndex: 2 });
+        model.run("selected-rows.toggle", { rowIndex: 0, extend: true });
+        expect(model.get("selected-row-keys")).toEqual(["r2", "r1"]);
+        // select-all: a's rows as rows, b's by its keys
+        model.run("selected-rows.set", { rowKeys: [] });
+        model.run("selected-rows.select-all", {});
+        expect(model.get("selected-row-keys")).toEqual(["r1", "r2", "r3"]);
     });
 
     it("extends a range to a group row, and toggles it without an anchor", () => {

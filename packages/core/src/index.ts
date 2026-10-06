@@ -56,6 +56,7 @@ export {
     type RowDragHandlePart,
     type RowDragHandleState,
     type RowPart,
+    type RowRead,
     type RowState,
     rowDetailPart,
     rowDragHandlePart,

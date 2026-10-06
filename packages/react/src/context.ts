@@ -7,6 +7,7 @@ import type {
     GroupRow,
     HeaderCellLayout,
     HeaderRowView,
+    RowMeta,
     SummaryPosition,
     SummaryRowView,
 } from "@fragiola/data-grid";
@@ -41,6 +42,8 @@ export interface RowInfo<TRow = unknown> {
     readonly group: GroupRow | undefined;
     /** its depth in the grid's tree (Epic #87): 0 at the top, and without row kinds */
     readonly depth: number;
+    /** its kind as the grid read it (`getRowMeta`'s answer, Epic #87): its parts read no more */
+    readonly meta: RowMeta | undefined;
 }
 
 /** A body cell, as `DataGrid.Cells` hands it to its children. */
@@ -58,6 +61,8 @@ export interface CellInfo<TRow = unknown> {
     readonly value: unknown;
     /** its row's group, on a group row (Epic #87) */
     readonly group: GroupRow | undefined;
+    /** its row's kind (Epic #87), as its row's info */
+    readonly meta: RowMeta | undefined;
 }
 
 /**

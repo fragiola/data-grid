@@ -112,8 +112,10 @@ row, and `model.run("row-groups.toggle", { rowIndex })` expands it from code.
 | ← | an expanded parent's tree cell: collapse it; another row's tree cell: go to the row it is under, in that column |
 
 A row's **tree cell** is the one holding its toggle (`useGroupToggle`'s element); for a row with
-none (a file, a row loading), the cell in the column the grid's toggles are in, else the first
-column. A checkbox column before the names leaves the arrows plain there.
+none (a leaf, a row loading), the cell in the column the grid's toggles are in (one rendered now,
+else the column they were last found in while the columns stay the same), else the first column.
+Keep the toggles in one column. A row that neither expands nor sits under one has plain arrows. A checkbox
+column before the names leaves the arrows plain there.
 
 Enter stays the cell's own (its controls, editing later): on a parent it does not toggle, as it
 does on a group row. Shift+Space selects the row, as anywhere.

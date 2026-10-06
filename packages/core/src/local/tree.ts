@@ -1,6 +1,6 @@
 import type { Column, RowKey, RowKeyGetter, SortColumn } from "../model/types";
 import { keySet } from "../utils";
-import type { RowEntry } from "./filter";
+import { entryKeyOf, type RowEntry } from "./filter";
 import type { ShownRow } from "./group";
 import { sortEntries } from "./sort";
 
@@ -83,14 +83,6 @@ export function keptTree<TRow, TNode>(
     return keep(roots);
 }
 
-/** A tree row's key: `rowKey`'s answer with its index in the tree, else that index. */
-export function treeKeyOf<TRow>(
-    entry: RowEntry<TRow>,
-    rowKey: RowKeyGetter<TRow> | undefined,
-): RowKey {
-    return rowKey ? rowKey(entry.row, entry.index) : entry.index;
-}
-
 /** The keys of every parent, at every depth, the outer ones first: what expanding them all sets. */
 export function parentKeysOf<TRow>(
     roots: readonly TreeNode<TRow>[],
@@ -100,7 +92,7 @@ export function parentKeysOf<TRow>(
     const add = (nodes: readonly TreeNode<TRow>[]) => {
         for (const node of nodes) {
             if (node.children.length === 0) continue;
-            keys.push(treeKeyOf(node.entry, rowKey));
+            keys.push(entryKeyOf(node.entry, rowKey));
             add(node.children);
         }
     };
@@ -140,7 +132,7 @@ export function subtreeKeysOf<TRow>(
     const add = (nodes: readonly TreeNode<TRow>[]) => {
         for (const child of nodes) {
             if (!isRowSelectable || isRowSelectable(child.entry.row)) {
-                keys.push(treeKeyOf(child.entry, rowKey));
+                keys.push(entryKeyOf(child.entry, rowKey));
             }
             add(child.children);
         }
@@ -196,7 +188,7 @@ export function shownTreeOf<TRow>(
                 entry: node.entry,
                 node,
             });
-            if (parent && expanded.has(treeKeyOf(node.entry, rowKey))) {
+            if (parent && expanded.has(entryKeyOf(node.entry, rowKey))) {
                 add(node.children, depth + 1, index);
             }
         });

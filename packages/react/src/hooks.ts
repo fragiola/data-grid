@@ -27,6 +27,7 @@ import {
     measuredRow,
     type RowDetailState,
     type RowDragHandleState,
+    type RowMeta,
     type RowState,
     renderedWidth,
     rowColumns,
@@ -153,6 +154,7 @@ export function useRows<TRow = unknown>(): RowInfo<TRow>[] {
             key: rowKeyOf(view, rowIndex, meta, row) ?? rowIndex,
             group,
             depth: depthOf(meta),
+            meta,
         };
     });
 }
@@ -218,10 +220,12 @@ export function useRowPart<TRow>(
 } {
     const view = useGridView<TRow>();
     const { engine } = useRootGrid();
+    // the row's kind, read once by `useRows`
     const { state, ariaSelected, ariaTree } = rowPart(
         view,
         row.rowIndex,
         row.loaded,
+        row,
     );
     const measured = measuredRow(view, row.loaded);
     return {
@@ -268,7 +272,7 @@ export function useRowPart<TRow>(
  */
 export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
     const view = useGridView<TRow>();
-    const { group } = row;
+    const { group, meta } = row;
     return cellsOf(view, row.rowIndex, (columnIndex, column) => ({
         rowIndex: row.rowIndex,
         columnIndex,
@@ -281,6 +285,7 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
               ? undefined
               : cellValue(column, row.row, row.rowIndex),
         group,
+        meta,
     }));
 }
 
@@ -632,9 +637,15 @@ export function useRowDragHandle(row: {
  */
 export function useGroupToggle(row: {
     readonly rowIndex: number;
+    /** the row's kind as read (a row's or a cell's info carries it): not read again */
+    readonly meta?: RowMeta | undefined;
 }): PartHookResult<GroupToggleState> {
     const view = useGridView();
-    const { state, attributes } = groupTogglePart(view, row.rowIndex);
+    const { state, attributes } = groupTogglePart(
+        view,
+        row.rowIndex,
+        "meta" in row ? { meta: row.meta } : undefined,
+    );
     if (!attributes) return { state, props: { style: {} } };
     return {
         state,

@@ -362,7 +362,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     anything else equals. A filter, the search or the sort changing goes to the first page.
    **Row kinds and grouping (Epic #87, E3.1–E3.2):** one generic still (the epic's stop
    condition never met). A source's optional `getRowMeta` (`RowSource`, `RowMetaGetter`; option,
-   `data.set`: left out, kept; given `undefined`, cleared, as `rowKey`; `Root` passes it always;
+   `data.set`: by index, it belongs to the source it comes with, so a payload without it has none,
+   unlike `rowKey` (a function of the row, kept when left out); `Root` passes it every time;
    `sourceMatches` compares it) answers a `RowMeta` `{ depth?,
    group?, expandable?, parentIndex?, setSize?, posInSet? }` per index, asked only for the
    source's rows (`rowMetaAt`, bounded by `rowCountOf`), `undefined` a data row at the top. A
@@ -390,13 +391,18 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `groupSelected`, `selection-anchor.set` takes a group row); `rowKeys` are kept as given (as `selected-rows.set`'s: the grid
    cannot ask `isRowSelectable` of a collapsed group's rows; the app lists the selectable ones);
    `is("row-selected")` on a group row is every one of its keys selected (`groupSelected`, cached
-   per group and key list); a range and select-all take a group row's `rowKeys` (`keysOfRow`: a
-   collapsed group's rows are selected too; a data row not loaded still refuses it all). A row's
+   per group and key list); a range and select-all take a collapsed group row's `rowKeys`
+   (`keysOfRow`: its rows are not on the rows), an expanded one's rows as rows (a range never
+   reaches past its ends); a data row not loaded still refuses it all. Group keys and data row
+   keys share one key space and must never collide (`/local`'s group keys are JSON strings). A row's
    per-render paths read its meta once and pass it on (`rowMetaAt`, `dataRowAt`, `rowKeyOf`,
-   `rowSelectedWith`/`rowSelectableWith`, `groupKeyAt`'s `meta`): `rowPart` reads a data row only
-   when the selection or its key needs it, and nothing is asked without `getRowMeta`; `useRows`
-   keys rows by the core's `rowKeyOf` (the engine's measured keys' rule). A fit and `autoSize`
-   measure group rows' cells (`rowLoaded`). `expanded-rows.toggle` refuses a group row (no detail); `rowsMove` is false while
+   `rowSelectedWith`/`rowSelectableWith`, `groupKeyAt`'s `meta` and `row`, `rowPart`'s and
+   `groupTogglePart`'s `RowRead`): `rowPart` reads a data row only when the selection or its key
+   needs it, and nothing is asked without `getRowMeta`; `useRows` reads the meta once, carries it
+   (`RowInfo.meta`, `CellInfo.meta`) into `useRow` and `useGroupToggle`, and keys rows by the
+   core's `rowKeyOf` (the engine's measured keys' rule). A fit measures group rows' cells
+   (`rowLoaded`); `autoSize` waits for a loaded data row (group rows alone, all collapsed, would
+   freeze it at their cells), then measures them with it. `expanded-rows.toggle` refuses a group row (no detail); `rowsMove` is false while
    the source has `getRowMeta` (grouped rows never move). Spans ask `{ type: "group", group,
    rowIndex }` (`GroupColSpanArgs`). `Column.renderGroupCell({ group, rowIndex, column,
    columnIndex, value })` is what a group row's `Cell` without children shows, else `value` as text;
@@ -440,7 +446,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    (`subRowKeysOf` + `useSelectAll`/`toggledRowKeys`). `/local`: `local/tree.ts` (`treeOf`,
    `keptTree`, `shownTreeOf`, `parentKeysOf`, `subtreeKeysOf`; pure `treeRows(rows, grouping)`),
    `LocalGrouping.getSubRows` (`groupBy` then not read): every row at every depth is an entry,
-   its index its place in the tree read top to bottom (`getValue`'s `rowIndex`, the default key;
+   its index its place in the tree read top to bottom (`getValue`'s `rowIndex`, the default key,
+   one rule for every stage: `entryKeyOf` in `local/filter.ts`;
    give `rowKey` for keys stable across changes); filters and the search on every row, a match's
    ancestors kept (`filteredCount`/`filteredRows`: the kept rows at every depth, in the sorted
    tree's order, `treeEntriesOf`); the sort per sibling list; the page of the rows shown; `moveRow`
@@ -682,8 +689,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     #87, `rowGroupKey`, the APG treegrid, on a body cell in navigation, no modifier): Enter on a
     group row and Space on any row that expands (a tree's parent too) run one `row-groups.toggle`
     (once per press; before interaction, so a group cell's controls get the keys by F2); on a row's
-    tree cell (`onTreeColumn`: the cell holding its `data-grid-group-toggle`, the engine's own
-    cells; a row with none, the column this grid's toggles are in, else the first) → (logical:
+    tree cell (`onTreeColumn`, asked only of a row that expands or has a `parentIndex`: the cell
+    holding its `data-grid-group-toggle`, the engine's own cells; a row with none, the column
+    this grid's toggles are in: one rendered, else `treeColumn`, the one they were last found in,
+    reset with the columns, else the first; the app keeps them in one column) → (logical:
     `inlineKey`) on a collapsed row group expands it, ← on an expanded one collapses it, else ←
     goes to its `parentIndex` in the same column (`active-position.set`, focus following); any other arrow, or one with nothing to
     do, moves as usual. Shift+Space on a group row selects its rows. With summary rows

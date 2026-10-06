@@ -171,22 +171,19 @@ export function rowKeyOf<TRow>(
 
 /**
  * The key a row expands by (Epic #87): a group row's group key, a loaded row that expands
- * (`RowMeta.expandable`) by its own key; `undefined` for a row that does not expand. `meta`, when
- * the caller has it, saves its lookup.
+ * (`RowMeta.expandable`) by its own key; `undefined` for a row that does not expand. `meta` and
+ * `row` (its data row, `dataRowAt`), when the caller has them, save their lookups.
  */
 export function groupKeyAt<TRow>(
     state: RowsState<TRow>,
     rowIndex: number,
     meta: RowMeta | undefined = rowMetaAt(state.source, rowIndex),
+    row: TRow | undefined = meta?.expandable
+        ? dataRowAt(state.source, rowIndex, meta)
+        : undefined,
 ): RowKey | undefined {
     if (meta?.group) return meta.group.key;
-    if (!meta?.expandable) return undefined;
-    return rowKeyOf(
-        state,
-        rowIndex,
-        meta,
-        dataRowAt(state.source, rowIndex, meta),
-    );
+    return meta?.expandable ? rowKeyOf(state, rowIndex, meta, row) : undefined;
 }
 
 /** Whether a row group's key (`groupKeyAt`) is expanded: among the expanded group keys. */

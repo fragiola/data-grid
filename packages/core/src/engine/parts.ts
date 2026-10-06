@@ -5,7 +5,6 @@ import {
     depthOf,
     groupExpanded,
     groupKeyAt,
-    rowKeyOf,
     rowMetaAt,
 } from "../model/source";
 import { activeInCell } from "../model/spans";
@@ -17,6 +16,7 @@ import type {
     PinnedSide,
     ReorderSide,
     RowKey,
+    RowMeta,
     SortColumn,
     SortDirection,
     SummaryPosition,
@@ -232,6 +232,14 @@ export interface RowDetailState {
     readonly height: number;
 }
 
+/**
+ * A row's kind as its caller read it (Epic #87: `rowMetaAt`; an adapter's row info carries it),
+ * so a part reads `getRowMeta` no more.
+ */
+export interface RowRead {
+    readonly meta: RowMeta | undefined;
+}
+
 /** A body row's state, its `aria-selected` and its tree's ARIA. */
 export interface RowPart {
     readonly state: RowState;
@@ -351,23 +359,25 @@ export function rowPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
     loaded: boolean,
+    read?: RowRead,
 ): RowPart {
     const reorder = view.rowReorder;
     const moves = view.reorderableRows;
-    // the row read once (Epic #87: its kind, nothing asked of a grid without them)
+    // the row read once (Epic #87: its kind, as the caller read it, nothing asked of a grid
+    // without them)
     const tree = view.source.getRowMeta !== undefined;
-    const meta = tree ? rowMetaAt(view.source, rowIndex) : undefined;
+    const meta = read
+        ? read.meta
+        : tree
+          ? rowMetaAt(view.source, rowIndex)
+          : undefined;
     // its data row, only when the selection or its key needs it
     const row =
         view.rowSelection || meta?.expandable
             ? dataRowAt(view.source, rowIndex, meta)
             : undefined;
     const selected = rowSelectedWith(view, rowIndex, meta, row);
-    const groupKey = meta?.group
-        ? meta.group.key
-        : meta?.expandable
-          ? rowKeyOf(view, rowIndex, meta, row)
-          : undefined;
+    const groupKey = meta && groupKeyAt(view, rowIndex, meta, row);
     const expanded =
         groupKey === undefined ? undefined : groupExpanded(view, groupKey);
     const depth = tree ? depthOf(meta) : undefined;
@@ -417,8 +427,9 @@ export function rowPart<TRow, TNode>(
 export function groupTogglePart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
+    read?: RowRead,
 ): GroupTogglePart {
-    const meta = rowMetaAt(view.source, rowIndex);
+    const meta = read ? read.meta : rowMetaAt(view.source, rowIndex);
     const groupKey = groupKeyAt(view, rowIndex, meta);
     const expanded = groupExpanded(view, groupKey);
     return {

@@ -9,7 +9,7 @@ import type {
     SortDirection,
 } from "../model/types";
 import { keySet } from "../utils";
-import type { RowEntry } from "./filter";
+import { entryKeyOf, type RowEntry } from "./filter";
 import { sortEntries } from "./sort";
 import { subtreeKeysOf, type TreeNode } from "./tree";
 import { textOf } from "./values";
@@ -129,8 +129,7 @@ export function groupTree<TRow, TNode>(
         (key): Column<TRow, TNode> =>
             columns.find((column) => column.key === key) ?? { key, width: 0 },
     );
-    const keyOf = (entry: RowEntry<TRow>): RowKey =>
-        rowKey ? rowKey(entry.row, entry.index) : entry.index;
+    const keyOf = (entry: RowEntry<TRow>): RowKey => entryKeyOf(entry, rowKey);
     const sums = aggregates ? Object.entries(aggregates) : [];
     const level = (
         rows: readonly RowEntry<TRow>[],
@@ -315,10 +314,10 @@ export function groupedRowsOf<TRow>(
         rowCount: rows.length,
         getRow: (index) => rows[index]?.entry?.row,
         getRowMeta: (index) => rows[index]?.meta,
-        rowKey: (row, index) => {
+        rowKey: (_row, index) => {
             const entry = rows[index]?.entry;
             if (!entry) return index;
-            return rowKey ? rowKey(row, entry.index) : entry.index;
+            return entryKeyOf(entry, rowKey);
         },
         groupKeys,
         subRowKeysOf: (index) => {

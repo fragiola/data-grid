@@ -393,9 +393,7 @@ function loadedKeyAt<TRow>(
     if (!isIndex(rowIndex, state.rowCount)) {
         return fail("not_found", `no row ${rowIndex}`);
     }
-    const row = meta?.group
-        ? undefined
-        : dataRowAt(state.source, rowIndex, meta);
+    const row = dataRowAt(state.source, rowIndex, meta);
     const key = row === undefined ? undefined : keyOf(state, row, rowIndex);
     return key === undefined ? unloaded(rowIndex) : { ok: true, value: key };
 }
@@ -685,12 +683,8 @@ function createHandlers<TRow, TNode>(
             }
             const next = withSource(
                 state,
-                // a field left out keeps what the grid has, one given `undefined` clears it
-                sourceOf(
-                    "getRowMeta" in payload
-                        ? payload
-                        : { ...payload, getRowMeta: state.source.getRowMeta },
-                ),
+                // the rows' kinds belong to the source they come with (by index): left out, none
+                sourceOf(payload),
                 "rowKey" in payload ? payload.rowKey : state.rowKey,
                 hints,
             );
