@@ -118,9 +118,11 @@ import {
     ownerViewport,
     PAGE_KEYS,
     ROW_DRAG_HANDLE_ATTRIBUTE,
+    rehostWithin,
     releaseSelection,
     scrollerBefore,
     selectedIn,
+    shortcutLetter,
     TAB_STOP_ATTRIBUTE,
     VIEWPORTS,
     WHEEL_GESTURE,
@@ -224,19 +226,6 @@ function isInsetLayer(layer: EngineLayer): layer is InsetLayer {
 /** Physical scroll moves, on either axis or both. */
 type ScrollMoves = { top?: number | undefined; left?: number | undefined };
 
-/**
- * The Latin letter a shortcut is pressed with (Epic #89): its key's own, else, on a layout whose
- * letters are not Latin (Cyrillic, Greek), its key's place on the keyboard (`code`), as the
- * system's shortcuts read it.
- */
-function shortcutLetter(event: KeyboardEvent): string {
-    const key = event.key.toLowerCase();
-    if (key.length === 1 && key >= "a" && key <= "z") return key;
-    return event.code.startsWith("Key")
-        ? event.code.slice(3).toLowerCase()
-        : key;
-}
-
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
 
@@ -259,13 +248,18 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         detail: new Set(),
         label: new Set(),
         row: new Set(),
+        empty: new Set(),
     };
-    /** the layers that hold rows: a key on one is the grid's (a detail's are its content's) */
-    const rowLayers: readonly ReadonlySet<Element>[] = [
-        layers.grid,
-        layers.header,
-        layers.body,
-    ];
+    /**
+     * Whether an element is the viewport or one of the layers that hold rows (the grid, the
+     * header's, the body): a key on one is the grid's (a detail's are its content's). Set lookups:
+     * nothing allocated, no DOM read (the wheel asks it of every event).
+     */
+    const isOwnLayer = (element: Element) =>
+        element === viewport ||
+        (layers.grid as ReadonlySet<Element>).has(element) ||
+        (layers.header as ReadonlySet<Element>).has(element) ||
+        (layers.body as ReadonlySet<Element>).has(element);
     let detachViewport: (() => void) | null = null;
 
     let state = model.state;
@@ -466,6 +460,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rowsRevision,
             interaction: interaction.cell,
             tabbable,
+            emptyShown: layers.empty.size > 0,
             columnResize,
             columnReorder,
             reorderableRows: options.reorderableRows === true,
@@ -1007,10 +1002,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // panel or a field in a cell, Epic #89, E5.2), as the browser would give it; at its end the
         // browser would chain it here as a native scroll, a scaled jump: the grid takes it,
         // exactly. Not asked of the grid's own cells, rows and layers
-        const plain =
-            target === viewport ||
-            isCellElement(target) ||
-            rowLayers.some((elements) => elements.has(target));
+        // (a cell's ownership walks up to its viewport: asked only of a cell)
+        const plain = isOwnLayer(target) || isCellElement(target);
         if (!plain && event.timeStamp - wheelAt > WHEEL_GESTURE) {
             // a new gesture: the styles read in the last one may have changed
             wheelStyles = new WeakMap();
@@ -1075,7 +1068,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 align,
             );
             // compared with what the axis would hold: a move to the end it is at is no move
-            if (rowsY.offsetFor(target) !== rowsY.virtual) {
+            if (rowsY.moves(target)) {
                 moves.top = rowsY.scrollTo(target);
             }
         }
@@ -1095,7 +1088,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 columnAxis.totalSize - pinnedEndWidth - pinnedWidth,
                 align,
             );
-            if (columnsX.offsetFor(target) !== columnsX.virtual) {
+            if (columnsX.moves(target)) {
                 moves.left = columnsX.scrollTo(target);
             }
         }
@@ -1223,11 +1216,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Whether a key from `target` is the grid's: from one of its cells, its viewport or a layer. */
     function ownsKeysOf(target: Element): boolean {
-        return (
-            target === viewport ||
-            rowLayers.some((elements) => elements.has(target)) ||
-            cellOf(target) !== null
-        );
+        return isOwnLayer(target) || cellOf(target) !== null;
     }
 
     /**
@@ -1292,8 +1281,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * Finds the grid this one is nested in: the nearest attached viewport above its own. Asked on
-     * every attach of any grid (`NESTINGS`): an outer viewport attaches after its cells', and a
-     * grid between two others may attach after both, nearer than the host found before.
+     * its attach, and when a viewport around it attaches or detaches (`NESTINGS`): an outer
+     * viewport attaches after its cells', a grid between two others may attach after both,
+     * nearer than the host found before, and a host detaching leaves it to the next one out.
      */
     function findHost() {
         const parent = viewport?.parentElement;
@@ -3360,8 +3350,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
         }
         if (viewport && next && !inside) pendingFocus = false;
-        // focus leaving a nested grid: its tab stop is its holder's again (E5.2)
-        updateTabStop(inside);
+        // focus leaving a nested grid: its tab stop is its holder's again (E5.2); not the window
+        // losing focus, which leaves focus where it is
+        if (!windowBlur) updateTabStop(inside);
     }
 
     function onFocusIn(event: FocusEvent) {
@@ -4071,11 +4062,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             detachViewport?.();
             viewport = element;
             VIEWPORTS.add(element);
-            // a host for the grids nested in it, and the grids not hosted yet asked again (this
-            // one too: it may be nested in a grid attached already)
+            // a host for the grids nested in it, asked again, and its own host (it may be nested
+            // in a grid attached already)
             HOSTS.set(element, ownHost);
-            NESTINGS.add(findHost);
-            for (const find of [...NESTINGS]) find();
+            NESTINGS.set(element, findHost);
+            findHost();
+            rehostWithin(element);
             const doc = element.ownerDocument;
             const defaultView = doc.defaultView;
             readSize();
@@ -4190,7 +4182,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 pendingFocus = false;
                 // nested no more: a grid on its own until it is attached again
                 HOSTS.delete(element);
-                NESTINGS.delete(findHost);
+                NESTINGS.delete(element);
                 unlistenHost?.();
                 unlistenHost = null;
                 host = null;
@@ -4205,12 +4197,25 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     detachViewport = null;
                     wheelOn = false;
                 }
+                // the grids it hosted: hosted by the next grid out, or on their own
+                rehostWithin(element);
+                nestedListeners.clear();
             };
             detachViewport = detach;
             return detach;
         },
         registerLayer(layer, element) {
             layers[layer].add(element);
+            // an empty state mounted (or gone): its row counts in ARIA, a new view
+            if (layer === "empty") {
+                viewStale = true;
+                update();
+                return () => {
+                    layers.empty.delete(element);
+                    viewStale = true;
+                    update();
+                };
+            }
             // a measured row is only read (E2.2)
             if (layer === "row") {
                 heights.observeLater(element);

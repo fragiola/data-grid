@@ -226,6 +226,11 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * (or row, for a detail) holds it, or focus is inside it (Epic #89, E5.2; `ownTabStop`)
      */
     readonly tabbable: boolean;
+    /**
+     * whether an empty state is mounted (`Empty`, registered as the engine's `empty` element):
+     * its row counts in ARIA while the grid has no rows (Epic #89, E5.3)
+     */
+    readonly emptyShown: boolean;
     /** the column a drag is resizing (W4), or `null` */
     readonly columnResize: ColumnResize | null;
     /** the column or group a drag is moving, and where it would land (O4), or `null` */
@@ -482,7 +487,8 @@ export type EngineLayer =
     | "pinned"
     | "detail"
     | "label"
-    | "row";
+    | "row"
+    | "empty";
 
 /** What only an adapter calls. An app never touches it. */
 export interface EngineAdapter<TRow = unknown, TNode = unknown> {

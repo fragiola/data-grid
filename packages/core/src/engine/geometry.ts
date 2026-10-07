@@ -442,15 +442,16 @@ export function gridRole<TRow, TNode>(
 
 /**
  * The rows the body counts for in ARIA: its rows, or while it has none the empty state's row
- * (Epic #89, E5.2: `Empty`'s, at the body's first line).
+ * while one is mounted (Epic #89, E5.2: `Empty`'s, at the body's first line; `emptyShown`).
  */
 function bodyLines<TRow, TNode>(view: GridView<TRow, TNode>): number {
-    return view.rowCount === 0 ? 1 : view.rowCount;
+    if (view.rowCount > 0) return view.rowCount;
+    return view.emptyShown ? 1 : 0;
 }
 
 /**
  * The grid's `aria-rowcount`: the header rows, every body row (the empty state's row while there
- * is none) and the summary rows.
+ * is none and it is mounted) and the summary rows.
  */
 export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
     const { top, bottom } = view.summaryRows;

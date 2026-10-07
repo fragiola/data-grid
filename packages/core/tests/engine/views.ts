@@ -69,6 +69,7 @@ export function inputsOf(
         rowsRevision: 0,
         interaction: null,
         tabbable: true,
+        emptyShown: false,
         columnResize: null,
         columnReorder: null,
         reorderableRows: false,

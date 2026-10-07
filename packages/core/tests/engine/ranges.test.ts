@@ -185,6 +185,10 @@ describe("cell ranges by the keys", () => {
         expect(all.handled).toBe(true);
         expect(all.event.defaultPrevented).toBe(true);
         expect(selected()).toEqual(range([0, 0], [999, 7]));
+        // on a Greek layout: "α", the A key's place
+        model.run("selected-range.clear", {});
+        keydown(engine, header, "α", { ctrlKey: true, code: "KeyA" });
+        expect(selected()).toEqual(range([0, 0], [999, 7]));
         // a held key repeats nothing
         commands.length = 0;
         keydown(engine, header, "a", { metaKey: true, repeat: true });

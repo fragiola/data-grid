@@ -131,15 +131,20 @@ export default function ServerSelection() {
     }, [pageIndex]);
 
     // "Select every row" (Ctrl/⌘+A, the header's box) is the server's: the grid only holds a
-    // page, so a middleware turns the command into the app's own "all" before the grid selects
-    // the page's rows (what it shows of it)
+    // page, so a middleware turns the command, once it went through (not refused, not a dry run),
+    // into the app's own "all"; the grid selects the page's rows (what it shows of it)
     useEffect(
         () =>
             grid?.model.use((ctx, next) => {
-                if (ctx.command === "selected-rows.select-all") {
+                const result = next();
+                if (
+                    ctx.command === "selected-rows.select-all" &&
+                    result.ok &&
+                    !ctx.dryRun
+                ) {
                     setSelection({ all: true, keys: new Set() });
                 }
-                return next();
+                return result;
             }),
         [grid],
     );

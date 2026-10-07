@@ -87,8 +87,9 @@ describe("server rendering", () => {
         expect(empty).toMatch(
             /<div data-grid-part="empty-row" role="row" aria-rowindex="2"/,
         );
-        // the header row and the empty state's
-        expect(empty).toContain('aria-rowcount="2"');
+        // the header row only: the empty state's row counts once it is mounted (its element
+        // registers with the engine; hydration starts from this count, then adds it)
+        expect(empty).toContain('aria-rowcount="1"');
         expect(empty).toContain(
             '<div data-grid-part="empty" role="gridcell" aria-colspan="4"',
         );

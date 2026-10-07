@@ -148,6 +148,15 @@ export class ScrollAxisState {
         return this.mapping.scaled ? offset : Math.round(offset);
     }
 
+    /**
+     * Whether a move to `virtual` moves the axis: by a pixel or more. A scroll at a fractional
+     * offset (a page zoomed, a fractional device pixel ratio) is where a move to its whole pixel
+     * would put it: no move.
+     */
+    moves(virtual: number): boolean {
+        return Math.abs(this.offsetFor(virtual) - this.virtual) >= 1;
+    }
+
     /** Moves to a virtual offset (`offsetFor`). Returns the physical scroll to set on the container. */
     scrollTo(virtual: number): number {
         this.remainder = 0;

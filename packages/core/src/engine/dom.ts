@@ -37,12 +37,28 @@ export const CTRL_KEYS: Record<string, Direction> = {
 /** The pixels a wheel "line" or "page" stands for (`deltaMode` 1 and 2). */
 export const LINE_HEIGHT = 40;
 
-/** Whether a key is Ctrl/⌘+A, without Shift: select all (the cells, the rows). */
+/**
+ * The Latin letter a shortcut is pressed with (Epic #89): its key's own, else, on a layout whose
+ * letters are not Latin (Cyrillic, Greek), its key's place on the keyboard (`code`), as the
+ * system's shortcuts read it.
+ */
+export function shortcutLetter(event: KeyboardEvent): string {
+    const key = event.key.toLowerCase();
+    if (key.length === 1 && key >= "a" && key <= "z") return key;
+    return event.code.startsWith("Key")
+        ? event.code.slice(3).toLowerCase()
+        : key;
+}
+
+/**
+ * Whether a key is Ctrl/⌘+A, without Shift: select all (the cells, the rows), its letter read as
+ * the system's shortcuts read it (`shortcutLetter`: on a Cyrillic or a Greek layout too).
+ */
 export function isSelectAll(event: KeyboardEvent): boolean {
     return (
         (event.ctrlKey || event.metaKey) &&
         !event.shiftKey &&
-        event.key.toLowerCase() === "a"
+        shortcutLetter(event) === "a"
     );
 }
 
@@ -324,11 +340,19 @@ export interface NestingHost {
 export const HOSTS = new WeakMap<Element, NestingHost>();
 
 /**
- * Every attached grid's search for the grid it is nested in (`findHost`): each attach asks them
- * all again (an outer viewport attaches after the ones in its cells: refs attach child first; a
- * grid between two others may attach after both).
+ * Every attached grid's search for the grid it is nested in (`findHost`), by its viewport: a
+ * viewport attaching or detaching asks the grids inside it again (`rehostWithin`: an outer
+ * viewport attaches after the ones in its cells, refs attach child first; a grid between two
+ * others may attach after both; a host detaching leaves its grids to the next one out).
  */
-export const NESTINGS = new Set<() => void>();
+export const NESTINGS = new Map<Element, () => void>();
+
+/** Asks the grids nested inside `element` for their host again (it attached or detached). */
+export function rehostWithin(element: Element): void {
+    for (const [viewport, find] of [...NESTINGS]) {
+        if (viewport !== element && element.contains(viewport)) find();
+    }
+}
 
 export function isElement(target: unknown): target is Element {
     return (

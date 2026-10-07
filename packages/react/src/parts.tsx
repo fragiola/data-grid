@@ -16,6 +16,7 @@ import {
     isValidElement,
     type Key,
     type ReactNode,
+    useContext,
     useLayoutEffect,
 } from "react";
 import {
@@ -29,6 +30,7 @@ import {
     SummaryContext,
     SummaryRowContext,
     type SummaryRowInfo,
+    TableContext,
     useRootGrid,
     useRowContext,
 } from "./context";
@@ -159,10 +161,16 @@ export function Grid(props: GridProps) {
     // without rows, and with expanded rows (a detail is as wide as the view), the sizer spans at
     // least the visible area: it clips what it holds
     const wide = empty || view.expandedRows.length > 0;
+    // a `<table>`: what it holds takes a table's structure (`Empty`)
+    const table = isValidElement(rest.render) && rest.render.type === "table";
     return useRenderElement("div", rest, {
         state: { rowCount: view.rowCount, columnCount: view.columnCount },
         ref: layerRef(engine, "grid"),
-        children,
+        children: table ? (
+            <TableContext value={true}>{children}</TableContext>
+        ) : (
+            children
+        ),
         props: {
             role: gridRole(view),
             "aria-rowcount": ariaRowCount(view),
@@ -400,9 +408,15 @@ const EMPTY_CELL = { height: "100%", boxSizing: "border-box" } as const;
 export function Empty(props: EmptyProps) {
     const { children, ...rest } = props;
     const view = useGridView();
+    const { engine } = useRootGrid();
+    // in a table grid, a cell of a table (a `<td>` without `render`); a `<td>` rendered says so
+    // in any grid
+    const tableGrid = useContext(TableContext);
     const columns = Math.max(1, view.columnCount);
-    const rendered = useRenderElement("div", rest, {
+    const rendered = useRenderElement(tableGrid ? "td" : "div", rest, {
         state: {},
+        // mounted, its row counts in ARIA (`emptyShown`)
+        ref: layerRef(engine, "empty"),
         children,
         props: {
             ...dataAttributes({ "grid-part": "empty" }),
@@ -412,9 +426,9 @@ export function Empty(props: EmptyProps) {
         },
     });
     if (view.rowCount !== 0) return null;
-    // what it renders tells its structure: a table's cell (a `<td>`, from a `render` element or
-    // function) spans the columns natively, in a table's row and row group; else divs with roles
-    const table = rendered.type === "td";
+    // a table's cell (in a table grid, or a `<td>` from a `render` element or function) spans the
+    // columns natively, in a table's row and row group; else divs with roles
+    const table = tableGrid || rendered.type === "td";
     const cell = table
         ? cloneElement(rendered as React.ReactElement<EmptyCellProps>, {
               role: undefined,

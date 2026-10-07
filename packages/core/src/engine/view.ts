@@ -284,6 +284,7 @@ export interface ViewInputs<TRow, TNode>
         | "rowsRevision"
         | "interaction"
         | "tabbable"
+        | "emptyShown"
         | "columnResize"
         | "columnReorder"
         | "reorderableRows"
@@ -446,6 +447,7 @@ const VIEW_KEYS = [
     "expandedGroupKeys",
     "interaction",
     "tabbable",
+    "emptyShown",
     "columnResize",
     "columnReorder",
     "reorderableRows",

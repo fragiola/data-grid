@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
     createDataGridEngine,
@@ -265,6 +265,51 @@ describe("a nested grid's tab stop (Epic #89, E5.2)", () => {
         middleModel.run("active-position.set", { rowIndex: 1, columnIndex: 0 });
         commit(middle);
         expect(tabbable(deep.engine)).toBe(true);
+    });
+
+    it("keeps its tab stop through the window losing focus (focus stays in it)", () => {
+        const { outer, inner, innerCell } = nested();
+        // the outer active cell never follows: only focus inside keeps the inner tab stop
+        outer.model.use((ctx, next) =>
+            ctx.command === "active-position.set"
+                ? { ok: false, error: { code: "vetoed", message: "no" } }
+                : next(),
+        );
+        innerCell.focus();
+        expect(tabbable(inner.engine)).toBe(true);
+        // alt-tab, the devtools: a focusout to nowhere while the document has no focus
+        const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+        innerCell.dispatchEvent(
+            new FocusEvent("focusout", { bubbles: true, relatedTarget: null }),
+        );
+        expect(tabbable(inner.engine)).toBe(true);
+        hasFocus.mockRestore();
+    });
+
+    it("is hosted by the next grid out, or is its own, once its host detaches", () => {
+        const { outer, inner, sameIndexes } = nested();
+        outer.model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
+        commit(outer.engine);
+        expect(tabbable(inner.engine)).toBe(false);
+        // the outer grid goes: the inner one is a grid on its own, no longer told by it
+        outer.engine.destroy();
+        expect(tabbable(inner.engine)).toBe(true);
+        sameIndexes.remove();
+        // and three deep: the middle one detaching hands the deepest one to the outermost
+        const top = grid(document.body);
+        const middle = grid(top.cell(0, 1));
+        const deep = grid(middle.cell(1, 0));
+        top.model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
+        commit(top.engine);
+        middle.model.run("active-position.set", {
+            rowIndex: 1,
+            columnIndex: 0,
+        });
+        commit(middle.engine);
+        expect(tabbable(deep.engine)).toBe(true);
+        middle.engine.destroy();
+        // the outermost's active cell does not hold it: no tab stop, whatever the middle's was
+        expect(tabbable(deep.engine)).toBe(false);
     });
 
     it("keeps its own tab stop outside any row or cell of its holder (an empty state)", () => {

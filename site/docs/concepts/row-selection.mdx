@@ -164,11 +164,13 @@ const grid = useDataGrid(gridRef);
 useEffect(
     () =>
         grid?.model.use((ctx, next) => {
-            if (ctx.command === "selected-rows.select-all") {
+            // the grid selects the rows it has: the page's part of "all"
+            const result = next();
+            // went through (not refused, not a dry run): every row of the server's
+            if (ctx.command === "selected-rows.select-all" && result.ok && !ctx.dryRun) {
                 setSelection({ all: true, keys: new Set() });
             }
-            // the grid then selects the rows it has: the page's part of "all"
-            return next();
+            return result;
         }),
     [grid],
 );

@@ -903,7 +903,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     logical. With
     `rowSelection`, on a body cell in navigation: Shift+Space toggles its row, Shift+Up/Down
     (multiple) move and select from the anchor (the starting row when there is none or it
-    clears; additive), Ctrl/⌘+A selects every row; at most one `selected-rows.*` command a key. **Interactive
+    clears; additive), Ctrl/⌘+A selects every row (`isSelectAll`: its letter read through `shortcutLetter`, on a non-Latin layout too); at most one `selected-rows.*` command a key. **Interactive
     cells (Epic #52, I1–I5):** two modes, the engine's. Outside interaction the engine keeps the
     controls inside its own cells at `tabindex` -1 (a MutationObserver from the viewport's window,
     cells rendered later included; their own value kept; `data-grid-tab-stop` opts a control
@@ -1245,11 +1245,16 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `role="gridcell"`, `aria-colspan` every column; rendered as a `<td>`, `colSpan`, no role) in a
   row of its own (`data-grid-part="empty-row"`, `role="row"`; a `<tr>` for a `<td>`), in an area
   of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as large as
-  the visible body; a `<tbody>` for a `<td>`): the tags follow `render`, a `<td>` element making a
-  table's. The app's class, style and children go on the cell (`height: 100%`; a `<td>` a block,
+  the visible body; a `<tbody>` for a `<td>`): a table's structure in a table grid (`Grid`
+  rendered as a `<table>` element: `TableContext`; there `Empty`'s own tag is a `<td>`, and a
+  component rendering one, `render={<Td />}`, is given `colSpan`) or when its rendered element is
+  a `<td>`; else divs with roles. The app's class, style and children go on the cell (`height: 100%`; a `<td>` a block,
   a div's display the app's); it has no text or name of its own and no indexes (the keys, the
   tab order and interaction leave its controls alone), and `Root` and `Grid` carry `data-empty`
-  meanwhile. With no rows, the grid's sizer
+  meanwhile. Its row counts in `aria-rowcount` (and moves the bottom summary rows' indexes) only
+  while it is mounted: its cell registers as the engine's `empty` element (`view.emptyShown`).
+  On the server nothing registers: the server's HTML counts no empty line, hydration starts from
+  that count (it matches) and the first commit adds it. With no rows, the grid's sizer
   spans at least the visible area (the view's `viewportWidth`/`viewportBodyHeight`).
 - **`RowDetail` renders only while its row is expanded (Epic #41, M3).** It holds only its
   children (no text, no names), is a block (its content's layout is the app's), and drops a

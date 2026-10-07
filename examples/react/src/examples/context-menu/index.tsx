@@ -48,10 +48,18 @@ export default function ContextMenuExample() {
     const gridRef = useDataGridRef<Task>();
     const gridElement = useRef<HTMLDivElement>(null);
 
-    /** Changes the rows now (so the grid has them), then makes `active` the active cell. */
-    function change(next: readonly Task[], active: CellPosition, what: string) {
+    /**
+     * Changes the rows now (so the grid has them), then makes `active` the active cell; `null`
+     * (no row left) clears it, and the menu's focus goes to the grid itself.
+     */
+    function change(
+        next: readonly Task[],
+        active: CellPosition | null,
+        what: string,
+    ) {
         flushSync(() => setRows(next));
-        gridRef.current?.model.run("active-position.set", active);
+        if (active) gridRef.current?.model.run("active-position.set", active);
+        else gridRef.current?.model.run("active-position.clear", {});
         setAnnouncement(what);
     }
 
@@ -71,7 +79,10 @@ export default function ContextMenuExample() {
         const next = [...rows.slice(0, at), ...rows.slice(at + 1)];
         change(
             next,
-            { rowIndex: Math.min(at, next.length - 1), columnIndex },
+            // the row now at its place, else the one above; none left, no active cell
+            next.length === 0
+                ? null
+                : { rowIndex: Math.min(at, next.length - 1), columnIndex },
             `Deleted task ${removed?.id}.`,
         );
     }

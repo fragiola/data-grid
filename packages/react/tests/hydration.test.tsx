@@ -59,6 +59,10 @@ describe("hydration", () => {
                 if (name === "an empty grid") {
                     expect(cells).toHaveLength(0);
                     expect(root(container)).toHaveAttribute("data-empty", "");
+                    // hydrated with the server's count, the empty state's row counts once mounted
+                    expect(
+                        container.querySelector('[data-grid-part="grid"]'),
+                    ).toHaveAttribute("aria-rowcount", "2");
                 } else {
                     // the window, from the viewport's size: rows and columns
                     expect(cells.length).toBeGreaterThan(4);

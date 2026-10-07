@@ -112,6 +112,12 @@ export const SummaryContext = createContext<SummaryPosition | null>(null);
 export const SummaryRowContext = createContext<SummaryRowInfo | null>(null);
 
 /**
+ * Whether the grid is a table (`DataGrid.Grid` rendered as a `<table>` element): the parts it
+ * holds take a table's structure (`DataGrid.Empty`'s row and area).
+ */
+export const TableContext = createContext(false);
+
+/**
  * The view the engine reports, read once by the root and handed down: a part re-renders when it
  * changes, even under a parent that did not.
  */

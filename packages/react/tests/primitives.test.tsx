@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createRef, StrictMode, useState } from "react";
+import { type ComponentProps, createRef, StrictMode, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
@@ -674,6 +674,52 @@ describe("the empty state", () => {
         expect(empty).not.toHaveAttribute("aria-colspan");
         expect(empty?.style.color).toBe("red");
         expect(empty?.style.display).toBe("block");
+    });
+
+    it("takes a table's structure in a table grid, whatever renders its cell (a component)", () => {
+        // the app's own cell component, rendering a `<td>`
+        const Td = (props: ComponentProps<"td">) => <td {...props} />;
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid render={<table />}>
+                    <DataGrid.Body render={<tbody />} />
+                    <DataGrid.Empty render={<Td />}>No people</DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [empty] = parts(container, "empty");
+        expect(empty?.tagName).toBe("TD");
+        expect(empty?.parentElement?.tagName).toBe("TR");
+        expect(empty?.parentElement?.parentElement?.tagName).toBe("TBODY");
+        expect(empty).toHaveAttribute("colspan", String(columns.length));
+        expect(empty).not.toHaveAttribute("role");
+        // without `render`, a table grid's empty state is a `<td>` too
+        const plain = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid render={<table />}>
+                    <DataGrid.Empty>No people</DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [cell] = parts(plain.container, "empty");
+        expect(cell?.tagName).toBe("TD");
+        expect(cell?.parentElement?.tagName).toBe("TR");
+    });
+
+    it("counts no empty line in ARIA without an empty state", () => {
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        // the header row only
+        expect(parts(container, "grid")[0]).toHaveAttribute(
+            "aria-rowcount",
+            "1",
+        );
     });
 
     it("counts its row in ARIA, after the header rows and before the bottom summary rows", () => {
