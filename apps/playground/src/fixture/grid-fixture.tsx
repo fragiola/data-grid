@@ -144,7 +144,7 @@ import { createRoot } from "react-dom/client";
 // `window.cellEdits` the edits committed, `window.editingChanges` the edited cells,
 // `window.fills` the fills, and a button before and after the grid take Tab.
 
-interface FixtureRow {
+export interface FixtureRow {
     index: number;
 }
 
@@ -172,7 +172,7 @@ function numberParam(params: URLSearchParams, name: string, fallback: number) {
     return params.has(name) && Number.isFinite(value) ? value : fallback;
 }
 
-function Expose() {
+export function Expose() {
     window.grid = useDataGrid<FixtureRow>();
     return null;
 }
@@ -207,7 +207,7 @@ function editedValue(
 }
 
 /** C1's editor with `&edit=1`: a field, starting from the key typed, as an app writes one. */
-function TextEditor({
+export function TextEditor({
     value,
     startKey,
     rowIndex,
@@ -229,7 +229,7 @@ function TextEditor({
 }
 
 /** C5's editor with `&edit=1`: a picker whose options are portalled out of the grid. */
-function PickEditor({
+export function PickEditor({
     value,
     rowIndex,
     onCommit,
@@ -283,7 +283,7 @@ function editColumn(columnIndex: number): Partial<Column<FixtureRow>> {
 }
 
 /** A cell's fill handle with `&fill=1`, as an app writes it: a square at its bottom-end corner. */
-function FillHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
+export function FillHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
     const { state, props } = useFillHandle(cell);
     if (!state.visible) return null;
     return (
@@ -304,7 +304,7 @@ const FILL_HANDLE_STYLE = {
 } as const;
 
 // the fill's target is the app's to mark
-const FILL_CSS = `[data-fill-target] { background: #ffd; }`;
+export const FILL_CSS = `[data-fill-target] { background: #ffd; }`;
 
 /** What `&groupBy` aggregates: C4, the sum of a group's rows' indexes. */
 const AGGREGATES = {
@@ -369,7 +369,7 @@ function groupCellContent(cell: CellInfo<FixtureRow>, selection: boolean) {
 }
 
 /** A row's drag handle, as an app writes it: the hook's props on an element of its own. */
-function RowHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
+export function RowHandle({ cell }: { cell: CellInfo<FixtureRow> }) {
     const { props } = useRowDragHandle(cell);
     return (
         <span
@@ -391,7 +391,7 @@ const HANDLE_STYLE = {
 } as const;
 
 // the row's drop indicator is the app's: a line above or below its target
-const ROW_DROP_CSS = `
+export const ROW_DROP_CSS = `
 [data-grid-part="row"][data-drop-target="before"] { box-shadow: inset 0 3px 0 green; }
 [data-grid-part="row"][data-drop-target="after"] { box-shadow: inset 0 -3px 0 green; }
 [data-grid-part="row"][data-dragging] { opacity: 0.6; }
@@ -457,7 +457,7 @@ function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
 }
 
 /** A row's checkbox, as an app writes it: the grid's command, Shift+click extending. */
-function SelectBox({ rowIndex }: { rowIndex: number }) {
+export function SelectBox({ rowIndex }: { rowIndex: number }) {
     const { model } = useDataGrid<FixtureRow>();
     // the view moves with the selection: this re-renders
     useGridView();
@@ -490,7 +490,7 @@ const INNER_COLUMNS: Column<FixtureRow>[] = Array.from(
 );
 
 /** The expander of a row: a button in its first cell, as an app writes it (M3). */
-function Expander({ rowIndex }: { rowIndex: number }) {
+export function Expander({ rowIndex }: { rowIndex: number }) {
     const { model } = useDataGrid<FixtureRow>();
     return (
         <button
@@ -522,7 +522,7 @@ const TABLE = {
 };
 
 /** The `render` element of each part: a table's, or none (the parts' own divs). */
-function tags(table: boolean): Partial<typeof TABLE> {
+export function tags(table: boolean): Partial<typeof TABLE> {
     return table ? TABLE : {};
 }
 
@@ -662,7 +662,7 @@ function GroupContent({
 
 // A range's look is the app's (Epic #88): a tint on its cells, a line on its edges (logical
 // sides, so it mirrors right to left)
-const RANGE_CSS = `
+export const RANGE_CSS = `
 [data-selected-cell] { background: #def; }
 [data-range-edge~="top"] { border-top: 2px solid blue; }
 [data-range-edge~="bottom"] { border-bottom: 2px solid blue; }
@@ -682,7 +682,7 @@ const EMPTY_CONTENT = {
  * Stacking is the consumer's (P4): pinned cells are opaque and above the cells that scroll under
  * them.
  */
-function pinnedStyle(state: { pinned: boolean }) {
+export function pinnedStyle(state: { pinned: boolean }) {
     return state.pinned ? { background: "white", zIndex: 1 } : undefined;
 }
 
@@ -784,7 +784,7 @@ function reorderColumn(
 // The drop indicator is the app's (O4): a line on the target's side, from its attribute (its
 // start: the right edge right to left). A reorderable header cell leaves the browser only its
 // vertical pans: a touch moved sideways drags it (Epic #89)
-const DROP_TARGET_CSS = `
+export const DROP_TARGET_CSS = `
 [data-grid-part="header-cell"][data-reorderable] { touch-action: pan-y; }
 [data-drop-target="before"] { box-shadow: inset 3px 0 0 blue; }
 [data-drop-target="after"] { box-shadow: inset -3px 0 0 blue; }
@@ -826,7 +826,7 @@ function Resizer({ cell }: { cell: HeaderCellInfo<FixtureRow> }) {
 }
 
 /** A header row of the fixture: `row` from `HeaderRows`, or the columns' row without one. */
-function HeaderRow({
+export function HeaderRow({
     table,
     row,
     resize = false,
@@ -878,7 +878,7 @@ function HeaderRow({
  * A position's summary rows, as an app writes them: after the header (top) or last (bottom),
  * opaque and above the rows that scroll under them; nothing while the grid has none there.
  */
-function SummaryRows({
+export function SummaryRows({
     position,
     table,
     render,

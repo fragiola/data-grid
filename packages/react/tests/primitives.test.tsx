@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createRef, Profiler, StrictMode, useState } from "react";
+import { createRef, StrictMode, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
@@ -11,7 +11,7 @@ import {
     type RootProps,
     useDataGrid,
 } from "../src";
-import { stubViewportSize, tags } from "./helpers";
+import { renderCounting, scrollRoot, stubViewportSize, tags } from "./helpers";
 
 // The primitive contract (AGENTS.md): render, never asChild; refs merged; props forwarded and
 // handlers composed; className/style as functions; structural inline style only; state through
@@ -1247,22 +1247,17 @@ describe("the engine's life", () => {
     });
 
     it("does not render React for a scroll that keeps the rendered window (D9)", () => {
-        let commits = 0;
-        const { container } = render(
-            <Profiler id="grid" onRender={() => commits++}>
-                <DivGrid />
-            </Profiler>,
+        const { container, commits, resetCommits } = renderCounting(
+            <DivGrid />,
         );
         const root = parts(container, "root")[0] as HTMLElement;
-        commits = 0;
+        resetCommits();
         // every column is rendered (450px in a 400px view): sideways, the windows stay
-        root.scrollLeft = 30;
-        fireEvent.scroll(root);
-        expect(commits).toBe(0);
+        scrollRoot(root, { left: 30 });
+        expect(commits()).toBe(0);
         // down past the overscan: a new rendered window, one commit
-        root.scrollTop = 200;
-        fireEvent.scroll(root);
-        expect(commits).toBe(1);
+        scrollRoot(root, { top: 200 });
+        expect(commits()).toBe(1);
     });
 
     it("reports the first windows", () => {
