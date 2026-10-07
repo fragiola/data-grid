@@ -12,6 +12,22 @@ export async function settle(page: Page) {
     );
 }
 
+/**
+ * Tab, with a button after the page's content to take the focus leaving: past a page's last
+ * focusable element Chromium and WebKit hand focus to the browser, Firefox keeps it where it is.
+ */
+export async function pressTabOut(page: Page) {
+    await page.evaluate(() => {
+        if (document.querySelector("[data-tab-out]")) return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "After the example";
+        button.setAttribute("data-tab-out", "");
+        document.body.append(button);
+    });
+    await page.keyboard.press("Tab");
+}
+
 /** The grid's scroll container. */
 export function viewport(page: Page): Locator {
     return page.locator('[data-grid-part="root"]').first();
@@ -117,6 +133,65 @@ export async function dragBy(
         await page.mouse.up();
         await settle(page);
     }
+}
+
+/**
+ * A drag by touch (Epic #89), as a browser hands it to the page: a touch's pointer events
+ * (`pointerType` "touch"), pressed at `target`'s centre, moved by `dx`/`dy` one step a frame and
+ * released there, each one at the pressed element (a touch's pointer is held by what it pressed).
+ * Playwright drives a touchscreen only to tap: these are the page's own events, what a page reads
+ * of a finger on an element with `touch-action: none`. Returns whether any of them was prevented.
+ */
+export async function touchDrag(
+    page: Page,
+    target: Locator,
+    { dx = 0, dy = 0, steps = 6 }: { dx?: number; dy?: number; steps?: number },
+): Promise<boolean> {
+    const box = await boxOf(target);
+    const prevented = await page.evaluate(
+        async ({ x, y, dx, dy, steps }) => {
+            const pressed = document.elementFromPoint(x, y);
+            if (!pressed) throw new Error("nothing at the touch");
+            let prevented = false;
+            const send = (type: string, step: number) => {
+                const event = new PointerEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    pointerId: 11,
+                    pointerType: "touch",
+                    isPrimary: true,
+                    button: type === "pointermove" ? -1 : 0,
+                    buttons: type === "pointerup" ? 0 : 1,
+                    clientX: x + (dx * step) / steps,
+                    clientY: y + (dy * step) / steps,
+                    width: 20,
+                    height: 20,
+                });
+                pressed.dispatchEvent(event);
+                prevented ||= event.defaultPrevented;
+            };
+            const frame = () =>
+                new Promise((resolve) => requestAnimationFrame(resolve));
+            send("pointerdown", 0);
+            for (let step = 1; step <= steps; step++) {
+                await frame();
+                send("pointermove", step);
+            }
+            await frame();
+            send("pointerup", steps);
+            return prevented;
+        },
+        {
+            x: box.x + box.width / 2,
+            y: box.y + box.height / 2,
+            dx,
+            dy,
+            steps,
+        },
+    );
+    await settle(page);
+    return prevented;
 }
 
 /**

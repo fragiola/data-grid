@@ -4,7 +4,7 @@ import {
     type DataGridState,
     veto,
 } from "@fragiola/data-grid";
-import type { ReactNode, RefObject } from "react";
+import type { ReactNode } from "react";
 
 // A piece of the model's state a root prop can control (D3): the column widths and order, the
 // active position, the selection, the sort, the expanded rows. One way for all of them:
@@ -55,9 +55,9 @@ export interface Controlled {
 /** What the root's guards share: whether it is syncing a prop, or applying the data props. */
 export interface ControlledFlags {
     /** a command the root runs to follow a controlled prop: the guard lets it through */
-    readonly syncing: RefObject<boolean>;
+    syncing: boolean;
     /** the root is applying the data props: a controlled value they move is settled after */
-    readonly applying: RefObject<boolean>;
+    applying: boolean;
 }
 
 /**
@@ -74,7 +74,7 @@ export function bindControlled<TRow, V>(
         const result = next();
         if (
             ctx.dryRun ||
-            flags.syncing.current ||
+            flags.syncing ||
             spec.prop() === undefined ||
             !result.ok
         ) {
@@ -92,9 +92,9 @@ export function bindControlled<TRow, V>(
         }
         if (spec.prop() !== undefined) {
             // controlled, moved by another piece's prop: its value stands (followControlled)
-            if (flags.syncing.current) sync.carried = "moved";
+            if (flags.syncing) sync.carried = "moved";
             // controlled: decided once every prop is applied (settleControlled)
-            if (flags.syncing.current || flags.applying.current) return;
+            if (flags.syncing || flags.applying) return;
             // controlled, moved by another piece's own commit (an uncontrolled order's move):
             // told now, and its value stands too, its prop unchanged never pulling it back
             sync.carried = "told";
@@ -138,12 +138,12 @@ function followControlled<TRow, V>(
         sync.carried = null;
     }
     if (spec.same(value, spec.read(model.state))) return;
-    flags.syncing.current = true;
+    flags.syncing = true;
     sync.following = true;
     try {
         spec.apply(value);
     } finally {
-        flags.syncing.current = false;
+        flags.syncing = false;
         sync.following = false;
     }
 }

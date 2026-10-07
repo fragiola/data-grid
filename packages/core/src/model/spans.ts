@@ -72,7 +72,7 @@ export function spanPartStart<TRow, TNode>(
  * How many columns a column's cell spans, asked with `args`: its `colSpan`, kept within its part
  * (and the columns). 1 without one.
  */
-export function columnSpanOf<TRow, TNode>(
+function columnSpanOf<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
     columnIndex: number,
     args: ColSpanArgs<TRow>,

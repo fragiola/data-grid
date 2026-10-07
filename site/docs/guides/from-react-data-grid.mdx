@@ -1,0 +1,292 @@
+---
+title: Coming from React Data Grid
+description: Map React Data Grid's props, column options, renderers and examples onto this headless grid, and see what your app writes in their place.
+---
+
+This grid takes its API's shape from React Data Grid (7.0.0-beta.60): columns are plain objects,
+rows an array, the active cell and the sort are props, controlled or not. Most props keep their
+name. What changes is everything that renders: React Data Grid draws a grid with its own
+stylesheet, this one hands you the parts and draws nothing. This page maps each of React Data
+Grid's props and column options onto this grid, and says what your app does where the grid
+deliberately does nothing.
+
+## What changes first
+
+- **No CSS, no icons, no text.** There is no stylesheet to import and no `rdg-light` or
+  `rdg-dark` class: every part takes your `className` and `style`, each a value or a function of
+  the part's state (`(state) => …`). Light and dark are your own CSS. See
+  [Styling with Tailwind](/docs/guides/styling-tailwind) and
+  [Styling with plain CSS](/docs/guides/styling-css).
+- **Parts instead of one component.** `<DataGrid />` becomes `DataGrid.Root` (the data and the
+  scroll container) holding `DataGrid.Grid`, `Header` and `Body`; write the rows and cells out
+  (`Rows`, `Row`, `Cells`, `Cell`) when you want to style or replace them. See
+  [The primitive contract](/docs/concepts/primitive-contract).
+- **The structure is yours.** The same parts render `div`s or a real `<table>`: `render`
+  replaces any part's element (an element, or a function of its props and state). See
+  [Tables or divs](/docs/concepts/tables-or-divs).
+- **State is in attributes.** The active cell, a selected row, a sorted header carry `data-*`
+  attributes and ARIA (`data-active`, `data-selected`, `data-sort`, `aria-sort`), for your CSS.
+  See [State attributes](/docs/concepts/state-attributes).
+- **No menus, no editors, no checkboxes.** The grid owns the behaviour (which cell is edited,
+  which rows are selected, which group is open) and your app renders the controls.
+- **The grid writes no data.** There is no `onRowsChange`: an edit, a paste, a fill and a row
+  move are events, and your app writes its rows.
+
+```tsx title="people.tsx"
+// React Data Grid
+<DataGrid columns={columns} rows={people} rowKeyGetter={(person) => person.id} />
+
+// this grid
+<DataGrid.Root columns={columns} rows={people} rowKey={(person) => person.id} className="h-96">
+    <DataGrid.Grid aria-label="People">
+        <DataGrid.Header />
+        <DataGrid.Body />
+    </DataGrid.Grid>
+</DataGrid.Root>
+```
+
+`DataGrid.Root` is the element that scrolls: give it a bounded height, as React Data Grid's
+container needs one. See [Sizing the grid](/docs/getting-started/sizing).
+
+## The grid's props
+
+### Rows and sizes
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `rows` | `rows` | the same |
+| — | `rowCount` + `getRow(index)` | rows by index: `undefined` is a row not loaded yet, which keeps its room and renders with `data-loading`. See [Loading data](/docs/concepts/data-loading) |
+| `rowKeyGetter(row)` | `rowKey(row, index)` | without one, a row's key is its index |
+| `rowHeight` (a number, or a function of the row) | `rowHeight` | a number, a function of the row's **index**, or `"auto"`: as tall as its content, measured ([Measured heights](/docs/concepts/measured-heights)) |
+| `headerRowHeight` | `headerRowHeight` | default 35 (not the row height); 0 for no header |
+| `summaryRowHeight` | `summaryRowHeight` | default 35 |
+| `topSummaryRows`, `bottomSummaryRows` (arrays of summary rows) | `summaryRows={{ top, bottom }}` (counts) | the figures are yours, read where the summary cells render. See [Summary rows](/docs/concepts/summary-rows) |
+| `enableVirtualization` | — | always virtualized on both axes. To print or export, use the rows your app holds (`rows`, or `useLocalRows`'s `filteredRows`); `toTsv` from `@fragiola/data-grid` makes tab-separated text of rows of strings, so map each row to its columns' texts first |
+| `direction` | `direction` | `"ltr"` or `"rtl"`; without it, the page's direction, as the browser computes it. See [Right to left](/docs/concepts/right-to-left) |
+
+### Sorting and selection
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `sortColumns`, `onSortColumnsChange` | the same, plus `defaultSortColumns` | `direction` is `"ascending"` or `"descending"` (not `"ASC"`/`"DESC"`). The grid never orders the rows: `useLocalRows` from `@fragiola/data-grid-react/local` does in memory, a server otherwise. See [Sorting](/docs/concepts/sorting) |
+| `selectedRows` (a `Set`), `onSelectedRowsChange` | `selectedRowKeys` (an array), `onSelectedRowKeysChange`, `defaultSelectedRowKeys` | turned on by `rowSelection="single"` or `"multiple"`. See [Row selection](/docs/concepts/row-selection) |
+| `isRowSelectionDisabled(row)` | `isRowSelectable(row, rowIndex)` | the opposite question |
+| `onActivePositionChange` | `activePosition`, `defaultActivePosition`, `onActivePositionChange` | the position is `{ rowIndex, columnIndex }` (header rows are -1 and above), or `null` |
+| — | `cellSelection="range"`, `selectedRange`, `onSelectedRangeChange` | a range of cells by the keys, a drag or Shift+click. See [Cell selection](/docs/concepts/cell-selection) |
+
+### Editing, the clipboard and the fill handle
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `onRowsChange(rows, data)` | `onCellEdit`, `onRangePaste`, `onFill`, `onRowMove` | each tells what happened; your app writes the rows. Rows behind `getRow` are told with `rows.changed` |
+| a column's edit committed | `onCellEdit({ row, rowIndex, columnIndex, columnKey, value })` | told only when the value changed. See [Editing cells](/docs/concepts/editing) |
+| `onCellCopy` | `cellSelection="range"` and a column's `getCopyText` | Ctrl+C copies the range (or the active cell) as tab-separated text; your `onCopy` on `Root` runs first, and `preventDefault` makes the copy yours |
+| `onCellPaste` (returns the row) | `onRangePaste({ range, values })`, `onBeforeRangePaste` | the values parsed from the clipboard and the range they land in; `onBeforeRangePaste` returning `false` refuses one |
+| `onFill({ columnKey, sourceRow, targetRow })` (returns the row) | `onFill({ source, target })` | two ranges of cells; giving `onFill` turns the handle on, and the handle is your element (`useFillHandle`). `repeatedFill` from `@fragiola/data-grid/fill` repeats the source's values. See [Fill handle](/docs/concepts/fill) |
+
+### Columns from the outside
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `columnWidths` (a `Map`), `onColumnWidthsChange` | `columnWidths` (`{ [columnKey]: px }`), `onColumnWidthsChange`, `defaultColumnWidths` | only the widths a person or your code set; a column's own `width` is the rest. See [Column resizing](/docs/concepts/column-resizing) |
+| `onColumnResize(column, width)` | `onColumnWidthsChange` | or `engine.subscribe("column-resize", …)` for the drag as it happens |
+| `onColumnsReorder(sourceKey, targetKey)` | `columnOrder`, `onColumnOrderChange`, `defaultColumnOrder` | the order is a list of keys; you never reorder `columns` yourself. See [Column reordering](/docs/concepts/column-reordering) |
+| `defaultColumnOptions` | — | spread your own defaults into each column: `columns.map((column) => ({ resizable: true, ...column }))` |
+
+### Events
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `onCellClick`, `onCellDoubleClick`, `onCellContextMenu`, `onCellMouseDown` | `onClick`, `onDoubleClick`, `onContextMenu`, `onPointerDown` on `DataGrid.Cell` | any prop a part does not use goes to its element; the cell's `cell` (its row, column and indexes) is in your closure. A menu is your own component ([`context-menu`](/examples/context-menu)) |
+| `onCellKeyDown` with `preventGridDefault()` | `onKeyDown` on `DataGrid.Cell` with `preventDefault()` | your handlers run before the grid's, so `preventDefault` cancels a grid key. See [Replacing a key](/docs/concepts/keyboard#replacing-a-key) |
+| moves refused in `onCellKeyDown` | a middleware: `model.use(…)` | it can refuse or rewrite any command, `active-position.move` and `editing-cell.set` included |
+| `onScroll` | `onRowWindowChange`, `onColumnWindowChange`, `onRowsEndReached` | the rows and columns in view, and the end coming near. Beside the grid, `useRowWindow(gridRef)` and `useColumnWindow(gridRef)`. `onScroll` on `Root` is still the element's own, but past the browser's size limit its `scrollTop` is not a row offset ([Scroll scaling](/docs/concepts/scroll-scaling)) |
+
+### Rendering
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `renderers.renderRow` | the `Rows` children function, or `render` on `DataGrid.Row` | `(row) => <DataGrid.Row row={row}>…</DataGrid.Row>` |
+| `renderers.renderCell` | the `Cells` children function, or `render` on `DataGrid.Cell` | a cell given children renders only them |
+| `renderers.renderSortStatus` | a header cell's state (`sortDirection`, `sortPriority`) or `data-sort`, `data-sort-priority` | an arrow drawn in CSS, or in a `render` function |
+| `renderers.renderCheckbox` | your own checkbox | the grid renders none |
+| `renderers.noRowsFallback` | `DataGrid.Empty` | rendered in the body area while there are no rows. See [Empty state](/docs/guides/empty-state) |
+| `DataGridRenderersContext` | a component of yours around the parts | the parts are plain components: wrap them once and reuse them |
+| `rowClass(row, rowIndex)` | `className` on `DataGrid.Row`, a value or `(state) => …` | the row's data is `row.row` in the `Rows` children function |
+| `headerRowClass` | `className` on `DataGrid.HeaderRow` | through the `HeaderRows` children function |
+| `className`, `style`, `role`, `aria-*`, `data-*` | on `Root` or `Grid` | name the grid on `Grid` (`aria-label`); the role is the grid's (`grid`, or `treegrid` with row kinds) |
+
+### The ref
+
+React Data Grid's `ref` is a handle with `element`, `scrollToCell` and `setActivePosition`
+(`selectCell` in earlier betas). Here `ref` stays the root's element, and a `gridRef`
+(`useDataGridRef()`) is the grid's model and engine, from outside the root:
+
+| React Data Grid | here |
+| --- | --- |
+| `ref.current.element` | `ref` on `DataGrid.Root` |
+| `scrollToCell({ idx, rowIdx })` | `gridRef.current?.engine.run("scroll-to-cell", { rowIndex, columnIndex, align })`; `align` is `"nearest"`, `"start"`, `"center"` or `"end"`, and either index alone scrolls one axis |
+| `setActivePosition({ idx, rowIdx })` | `gridRef.current?.model.run("active-position.set", { rowIndex, columnIndex })` |
+| `setActivePosition(position, { enableEditor: true })` | `gridRef.current?.engine.run("edit-cell", { rowIndex, columnIndex })` |
+
+Inside the root, `useDataGrid()` returns the same `{ model, engine }`. See
+[Model and engine](/docs/concepts/model-and-engine#from-outside-the-root) and the
+[`scroll-to-cell`](/examples/scroll-to-cell) example.
+
+## Column options
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `key` | `key` | the same |
+| `name` (a string or an element) | `name` (a string) | the header's text; an element goes in `renderHeaderCell` |
+| `width` (a number, `"auto"`, `"1fr"`, a percentage, `"max-content"`) | `width` (pixels, required), `flex`, `autoSize` | `flex` shares the room left in proportion, `autoSize` fits the content once, and the `fit-columns` action fits on demand. See [Automatic widths](/docs/concepts/auto-widths) |
+| `minWidth` (default 50), `maxWidth` | `minWidth` (default 40), `maxWidth` | they limit a resizable column |
+| `frozen` (`true`, `"start"`, `"end"`) | `pinned` (`"start"` or `"end"`) | see [Pinned columns](/docs/concepts/pinned-columns) |
+| `resizable` | `resizable` | the handle is your element, with `useColumnResizer(cell)`'s props |
+| `sortable` | `sortable` | the same |
+| `sortDescendingFirst` | — | no direct equivalent: a column sorts ascending first. A middleware gives a column the other cycle ([Descending first](#descending-first)) |
+| `draggable` | `reorderable` | on columns and on groups; the indicator is yours (`data-drop-target`) |
+| `renderCell(props)` | `renderCell({ row, rowIndex, column, columnIndex, value })` | no `onRowChange`: update your rows. A cell's children replace it entirely |
+| `renderHeaderCell(props)` | `renderHeaderCell({ column, columnIndex })` | `headerCellContent(cell)` is the default content, to place a resize handle beside |
+| `renderEditCell({ row, onRowChange, onClose })` | `renderEditCell({ row, value, initialValue, startKey, onChange, onCommit, onCancel, editorProps })` | the draft is a value, not a row; `editorProps` marks a portalled popover as part of the edit |
+| `editable` (a boolean, or a function of the row) | `editable` (a boolean, or a function of the row and its index) | there is no built-in text editor: give `renderEditCell` |
+| `editorOptions` | — | a press outside the cell commits; the edit ends when its row or column leaves its place (by key); `useCellEdit(cell)` puts an editor inside a cell's own children, beside its content |
+| `colSpan({ type })` | `colSpan({ type, rowIndex, … })` | `type` is lowercase: `"header"`, `"row"` (with `row`), `"summary"`, `"group"`. See [Column spanning](/docs/concepts/column-spanning) |
+| `renderSummaryCell({ row })` | `renderSummaryCell({ position, summaryIndex, column, columnIndex })`, or `DataGrid.SummaryCell` children | there is no summary row object: your figures come from your component |
+| `renderGroupCell({ groupKey, childRows, isExpanded, toggleGroup })` | `renderGroupCell({ group, rowIndex, column, columnIndex, value })` | the toggle is your control with `useGroupToggle(row)` |
+| `cellClass(row)` | `className` on `DataGrid.Cell`, a value or `(state) => …` | the row is `cell.row` in the `Cells` children function |
+| `headerCellClass` | `className` on `DataGrid.HeaderCell` | the same for a group's header cell |
+| `summaryCellClass` | `className` on `DataGrid.SummaryCell` | |
+| — | `getValue`, `getCopyText`, `compare`, `filter`, `meta` | a cell's value, its copied text, the in-memory sort and filter, and anything of yours |
+
+### Descending first
+
+A click, Enter or Space on a sortable header cell runs `sort-columns.toggle`, which cycles
+ascending, descending, none. For the columns that should start descending, a middleware refuses
+the toggle and sets the sort it would give instead: the `set` runs right after the refused
+toggle, so a controlled `Root` is asked as for any sort.
+
+```ts title="descending-first.ts"
+import { type SortColumn, veto } from "@fragiola/data-grid-react";
+
+const DESCENDING_FIRST = new Set(["budget", "updatedAt"]);
+
+// descending, ascending, none: the reverse of the grid's own cycle
+model.use((ctx, next) => {
+    if (
+        ctx.command !== "sort-columns.toggle" ||
+        !DESCENDING_FIRST.has(ctx.payload.columnKey)
+    ) {
+        return next();
+    }
+    const { columnKey, multi = false } = ctx.payload;
+    const sorts = ctx.state.sortColumns;
+    const current = sorts.find((entry) => entry.columnKey === columnKey);
+    const direction = !current
+        ? "descending"
+        : current.direction === "descending"
+          ? "ascending"
+          : null;
+    // alone, the column replaces the sort; with Ctrl/⌘, it keeps its place among the others
+    const others = multi
+        ? sorts.filter((entry) => entry.columnKey !== columnKey)
+        : [];
+    const at = current && multi ? sorts.indexOf(current) : others.length;
+    const sortColumns: SortColumn[] = direction
+        ? [...others.slice(0, at), { columnKey, direction }, ...others.slice(at)]
+        : others;
+    // a dry run (`model.check`) changes nothing
+    if (!ctx.dryRun) model.run("sort-columns.set", { sortColumns });
+    return veto("replaced by sort-columns.set");
+});
+```
+
+### Column groups
+
+A group is `{ key, name, children }`, as in React Data Grid, with a **`key`** of its own (unique
+among the groups and columns). `headerCellClass` becomes `className` on its `HeaderCell`. A group
+can move whole (`reorderable`) and collapse (`collapsible`, its children's `groupShow`), with a
+label that stays in view as the columns scroll. See [Column groups](/docs/concepts/column-groups)
+and [Collapsible groups](/docs/concepts/collapsible-groups).
+
+## Grouping and trees
+
+`TreeDataGrid` is no separate component here: one `Root` shows group rows and a tree's rows
+through the same row kinds (`getRowMeta`), and the grid is then a `treegrid`.
+
+| React Data Grid | here | notes |
+| --- | --- | --- |
+| `TreeDataGrid` | `DataGrid.Root` with `useLocalRows`'s props | `useLocalRows(rows, columns, { groupBy })` from `@fragiola/data-grid-react/local` groups in memory and hands the root the rows shown |
+| `groupBy` | `groupBy` (an option of `useLocalRows`) | the outer column first |
+| `rowGrouper(rows, columnKey)` | a column's `getValue` | rows group by their value's text in that column; a server sends its own grouped rows (`rowCount`, `getRow`, `getRowMeta`) |
+| `expandedGroupIds`, `onExpandedGroupIdsChange` | `expandedGroupKeys`, `onExpandedGroupKeysChange` (on the hook, or on `Root` for a server's rows) | `groupKeyOf(path)` makes a group's key |
+| `groupIdGetter` | — | a group's key is its path (`groupKeyOf`) |
+| a group's figures in `renderGroupCell` | `aggregates` (an option of `useLocalRows`) | your functions over a group's rows, by column key |
+| a tree drawn with your own rows (the TreeView example) | `getSubRows` (an option of `useLocalRows`) | parents expand by their own key; a server can list children as they open |
+
+See [Row grouping](/docs/concepts/row-grouping) and [Tree data](/docs/concepts/tree-data).
+
+## Master-detail
+
+React Data Grid's master-detail example adds detail rows to the rows, gives them a height with
+`rowHeight` and spans them with `colSpan`. Here a row expands into its own detail:
+`DataGrid.RowDetail` inside the row, the expanded rows' keys in `expandedRowKeys` (with
+`onExpandedRowKeysChange` or `defaultExpandedRowKeys`), and its height in `detailHeight` (a
+number, a function of the row, or `"auto"`). Indexes, counts and `getRow` stay those of your
+rows. See [Master-detail](/docs/guides/master-detail).
+
+## Exports with no counterpart
+
+| React Data Grid | here |
+| --- | --- |
+| `SelectColumn`, `SELECT_COLUMN_KEY` | a column of yours whose cells render a checkbox: `model.is("row-selected", { rowIndex })`, `model.run("selected-rows.toggle", { rowIndex, extend })` |
+| `useRowSelection` | `useRow(row).state.selected`, or the model's `row-selected` question, as above |
+| `useHeaderRowSelection` | `useSelectAll(rowKeys)` from `@fragiola/data-grid-react/selection`: `status` (`"all"`, `"some"`, `"none"`), `toggle` |
+| `renderTextEditor` | your field in `renderEditCell`, from `value` and `onChange` |
+| `renderToggleGroup`, `ToggleGroup` | your control with `useGroupToggle(row)` |
+| `renderHeaderCell`, `renderSortIcon`, `renderSortPriority` | `headerCellContent(cell)`, and your own marks from `data-sort` and `data-sort-priority` |
+| `renderCheckbox`, `renderValue`, `SelectCellFormatter` | your own components |
+| `Row`, `Cell` | `DataGrid.Row`, `DataGrid.Cell` |
+
+## What this grid adds
+
+- **Rows by index.** `rowCount` and `getRow(index)` stand for a dataset you do not hold: rows not
+  loaded keep their room, and the windows tell you what to load. See
+  [Loading data](/docs/concepts/data-loading).
+- **Millions of rows and columns.** Past the browser's size limit, scroll scaling maps the
+  scrollbar onto the whole dataset, on both axes. See [Scroll scaling](/docs/concepts/scroll-scaling).
+- **Ranges of cells.** Shift with the keys, a drag or Shift+click select a range, copied and pasted
+  as tab-separated text. See [Cell selection](/docs/concepts/cell-selection).
+- **Rows as tall as their content.** `rowHeight="auto"` measures each row as it renders. See
+  [Measured heights](/docs/concepts/measured-heights).
+- **Collapsible column groups** with labels that stay in view. See
+  [Collapsible groups](/docs/concepts/collapsible-groups).
+- **Row reordering by the grid.** `onRowMove` turns it on: a drag on your handle
+  (`useRowDragHandle`) or Ctrl+Shift+↑ and ↓. See [Row reordering](/docs/concepts/row-reordering).
+
+## The examples side by side
+
+Each example of React Data Grid's website, and the one here that does the same:
+
+| React Data Grid | here |
+| --- | --- |
+| AllFeatures | [`all-features`](/examples/all-features) |
+| Animation | [`animated-row-heights`](/examples/animated-row-heights) |
+| CellNavigation | [`custom-navigation`](/examples/custom-navigation) |
+| ColumnGrouping | [`grouped-headers`](/examples/grouped-headers); its top and bottom summary rows in [`summary-rows`](/examples/summary-rows) |
+| ColumnSpanning | [`column-spanning`](/examples/column-spanning) |
+| ColumnsReordering | [`column-reordering`](/examples/column-reordering) |
+| CommonFeatures | [`common-features`](/examples/common-features) |
+| ContextMenu | [`context-menu`](/examples/context-menu) |
+| CustomizableRenderers | [`custom-renderers`](/examples/custom-renderers) |
+| HeaderFilters | [`header-filters`](/examples/header-filters) |
+| InfiniteScrolling | [`infinite-loading`](/examples/infinite-loading) |
+| MasterDetail | [`master-detail`](/examples/master-detail) |
+| MillionCells | [`large-dataset`](/examples/large-dataset) |
+| NoRows | [`empty-state`](/examples/empty-state) |
+| ResizableGrid | [`resizable-grid`](/examples/resizable-grid) |
+| RowGrouping | [`row-grouping`](/examples/row-grouping) |
+| RowsReordering | [`row-reordering`](/examples/row-reordering) |
+| ScrollToCell | [`scroll-to-cell`](/examples/scroll-to-cell) |
+| TreeView | [`tree-data`](/examples/tree-data) |
+| VariableRowHeight | [`variable-row-height`](/examples/variable-row-height) |

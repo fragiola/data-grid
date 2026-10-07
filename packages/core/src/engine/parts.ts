@@ -41,6 +41,7 @@ import {
     cellSpan,
     columnLeft,
     columnPinning,
+    columnSide,
     headerCellSort,
     resizeEdge,
     rowCellsHeight,
@@ -547,7 +548,8 @@ export function cellPart<TRow, TNode>(
                   )
                 : undefined,
         },
-        tabIndex: active ? 0 : -1,
+        // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
+        tabIndex: active && view.tabbable ? 0 : -1,
         ariaColSpan: span > 1 ? span : undefined,
         ariaSelected: selected,
     };
@@ -664,7 +666,8 @@ export function headerCellPart<TRow, TNode>(
             pinnedSide,
             interacting: isHeldCell(view.interaction, cell),
         },
-        tabIndex: active ? 0 : -1,
+        // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
+        tabIndex: active && view.tabbable ? 0 : -1,
         ariaSort: sort.ariaSort,
     };
 }
@@ -680,18 +683,16 @@ export function columnResizerPart<TRow, TNode>(
     const resizable = spanResizable(view.columnDefs, cell);
     const axis = view.columnAxis;
     // a cell whose columns do not resize is its width, with nothing to move within
-    const fixed =
-        axis.offsetOf(cell.columnIndex + cell.columnSpan) -
-        axis.offsetOf(cell.columnIndex);
-    const span: SpanWidths = resizable
-        ? spanWidths(view.columnDefs, axis, cell)
-        : { width: fixed, minWidth: fixed, maxWidth: fixed };
+    let span: SpanWidths;
+    if (resizable) span = spanWidths(view.columnDefs, axis, cell);
+    else {
+        const fixed =
+            axis.offsetOf(cell.columnIndex + cell.columnSpan) -
+            axis.offsetOf(cell.columnIndex);
+        span = { width: fixed, minWidth: fixed, maxWidth: fixed };
+    }
     const { width, minWidth, maxWidth } = span;
-    const { pinnedSide } = columnPinning(
-        view,
-        cell.columnIndex,
-        cell.columnSpan,
-    );
+    const pinnedSide = columnSide(view, cell.columnIndex);
     return {
         state: {
             columnKey: cell.key,

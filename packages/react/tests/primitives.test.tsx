@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createRef, Profiler, StrictMode, useState } from "react";
+import { type ComponentProps, createRef, StrictMode, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
     type CellPosition,
@@ -11,7 +11,7 @@ import {
     type RootProps,
     useDataGrid,
 } from "../src";
-import { stubViewportSize, tags } from "./helpers";
+import { renderCounting, scrollRoot, stubViewportSize, tags } from "./helpers";
 
 // The primitive contract (AGENTS.md): render, never asChild; refs merged; props forwarded and
 // handlers composed; className/style as functions; structural inline style only; state through
@@ -555,17 +555,25 @@ describe("the empty state", () => {
         expect(parts(container, "row")).toHaveLength(3);
     });
 
-    it("fills the visible body below the header, and stays in view sideways", () => {
+    it("fills the visible body below the header in an area of its own, and stays in view sideways", () => {
         const { container } = render(<EmptyGrid rows={[]} />);
-        const [empty] = parts(container, "empty");
+        const [area] = parts(container, "empty-area");
         // the viewport is 400 × 235, the header 35 high
-        expect(empty?.style.position).toBe("sticky");
-        expect(empty?.style.left).toBe("0px");
-        expect(empty?.style.width).toBe("400px");
-        expect(empty?.style.height).toBe("200px");
-        for (const property of [...(empty?.style ?? [])]) {
-            expect(STRUCTURAL.has(property), property).toBe(true);
+        expect(area?.style.position).toBe("sticky");
+        expect(area?.style.left).toBe("0px");
+        expect(area?.style.width).toBe("400px");
+        expect(area?.style.height).toBe("200px");
+        // the empty state is a cell in a row, both as tall as the area (Epic #89, E5.2)
+        const [row] = parts(container, "empty-row");
+        const [empty] = parts(container, "empty");
+        expect(row?.parentElement).toBe(area);
+        expect(empty?.parentElement).toBe(row);
+        for (const element of [area, row, empty]) {
+            for (const property of [...(element?.style ?? [])]) {
+                expect(STRUCTURAL.has(property), property).toBe(true);
+            }
         }
+        expect(empty?.style.height).toBe("100%");
         // the grid is at least as large as the visible area, so the empty state has room
         const [grid] = parts(container, "grid");
         expect(grid?.style.width).toBe("450px");
@@ -573,7 +581,7 @@ describe("the empty state", () => {
     });
 
     it("follows the primitive contract: render, ref, handlers, className and style", () => {
-        const ref = createRef<HTMLTableSectionElement>();
+        const ref = createRef<HTMLTableCellElement>();
         const onClick = vi.fn();
         const { container } = render(
             <DataGrid.Root columns={columns} rows={[]}>
@@ -581,28 +589,31 @@ describe("the empty state", () => {
                     <DataGrid.Body render={<tbody />} />
                     <DataGrid.Empty
                         ref={ref}
-                        render={<tbody />}
+                        render={<td />}
                         id="nothing"
                         onClick={onClick}
                         className={() => "from-a-function"}
-                        style={{ color: "red", position: "static", width: 1 }}
+                        style={{ color: "red", display: "flex", height: 1 }}
                     >
-                        <tr>
-                            <td>No people</td>
-                        </tr>
+                        No people
                     </DataGrid.Empty>
                 </DataGrid.Grid>
             </DataGrid.Root>,
         );
+        // a table's cell: in a row and a row group of the table's own
         const [empty] = parts(container, "empty");
-        expect(empty?.tagName).toBe("TBODY");
+        expect(empty?.tagName).toBe("TD");
+        expect(empty?.parentElement?.tagName).toBe("TR");
+        expect(empty?.parentElement?.parentElement?.tagName).toBe("TBODY");
+        expect(empty).toHaveAttribute("colspan", String(columns.length));
+        expect(empty).not.toHaveAttribute("role");
         expect(ref.current).toBe(empty);
         expect(empty).toHaveAttribute("id", "nothing");
         expect(empty).toHaveClass("from-a-function");
         // the consumer's style is merged under the structural one
         expect(empty?.style.color).toBe("red");
-        expect(empty?.style.position).toBe("sticky");
-        expect(empty?.style.width).toBe("400px");
+        expect(empty?.style.display).toBe("block");
+        expect(empty?.style.height).toBe("100%");
         fireEvent.click(screen.getByText("No people"));
         expect(onClick).toHaveBeenCalledTimes(1);
 
@@ -617,6 +628,7 @@ describe("the empty state", () => {
         expect(rendered).toHaveBeenCalled();
         expect(rendered.mock.calls[0]?.[0]).toMatchObject({
             "data-grid-part": "empty",
+            role: "gridcell",
         });
     });
 
@@ -636,10 +648,114 @@ describe("the empty state", () => {
         );
         // 150px of columns in a 400px viewport: the grid, and the empty state, are 400px wide
         expect(parts(container, "grid")[0]?.style.width).toBe("400px");
-        expect(parts(container, "empty")[0]?.style.width).toBe("400px");
+        expect(parts(container, "empty-area")[0]?.style.width).toBe("400px");
     });
 
-    it("sets no role, text or name of its own", () => {
+    it("finds a table's structure from a render function's `<td>` too", () => {
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid render={<table />}>
+                    <DataGrid.Body render={<tbody />} />
+                    <DataGrid.Empty
+                        render={(props) => <td {...props} />}
+                        style={{ color: "red" }}
+                    >
+                        No people
+                    </DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [empty] = parts(container, "empty");
+        expect(empty?.tagName).toBe("TD");
+        expect(empty?.parentElement?.tagName).toBe("TR");
+        expect(empty?.parentElement?.parentElement?.tagName).toBe("TBODY");
+        expect(empty).toHaveAttribute("colspan", String(columns.length));
+        expect(empty).not.toHaveAttribute("role");
+        expect(empty).not.toHaveAttribute("aria-colspan");
+        expect(empty?.style.color).toBe("red");
+        expect(empty?.style.display).toBe("block");
+    });
+
+    it("takes a table's structure in a table grid, whatever renders its cell (a component)", () => {
+        // the app's own cell component, rendering a `<td>`
+        const Td = (props: ComponentProps<"td">) => <td {...props} />;
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid render={<table />}>
+                    <DataGrid.Body render={<tbody />} />
+                    <DataGrid.Empty render={<Td />}>No people</DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [empty] = parts(container, "empty");
+        expect(empty?.tagName).toBe("TD");
+        expect(empty?.parentElement?.tagName).toBe("TR");
+        expect(empty?.parentElement?.parentElement?.tagName).toBe("TBODY");
+        expect(empty).toHaveAttribute("colspan", String(columns.length));
+        expect(empty).not.toHaveAttribute("role");
+        // without `render`, a table grid's empty state is a `<td>` too
+        const plain = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid render={<table />}>
+                    <DataGrid.Empty>No people</DataGrid.Empty>
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        const [cell] = parts(plain.container, "empty");
+        expect(cell?.tagName).toBe("TD");
+        expect(cell?.parentElement?.tagName).toBe("TR");
+    });
+
+    it("counts no empty line in ARIA without an empty state", () => {
+        const { container } = render(
+            <DataGrid.Root columns={columns} rows={[]}>
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        // the header row only
+        expect(parts(container, "grid")[0]).toHaveAttribute(
+            "aria-rowcount",
+            "1",
+        );
+    });
+
+    it("counts its row in ARIA, after the header rows and before the bottom summary rows", () => {
+        const { container } = render(
+            <DataGrid.Root
+                columns={columns}
+                rows={[]}
+                summaryRows={{ top: 1, bottom: 1 }}
+            >
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Summary position="top" />
+                    <DataGrid.Body />
+                    <DataGrid.Summary position="bottom" />
+                    <DataGrid.Empty />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        // the header row, the top summary row, the empty state's row, the bottom summary row
+        expect(parts(container, "grid")[0]).toHaveAttribute(
+            "aria-rowcount",
+            "4",
+        );
+        expect(parts(container, "empty-row")[0]).toHaveAttribute(
+            "aria-rowindex",
+            "3",
+        );
+        const summaryRows = container.querySelectorAll(
+            '[data-grid-part="summary-row"]',
+        );
+        expect(
+            [...summaryRows].map((row) => row.getAttribute("aria-rowindex")),
+        ).toEqual(["2", "4"]);
+    });
+
+    it("is a row and a cell spanning the columns, with no text or name of its own", () => {
         const { container } = render(
             <DataGrid.Root columns={columns} rows={[]}>
                 <DataGrid.Grid>
@@ -649,7 +765,12 @@ describe("the empty state", () => {
             </DataGrid.Root>,
         );
         const [empty] = parts(container, "empty");
-        expect(empty).not.toHaveAttribute("role");
+        expect(parts(container, "empty-row")[0]).toHaveAttribute("role", "row");
+        expect(parts(container, "empty-area")[0]).not.toHaveAttribute("role");
+        expect(empty).toHaveAttribute("role", "gridcell");
+        expect(empty).toHaveAttribute("aria-colspan", String(columns.length));
+        // not a cell of the grid's: no indexes (the keys and the tab order leave it alone)
+        expect(empty).not.toHaveAttribute("data-row-index");
         expect(empty?.textContent).toBe("");
         expect(container.querySelectorAll("[aria-label]")).toHaveLength(0);
     });
@@ -1172,22 +1293,17 @@ describe("the engine's life", () => {
     });
 
     it("does not render React for a scroll that keeps the rendered window (D9)", () => {
-        let commits = 0;
-        const { container } = render(
-            <Profiler id="grid" onRender={() => commits++}>
-                <DivGrid />
-            </Profiler>,
+        const { container, commits, resetCommits } = renderCounting(
+            <DivGrid />,
         );
         const root = parts(container, "root")[0] as HTMLElement;
-        commits = 0;
+        resetCommits();
         // every column is rendered (450px in a 400px view): sideways, the windows stay
-        root.scrollLeft = 30;
-        fireEvent.scroll(root);
-        expect(commits).toBe(0);
+        scrollRoot(root, { left: 30 });
+        expect(commits()).toBe(0);
         // down past the overscan: a new rendered window, one commit
-        root.scrollTop = 200;
-        fireEvent.scroll(root);
-        expect(commits).toBe(1);
+        scrollRoot(root, { top: 200 });
+        expect(commits()).toBe(1);
     });
 
     it("reports the first windows", () => {
@@ -1218,5 +1334,34 @@ describe("the engine's life", () => {
         rerender(<DivGrid rows={people.slice(0, 5)} />);
         expect(parts(container, "row")).toHaveLength(5);
         expect(screen.getByText("Person 4")).toBeInTheDocument();
+    });
+});
+
+describe("layering (Epic #89, E5.2)", () => {
+    it("stacks the header above the summary rows above the body, inside the grid's own context", () => {
+        const { container } = render(
+            <DataGrid.Root
+                columns={columns}
+                rows={people}
+                summaryRows={{ top: 1, bottom: 1 }}
+                style={{ zIndex: 5 }}
+            >
+                <DataGrid.Grid style={{ zIndex: 9 }}>
+                    <DataGrid.Header style={{ zIndex: 50 }} />
+                    <DataGrid.Summary position="top" />
+                    <DataGrid.Body />
+                    <DataGrid.Summary position="bottom" />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        // structural: the consumer's own z-index never wins; the grid is the app's to stack
+        expect(parts(container, "grid")[0]?.style.zIndex).toBe("9");
+        expect(parts(container, "header")[0]?.style.zIndex).toBe("2");
+        for (const summary of parts(container, "summary")) {
+            expect(summary.style.zIndex).toBe("1");
+        }
+        expect(parts(container, "body")[0]?.style.zIndex).toBe("");
+        // the root is the app's to stack in its page
+        expect(parts(container, "root")[0]?.style.zIndex).toBe("5");
     });
 });

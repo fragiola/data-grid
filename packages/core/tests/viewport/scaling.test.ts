@@ -17,13 +17,32 @@ describe("the scroll mapping", () => {
         const mapping = createScrollMapping(10_000, VIEWPORT);
         expect(mapping.scaled).toBe(false);
         expect(mapping.physicalSize).toBe(10_000);
-        for (const x of [0, 1.5, 4_000, 9_400]) {
+        for (const x of [0, 1, 4_000, 9_400]) {
             expect(mapping.toVirtual(x)).toBe(x);
             expect(mapping.toPhysical(x)).toBe(x);
         }
+        // a physical scroll is whole pixels (Epic #89); a native one is read to the sub-pixel
+        expect(mapping.toPhysical(1.5)).toBe(2);
+        expect(mapping.toVirtual(1.5)).toBe(1.5);
         // clamped to the scrollable range
         expect(mapping.toVirtual(20_000)).toBe(9_400);
         expect(mapping.toPhysical(-5)).toBe(0);
+    });
+
+    it("is whole pixels for a fractional size, its end reachable (Epic #89)", () => {
+        // a browser takes a fraction its own way: the end is the next whole pixel, the content's
+        // .3 left in view
+        const mapping = createScrollMapping(10_000.3, VIEWPORT);
+        expect(mapping.scaled).toBe(false);
+        expect(mapping.physicalSize).toBe(10_001);
+        expect(mapping.maxPhysical).toBe(9_401);
+        expect(mapping.maxVirtual).toBe(9_401);
+        expect(mapping.toPhysical(9_400.3)).toBe(9_400);
+        expect(mapping.toPhysical(20_000)).toBe(9_401);
+        // scaled, the virtual end stays the content's own, the physical one whole
+        const scaled = createScrollMapping(ROWS * HEIGHT + 0.3, VIEWPORT);
+        expect(scaled.maxVirtual).toBe(ROWS * HEIGHT + 0.3 - VIEWPORT);
+        expect(Number.isInteger(scaled.toPhysical(123_456.7))).toBe(true);
     });
 
     it("caps the physical size and maps the ends exactly", () => {
@@ -50,7 +69,7 @@ describe("the scroll mapping", () => {
         const mapping = createScrollMapping(ROWS * HEIGHT, VIEWPORT);
         const half = mapping.toVirtual(mapping.maxPhysical / 2);
         expect(half / mapping.maxVirtual).toBeCloseTo(0.5, 9);
-        for (const physical of [1, 1234.5, 5_000_000, 9_999_000]) {
+        for (const physical of [1, 1234, 5_000_000, 9_999_000]) {
             const there = mapping.toPhysical(mapping.toVirtual(physical));
             expect(there).toBeCloseTo(physical, 6);
         }
@@ -99,6 +118,42 @@ describe("the scroll state", () => {
         state.scrollTo(100);
         expect(state.sync(100.4)).toBe(true);
         expect(state.virtual).toBe(100.4);
+    });
+
+    it("holds whole pixels unscaled, its end the content's .3 past it (Epic #89)", () => {
+        const state = new ScrollAxisState(
+            createScrollMapping(10_000.3, VIEWPORT),
+        );
+        // the end: a whole pixel, reachable, the content's end in view
+        expect(state.scrollTo(20_000)).toBe(9_401);
+        expect(state.virtual).toBe(9_401);
+        expect(state.offsetFor(9_400.3 + 1)).toBe(9_401);
+        // a move to where it is, once clamped, is no move
+        expect(state.offsetFor(50_000)).toBe(state.virtual);
+        expect(state.scrollTo(100.4)).toBe(100);
+        expect(state.virtual).toBe(100);
+        // its own scroll event changes nothing
+        expect(state.sync(100)).toBe(false);
+    });
+
+    it("adds a wheel's sub-pixel deltas up into whole pixels, unscaled (Epic #89)", () => {
+        const state = new ScrollAxisState(
+            createScrollMapping(10_000, VIEWPORT),
+        );
+        const written: number[] = [];
+        for (let step = 0; step < 10; step++) written.push(state.scrollBy(0.3));
+        // every write whole, none lost: 3px for ten deltas of 0.3
+        expect(written.every(Number.isInteger)).toBe(true);
+        expect(state.virtual).toBe(3);
+        expect(written.at(0)).toBe(0);
+        // a scroll the engine did not make starts the fractions again
+        state.scrollBy(0.4);
+        expect(state.sync(50)).toBe(true);
+        expect(state.scrollBy(0.4)).toBe(50);
+        // and at the end, nothing is kept beyond it
+        state.scrollTo(9_400);
+        state.scrollBy(0.6);
+        expect(state.scrollBy(-0.6)).toBe(9_399);
     });
 
     it("keeps its virtual offset through a new mapping", () => {

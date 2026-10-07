@@ -23,8 +23,8 @@ export const root = cn(
 export const grid =
     "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
 
-/** opaque and above the rows: they scroll under it */
-export const header = "z-10 bg-palette-base";
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
 
 export const headerRow = cn(
     "bg-(--dg-header-bg) text-palette-accent",
@@ -40,7 +40,7 @@ export const headerCell = cn(
     "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
     // a drag moves it (a hand where a click does not sort): the cell in hand dimmed, a line
     // inside the target on the side it lands
-    "data-reorderable:not-data-sortable:cursor-grab data-reorderable:select-none data-reorderable:data-dragging:cursor-grabbing data-dragging:opacity-50",
+    "data-reorderable:not-data-sortable:cursor-grab data-reorderable:select-none data-reorderable:touch-pan-y data-reorderable:data-dragging:cursor-grabbing data-dragging:opacity-50",
     "data-[drop-target=before]:shadow-[inset_3px_0_0_var(--dg-active-line)] data-[drop-target=after]:shadow-[inset_-3px_0_0_var(--dg-active-line)]",
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );

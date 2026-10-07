@@ -33,30 +33,34 @@ const columns: Column<Order>[] = [
 
 ## Tab
 
-Every grid is a tab stop: the active cell, or the grid itself before one is active. So by
-default, Tab visits each rendered nested grid in page order before it leaves the outer grid.
-
-To keep a single stop, render the inner grid's tab stops only while the outer cell holding it is
-active (the grid, its header cells and its cells). A `tabIndex` you pass to a part overrides the
-grid's own. Then Tab moves from the active outer cell into its inner grid, and Shift+Tab moves
-back. In a cell, it looks like this (the [`master-detail`](/examples/master-detail) example does
-the same for a grid in a detail, reachable while its row is active):
+A grid on its own is one tab stop: its active cell, or the grid itself before one is active. A
+grid nested in another one is reachable through the cell that holds it: its tab stop is in the
+page's tab order only while the outer grid's active cell holds it (for a grid in a row's
+[detail](/docs/guides/master-detail), while the active cell is in that row), or while focus is
+inside it. So Tab moves from the active outer cell into its inner grid, Shift+Tab moves back, and
+Tab from any other outer cell leaves the outer grid without visiting the grids nested in it.
 
 ```tsx title="items.tsx"
-function Items({ order, rowIndex, columnIndex }: ItemsProps) {
-    // the outer grid's view: this renders in its cell, outside the inner root
-    const { active } = useGridView();
-    const reachable = active?.rowIndex === rowIndex && active.columnIndex === columnIndex;
-    const tabIndex = reachable ? undefined : -1;
+function Items({ order }: { order: Order }) {
+    // nothing to do: the inner grid is reachable while the outer cell holding it is active
     return (
         <DataGrid.Root columns={itemColumns} rows={order.items}>
-            <DataGrid.Grid aria-label={`Items of order ${order.id}`} tabIndex={tabIndex}>
-                …
-                <DataGrid.HeaderCell cell={cell} tabIndex={tabIndex} />
-                …
-                <DataGrid.Cell cell={cell} tabIndex={tabIndex} />
-            </DataGrid.Grid>
+            <DataGrid.Grid aria-label={`Items of order ${order.id}`}>…</DataGrid.Grid>
         </DataGrid.Root>
     );
 }
 ```
+
+To give a nested grid a tab stop of its own, as before, pass `ownTabStop` to its root. A
+`tabIndex` you pass to a part still overrides the grid's own.
+
+## The wheel
+
+A wheel over a nested grid scrolls it while it can scroll that way. At its end the browser
+passes the wheel on to the outer grid; when the outer grid's scroll is
+[scaled](/docs/concepts/scroll-scaling), the outer grid takes that wheel itself and moves by
+exactly its delta, as it does over its own cells, instead of the browser's native scroll, which
+would jump far. The same holds for anything that scrolls inside a cell or a detail (a notes
+panel, a text area), and each axis is decided apart: a diagonal wheel over a panel that scrolls
+only sideways scrolls the panel sideways and the outer grid down. Content with
+`overscroll-behavior: contain` keeps the wheel at its end too.

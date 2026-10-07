@@ -79,7 +79,7 @@ A move outside the rules is refused, and a middleware can refuse or rewrite any 
 fixed `#` first, for instance:
 
 ```ts title="first-column.ts"
-import { veto } from "@fragiola/data-grid";
+import { veto } from "@fragiola/data-grid-react";
 
 model.use((ctx, next) =>
     ctx.command === "column-order.move" &&
@@ -114,8 +114,10 @@ The columns do not move during the drag: only the state changes. The release run
 capture end the drag and move nothing. Escape reaches the grid after your handlers, wherever focus
 is: one you prevent keeps the drag going.
 
-On a touch screen, a drag on a header cell pans the grid unless the cell has
-`touch-action: none`, which is yours to set (and then the header no longer pans).
+On a touch screen, a drag on a header cell pans the grid unless its `touch-action` keeps the
+sideways moves for the page, which is yours to set. `touch-action: pan-y` on a reorderable header
+cell is the usual choice: a finger moved sideways drags the column, one moved up or down still
+scrolls ([Touch screens](/docs/guides/touch)).
 
 ## The indicator
 

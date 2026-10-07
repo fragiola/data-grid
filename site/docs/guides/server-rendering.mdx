@@ -1,0 +1,73 @@
+---
+title: Server rendering
+description: Render the grid on the server with React, hydrate it on the client, and know what the first HTML holds before the browser measures anything.
+---
+
+The grid renders on the server with `renderToString`, `renderToPipeableStream` or a framework's
+server components setup, and hydrates on the client without a mismatch. Nothing it renders reads
+`window` or `document`: the core touches the page only through the element the grid attaches
+to, and only once it has one.
+
+## What the server sends
+
+A server has no screen, so the grid measures nothing there. The first HTML holds what the grid
+knows from its props alone:
+
+- the root, the grid and every part you compose: the header, the summary areas, the body and
+  `DataGrid.Empty`;
+- the ARIA of the whole dataset: `role="grid"` (or `treegrid` with row kinds), `aria-rowcount`,
+  `aria-colcount`, `aria-multiselectable`, and the tab stop;
+- the state attributes that do not depend on a size: `data-empty` and the empty state's content,
+  and `dir` when you give a `direction`;
+- the structural styles.
+
+The rows and the cells are not there yet. Which ones render depends on the viewport's size, the
+row heights and the scroll position, and the server knows none of them. On the client, hydration
+renders the same first view (the grid before it attaches), so React finds exactly the HTML the
+server sent. Then the root attaches to its element, reads its size and renders the window of rows
+and columns before the browser paints, with `rowHeight`, `estimatedRowHeight` and the columns'
+widths sizing it. From then on it is the grid you know: the keys, the focus and the scroll.
+
+## A client component
+
+The grid is interactive, so in a framework with server components it belongs in a client
+component. Mark the file that renders `DataGrid.Root` with the directive and import it from your
+server component as usual:
+
+```tsx title="people-grid.tsx"
+"use client";
+
+import { DataGrid } from "@fragiola/data-grid-react";
+import { columns, type Person } from "./columns";
+
+export function PeopleGrid({ people }: { people: Person[] }) {
+    return (
+        <DataGrid.Root columns={columns} rows={people} style={{ height: 480 }}>
+            <DataGrid.Grid aria-label="People">
+                <DataGrid.Header />
+                <DataGrid.Body />
+            </DataGrid.Grid>
+        </DataGrid.Root>
+    );
+}
+```
+
+The rows can come from the server: pass them as a prop, and keep functions such as `getRow`,
+`rowKey` and the columns' renderers in the client component, since functions do not cross from a
+server component to a client one.
+
+## Keep the first render the same on both sides
+
+Hydration compares the server's HTML with the client's first render. The grid's own output is the
+same on both sides; what you render around and inside it must be too:
+
+- render the same structure on both sides: a `table` with `thead`, `tbody`, `tr` and `th`/`td`
+  parts all the way down (the browser moves a `div` out of a `table` while it parses the HTML,
+  and React then finds the page changed), or `div`s;
+- start from the same state: a `defaultActivePosition`, a `defaultSortColumns` or a
+  `defaultSelectedRange` given on the server must be given on the client too;
+- read nothing that only the browser knows (the window's size, `localStorage`, the time) while
+  rendering: read it in an effect and pass it down after hydration.
+
+Give the root a size in CSS, as always ([Sizing the grid](/docs/getting-started/sizing)): the
+server's HTML takes its place on the page before the rows render, so nothing moves when they do.

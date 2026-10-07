@@ -35,6 +35,7 @@ export type {
     RowReorder,
     RowSelectable,
     RowSelection,
+    ScrollAlign,
     Size,
     SortColumn,
     SortDirection,
@@ -42,6 +43,8 @@ export type {
     SummaryPosition,
     SummaryRowCounts,
 } from "@fragiola/data-grid";
+// a middleware's refusal: an app installs only this package
+export { veto } from "@fragiola/data-grid";
 export {
     type CellEditEvent,
     type CellInfo,

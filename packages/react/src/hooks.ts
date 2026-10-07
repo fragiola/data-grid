@@ -8,19 +8,21 @@ import {
     type ColumnResizerState,
     cellBox,
     cellPart,
-    cellValue,
     columnResizerPart,
+    type DataGridEngine,
     dataRowAt,
     depthOf,
     type EditCellRenderProps,
     EMPTY_WINDOW,
+    type EngineEventKey,
+    type EngineQueryKey,
+    type EngineQueryMap,
     type FillHandleState,
     fillHandlePart,
     GROUP_LABEL_ATTRIBUTE,
     type GridDirection,
     type GridView,
     type GroupToggleState,
-    groupCellValue,
     groupTogglePart,
     type HeaderCellPart,
     type HeaderCellState,
@@ -34,6 +36,7 @@ import {
     type RowMeta,
     type RowState,
     renderedWidth,
+    rowCellValue,
     rowColumns,
     rowDetailPart,
     rowDisplay,
@@ -55,7 +58,6 @@ import {
 import type * as React from "react";
 import {
     type ReactNode,
-    useCallback,
     useContext,
     useMemo,
     useSyncExternalStore,
@@ -91,7 +93,6 @@ export type {
     SummaryCellState,
     SummaryRowState,
 } from "@fragiola/data-grid";
-export { useDataGrid } from "./context";
 
 /** What a part hook returns: its state, and the props for its element (the structural style in `props.style`). */
 interface PartHookResult<S> {
@@ -117,14 +118,26 @@ function useWindow<TRow>(
         gridRef,
         "a window hook must be used inside <DataGrid.Root>, or be given a gridRef",
     )?.engine;
+    return useEngineValue(engine, event, EMPTY_WINDOW);
+}
+
+/**
+ * An engine's value it reports with an event of the same key (a window, the edit's draft): read
+ * again when the event comes; `fallback` without an engine.
+ */
+function useEngineValue<TRow, K extends EngineEventKey & EngineQueryKey>(
+    engine: DataGridEngine<TRow, ReactNode> | undefined,
+    key: K,
+    fallback: EngineQueryMap[K],
+): EngineQueryMap[K] {
     const subscribe = useMemo(
         () =>
             engine
-                ? (listener: () => void) => engine.subscribe(event, listener)
+                ? (listener: () => void) => engine.subscribe(key, listener)
                 : noSubscription,
-        [engine, event],
+        [engine, key],
     );
-    const read = () => (engine ? engine.get(event) : EMPTY_WINDOW);
+    const read = () => (engine ? engine.get(key) : fallback);
     return useSyncExternalStore(subscribe, read, read);
 }
 
@@ -285,11 +298,7 @@ export function useCells<TRow = unknown>(row: RowInfo<TRow>): CellInfo<TRow>[] {
         column,
         row: row.row,
         loaded: row.loaded,
-        value: group
-            ? groupCellValue(group, column)
-            : row.row === undefined
-              ? undefined
-              : cellValue(column, row.row, row.rowIndex),
+        value: rowCellValue(column, row.rowIndex, group, row.row),
         group,
         meta,
     }));
@@ -467,12 +476,7 @@ export function useCellEdit<TRow>(
     cell: CellInfo<TRow>,
 ): EditCellRenderProps<TRow, ReactNode> | null {
     const { engine } = useRootGrid();
-    const subscribe = useCallback(
-        (listener: () => void) => engine.subscribe("edit-draft", listener),
-        [engine],
-    );
-    const read = () => engine.get("edit-draft");
-    const draft = useSyncExternalStore(subscribe, read, read);
+    const draft = useEngineValue(engine, "edit-draft", null);
     const ways = useMemo(
         () => ({
             onChange: (value: unknown) => engine.run("change-edit", { value }),
@@ -631,6 +635,44 @@ export function useHeaderCell<TRow>(
 }
 
 /**
+ * A control the app renders in a part (a resizer, a row's drag handle, a fill handle, a group's
+ * toggle): its state, and while it has its attributes (`undefined`: none to render), them and
+ * its `data-*` (`dataOf` its state, a module function: nothing is allocated for a control with
+ * none), with no style of its own.
+ */
+function controlPart<S>(
+    state: S,
+    attributes: Record<string, unknown> | undefined,
+    dataOf: (state: S) => Parameters<typeof dataAttributes>[0],
+): PartHookResult<S> {
+    return {
+        state,
+        props: attributes
+            ? { ...attributes, ...dataAttributes(dataOf(state)), style: {} }
+            : { style: {} },
+    };
+}
+
+/** The controls' `data-*`, from their state. */
+const resizerData = (state: ColumnResizerState) => ({
+    "grid-part": "column-resizer",
+    resizing: state.resizing,
+});
+const dragHandleData = (state: RowDragHandleState) => ({
+    "grid-part": "row-drag-handle",
+    reorderable: state.reorderable,
+    dragging: state.dragging,
+});
+const fillHandleData = (state: FillHandleState) => ({
+    "grid-part": "fill-handle",
+    filling: state.filling,
+});
+const groupToggleData = (state: GroupToggleState) => ({
+    "grid-part": "group-toggle",
+    expanded: state.expanded,
+});
+
+/**
  * A column resizer (Epic #70, W3): the state and props of a handle the app renders inside a
  * header cell (a column's, or a group's, which resizes its columns together). The props make it
  * a vertical separator whose values are widths in pixels, marked for the engine, which drags it,
@@ -644,19 +686,11 @@ export function useColumnResizer<TRow>(
 ): PartHookResult<ColumnResizerState> {
     const view = useGridView<TRow>();
     const { state, tabIndex, attributes } = columnResizerPart(view, cell);
-    if (!state.resizable) return { state, props: { style: {} } };
-    return {
+    return controlPart(
         state,
-        props: {
-            ...attributes,
-            tabIndex,
-            ...dataAttributes({
-                "grid-part": "column-resizer",
-                resizing: state.resizing,
-            }),
-            style: {},
-        },
-    };
+        state.resizable ? { ...attributes, tabIndex } : undefined,
+        resizerData,
+    );
 }
 
 /**
@@ -679,18 +713,7 @@ export function useRowDragHandle(row: {
         row.rowIndex,
         row.loaded,
     );
-    return {
-        state,
-        props: {
-            ...attributes,
-            ...dataAttributes({
-                "grid-part": "row-drag-handle",
-                reorderable: state.reorderable,
-                dragging: state.dragging,
-            }),
-            style: {},
-        },
-    };
+    return controlPart(state, attributes, dragHandleData);
 }
 
 /**
@@ -709,18 +732,7 @@ export function useFillHandle(cell: {
 }): PartHookResult<FillHandleState> {
     const view = useGridView();
     const { state, attributes } = fillHandlePart(view, cell);
-    if (!attributes) return { state, props: { style: {} } };
-    return {
-        state,
-        props: {
-            ...attributes,
-            ...dataAttributes({
-                "grid-part": "fill-handle",
-                filling: state.filling,
-            }),
-            style: {},
-        },
-    };
+    return controlPart(state, attributes, fillHandleData);
 }
 
 /**
@@ -742,18 +754,7 @@ export function useGroupToggle(row: {
         row.rowIndex,
         "meta" in row ? { meta: row.meta } : undefined,
     );
-    if (!attributes) return { state, props: { style: {} } };
-    return {
-        state,
-        props: {
-            ...attributes,
-            ...dataAttributes({
-                "grid-part": "group-toggle",
-                expanded: state.expanded,
-            }),
-            style: {},
-        },
-    };
+    return controlPart(state, attributes, groupToggleData);
 }
 
 /** The state of a group's label: the key of the header cell it labels. */

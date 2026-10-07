@@ -163,6 +163,22 @@
                 {
                     "label": "Empty state",
                     "path": "guides/empty-state"
+                },
+                {
+                    "label": "Loading and errors",
+                    "path": "guides/loading-and-errors"
+                },
+                {
+                    "label": "Server rendering",
+                    "path": "guides/server-rendering"
+                },
+                {
+                    "label": "Touch screens",
+                    "path": "guides/touch"
+                },
+                {
+                    "label": "Coming from React Data Grid",
+                    "path": "guides/from-react-data-grid"
                 }
             ]
         },
@@ -170,8 +186,8 @@
             "label": "Project",
             "pages": [
                 {
-                    "label": "Limitations and roadmap",
-                    "path": "limitations"
+                    "label": "Beyond v0",
+                    "path": "beyond-v0"
                 },
                 {
                     "label": "Found a problem?",

@@ -98,6 +98,20 @@ export function groupCellValue<TRow, TNode>(
         : undefined;
 }
 
+/**
+ * A cell's value at a row as read (`rowMetaAt`, `dataRowAt`): a group row's (`groupCellValue`), a
+ * loaded row's (`cellValue`), `undefined` for a row not loaded.
+ */
+export function rowCellValue<TRow, TNode>(
+    column: Column<TRow, TNode>,
+    rowIndex: number,
+    group: GroupRow | undefined,
+    row: TRow | undefined,
+): unknown {
+    if (group) return groupCellValue(group, column);
+    return row === undefined ? undefined : cellValue(column, row, rowIndex);
+}
+
 /** The cell's value: the column's getter, or the row's property named by the key. */
 export function cellValue<TRow, TNode>(
     column: Column<TRow, TNode>,
@@ -121,22 +135,17 @@ export function keyOf<TRow>(
     return state.rowKey ? state.rowKey(row, rowIndex) : rowIndex;
 }
 
-/** The row at `rowIndex` when it is one of the grid's rows and loaded. */
-export function loadedRow<TRow>(
-    state: Pick<RowsState<TRow>, "source" | "rowCount">,
-    rowIndex: number,
-): TRow | undefined {
-    return isIndex(rowIndex, state.rowCount)
-        ? rowAt(state.source, rowIndex)
-        : undefined;
-}
-
-/** The key of a loaded row; `undefined` while it is not loaded (its key is unknown). */
+/**
+ * The key of a loaded row (one of the grid's rows); `undefined` while it is not loaded (its key is
+ * unknown).
+ */
 export function loadedRowKey<TRow>(
     state: RowsState<TRow>,
     rowIndex: number,
 ): RowKey | undefined {
-    const row = loadedRow(state, rowIndex);
+    const row = isIndex(rowIndex, state.rowCount)
+        ? rowAt(state.source, rowIndex)
+        : undefined;
     return row === undefined ? undefined : keyOf(state, row, rowIndex);
 }
 
@@ -220,8 +229,9 @@ export function groupKeyAt<TRow>(
         ? dataRowAt(state.source, rowIndex, meta)
         : undefined,
 ): RowKey | undefined {
-    if (meta?.group) return meta.group.key;
-    return meta?.expandable ? rowKeyOf(state, rowIndex, meta, row) : undefined;
+    return meta?.group || meta?.expandable
+        ? rowKeyOf(state, rowIndex, meta, row)
+        : undefined;
 }
 
 /** Whether a row group's key (`groupKeyAt`) is expanded: among the expanded group keys. */

@@ -361,6 +361,29 @@ describe("bringing a cell into view", () => {
         expect(scroll.left).toBe(0);
     });
 
+    it("rounds the scroll so a column is wholly in view beside a fractional pinned width (Epic #89)", () => {
+        // two pinned columns of 100.3: 200.6 pinned pixels, then columns of 100
+        const columns = COLUMNS.map((entry, index) =>
+            index < 2 ? { ...entry, width: 100.3 } : entry,
+        );
+        const { engine, scroll, commit } = setup({ columns });
+        engine.run("scroll-to-cell", { columnIndex: 30 });
+        commit();
+        // column 30 ends at 3,100.6: the view's right edge at 3,101 (a whole pixel)
+        expect(scroll.left).toBe(2_601);
+        // the axis holds what was written: no fraction left between them
+        expect(engine.get("scroll-position").left).toBe(2_601);
+        engine.run("scroll-to-cell", { columnIndex: 20 });
+        commit();
+        // column 20 starts at 2,000.6, 200.6 pinned pixels before it: 1,800, its start in view
+        expect(scroll.left).toBe(1_800);
+        expect(engine.get("scroll-position").left).toBe(1_800);
+        // in view: no move
+        engine.run("scroll-to-cell", { columnIndex: 21 });
+        commit();
+        expect(scroll.left).toBe(1_800);
+    });
+
     it("moves nothing for a column already in view, under scaled scroll too", () => {
         const wide: Column<Row>[] = Array.from({ length: 1_000 }, (_, i) =>
             column(`c${i}`, i < 2),

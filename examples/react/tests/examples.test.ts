@@ -21,7 +21,9 @@ import { CATEGORIES } from "../src/examples/meta-types.ts";
 const ALLOWED = [
     /^react$/,
     /^react-dom$/,
-    /^@fragiola\/data-grid(\/(local|selection|fill))?$/,
+    // the core's extras only: its main entry's types and helpers come through the React package,
+    // which is what an app installs
+    /^@fragiola\/data-grid\/(local|selection|fill)$/,
     /^@fragiola\/data-grid-react(\/(local|selection))?$/,
     /^lucide-react$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,

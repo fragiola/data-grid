@@ -1,8 +1,8 @@
 # CI: the Fragiola project jobs, with the Playwright suites split out of Checks.
 #
 #   Checks   Biome, TypeScript, the unit tests and the build (with the .d.ts check).
-#   E2E      the Playwright suites, in parallel jobs: the playground (Chromium and Firefox: the
-#            scroll scaling and focus specs run in both) and the examples app. The playground's
+#   E2E      the Playwright suites, in parallel jobs: the playground and the examples app, each in
+#            Chromium, Firefox and WebKit (Epic #89). The playground's
 #            dev server serves the packages from source, so its job builds nothing; the examples
 #            suite builds the embed against the packages' dist, so its job builds the packages.
 #   Site export       fragiola.com builds /data-grid from `pnpm site:export` (contract v1.2,
@@ -72,12 +72,12 @@ jobs:
             id: playground
             package: playground
             dir: apps/playground
-            browsers: chromium firefox
+            browsers: chromium firefox webkit
           - name: examples
             id: examples
             package: examples-react
             dir: examples/react
-            browsers: chromium
+            browsers: chromium firefox webkit
     steps:
       - uses: actions/checkout@v4
 

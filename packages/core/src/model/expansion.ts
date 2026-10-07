@@ -135,6 +135,8 @@ export function holdsRowIn(
     start: number,
     end: number,
 ): boolean {
+    // none expanded (the usual case): nothing to look for
+    if (rows.length === 0) return false;
     const first = rows[firstRowFrom(rows, start)];
     return first !== undefined && first < end;
 }

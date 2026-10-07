@@ -14,7 +14,7 @@ export interface AxisWindow {
     readonly rendered: Range;
 }
 
-export const EMPTY_RANGE: Range = { start: 0, end: 0 };
+const EMPTY_RANGE: Range = { start: 0, end: 0 };
 export const EMPTY_WINDOW: AxisWindow = {
     visible: EMPTY_RANGE,
     rendered: EMPTY_RANGE,
@@ -77,7 +77,9 @@ export function sameWindow(a: AxisWindow, b: AxisWindow): boolean {
  * The window at `offset`: what is in view, and what is rendered. With a `previous` window, the
  * rendered range is kept while it still covers what is in view and stays inside the axis, so
  * scrolling inside the overscan changes nothing to render; once the view leaves it, the rendered
- * range is the view plus `overscan` items on each side.
+ * range is the view plus `overscan` items on each side. A rendered range larger than the view
+ * needs is made again (the viewport shrank, the sizes changed), unless `scrolled`: a scroll
+ * changes no size, and items of different sizes coming and going through one render nothing (D9).
  */
 export function windowFor(
     axis: Axis,
@@ -85,6 +87,7 @@ export function windowFor(
     viewportSize: number,
     overscan: number,
     previous?: AxisWindow,
+    scrolled = false,
 ): AxisWindow {
     const visible = visibleRange(axis, offset, viewportSize);
     if (visible.start === visible.end) return EMPTY_WINDOW;
@@ -93,8 +96,8 @@ export function windowFor(
         kept &&
         kept.end <= axis.count &&
         contains(kept, visible) &&
-        // a rendered range larger than the view needs (the viewport shrank) is recomputed
-        kept.end - kept.start <= visible.end - visible.start + 2 * overscan
+        (scrolled ||
+            kept.end - kept.start <= visible.end - visible.start + 2 * overscan)
     ) {
         return sameRange(previous.visible, visible) &&
             sameRange(previous.rendered, kept)

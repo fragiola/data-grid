@@ -9,12 +9,20 @@ It is built for **millions of cells**: virtualized on both axes, with a scroll s
 the whole dataset from the start, and windows (which rows and columns are in view) a developer
 loads data by.
 
+**v0 is reached** (Epics #85–#89): a stable grid at parity with React Data Grid 7.0.0-beta.60
+(every example of its website has a counterpart here: `site/docs/guides/from-react-data-grid.mdx`
+maps them and its props), plus four capabilities it lacks: **cell ranges** (with the clipboard
+and the fill handle), **measured row heights**, **collapsible column groups with sticky labels**
+and **row reordering**. It also takes rows by index (`rowCount` + `getRow`) and scales the scroll
+past the browser's size limit. What it leaves out is `site/docs/beyond-v0.mdx`; next come the
+maintainer's API review, then features and examples inspired by Bryntum Grid, then publishing.
+
 Other adapters may follow React, so **every piece of logic that isn't rendering lives in the core**.
 
 | package | name | contains | depends on |
 |---|---|---|---|
-| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; `/local`: the opt-in pipeline for rows in memory | DOM only |
-| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows` | peer `react`, `react-dom` (^19) |
+| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`) | DOM only |
+| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `react`, `react-dom` (^19) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react` |
 
 ## Non-negotiable rules
@@ -54,7 +62,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 4. **The primitive contract is Dockable's (D4)**, below.
 5. **Structure is the consumer's (D5).** The same primitives render `table/thead/tbody/tr/th/td` or
    `div`s (or anything through `render`). Two unstyled fixtures, one table and one div, are driven
-   by the **same** Playwright spec.
+   by the **same** Playwright spec, in Chromium, Firefox and WebKit (Epic #89), as is the examples
+   suite.
 6. **Data contract (D6).** `rows: TRow[]`, or `rowCount` + `getRow(index) => TRow | undefined`;
    `undefined` is "not loaded yet": the row keeps its space and renders with `data-loading`. The
    engine reports the row and column windows (visible and rendered ranges) and the end being
@@ -80,7 +89,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `"auto"`, nothing otherwise (a grid of given heights reads, observes and allocates nothing
    more). A loaded measured row registers as the engine's `row` element (`EngineLayer`; React's
    `Row` through `useRowPart`'s `ref`, `useRow`'s props carry it), a detail as before (`detail`).
-   Each element is read once, at the commit that first renders it (`takeMeasures`: border-box
+   Each element is read once, at the commit that first renders it (`heights.take`,
+   `engine/heights.ts`, the engine's measuring: border-box
    height, `layoutScale` from the viewport as the fit; before the browser paints; not at the
    commit of a view already replaced, as when an automatic width changed meanwhile: the next
    commit reads), and from the
@@ -130,6 +140,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the layers' offsets imperatively; React never reconciles what the engine writes. A commit reads
    the scroll as it is first (`syncScroll`), so a scroll whose event has not run yet (a scroll and
    a click in one task) never has the layers written against the scroll the engine last knew.
+   A rendered range is kept while it covers what is in view. Through a scroll (any update but a
+   relayout: no size changed) it is kept even when larger than the view needs (`windowFor`'s
+   `scrolled`), so rows or columns of different sizes coming and going render nothing; a relayout
+   (the sizes or the content changed: `update("trim")`, `"fresh"`) trims it (Epic #89, E5.3). React's tests count commits with
+   `renderCounting` (`packages/react/tests/helpers.tsx`, a `Profiler`), one per feature in
+   `render-counts.test.tsx`; the stress fixture counts them in the browser (`window.commits`).
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, renderSummaryCell?, renderGroupCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
     flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, getCopyText?, editable?,
@@ -346,8 +362,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `data-grid-part="summary-cell"`, `data-summary`); `Body` starts below the top ones and `Grid`
     holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells` (the body cells'
     span-aware walk, `cellsOf` in `hooks.ts`, shared with `useCells`), `useSummaryCell`;
-    `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Stacking is the app's,
-    as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
+    `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Their layer is the
+    grid's (a structural `z-index`, below the header's, Epic #89, E5.2); their background is the
+    app's, as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
     the main ones (their built files must not contain it): `@fragiola/data-grid/local` holds the
     framework-free pipeline (`createLocalRows` keeps the sort, filters, search and page;
     `derive(rows, columns)` filters, searches, sorts and pages in that order, each stage
@@ -550,10 +567,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    grid's cells itself (`isCellElement`: a field inside one keeps its own clipboard, a nested
    grid's cell is that grid's) while cells are selectable. WebKit fires `copy` only while
    something is selected, and a copy goes to the selection: Ctrl/⌘+C on one of the grid's cells,
-   with something to copy, selects a hidden node appended to the cell (`selectForCopy`, through
-   the viewport document's Selection, the keydown never prevented), unless text inside that cell
-   is selected (its content, its editor: copied as it is); the copy takes the event from that
-   node as from its cell and `endCopySelection` removes it and puts the selection back (else the
+   with something to copy, or Ctrl/⌘+V (Epic #89: Firefox fires a paste at the page's selection,
+   not at the focused cell, whose text a press with `user-select: none` never selects; the letter
+   read through `shortcutLetter`: the key's own, else its `code` on a non-Latin layout), selects a
+   hidden node appended to the cell (`selectForClipboard`, `holdSelection` in `dom.ts`, through
+   the viewport document's Selection, the keydown never prevented), unless, for a copy, text inside
+   that cell is selected (its content, its editor: copied as it is); the copy takes the event from that
+   node as from its cell and `endClipboardSelection` (at the copy or the paste) removes it and puts the selection back (else the
    next task does, through the view's `setTimeout`). A copy writes the range, else the
    active body cell, as TSV into `event.clipboardData` and is prevented: the page's own event, no
    permission (`rangeText`: a loaded row's cell through `Column.getCopyText(CellRenderProps)`,
@@ -883,7 +903,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     logical. With
     `rowSelection`, on a body cell in navigation: Shift+Space toggles its row, Shift+Up/Down
     (multiple) move and select from the anchor (the starting row when there is none or it
-    clears; additive), Ctrl/⌘+A selects every row; at most one `selected-rows.*` command a key. **Interactive
+    clears; additive), Ctrl/⌘+A selects every row (`isSelectAll`: its letter read through `shortcutLetter`, on a non-Latin layout too); at most one `selected-rows.*` command a key. **Interactive
     cells (Epic #52, I1–I5):** two modes, the engine's. Outside interaction the engine keeps the
     controls inside its own cells at `tabindex` -1 (a MutationObserver from the viewport's window,
     cells rendered later included; their own value kept; `data-grid-tab-stop` opts a control
@@ -942,7 +962,42 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 13. **The core never touches global `document`/`window`** (nor `requestAnimationFrame`,
     `ResizeObserver`, …): DOM access goes through the root element's `ownerDocument`/`defaultView`,
     so the model loads in plain Node. **The core has zero runtime dependencies** and never imports
-    `react`. A guard test enforces both.
+    `react`. A guard test enforces both. **Server rendering (Epic #89, E5.1):** a `Root` renders
+    to a string in plain Node with no warning (React 19 no longer warns about layout effects on
+    the server: no isomorphic wrapper is needed) and hydrates without a mismatch: before it
+    attaches, the engine's view has no size, so the server and the client's first render hold the
+    same shell (the parts, the ARIA counts and roles, `data-empty` and `Empty`, the given `dir`,
+    structural styles) and no row or cell; the window renders at attach, before paint
+    (`packages/react/tests/server.test.tsx` in Node, `hydration.test.tsx` in jsdom, both over
+    `server-grids.tsx`: rows, groups, row groups, tree meta, summary rows, pinned columns, empty,
+    RTL, cell ranges, as divs and as a table). A table's header rows and rows must be `tr`s down to
+    the cells (the HTML parser moves a `div` out of a table). Docs: `guides/server-rendering`.
+    **Touch (Epic #89, E5.1):** the drags read pointer events of any type: a touch drags a
+    resizer, a reorderable header cell, a row's handle and the fill handle as a mouse does (their
+    `touch-action` is the app's: `none` on handles, `pan-y` on reorderable header cells in the
+    fixture and examples); a touch press on a body cell starts no range drag (the browser pans
+    the body; the grid sets no `touch-action`). While a press is held (`listen`), `selectstart`
+    and `dragstart` are prevented on the document, and for a touch `contextmenu` too: a long
+    press selects no text and opens no menu, the page's own again at the release (a mouse's
+    context menu, a macOS Ctrl+click's, stays the app's). A long press on a body cell, and
+    `-webkit-touch-callout`, are the browser's and the app's CSS (`user-select` is not
+    structural). The shared spec's `touch` block drives an emulated touch screen (`hasTouch`):
+    `touchDrag` (`examples/react/e2e/examples/helpers.ts`, the page's own touch pointer events,
+    every engine), `page.touchscreen.tap`, and in Chromium a finger through CDP
+    (`Input.dispatchTouchEvent`: touch-action and the native scroll). Docs: `guides/touch`.
+    **WebKit (Epic #89):** fixes where it differs. Scrolling is whole pixels, as WebKit drops a
+    fraction of `scrollTop` Chromium rounds (a measured row's edge left out of view), and the axis
+    holds exactly what the engine writes (`viewport/scaling.ts`): the physical size and its end
+    are rounded up (`createScrollMapping`); unscaled, the virtual offset is the physical scroll,
+    whole (`maxVirtual` = `maxPhysical`, `ScrollAxisState.offsetFor`, `scrollTo`), scaled it
+    stays exact and `toPhysical` rounds; the wheel's writes go through `scrollBy` on both axes,
+    an unscaled one keeping a delta's fraction for the next (`remainder`, reset by a scroll the
+    engine did not make). A scroll target's span start is rounded down and its end and maximum
+    up (`scrollTargetForSpan`), a column's worked out in the scroll's own space (less the pinned
+    width, fractional or not), and a move is compared with the clamped offset (`offsetFor`): a
+    key at the end is no move. A field's
+    default width is the browser's: the fixture sizes its own. Paste: Playwright's WebKit fires
+    `paste` at a focused cell; Firefox fires it at the page's selection (`selectForClipboard`).
 14. **App policy stays in the app.** The packages ship no fetching, caching, persistence or
     translations.
 
@@ -958,7 +1013,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip): a report, after `pnpm build` |
-| `pnpm e2e` | Playwright: the playground (Chromium and Firefox) and the examples app (Chromium) |
+| `pnpm e2e` | Playwright: the playground and the examples app, each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
 | `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
 | `pnpm site:dev --base /data-grid --port <n>` | the examples app with hot reload, under the base `www` proxies in dev |
@@ -987,10 +1042,19 @@ themes) and the source beside the stage; the state is in the URL
 (`?example=<slug>&theme=<name>&code=1`).
 
 - **Examples** live in `examples/react/src/examples` and are public: the site embeds them, readers
-  copy them. The playground reads them in place (`import.meta.glob`, the `#/` alias and the
+  copy them. Each of React Data Grid's website examples has one (the parity table of
+  `site/docs/guides/from-react-data-grid.mdx`); a menu, a filter or a checkbox in one is the app's
+  (Fragiola UI, vendored). The playground reads them in place (`import.meta.glob`, the `#/` alias and the
   pre-paint theme from `examples/react/vite.shared.ts`); it never keeps a second list.
 - **Fixtures** (`fixtures/<name>/`) are the unstyled pages Playwright drives; the sidebar links
-  them.
+  them. `stress-grid` (Epic #89, E5.3; `src/fixture/stress-fixture.tsx`, the grid fixture's parts)
+  has every feature on at once: 1,000,000 rows through `getRow`, 1,000 columns, both axes scaled
+  (`maxScrollSize` 80,000), groups with a collapsible one and sticky labels, pinned columns at
+  both ends, spans, sorting, resizing, reordering columns and rows, row selection, details,
+  summary rows, cell ranges, the clipboard, editing, the fill handle and a direction toggle
+  (`?kind=table|div`; `&grouped=1`: 100,000 rows in memory grouped, `getRow` cannot feed
+  grouping). `e2e/stress.spec.ts` drives both structures in every browser, and counts React's
+  commits through the wheel's exact steps (`window.commits`).
 
 ## Conventions
 
@@ -1028,8 +1092,18 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
 - **Size is watched.** `pnpm size` (after `pnpm build`; CI prints it too) reports each entry point;
   a PR says when one grows noticeably, and why.
 - **Tests share their setup**, never a copy: `packages/core/tests/engine/harness.ts` (the engine
-  on a fake viewport), `packages/react/tests/helpers.tsx` and `examples/react/e2e/helpers.ts`,
-  `examples/react/e2e/examples/helpers.ts` (the playground's spec imports it too).
+  on a fake viewport), `packages/react/tests/helpers.tsx` (`renderCounting`, `scrollRoot` for
+  D9) and `examples/react/e2e/helpers.ts`, `examples/react/e2e/examples/helpers.ts` (the
+  playground's spec imports it too).
+- **The engine's modules** (`packages/core/src/engine/`): `engine.ts` (the closure binding one
+  grid to the DOM: scroll, windows, layers, focus, keys, drags, edits), `types`, `view` (pure: a
+  view from its inputs), `geometry` (pure per-view and per-cell math, axis anchors), `parts`
+  (part state and ARIA), `interaction` (a cell's controls), `heights` (measured rows and details:
+  observing, reading, forgetting), `measure` (their store and axis), `drag` (the drags' state and
+  pure geometry: edge steps, drop sides, a fill's target), `dom` (DOM predicates, attributes, the
+  wheel's scrollers, the clipboard's held selection). A helper only the main entry uses stays out
+  of `utils.ts` when `/local` imports that module too: a shared chunk carries every export the
+  main entry uses (`pnpm size` shows it).
 
 A review checks:
 
@@ -1051,15 +1125,19 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
 - **Structural inline style only**: `position` (`sticky` on the header, the summary rows'
-  `Summary`, `Empty`, pinned cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
+  `Summary`, `Empty`'s area, pinned cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
   right to left: `inlineSide`), `transform` on the layers,
   `display` (also to make table parts positionable, `flex` on rows and header rows with
   pinned columns, `grid` on a measured row, Epic #86), in a measured row `grid-area` on its
   cells and detail and its cells' inline start margin (`margin-left`, `margin-right` right to
   left: their place, in place of `left`), `align-self` on a measured detail in a row of pinned
-  cells, `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
-  rows (with column groups, an upper row stays above the next, which a column spanning rows
-  reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
+  cells, `overflow` on the viewport, `contain`, `box-sizing`, `z-index` for the grid's layers
+  (Epic #89, E5.2: `Header` 2 above `Summary` 1, both above the body, which has none (its
+  transform makes it a context, its pinned cells' stacking the app's); `Grid` none (no stacking
+  context of its own: content placed in it, fixed or not, stacks against the page as the app
+  says); between header rows, with column groups, an upper row above the next, which a
+  column spanning rows reaches into; the header's and summary rows' background is the app's),
+  `height: 100%` on the empty state's row and cell, and on a row's detail `margin-top` (its place below the row's cells) and, in a
   row of pinned cells, `margin-left` (`margin-right` right to left) and `flex-shrink: 0` (its box
   from the row's start, never shrunk). Nothing cosmetic. (The root's `dir`, when a direction is
   given, is structural: `Root` renders `view.givenDirection`.)
@@ -1142,9 +1220,41 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   viewports, across engines). A grid nested in a cell is its own grid; to the outer grid, focus
   inside it is focus inside the cell that holds it, and its keys (and wheel) are never the outer
   grid's. The registry is module state: nesting needs one copy of `@fragiola/data-grid` in the app.
-- **`Empty` renders only while there are no rows (Epic #12, E3).** It sits in the body area (in
-  the flow after `Header`, sticky at the inline start, as large as the visible body), has no text or role
-  of its own, and `Root` and `Grid` carry `data-empty` meanwhile. With no rows, the grid's sizer
+  **Its tab stop is its holder's (Epic #89, E5.2):** a nested grid's tab stop (`view.tabbable`:
+  the active cell's and header cell's `tabIndex` 0, the grid's) is in the page's tab order only
+  while the outer grid's active cell holds it (`holdsNested`: the outer cell it is in, or, in a
+  detail, a row index and no column, its row) or focus is inside it (`updateTabStop`, from
+  `focusin`/`focusout`); a grid on its own always. Each engine registers a `NestingHost`
+  (`HOSTS`, `dom.ts`) on attach and tells its nested grids, at the commit that renders its
+  cells' indexes (`nestedStale`), when its active cell, or what is at it, can have changed (the
+  active position, a new source, new columns, `rows.changed` over the active row); an inner grid
+  takes the nearest attached viewport above its own for its host, every grid asked again on
+  every attach (`NESTINGS`: refs attach child first, and a grid between two others may attach
+  after both). A nested grid outside any row or cell of its host (in `Empty`) keeps its own tab
+  stop. `ownTabStop` (an engine option, a `Root` prop) keeps a tab stop of its own; a part's
+  `tabIndex` still overrides. **The wheel under scaling (E5.2):** a wheel along a scaled axis is
+  the engine's, decided per axis: its part on an axis goes to what still scrolls that way
+  between its target and the viewport (`scrollerBefore`: `overflow` auto/scroll with content
+  beyond that edge, right to left mirrored, or `overscroll-behavior` contain/none; a nested grid,
+  a panel or a field in a cell), else to the grid, moved exactly; every part an inner element's,
+  the browser's (not prevented), else prevented and an inner part scrolled there by the engine.
+  Not asked of the grid's own cells, rows and layers; the styles read once a gesture
+  (`wheelStyles`, reset after `WHEEL_GESTURE` ms), the scroll sizes only where they scroll. A
+  wheel along no scaled axis is the browser's.
+- **`Empty` renders only while there are no rows (Epic #12, E3).** It is a cell (Epic #89, E5.2:
+  `role="gridcell"`, `aria-colspan` every column; rendered as a `<td>`, `colSpan`, no role) in a
+  row of its own (`data-grid-part="empty-row"`, `role="row"`; a `<tr>` for a `<td>`), in an area
+  of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as large as
+  the visible body; a `<tbody>` for a `<td>`): a table's structure in a table grid (`Grid`
+  rendered as a `<table>` element: `TableContext`; there `Empty`'s own tag is a `<td>`, and a
+  component rendering one, `render={<Td />}`, is given `colSpan`) or when its rendered element is
+  a `<td>`; else divs with roles. The app's class, style and children go on the cell (`height: 100%`; a `<td>` a block,
+  a div's display the app's); it has no text or name of its own and no indexes (the keys, the
+  tab order and interaction leave its controls alone), and `Root` and `Grid` carry `data-empty`
+  meanwhile. Its row counts in `aria-rowcount` (and moves the bottom summary rows' indexes) only
+  while it is mounted: its cell registers as the engine's `empty` element (`view.emptyShown`).
+  On the server nothing registers: the server's HTML counts no empty line, hydration starts from
+  that count (it matches) and the first commit adds it. With no rows, the grid's sizer
   spans at least the visible area (the view's `viewportWidth`/`viewportBodyHeight`).
 - **`RowDetail` renders only while its row is expanded (Epic #41, M3).** It holds only its
   children (no text, no names), is a block (its content's layout is the app's), and drops a

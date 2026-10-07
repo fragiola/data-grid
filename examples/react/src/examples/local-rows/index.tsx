@@ -190,18 +190,12 @@ export default function LocalRows() {
                             )}
                         </DataGrid.Rows>
                     </DataGrid.Body>
-                    <DataGrid.Empty>
-                        {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's row, the grid owns focus */}
-                        <div role="row" className={styles.emptyRow}>
-                            {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's cell, the grid owns focus */}
-                            <div
-                                role="gridcell"
-                                className={styles.empty}
-                                data-testid="empty"
-                            >
-                                No one matches these filters.
-                            </div>
-                        </div>
+                    {/* the grid's cell while it has no rows: the content laid out in it */}
+                    <DataGrid.Empty
+                        className={styles.empty}
+                        data-testid="empty"
+                    >
+                        No one matches these filters.
                     </DataGrid.Empty>
                 </DataGrid.Grid>
             </DataGrid.Root>

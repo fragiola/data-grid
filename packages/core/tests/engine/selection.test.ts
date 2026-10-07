@@ -190,6 +190,14 @@ describe("Ctrl+A and ⌘+A", () => {
         expect(keys()).toEqual([]);
     });
 
+    it("are the same key on a layout whose letters are not Latin (its place, `code`)", () => {
+        const { key, activate, keys } = setup();
+        // Ctrl with the A key on a Russian layout: "ф"
+        const press = key(activate(1), "ф", { ctrlKey: true, code: "KeyA" });
+        expect(press.event.defaultPrevented).toBe(true);
+        expect(keys()).toHaveLength(100);
+    });
+
     it("are the page's in single mode", () => {
         const { key, activate, keys } = setup("single");
         const press = key(activate(1), "a", { ctrlKey: true });

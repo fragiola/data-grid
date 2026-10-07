@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import {
+    ariaRowCount,
     type Column,
     createDataGridEngine,
     createDataGridModel,
@@ -195,6 +196,43 @@ describe("windows", () => {
         expect(lookups).not.toHaveBeenCalled();
     });
 
+    it("keep a rendered range larger than the view needs through a scroll, and trim it on a relayout", () => {
+        // rows of 20 to 50px: fewer rows in view after some scrolls, the view the same
+        const { engine, model, scrollTo, view } = setup({
+            rowHeight: (index) => 20 + (index % 4) * 10,
+        });
+        const oversized = () => {
+            const { visible, rendered } = engine.get("row-window");
+            return (
+                rendered.end - rendered.start > visible.end - visible.start + 6
+            );
+        };
+        scrollTo(2_000);
+        const renders = vi.fn();
+        engine.adapter.subscribe(renders);
+        let top = 2_000;
+        while (!oversized() && top < 2_100) {
+            top += 5;
+            scrollTo(top);
+        }
+        // a scroll changes no size: the larger range stays, nothing renders (D9)
+        expect(oversized()).toBe(true);
+        expect(renders).not.toHaveBeenCalled();
+        // rows changed on screen (data-dependent sizes may have): laid out again, trimmed
+        const { rendered } = engine.get("row-window");
+        model.run("rows.changed", { start: rendered.start, end: rendered.end });
+        expect(oversized()).toBe(false);
+        expect(view().renderedRows).toEqual(engine.get("row-window").rendered);
+        // and the same after a resize of the same size (a relayout)
+        while (!oversized() && top < 2_300) {
+            top += 5;
+            scrollTo(top);
+        }
+        expect(oversized()).toBe(true);
+        resize?.();
+        expect(oversized()).toBe(false);
+    });
+
     it("follow a resize", () => {
         const { engine, size } = setup();
         size.height = 430;
@@ -258,6 +296,36 @@ describe("windows", () => {
             visible: { start: 90, end: 100 },
             rendered: { start: 87, end: 103 },
         });
+    });
+});
+
+describe("a fractional scroll (a page zoomed, a fractional pixel ratio)", () => {
+    it("is no move to a cell already in view: the scroll stays where it is", () => {
+        const { engine, scroll, scrollTo, render } = setup();
+        scrollTo(33.33, 50.5);
+        render();
+        engine.run("scroll-to-cell", { rowIndex: 5, columnIndex: 2 });
+        expect(scroll).toEqual({ top: 33.33, left: 50.5 });
+        // a cell out of view still moves it
+        engine.run("scroll-to-cell", { rowIndex: 40 });
+        render();
+        expect(scroll.top).not.toBe(33.33);
+    });
+});
+
+describe("an empty state's row in ARIA (Epic #89, E5.3)", () => {
+    it("counts while an empty state is mounted, and only then", () => {
+        const { engine, view } = setup({ rows: 0 });
+        // no rows and no empty state: the header's row only
+        expect(view().emptyShown).toBe(false);
+        expect(ariaRowCount(view())).toBe(1);
+        const empty = document.createElement("div");
+        const unregister = engine.adapter.registerLayer("empty", empty);
+        expect(view().emptyShown).toBe(true);
+        expect(ariaRowCount(view())).toBe(2);
+        unregister();
+        expect(view().emptyShown).toBe(false);
+        expect(ariaRowCount(view())).toBe(1);
     });
 });
 

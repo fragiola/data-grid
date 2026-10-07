@@ -32,6 +32,8 @@ test("has no class on any part but the sizing root, and only structural inline s
             "overflow-y",
             "overflow-clip-margin",
             "box-sizing",
+            // the grid's layers (Epic #89, E5.2): the grid, the header and the summary rows
+            "z-index",
         ]).toContain(property);
     }
     await expect(

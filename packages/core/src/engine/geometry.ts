@@ -104,17 +104,24 @@ export function columnPinning<TRow, TNode>(
     readonly pinnedEdge: boolean;
     readonly pinnedSide: PinnedSide | undefined;
 } {
-    const endFrom = endPartFrom(view);
     // a span never crosses its part (E1.2): its first column tells it
-    const pinnedSide = columnPart(columnIndex, view.pinnedColumnCount, endFrom);
+    const pinnedSide = columnSide(view, columnIndex);
     return {
         pinned: pinnedSide !== undefined,
         pinnedEdge:
             pinnedSide === "start"
                 ? columnIndex + columnSpan === view.pinnedColumnCount
-                : pinnedSide === "end" && columnIndex === endFrom,
+                : pinnedSide === "end" && columnIndex === endPartFrom(view),
         pinnedSide,
     };
+}
+
+/** The part of a view a column is in (`columnPart`): pinned at the start, at the end, or none. */
+export function columnSide<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    columnIndex: number,
+): PinnedSide | undefined {
+    return columnPart(columnIndex, view.pinnedColumnCount, endPartFrom(view));
 }
 
 /** The first column pinned at the end in effect in a view (`pinnedEndFrom`): its column count without. */
@@ -189,7 +196,7 @@ export function columnLeft<TRow, TNode>(
     return leftInRow(
         view,
         view.columnAxis.offsetOf(columnIndex),
-        columnPinning(view, columnIndex).pinnedSide,
+        columnSide(view, columnIndex),
     );
 }
 
@@ -234,9 +241,9 @@ export function spanInRow<TRow, TNode>(
     const axis = view.columnAxis;
     let start = axis.offsetOf(from);
     let end = axis.offsetOf(to);
-    const { pinned, pinnedSide } = columnPinning(view, from, to - from);
+    const pinnedSide = columnSide(view, from);
     // a pinned span is always whole: its columns are all rendered
-    if (axis.totalSize > view.width && !pinned) {
+    if (axis.totalSize > view.width && pinnedSide === undefined) {
         // the rendered columns it reaches into, or the active column it is rendered for (the
         // only column rendered outside them)
         const rendered = view.renderedColumns;
@@ -307,11 +314,18 @@ export function cellSpan<TRow, TNode>(
     return view.rowSpans?.get(rowIndex)?.spans.get(columnIndex) ?? 1;
 }
 
+/** No span: a header cell's ARIA for one column and one row (one object, not one per cell). */
+const NO_SPANS: {
+    readonly "aria-colspan"?: number;
+    readonly "aria-rowspan"?: number;
+} = Object.freeze({});
+
 /** A header cell's `aria-colspan` and `aria-rowspan`, each only when it spans more than one. */
 export function ariaHeaderCellSpans(cell: {
     readonly columnSpan: number;
     readonly rowSpan: number;
 }): { readonly "aria-colspan"?: number; readonly "aria-rowspan"?: number } {
+    if (cell.columnSpan <= 1 && cell.rowSpan <= 1) return NO_SPANS;
     return {
         ...(cell.columnSpan > 1 ? { "aria-colspan": cell.columnSpan } : {}),
         ...(cell.rowSpan > 1 ? { "aria-rowspan": cell.rowSpan } : {}),
@@ -426,27 +440,51 @@ export function gridRole<TRow, TNode>(
     return view.source.getRowMeta ? "treegrid" : "grid";
 }
 
-/** The grid's `aria-rowcount`: the header rows, every body row and the summary rows. */
+/**
+ * The rows the body counts for in ARIA: its rows, or while it has none the empty state's row
+ * while one is mounted (Epic #89, E5.2: `Empty`'s, at the body's first line; `emptyShown`).
+ */
+function bodyLines<TRow, TNode>(view: GridView<TRow, TNode>): number {
+    if (view.rowCount > 0) return view.rowCount;
+    return view.emptyShown ? 1 : 0;
+}
+
+/**
+ * The grid's `aria-rowcount`: the header rows, every body row (the empty state's row while there
+ * is none and it is mounted) and the summary rows.
+ */
 export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
     const { top, bottom } = view.summaryRows;
-    return view.rowCount + view.headerRowCount + top + bottom;
+    return bodyLines(view) + view.headerRowCount + top + bottom;
 }
 
 /**
  * A row's `aria-rowindex`: 1-based, top to bottom (`rowLine`): the header rows first (they are
- * -depth … -1), then the top summary rows, the body rows and the bottom summary rows (E2.1).
+ * -depth … -1), then the top summary rows, the body rows (the empty state's row while there is
+ * none) and the bottom summary rows (E2.1).
  */
 export function ariaRowIndex<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
 ): number {
     const { top } = view.summaryRows;
+    // the rows after the body's: past the empty state's row while there is no other
+    const past =
+        rowIndex >= view.rowCount ? bodyLines(view) - view.rowCount : 0;
     return (
         rowLine(rowIndex, view.header.depth, top) +
         view.headerRowCount +
         top +
-        1
+        1 +
+        past
     );
+}
+
+/** The empty state's row's `aria-rowindex` (Epic #89, E5.2): the body's first line. */
+export function ariaEmptyRowIndex<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): number {
+    return view.headerRowCount + view.summaryRows.top + 1;
 }
 
 /**
@@ -506,4 +544,32 @@ export function headerCellSort<TRow, TNode>(
         priority: sorted ? index + 1 : undefined,
         ariaSort: first === sorted ? sorted?.direction : undefined,
     };
+}
+
+/** An item of an axis and how far into it: where a view is kept while the axis changes. */
+export interface AxisAnchor {
+    readonly index: number;
+    readonly within: number;
+}
+
+/**
+ * The item at an axis's `offset` (the view's start, `virtual`), and how far into it that is: an
+ * anchor a view is kept on while the axis changes; none at the start.
+ */
+export function anchorOf(
+    axis: Axis,
+    virtual: number,
+    offset = virtual,
+): AxisAnchor | null {
+    if (axis.count === 0 || virtual <= 0) return null;
+    const index = axis.indexAt(offset);
+    return { index, within: offset - axis.offsetOf(index) };
+}
+
+/** Where an anchor is on an axis that changed: its item's offset, as far into it as it fits. */
+export function anchoredOffset(axis: Axis, anchor: AxisAnchor): number {
+    return (
+        axis.offsetOf(anchor.index) +
+        Math.min(anchor.within, axis.sizeOf(anchor.index))
+    );
 }

@@ -1,4 +1,10 @@
-import { act } from "@testing-library/react";
+import {
+    act,
+    fireEvent,
+    type RenderResult,
+    render,
+} from "@testing-library/react";
+import { Profiler, type ReactElement } from "react";
 import { afterAll, beforeAll } from "vitest";
 
 // What the React tests share: a grid root's size (jsdom lays nothing out), the parts by their
@@ -24,6 +30,44 @@ export function stubViewportSize(width: number, height: number) {
         delete (HTMLElement.prototype as { clientHeight?: number })
             .clientHeight;
     });
+}
+
+/**
+ * Renders `ui` counting React's commits (a `Profiler` around it, D9): `commits()` is how many
+ * there were since the render or the last `resetCommits()`.
+ */
+export function renderCounting(ui: ReactElement): RenderResult & {
+    commits: () => number;
+    resetCommits: () => void;
+} {
+    let commits = 0;
+    const result = render(
+        <Profiler
+            id="counted"
+            onRender={() => {
+                commits += 1;
+            }}
+        >
+            {ui}
+        </Profiler>,
+    );
+    return {
+        ...result,
+        commits: () => commits,
+        resetCommits: () => {
+            commits = 0;
+        },
+    };
+}
+
+/** Scrolls a grid's root to `top` and `left` (the ones given) and fires its scroll. */
+export function scrollRoot(
+    element: HTMLElement,
+    { top, left }: { top?: number; left?: number },
+) {
+    if (top !== undefined) element.scrollTop = top;
+    if (left !== undefined) element.scrollLeft = left;
+    fireEvent.scroll(element);
 }
 
 /** DOM changes reach the engine's observer as a microtask: let it run. */

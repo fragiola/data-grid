@@ -2,7 +2,7 @@ import type { Column, RowKey, RowKeyGetter, SortColumn } from "../model/types";
 import { keySet } from "../utils";
 import { entryKeyOf, type RowEntry } from "./filter";
 import type { ShownRow } from "./group";
-import { sortEntries } from "./sort";
+import { sortedByEntry } from "./sort";
 
 // Tree data in memory (Epic #87, E3.3): rows with rows of their own under them (`getSubRows`),
 // flattened as the grid shows them, the same shape as grouped rows (`GroupedRows`). A parent is a
@@ -69,16 +69,8 @@ export function keptTree<TRow, TNode>(
             );
         }
         if (sortColumns.length === 0 || kept.length < 2) return kept;
-        // siblings sorted among themselves: the sort hands the same entries back, in order
-        const nodeOf = new Map(kept.map((node) => [node.entry, node]));
-        return sortEntries(
-            kept.map((node) => node.entry),
-            sortColumns,
-            columns,
-        ).flatMap((entry) => {
-            const node = nodeOf.get(entry);
-            return node ? [node] : [];
-        });
+        // siblings sorted among themselves
+        return sortedByEntry(kept, (node) => node.entry, sortColumns, columns);
     };
     return keep(roots);
 }

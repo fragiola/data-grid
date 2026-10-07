@@ -6,7 +6,7 @@
 
 import { entryByKey, isColumnGroup } from "../header/header";
 import { sameList } from "../utils";
-import { fail } from "./result";
+import { fail, ok } from "./result";
 import type {
     Column,
     ColumnOrGroup,
@@ -34,7 +34,7 @@ export function sortableColumn<TRow, TNode>(
     if (column.sortable !== true) {
         return fail("refused", `column "${column.key}" is not sortable`);
     }
-    return { ok: true, value: column };
+    return ok(column);
 }
 
 /**

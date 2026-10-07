@@ -1,4 +1,4 @@
-import type { Axis } from "../axis/axis";
+import { type Axis, clampedIndex, cleanCount } from "../axis/axis";
 import type { RowKey } from "../model/types";
 import { lowerBound } from "../utils";
 
@@ -303,16 +303,12 @@ export class MeasuredHeights {
     }
 }
 
-function cleanCount(count: number): number {
-    return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
-}
-
 /**
  * Items of `estimate` pixels but the measured ones (a version of the heights, which never
  * changes): an item's offset is its index times the estimate, plus what the measured items before
  * it add over theirs, found in O(log k).
  */
-export class MeasuredAxis implements Axis {
+class MeasuredAxis implements Axis {
     readonly fixed = false;
     readonly count: number;
     readonly totalSize: number;
@@ -341,10 +337,7 @@ export class MeasuredAxis implements Axis {
     }
 
     offsetOf(index: number): number {
-        const item = Number.isNaN(index)
-            ? 0
-            : Math.min(Math.max(Math.floor(index), 0), this.count);
-        return this.startOf(item);
+        return this.startOf(clampedIndex(index, this.count));
     }
 
     sizeOf(index: number): number {

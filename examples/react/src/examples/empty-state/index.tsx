@@ -76,39 +76,30 @@ export default function EmptyState() {
                             )}
                         </DataGrid.Rows>
                     </DataGrid.Body>
-                    <DataGrid.Empty>
-                        {/* a row and a cell: inside the grid, content sits in its structure */}
-                        {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's row, the grid owns focus */}
-                        <div role="row" className={styles.emptyRow}>
-                            {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's cell, the grid owns focus */}
-                            <div
-                                role="gridcell"
-                                className={styles.empty}
-                                data-testid="empty"
-                            >
-                                <div className={styles.illustration}>
-                                    <UsersRound aria-hidden />
-                                </div>
-                                <p className={styles.emptyTitle}>
-                                    No people yet
-                                </p>
-                                <p className={styles.emptyText}>
-                                    Add a few sample rows to see the grid fill
-                                    up, then clear them to come back here.
-                                </p>
-                                <Clickable.Button
-                                    size="sm"
-                                    onClick={() => {
-                                        setRows(SAMPLE);
-                                        // the button goes away with the empty state: keep focus in the grid
-                                        grid.current?.focus();
-                                    }}
-                                >
-                                    <Plus aria-hidden />
-                                    Add sample rows
-                                </Clickable.Button>
-                            </div>
+                    {/* the grid's cell while it has no rows: the content laid out in it */}
+                    <DataGrid.Empty
+                        className={styles.empty}
+                        data-testid="empty"
+                    >
+                        <div className={styles.illustration}>
+                            <UsersRound aria-hidden />
                         </div>
+                        <p className={styles.emptyTitle}>No people yet</p>
+                        <p className={styles.emptyText}>
+                            Add a few sample rows to see the grid fill up, then
+                            clear them to come back here.
+                        </p>
+                        <Clickable.Button
+                            size="sm"
+                            onClick={() => {
+                                setRows(SAMPLE);
+                                // the button goes away with the empty state: keep focus in the grid
+                                grid.current?.focus();
+                            }}
+                        >
+                            <Plus aria-hidden />
+                            Add sample rows
+                        </Clickable.Button>
                     </DataGrid.Empty>
                 </DataGrid.Grid>
             </DataGrid.Root>

@@ -20,7 +20,11 @@ export default defineConfig({
         baseURL: `http://localhost:${PORT}${BASE}`,
         trace: "on-first-retry",
     },
-    projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+    projects: [
+        { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+        { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+        { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    ],
     webServer: {
         command: `node scripts/generate.ts && vite build --outDir .e2e/dist --emptyOutDir && node e2e/serve.ts ${PORT}`,
         env: { EMBED_BASE: BASE },

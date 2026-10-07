@@ -65,7 +65,9 @@ While no cell is active, the grid is the tab stop; focusing it activates the fir
 Then the active cell is (`tabIndex` 0, the others -1), so Tab moves past the grid in one step.
 The controls inside cells (buttons, links, fields, a select, a box to check) are no stops of their
 own: the grid keeps them at `tabIndex` -1, the ones your cells render later included, so a grid
-full of controls is still one stop.
+full of controls is still one stop. A grid nested in another one's cell is reachable through
+that cell: its stop is in the tab order only while the outer active cell holds it
+([Nested grids](/docs/guides/nested-grids)).
 
 ## Controls in cells
 
@@ -124,7 +126,7 @@ A cell's `onKeyDown` runs before the grid's: `preventDefault` cancels the grid's
 A middleware can refuse or rewrite any move:
 
 ```ts title="no-header.ts"
-import { veto } from "@fragiola/data-grid";
+import { veto } from "@fragiola/data-grid-react";
 
 // ArrowUp from the first row stays there: the header never becomes active
 model.use((ctx, next) =>

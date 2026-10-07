@@ -208,7 +208,7 @@ describe("right to left", () => {
                     <DataGrid.Empty />
                 </DataGrid.Grid>
             </DataGrid.Root>,
-        ).container.querySelector<HTMLElement>('[data-grid-part="empty"]');
+        ).container.querySelector<HTMLElement>('[data-grid-part="empty-area"]');
         expect(empty?.style.right).toBe("0px");
         expect(empty?.style.left).toBe("");
     });

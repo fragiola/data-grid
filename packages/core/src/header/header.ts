@@ -48,7 +48,7 @@ export function isHeaderRow(
 }
 
 /** The grid's columns and its header, from the entries of `columns`. */
-export interface ColumnLayout<TRow, TNode> {
+interface ColumnLayout<TRow, TNode> {
     readonly columns: readonly Column<TRow, TNode>[];
     readonly header: HeaderLayout<TRow, TNode>;
 }
@@ -260,7 +260,7 @@ export function pinnedPart(entry: unknown): PinnedSide | undefined {
 }
 
 /** How many columns are pinned at the start: the leading ones with `pinned: "start"`. */
-export function pinnedColumnCount<TRow, TNode>(
+function pinnedColumnCount<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
 ): number {
     let count = 0;
@@ -280,7 +280,7 @@ export function pinnedEndFrom(
 }
 
 /** How many columns are pinned at the end: the trailing ones with `pinned: "end"`. */
-export function pinnedEndColumnCount<TRow, TNode>(
+function pinnedEndColumnCount<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
 ): number {
     let count = 0;

@@ -38,7 +38,7 @@ export interface Axis {
 }
 
 /** A size added after an item's own (an expanded row's detail). */
-export interface AxisExtra {
+interface AxisExtra {
     readonly index: number;
     readonly size: number;
 }
@@ -47,8 +47,16 @@ function clean(size: number): number {
     return Number.isFinite(size) && size > 0 ? size : 0;
 }
 
-function cleanCount(count: number): number {
+/** A count of items: a whole number, 0 for anything that is not one above 0. */
+export function cleanCount(count: number): number {
     return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+}
+
+/** An index kept from 0 to `count` (0 for NaN), whole: what an axis's `offsetOf` reads. */
+export function clampedIndex(index: number, count: number): number {
+    return Number.isNaN(index)
+        ? 0
+        : Math.min(Math.max(Math.floor(index), 0), count);
 }
 
 /** Creates an axis of `count` items of `size` pixels each, or `size(index)` pixels for item `index`. */
@@ -146,14 +154,8 @@ class VariableAxis implements Axis {
         return this.offsets[this.count] ?? 0;
     }
 
-    private clampIndex(index: number): number {
-        return Number.isNaN(index)
-            ? 0
-            : Math.min(Math.max(Math.floor(index), 0), this.count);
-    }
-
     offsetOf(index: number): number {
-        return this.offsets[this.clampIndex(index)] ?? 0;
+        return this.offsets[clampedIndex(index, this.count)] ?? 0;
     }
 
     sizeOf(index: number): number {
@@ -208,7 +210,7 @@ class VariableAxis implements Axis {
             this.count,
             this.size,
             this.offsets.subarray(0, this.count + 1),
-            this.clampIndex(index),
+            clampedIndex(index, this.count),
         );
     }
 }
@@ -290,9 +292,7 @@ class ExtendedAxis implements Axis {
     }
 
     offsetOf(index: number): number {
-        const item = Number.isNaN(index)
-            ? 0
-            : Math.min(Math.max(Math.floor(index), 0), this.count);
+        const item = clampedIndex(index, this.count);
         return (
             this.base.offsetOf(item) +
             (this.before[this.extrasBefore(item)] ?? 0)

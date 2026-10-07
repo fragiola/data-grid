@@ -1,7 +1,7 @@
 import { toTsv } from "../clipboard";
 import { clamp, isIndex } from "../utils";
 import type { Range } from "../viewport/window";
-import { cellValue, dataRowAt, groupCellValue, rowMetaAt } from "./source";
+import { dataRowAt, rowCellValue, rowMetaAt } from "./source";
 import {
     cellCovering,
     hasColumnSpans,
@@ -66,7 +66,7 @@ export function isBodyCell(
 }
 
 /** A range's rows and its columns, ends excluded (`Range`'s). */
-export function rangeBounds(range: CellRange): {
+function rangeBounds(range: CellRange): {
     readonly rows: Range;
     readonly columns: Range;
 } {
@@ -218,9 +218,8 @@ function copyText<TRow, TNode>(
     row: TRow | undefined,
 ): string {
     if (!column) return "";
-    if (group) return valueText(groupCellValue(group, column));
-    if (row === undefined) return "";
-    const value = cellValue(column, row, rowIndex);
+    const value = rowCellValue(column, rowIndex, group, row);
+    if (group || row === undefined) return valueText(value);
     return column.getCopyText
         ? column.getCopyText({ row, rowIndex, column, columnIndex, value })
         : valueText(value);

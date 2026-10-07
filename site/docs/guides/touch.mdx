@@ -1,0 +1,64 @@
+---
+title: Touch screens
+description: Resize, reorder and fill by touch, keep a long press from selecting text, and leave vertical swipes to scroll the grid.
+---
+
+The grid reads pointer events, so a finger works where a mouse does: the column resizers, the
+header cells that reorder, the rows' drag handles and the fill handle all drag by touch, and a tap
+on a cell makes it the active cell. What the browser does with a finger before the page sees it
+is decided by CSS, and that CSS is yours.
+
+## Handles: `touch-action: none`
+
+A browser pans the page when a finger moves, and tells the page the pointer was cancelled. An
+element you drag must take that move from the browser with `touch-action: none`. Every handle the
+grid drags is your element, so the property goes in your styles:
+
+```css title="grid.css"
+[data-grid-part="column-resizer"],
+[data-grid-part="row-drag-handle"],
+[data-grid-part="fill-handle"] {
+    touch-action: none;
+}
+```
+
+A header cell that reorders is larger than a handle and sits over the grid you scroll. Keep the
+vertical pans for the browser and the sideways moves for the drag:
+
+```css title="grid.css"
+[data-grid-part="header-cell"][data-reorderable] {
+    touch-action: pan-y;
+}
+```
+
+A finger moved sideways then drags the column. One moved up or down scrolls the grid, and the
+header no longer scrolls it sideways (the body still does).
+
+## Swipes scroll the body
+
+The grid sets no `touch-action` of its own. A swipe on the body scrolls it as the browser does on
+any scroll container: a press on a body cell by touch never starts a range drag, even with
+`cellSelection`, so dragging across cells with a finger scrolls. A tap selects nothing beyond the
+active cell; the keys, a mouse or a pen select ranges.
+
+## A long press
+
+While a finger holds one of the grid's handles or a reorderable header cell, the grid keeps the
+long press to itself: it prevents the text selection and the context menu the browser would open.
+The press can then still turn into a drag. Released, the page's own behaviour comes back.
+
+Elsewhere a long press is the browser's: on a body cell it selects the cell's text, which is what
+lets someone copy it on a phone. To turn that off, or the callout iOS shows over a link or an
+image, use your CSS:
+
+```css title="grid.css"
+[data-grid-part="cell"] {
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+```
+
+## Not built in
+
+Pinch to zoom is the browser's. Touch gestures of the grid's own (a swipe to delete a row, a
+long press to open a menu) are yours, through the parts' props.

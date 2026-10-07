@@ -36,8 +36,8 @@ export const root = cn(
 export const grid =
     "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
 
-/** opaque and above the rows: they scroll under it */
-export const header = "z-10 bg-palette-base";
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
 
 export const headerRow =
     "bg-(--dg-header-bg) text-palette-accent border-b-(length:--dg-gridline) border-(--dg-gridline-color)";

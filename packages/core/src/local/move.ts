@@ -1,3 +1,5 @@
+import { isIndex } from "../utils";
+
 // Moving a row in memory (Epic #86, E2.3): the grid tells a move (`row-move`, a root's
 // `onRowMove`) and never orders the rows itself; the app applies it to its own rows.
 
@@ -13,12 +15,8 @@ export function moveRow<TRow>(
 ): readonly TRow[] {
     if (
         fromIndex === toIndex ||
-        !Number.isInteger(fromIndex) ||
-        !Number.isInteger(toIndex) ||
-        fromIndex < 0 ||
-        toIndex < 0 ||
-        fromIndex >= rows.length ||
-        toIndex >= rows.length
+        !isIndex(fromIndex, rows.length) ||
+        !isIndex(toIndex, rows.length)
     ) {
         return rows;
     }

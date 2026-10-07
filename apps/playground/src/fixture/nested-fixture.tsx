@@ -4,7 +4,12 @@ import { createRoot } from "react-dom/client";
 
 // The unstyled nested grid Playwright drives (#17): an outer grid of orders whose "Items" cells
 // each hold an inner grid. Every cell says which grid it belongs to (`data-grid-name`), so a spec
-// can tell an outer cell from an inner one at the same indexes.
+// can tell an outer cell from an inner one at the same indexes. An inner grid is in the tab order
+// only while the outer cell holding it is active (Epic #89, E5.2); `?ownTabStop=1` gives each one
+// a tab stop of its own.
+
+const ownTabStop =
+    new URLSearchParams(location.search).get("ownTabStop") === "1";
 
 interface Item {
     name: string;
@@ -39,9 +44,10 @@ function Items({ order }: { order: Order }) {
             rowHeight={24}
             headerRowHeight={24}
             style={{ width: 220, height: 104 }}
+            ownTabStop={ownTabStop}
         >
             <DataGrid.Grid aria-label={`Items of order ${order.id}`}>
-                <DataGrid.Header style={{ background: "white", zIndex: 1 }} />
+                <DataGrid.Header style={{ background: "white" }} />
                 <DataGrid.Body>
                     <DataGrid.Rows<Item>>
                         {(row) => (
@@ -94,9 +100,7 @@ function Fixture() {
                 style={{ width: 700, height: 520 }}
             >
                 <DataGrid.Grid aria-label="Orders">
-                    <DataGrid.Header
-                        style={{ background: "white", zIndex: 1 }}
-                    />
+                    <DataGrid.Header style={{ background: "white" }} />
                     <DataGrid.Body>
                         <DataGrid.Rows<Order>>
                             {(row) => (

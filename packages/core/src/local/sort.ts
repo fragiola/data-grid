@@ -65,3 +65,26 @@ export function sortEntries<TRow, TNode>(
     }
     return sorted;
 }
+
+/**
+ * Items (a group's parts, a tree's siblings) sorted by their entries (`entryOf`, `undefined` for
+ * none: left out) as `sortEntries` sorts rows: the sort hands the same entries back, in order.
+ */
+export function sortedByEntry<TRow, TNode, T>(
+    items: readonly T[],
+    entryOf: (item: T) => RowEntry<TRow> | undefined,
+    sortColumns: readonly SortColumn[],
+    columns: readonly Column<TRow, TNode>[],
+): T[] {
+    const itemOf = new Map<RowEntry<TRow>, T>();
+    for (const item of items) {
+        const entry = entryOf(item);
+        if (entry) itemOf.set(entry, item);
+    }
+    return sortEntries([...itemOf.keys()], sortColumns, columns).flatMap(
+        (entry) => {
+            const item = itemOf.get(entry);
+            return item ? [item] : [];
+        },
+    );
+}

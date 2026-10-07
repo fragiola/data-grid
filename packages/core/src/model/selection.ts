@@ -1,5 +1,5 @@
 import { keySet, toggledKey } from "../utils";
-import { fail } from "./result";
+import { fail, ok } from "./result";
 import {
     dataRowAt,
     groupExpanded,
@@ -191,6 +191,17 @@ function groupSelected(group: GroupRow, keys: readonly RowKey[]): boolean {
     return selected;
 }
 
+/** `keys` with `added` after them, each key once. */
+function withKeys<K>(keys: readonly K[], added: readonly K[]): K[] {
+    return [...new Set([...keys, ...added])];
+}
+
+/** `keys` without the ones in `removed`. */
+function withoutKeys<K>(keys: readonly K[], removed: readonly K[]): K[] {
+    const gone = new Set(removed);
+    return keys.filter((key) => !gone.has(key));
+}
+
 /**
  * A group row toggled (Epic #87): its rows' keys cleared when every one is selected, else the
  * missing ones added after the others.
@@ -200,11 +211,9 @@ export function groupToggledKeys<TRow>(
     group: GroupRow,
 ): readonly RowKey[] {
     const rowKeys = group.rowKeys ?? [];
-    if (groupSelected(group, state.selectedRowKeys)) {
-        const removed = new Set(rowKeys);
-        return state.selectedRowKeys.filter((key) => !removed.has(key));
-    }
-    return [...new Set([...state.selectedRowKeys, ...rowKeys])];
+    return groupSelected(group, state.selectedRowKeys)
+        ? withoutKeys(state.selectedRowKeys, rowKeys)
+        : withKeys(state.selectedRowKeys, rowKeys);
 }
 
 /** The refusal of a command that needs a row not loaded: its key is unknown. */
@@ -276,19 +285,13 @@ export function extendedKeys<TRow>(
     const selected = keySet(state.selectedRowKeys);
     if (select) {
         const added = range.filter((key) => !selected.has(key));
-        return {
-            ok: true,
-            value:
-                added.length === 0
-                    ? state.selectedRowKeys
-                    : [...new Set([...state.selectedRowKeys, ...added])],
-        };
+        return ok(
+            added.length === 0
+                ? state.selectedRowKeys
+                : withKeys(state.selectedRowKeys, added),
+        );
     }
-    const removed = new Set(range);
-    return {
-        ok: true,
-        value: state.selectedRowKeys.filter((key) => !removed.has(key)),
-    };
+    return ok(withoutKeys(state.selectedRowKeys, range));
 }
 
 /**
@@ -306,8 +309,5 @@ export function allKeys<TRow>(
         for (const key of found) keys.add(key);
         found.length = 0;
     }
-    return {
-        ok: true,
-        value: keys.size === before ? state.selectedRowKeys : [...keys],
-    };
+    return ok(keys.size === before ? state.selectedRowKeys : [...keys]);
 }

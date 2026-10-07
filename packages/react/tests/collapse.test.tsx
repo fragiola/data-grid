@@ -1,5 +1,5 @@
-import { act, fireEvent, render } from "@testing-library/react";
-import { Profiler, useState } from "react";
+import { fireEvent, render } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
     type Column,
@@ -11,7 +11,14 @@ import {
     useGroupLabel,
     useHeaderCell,
 } from "../src";
-import { cellAt, root, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    renderCounting,
+    root,
+    scrollRoot,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Collapsible groups and sticky labels (Epic #85, E1.3): the collapsed groups controlled or not
 // on `Root`, toggled by the app's own control in the group's header cell; `data-collapsible`,
@@ -281,49 +288,31 @@ describe("a group's label", () => {
     });
 
     it("stays at the view's start through a scroll, React rendering nothing", () => {
-        let commits = 0;
-        const { container } = render(
-            <Profiler id="grid" onRender={() => commits++}>
-                <Grid />
-            </Profiler>,
-        );
+        const { container, commits, resetCommits } = renderCounting(<Grid />);
         const viewport = root(container);
-        act(() => {
-            viewport.scrollLeft = 300;
-            fireEvent.scroll(viewport);
-        });
+        scrollRoot(viewport, { left: 300 });
         const at = label(container).style.left;
-        commits = 0;
+        resetCommits();
         // inside the overscan: no render, and the label's inset holds (sticky keeps it in place)
-        for (const left of [310, 330, 350]) {
-            viewport.scrollLeft = left;
-            fireEvent.scroll(viewport);
-        }
-        expect(commits).toBe(0);
+        for (const left of [310, 330, 350]) scrollRoot(viewport, { left });
+        expect(commits()).toBe(0);
         expect(label(container).style.left).toBe(at);
     });
 
     it("follows every frame under scaled column scroll, React rendering nothing", () => {
-        let commits = 0;
-        const { container } = render(
-            <Profiler id="grid" onRender={() => commits++}>
-                <Grid maxScrollSize={1_200} />
-            </Profiler>,
+        const { container, commits, resetCommits } = renderCounting(
+            <Grid maxScrollSize={1_200} />,
         );
         const viewport = root(container);
         // 2,800px in 1,200: "g" (100–700) scrolled partly out
-        act(() => {
-            viewport.scrollLeft = 100;
-            fireEvent.scroll(viewport);
-        });
-        commits = 0;
+        scrollRoot(viewport, { left: 100 });
+        resetCommits();
         const insets = new Set<string>();
         for (const left of [101, 102, 103]) {
-            viewport.scrollLeft = left;
-            fireEvent.scroll(viewport);
+            scrollRoot(viewport, { left });
             insets.add(label(container).style.left);
         }
-        expect(commits).toBe(0);
+        expect(commits()).toBe(0);
         expect(insets.size).toBe(3);
     });
 });

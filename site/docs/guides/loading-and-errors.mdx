@@ -1,0 +1,59 @@
+---
+title: Loading and errors
+description: Show skeleton rows while the first load runs, an error with a retry in the grid's empty state, and a refetch that keeps the rows on screen.
+---
+
+The grid knows two things about loading: a row it has no data for yet (`getRow` answers
+`undefined`), and a grid with no rows. Everything else, the requests, their failures, a retry and
+the words on screen, is your app's. This guide puts them together.
+
+<Example id="loading-states" />
+
+## The first load: skeleton rows
+
+Before the first answer, give the grid a count of rows to show and a `getRow` that has none of
+them. Each one renders, in its place, as a row not loaded yet: `data-loading` on the row and its
+cells, and `cell.loaded` false in a cell's children, where a skeleton goes.
+
+```tsx title="people.tsx"
+const rowCount = rows ? rows.length : error ? 0 : 12;
+const getRow = useMemo(() => (index: number) => rows?.[index], [rows]);
+
+<DataGrid.Root columns={columns} rowCount={rowCount} getRow={getRow}>
+    <DataGrid.Grid aria-label="People" aria-busy={loading || undefined}>
+        …
+        <DataGrid.Cell cell={cell}>
+            {cell.loaded ? undefined : <span className="skeleton" />}
+        </DataGrid.Cell>
+        …
+    </DataGrid.Grid>
+</DataGrid.Root>
+```
+
+A new `getRow` when the rows arrive renders them. Mark the grid `aria-busy` while a request runs,
+so assistive technology waits for it.
+
+## An error: the empty state
+
+A first load that fails leaves nothing to show: zero rows, and the grid's
+[empty state](/docs/guides/empty-state) holds the error and a retry. `Empty` is a cell of the grid,
+so its button is a real control in the grid's structure, reachable with Tab.
+
+```tsx title="people.tsx"
+<DataGrid.Empty className="flex flex-col items-center justify-center gap-3">
+    <p>The people could not be loaded</p>
+    <button type="button" onClick={() => load()}>Retry</button>
+</DataGrid.Empty>
+```
+
+## A refetch keeps the rows
+
+A refetch with rows on screen keeps them (the same `rowCount` and `getRow`) while the request
+runs: dim the body if you like, and keep the grid `aria-busy`. A refetch that fails leaves the
+rows too: say so outside the grid (a banner with `role="alert"` and a retry), not in it.
+
+## What stays yours
+
+The requests, their order (drop an answer to a request you have moved on from), caching,
+retries and their timing, and every word on screen. For rows that load as they scroll into view,
+see [Loading data](/docs/concepts/data-loading).

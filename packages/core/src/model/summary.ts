@@ -1,3 +1,4 @@
+import { isIndex } from "../utils";
 import type {
     SummaryPosition,
     SummaryRowCounts,
@@ -23,18 +24,17 @@ import type {
 export const NO_SUMMARY_ROWS: SummaryRowCounts = { top: 0, bottom: 0 };
 
 /** What a grid's row indexes follow: its body rows, its header's depth and its summary rows. */
-export interface RowBands {
+interface RowBands {
     readonly rowCount: number;
     readonly header: { readonly depth: number };
     readonly summaryRows: SummaryRowCounts;
 }
 
-/** Where a grid's summary rows start: the first top one's row index, and the first bottom one's. */
-function firstRows(grid: RowBands): Record<SummaryPosition, number> {
-    return {
-        top: 0 - grid.header.depth - grid.summaryRows.top,
-        bottom: grid.rowCount,
-    };
+/** Where a position's summary rows start: the first one's row index (see the scheme above). */
+function firstRow(grid: RowBands, position: SummaryPosition): number {
+    return position === "top"
+        ? 0 - grid.header.depth - grid.summaryRows.top
+        : grid.rowCount;
 }
 
 /** The row index of a summary row (see the scheme above). */
@@ -43,7 +43,7 @@ export function summaryRowIndex(
     position: SummaryPosition,
     summaryIndex: number,
 ): number {
-    return firstRows(grid)[position] + summaryIndex;
+    return firstRow(grid, position) + summaryIndex;
 }
 
 /** The summary row at a row index, or `undefined` for a header or a body row. */
@@ -51,9 +51,8 @@ export function summaryRowAt(
     grid: RowBands,
     rowIndex: number,
 ): SummaryRowView | undefined {
-    const first = firstRows(grid);
     const position: SummaryPosition = rowIndex < 0 ? "top" : "bottom";
-    const summaryIndex = rowIndex - first[position];
+    const summaryIndex = rowIndex - firstRow(grid, position);
     return summaryIndex >= 0 && summaryIndex < grid.summaryRows[position]
         ? { rowIndex, position, summaryIndex }
         : undefined;
@@ -64,7 +63,7 @@ export function summaryRowsOf(
     grid: RowBands,
     position: SummaryPosition,
 ): SummaryRowView[] {
-    const first = firstRows(grid)[position];
+    const first = firstRow(grid, position);
     return Array.from({ length: grid.summaryRows[position] }, (_, index) => ({
         rowIndex: first + index,
         position,
@@ -74,15 +73,19 @@ export function summaryRowsOf(
 
 /** Every summary row's index, the top ones first. */
 export function summaryRowIndexes(grid: RowBands): number[] {
-    return [
-        ...summaryRowsOf(grid, "top"),
-        ...summaryRowsOf(grid, "bottom"),
-    ].map((row) => row.rowIndex);
+    const indexes: number[] = [];
+    for (const position of ["top", "bottom"] as const) {
+        const first = firstRow(grid, position);
+        for (let index = 0; index < grid.summaryRows[position]; index++) {
+            indexes.push(first + index);
+        }
+    }
+    return indexes;
 }
 
 /** Whether a count is one: a whole number, 0 or more. */
 function isCount(value: unknown): value is number {
-    return typeof value === "number" && Number.isInteger(value) && value >= 0;
+    return typeof value === "number" && isIndex(value);
 }
 
 /**
