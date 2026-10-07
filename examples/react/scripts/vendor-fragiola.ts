@@ -54,6 +54,7 @@ const DEFAULT_ITEMS = [
     "badge",
     "checkbox",
     "clickable",
+    "context-menu",
     "field",
     "input",
     "select",

@@ -5,6 +5,7 @@ import {
     type Column,
     DataGrid,
     useDataGrid,
+    useGridView,
 } from "@fragiola/data-grid-react";
 import { type KeyboardEvent, useState } from "react";
 import { type Person, people } from "../_kit/data";
@@ -19,42 +20,60 @@ const columns: Column<Person>[] = [
     { key: "team", name: "Team", width: 120 },
 ];
 
-/** What Tab does in the grid. */
-type Mode = "leave" | "change-row" | "loop-over-row";
+/** What Tab, and the arrows at a row's ends, do in the grid. */
+type Mode = "leave" | "change-row" | "loop-over-row" | "loop-over-column";
 
 const MODES: { mode: Mode; label: string }[] = [
     { mode: "leave", label: "Tab leaves the grid" },
     {
         mode: "change-row",
-        label: "Tab moves across the row, then to the next row",
+        label: "Tab and the arrows go on to the next row",
     },
-    { mode: "loop-over-row", label: "Tab loops over the row" },
+    { mode: "loop-over-row", label: "Tab and the arrows loop over the row" },
+    { mode: "loop-over-column", label: "Tab moves down the column" },
 ];
 
-/** Where Tab (or Shift+Tab) goes from `at`; `null` lets it leave the grid. */
-function tabTarget(
+/**
+ * Where a key goes from `at`: Tab (or Shift+Tab, `step` -1) anywhere, an arrow only past a row's
+ * first or last cell (inside the row the grid moves it as usual). The header is row -1: Tab goes
+ * through it like any row. `null` leaves the key to the grid: Tab leaves it, an arrow at an end
+ * stays.
+ */
+function target(
     at: CellPosition,
-    back: boolean,
+    step: 1 | -1,
+    tab: boolean,
     mode: Mode,
     rowCount: number,
     columnCount: number,
 ): CellPosition | null {
-    if (mode === "leave" || at.rowIndex < 0) return null;
-    const step = back ? -1 : 1;
+    if (mode === "leave") return null;
+    if (mode === "loop-over-column") {
+        if (!tab) return null;
+        // past the last row, the header; before the header, the last row
+        const rowIndex = at.rowIndex + step;
+        return {
+            rowIndex:
+                rowIndex >= rowCount
+                    ? -1
+                    : rowIndex < -1
+                      ? rowCount - 1
+                      : rowIndex,
+            columnIndex: at.columnIndex,
+        };
+    }
     const columnIndex = at.columnIndex + step;
     if (columnIndex >= 0 && columnIndex < columnCount) {
-        return { rowIndex: at.rowIndex, columnIndex };
+        return tab ? { rowIndex: at.rowIndex, columnIndex } : null;
     }
+    const wrapped = step === 1 ? 0 : columnCount - 1;
     if (mode === "loop-over-row") {
-        return {
-            rowIndex: at.rowIndex,
-            columnIndex: back ? columnCount - 1 : 0,
-        };
+        return { rowIndex: at.rowIndex, columnIndex: wrapped };
     }
     const rowIndex = at.rowIndex + step;
     // past the grid's first or last cell, Tab leaves it as usual
-    if (rowIndex < 0 || rowIndex >= rowCount) return null;
-    return { rowIndex, columnIndex: back ? columnCount - 1 : 0 };
+    if (rowIndex < -1 || rowIndex >= rowCount) return null;
+    return { rowIndex, columnIndex: wrapped };
 }
 
 export default function CustomNavigation() {
@@ -62,12 +81,12 @@ export default function CustomNavigation() {
     return (
         <div className={styles.frame}>
             <fieldset className={styles.modes}>
-                <legend className={styles.panel}>Tab key</legend>
+                <legend className={styles.panel}>Cell navigation</legend>
                 {MODES.map((option) => (
                     <label key={option.mode} className={styles.mode}>
                         <input
                             type="radio"
-                            name="tab-mode"
+                            name="navigation-mode"
                             value={option.mode}
                             checked={mode === option.mode}
                             onChange={() => setMode(option.mode)}
@@ -84,70 +103,77 @@ export default function CustomNavigation() {
                 defaultActivePosition={{ rowIndex: 0, columnIndex: 0 }}
                 className={styles.root}
             >
-                <DataGrid.Grid aria-label="People" className={styles.grid}>
-                    <DataGrid.Header className={styles.header}>
-                        <DataGrid.HeaderRow className={styles.headerRow}>
-                            <DataGrid.HeaderCells<Person>>
-                                {(cell) => (
-                                    <DataGrid.HeaderCell
-                                        cell={cell}
-                                        className={styles.headerCell}
-                                    />
-                                )}
-                            </DataGrid.HeaderCells>
-                        </DataGrid.HeaderRow>
-                    </DataGrid.Header>
-                    <Body mode={mode} />
-                </DataGrid.Grid>
+                <Grid mode={mode} />
             </DataGrid.Root>
         </div>
     );
 }
 
-/** The body, whose cells handle Tab before the grid sees it. */
-function Body({ mode }: { mode: Mode }) {
+/** The grid, whose cells (header cells too) handle the keys before the grid sees them. */
+function Grid({ mode }: { mode: Mode }) {
     const { model } = useDataGrid<Person>();
+    const { direction } = useGridView();
     const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const tab = event.key === "Tab";
+        // the arrow toward the row's end: → left to right, ← right to left
+        const forward = direction === "rtl" ? "ArrowLeft" : "ArrowRight";
+        const back = direction === "rtl" ? "ArrowRight" : "ArrowLeft";
         if (
-            event.key !== "Tab" ||
-            event.altKey ||
-            event.ctrlKey ||
-            event.metaKey
+            !tab &&
+            (event.shiftKey || (event.key !== forward && event.key !== back))
         ) {
             return;
         }
         const active = model.get("active-position");
         if (!active) return;
-        const target = tabTarget(
+        const step = (tab ? event.shiftKey : event.key === back) ? -1 : 1;
+        const next = target(
             active,
-            event.shiftKey,
+            step,
+            tab,
             mode,
             model.get("row-count"),
             model.get("column-count"),
         );
-        if (!target) return;
+        if (!next) return;
         // the key is ours now: the browser does not move focus, and the grid scrolls the
         // new active cell into view and focuses it
         event.preventDefault();
-        model.run("active-position.set", target);
+        model.run("active-position.set", next);
     };
     return (
-        <DataGrid.Body>
-            <DataGrid.Rows<Person>>
-                {(row) => (
-                    <DataGrid.Row row={row} className={styles.row}>
-                        <DataGrid.Cells<Person>>
-                            {(cell) => (
-                                <DataGrid.Cell
-                                    cell={cell}
-                                    className={styles.cell}
-                                    onKeyDown={onKeyDown}
-                                />
-                            )}
-                        </DataGrid.Cells>
-                    </DataGrid.Row>
-                )}
-            </DataGrid.Rows>
-        </DataGrid.Body>
+        <DataGrid.Grid aria-label="People" className={styles.grid}>
+            <DataGrid.Header className={styles.header}>
+                <DataGrid.HeaderRow className={styles.headerRow}>
+                    <DataGrid.HeaderCells<Person>>
+                        {(cell) => (
+                            <DataGrid.HeaderCell
+                                cell={cell}
+                                className={styles.headerCell}
+                                onKeyDown={onKeyDown}
+                            />
+                        )}
+                    </DataGrid.HeaderCells>
+                </DataGrid.HeaderRow>
+            </DataGrid.Header>
+            <DataGrid.Body>
+                <DataGrid.Rows<Person>>
+                    {(row) => (
+                        <DataGrid.Row row={row} className={styles.row}>
+                            <DataGrid.Cells<Person>>
+                                {(cell) => (
+                                    <DataGrid.Cell
+                                        cell={cell}
+                                        className={styles.cell}
+                                        onKeyDown={onKeyDown}
+                                    />
+                                )}
+                            </DataGrid.Cells>
+                        </DataGrid.Row>
+                    )}
+                </DataGrid.Rows>
+            </DataGrid.Body>
+        </DataGrid.Grid>
     );
 }
