@@ -329,6 +329,12 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
          */
         direction?: GridDirection | undefined;
         /**
+         * nested in another grid's cell, row or detail, keep a tab stop of its own, as a grid on its
+         * own does (default off: its tab stops are in the page's tab order only while the outer
+         * grid's active cell, or row, holds it, or focus is inside it)
+         */
+        ownTabStop?: boolean | undefined;
+        /**
          * a handle on this grid from outside the root (`useDataGridRef()`): its model and engine,
          * and the hooks that take it. `ref` stays the root's element.
          */
@@ -466,6 +472,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         overscan,
         maxScrollSize,
         direction,
+        ownTabStop,
         gridRef,
         children,
         ...rest
@@ -729,6 +736,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             endReachedThreshold,
             reorderableRows: onRowMove !== undefined,
             fillable: onFill !== undefined,
+            ownTabStop,
         });
         // subscribed before the viewport attaches, so the first windows are reported too
         engine.subscribe("row-window", (window) =>
@@ -971,6 +979,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             endReachedThreshold,
             reorderableRows,
             fillable,
+            ownTabStop,
         });
     }, [
         engine,
@@ -980,6 +989,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
         endReachedThreshold,
         reorderableRows,
         fillable,
+        ownTabStop,
     ]);
 
     const ref = useCallback(

@@ -514,7 +514,7 @@ const TABLE = {
     row: <tr />,
     cell: <td />,
     detail: <td />,
-    empty: <tbody />,
+    empty: <td />,
     summaryTop: <tbody />,
     summaryBottom: <tfoot />,
     summaryRow: <tr />,
@@ -542,7 +542,7 @@ function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
             <DataGrid.Grid aria-label="Items" render={tag.grid}>
                 <DataGrid.Header
                     render={tag.header}
-                    style={{ background: "white", zIndex: 1 }}
+                    style={{ background: "white" }}
                 >
                     <HeaderRow table={table} />
                 </DataGrid.Header>
@@ -670,8 +670,8 @@ const RANGE_CSS = `
 [data-range-edge~="end"] { border-inline-end: 2px solid blue; }
 `;
 
-// The empty state's content, centred in it (the part's own display is structural: a block)
-const EMPTY_ROW = { display: "block", height: "100%" } as const;
+// The empty state's content, centred in it (the part, a cell, is a block: its display is
+// structural)
 const EMPTY_CONTENT = {
     display: "grid",
     height: "100%",
@@ -892,7 +892,7 @@ function SummaryRows({
         <DataGrid.Summary
             position={position}
             render={render}
-            style={{ background: "white", zIndex: 1 }}
+            style={{ background: "white" }}
         >
             <DataGrid.SummaryRows>
                 {(row) => (
@@ -1238,7 +1238,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     <DataGrid.Grid aria-label="Fixture" render={tag.grid}>
                         <DataGrid.Header
                             render={tag.header}
-                            style={{ background: "white", zIndex: 1 }}
+                            style={{ background: "white" }}
                         >
                             {groups ? (
                                 // a header row per level
@@ -1359,19 +1359,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                             </DataGrid.Rows>
                         </DataGrid.Body>
                         <DataGrid.Empty render={tag.empty}>
-                            {table ? (
-                                <tr style={EMPTY_ROW}>
-                                    <td style={EMPTY_CONTENT}>No rows</td>
-                                </tr>
-                            ) : (
-                                // biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's row, the grid owns focus
-                                <div role="row" style={EMPTY_ROW}>
-                                    {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: a div grid's cell, the grid owns focus */}
-                                    <div role="gridcell" style={EMPTY_CONTENT}>
-                                        No rows
-                                    </div>
-                                </div>
-                            )}
+                            <div style={EMPTY_CONTENT}>No rows</div>
                         </DataGrid.Empty>
                         <SummaryRows
                             position="bottom"

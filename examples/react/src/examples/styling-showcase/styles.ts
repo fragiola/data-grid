@@ -85,7 +85,7 @@ const spreadsheet: Preset = {
     title: "Spreadsheet",
     rowHeight: 30,
     root: "palette-raised min-h-0 flex-1 border border-palette-line bg-palette-base text-palette-contrast font-mono text-xs",
-    header: "z-10 bg-palette-base",
+    header: "bg-palette-base",
     headerRow: "palette-surface bg-palette-soft border-b-2 border-palette-line",
     headerCell: (_state, column) =>
         cn(
@@ -146,7 +146,7 @@ const cards: Preset = {
     title: "Cards",
     rowHeight: 56,
     root: "palette-surface min-h-0 flex-1 rounded-[18px] bg-palette-base text-palette-contrast font-(family-name:--dg-font) text-sm",
-    header: "z-10 bg-palette-base",
+    header: "bg-palette-base",
     headerRow: "text-palette-accent/80",
     headerCell: () =>
         "flex items-center px-4 text-xs font-medium tracking-wide outline-none data-active:underline",
@@ -223,7 +223,7 @@ const neon: Preset = {
     title: "Neon",
     rowHeight: 40,
     root: "min-h-0 flex-1 rounded-[10px] border border-[oklch(0.7_0.2_200)] bg-[oklch(0.14_0.03_280)] text-[oklch(0.92_0.03_200)] shadow-[0_0_24px_oklch(0.7_0.2_200/0.35)] font-mono text-xs",
-    header: "z-10 bg-[oklch(0.14_0.03_280)]",
+    header: "bg-[oklch(0.14_0.03_280)]",
     headerRow:
         "border-b border-[oklch(0.75_0.25_330)] bg-[oklch(0.18_0.06_300)] shadow-[0_2px_12px_oklch(0.75_0.25_330/0.5)]",
     headerCell: (_state, column) =>

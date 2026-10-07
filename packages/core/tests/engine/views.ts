@@ -68,6 +68,7 @@ export function inputsOf(
         pinnedEndWidth: 0,
         rowsRevision: 0,
         interaction: null,
+        tabbable: true,
         columnResize: null,
         columnReorder: null,
         reorderableRows: false,

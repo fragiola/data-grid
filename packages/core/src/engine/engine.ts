@@ -105,6 +105,7 @@ import {
     FOCUSABLE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
+    HOSTS,
     inlineKey,
     isAltCharacter,
     isCellNode,
@@ -116,13 +117,17 @@ import {
     isPagelessControl,
     isResizer,
     KEYS,
+    keepsWheel,
     LINE_HEIGHT,
     layoutScale,
     maxContentWidths,
     movesWithArrows,
+    NESTINGS,
+    type NestingHost,
     ownerViewport,
     PAGE_KEYS,
     ROW_DRAG_HANDLE_ATTRIBUTE,
+    scrollsOverflow,
     TAB_STOP_ATTRIBUTE,
     VIEWPORTS,
 } from "./dom";
@@ -364,6 +369,21 @@ function shortcutLetter(event: KeyboardEvent): string {
         : key;
 }
 
+/**
+ * A wheel's gesture (Epic #89, E5.2): wheels this close together (ms) are one, the styles read for
+ * the first one kept for the others.
+ */
+const WHEEL_GESTURE = 300;
+
+/** What a wheel reads of an element's style: where it scrolls, keeps a wheel, is laid out. */
+interface WheelStyle {
+    readonly x: boolean;
+    readonly y: boolean;
+    readonly keepsX: boolean;
+    readonly keepsY: boolean;
+    readonly rtl: boolean;
+}
+
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
 
@@ -464,6 +484,27 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     let fillFrom: CellRange | null = fillSource();
     let drag: Drag<TRow, TNode> | null = null;
+    /**
+     * whether the grid's tab stop is in the page's tab order (`view.tabbable`, Epic #89, E5.2):
+     * nested in another grid, only while the outer grid's active cell holds it or focus is in it
+     */
+    let tabbable = true;
+    /** the grid this one is nested in (its host, found once attached), and its unsubscribe */
+    let host: NestingHost | null = null;
+    let unlistenHost: (() => void) | null = null;
+    /** the grids nested in this one, told when its active cell, or what is at it, changes */
+    const nestedListeners = new Set<() => void>();
+    /** they are to be told at the next commit (its cells' indexes rendered) */
+    let nestedStale = false;
+    const ownHost: NestingHost = {
+        holds: holdsNested,
+        listen(listener) {
+            nestedListeners.add(listener);
+            return () => {
+                nestedListeners.delete(listener);
+            };
+        },
+    };
     /** the last press the grid took (its drag, over or not): once it dragged, its click is its */
     let lastPress: Drag<TRow, TNode> | null = null;
     /** the cell whose controls have the keys, and an entry waiting for its cell (Epic #52) */
@@ -557,6 +598,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             pinnedEndWidth,
             rowsRevision,
             interaction: interaction.cell,
+            tabbable,
             columnResize,
             columnReorder,
             reorderableRows: options.reorderableRows === true,
@@ -1062,15 +1104,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Under scaling, the wheel moves the content by exactly its delta (the native scroll would not). */
     function onWheel(event: WheelEvent) {
+        const target = event.target;
         const yScaled = rowsY.mapping.scaled;
         const xScaled = columnsX.mapping.scaled;
-        // a wheel over a grid nested in a cell is that grid's (or the browser's, which chains it)
         if (
             (!yScaled && !xScaled) ||
             !viewport ||
             event.ctrlKey ||
             event.defaultPrevented ||
-            !inViewport(event.target)
+            !isElement(target)
         ) {
             return;
         }
@@ -1087,13 +1129,36 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             dx = dy;
             dy = 0;
         }
+        // a wheel along no scaled axis is the browser's own scroll
+        if (!(yScaled && dy !== 0) && !(xScaled && dx !== 0)) return;
+        // each axis's part is what still scrolls its way inside the grid (a nested grid, a notes
+        // panel or a field in a cell, Epic #89, E5.2), as the browser would give it; at its end the
+        // browser would chain it here as a native scroll, a scaled jump: the grid takes it,
+        // exactly. Not asked of the grid's own cells, rows and layers
+        const plain =
+            target === viewport ||
+            isCellElement(target) ||
+            rowLayers.some((elements) => elements.has(target));
+        if (!plain && event.timeStamp - wheelAt > WHEEL_GESTURE) {
+            // a new gesture: the styles read in the last one may have changed
+            wheelStyles = new WeakMap();
+        }
+        wheelAt = event.timeStamp;
+        const innerY =
+            plain || dy === 0 ? null : scrollerBefore(target, false, dy);
+        const innerX =
+            plain || dx === 0 ? null : scrollerBefore(target, true, dx);
+        if ((dy === 0 || innerY) && (dx === 0 || innerX)) return;
         event.preventDefault();
         // a person's scroll: the cell it scrolled to is left (E2.2)
         cellScroll = null;
         // each axis by its own rule: whole pixels, an unscaled one keeping a delta's fraction for
-        // the next delta (Epic #89: WebKit drops a fraction written to the scroll)
-        if (dy !== 0) viewport.scrollTop = rowsY.scrollBy(dy);
-        if (dx !== 0) {
+        // the next delta (Epic #89: WebKit drops a fraction written to the scroll); a part an
+        // element inside took, scrolled there, as the browser would have
+        if (innerY) innerY.scrollTop += dy;
+        else if (dy !== 0) viewport.scrollTop = rowsY.scrollBy(dy);
+        if (innerX) innerX.scrollLeft += dx;
+        else if (dx !== 0) {
             const sign = inlineSign(direction);
             viewport.scrollLeft = sign * columnsX.scrollBy(sign * dx);
         }
@@ -1101,6 +1166,64 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         syncScroll();
         update();
         retargetAfterScroll();
+    }
+
+    /** when the last wheel came (its `timeStamp`), and the styles read during its gesture */
+    let wheelAt = Number.NEGATIVE_INFINITY;
+    let wheelStyles = new WeakMap<Element, WheelStyle>();
+
+    /** An element's styles a wheel reads, once a gesture (`wheelStyles`). */
+    function wheelStyleOf(element: Element): WheelStyle {
+        let style = wheelStyles.get(element);
+        if (!style) {
+            const computed =
+                element.ownerDocument.defaultView?.getComputedStyle(element);
+            style = {
+                x: scrollsOverflow(computed?.overflowX ?? ""),
+                y: scrollsOverflow(computed?.overflowY ?? ""),
+                keepsX: keepsWheel(computed?.overscrollBehaviorX ?? ""),
+                keepsY: keepsWheel(computed?.overscrollBehaviorY ?? ""),
+                rtl: computed?.direction === "rtl",
+            };
+            wheelStyles.set(element, style);
+        }
+        return style;
+    }
+
+    /**
+     * The element from `target` up to the viewport (excluded) that still scrolls a wheel's part
+     * on one axis (`inline`: across, `delta` physical): one whose `overflow` scrolls on it, with
+     * content beyond its edge that way (right to left mirrored), or that never chains a wheel at
+     * its end (`overscroll-behavior`); `null` for none. Its scroll sizes are read only where its
+     * style lets it scroll.
+     */
+    function scrollerBefore(
+        target: Element,
+        inline: boolean,
+        delta: number,
+    ): Element | null {
+        for (
+            let node: Element | null = target;
+            node && node !== viewport;
+            node = node.parentElement
+        ) {
+            const style = wheelStyleOf(node);
+            if (!(inline ? style.x : style.y)) continue;
+            const max = inline
+                ? node.scrollWidth - node.clientWidth
+                : node.scrollHeight - node.clientHeight;
+            if (max < 1) continue;
+            if (inline ? style.keepsX : style.keepsY) return node;
+            // from the start, whatever the side it is laid out from
+            const at = inline
+                ? style.rtl
+                    ? -node.scrollLeft
+                    : node.scrollLeft
+                : node.scrollTop;
+            const toEnd = inline && style.rtl ? delta < 0 : delta > 0;
+            if (toEnd ? at < max - 0.5 : at > 0.5) return node;
+        }
+        return null;
     }
 
     /** a scroll to a cell asked for before the viewport attached: applied on attach */
@@ -1314,6 +1437,69 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return Number.isInteger(rowIndex) && Number.isInteger(columnIndex)
             ? { rowIndex, columnIndex }
             : null;
+    }
+
+    // ── nesting: an inner grid's tab stop is its holder's (Epic #89, E5.2) ────
+
+    /**
+     * Whether this grid's active cell holds `element` (an inner grid's viewport): the cell of this
+     * grid it is in, or, in a row's detail (a row index and no column), its row. One outside any
+     * row (in the empty state, beside the grid's layers) is no cell's: always held, its own tab
+     * stop.
+     */
+    function holdsNested(element: Element): boolean {
+        for (
+            let node = element.parentElement;
+            node && node !== viewport;
+            node = node.parentElement
+        ) {
+            if (!node.hasAttribute("data-row-index")) continue;
+            const active = state.activePosition;
+            if (!active) return false;
+            if (!node.hasAttribute("data-column-index")) {
+                return (
+                    Number(node.getAttribute("data-row-index")) ===
+                    active.rowIndex
+                );
+            }
+            const position = positionOf(node);
+            return position !== null && same(active, position);
+        }
+        return true;
+    }
+
+    /**
+     * Finds the grid this one is nested in: the nearest attached viewport above its own. Asked on
+     * every attach of any grid (`NESTINGS`): an outer viewport attaches after its cells', and a
+     * grid between two others may attach after both, nearer than the host found before.
+     */
+    function findHost() {
+        const parent = viewport?.parentElement;
+        const outer = parent ? ownerViewport(parent) : null;
+        const found = (outer && HOSTS.get(outer)) ?? null;
+        if (found === host) return;
+        unlistenHost?.();
+        unlistenHost = null;
+        host = found;
+        if (found) unlistenHost = found.listen(updateTabStop);
+        updateTabStop();
+    }
+
+    /**
+     * Whether the grid's tab stop is in the page's tab order now: always on its own (or with
+     * `ownTabStop`); nested, while focus is in it (`focused`) or its holder's active cell holds it.
+     */
+    function updateTabStop(focused = focusInside()) {
+        const next =
+            options.ownTabStop === true ||
+            host === null ||
+            viewport === null ||
+            focused ||
+            host.holds(viewport);
+        if (next === tabbable) return;
+        tabbable = next;
+        viewStale = true;
+        update();
     }
 
     // ── interaction: a cell's controls have the keys (Epic #52) ──────────────
@@ -3475,10 +3661,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
         }
         if (viewport && next && !inside) pendingFocus = false;
+        // focus leaving a nested grid: its tab stop is its holder's again (E5.2)
+        updateTabStop(inside);
     }
 
     function onFocusIn(event: FocusEvent) {
         const target = event.target;
+        // focus in a nested grid keeps its tab stop (E5.2)
+        updateTabStop(true);
         const cell = cellOf(target);
         if (cell) {
             if (rowsY.mapping.scaled || columnsX.mapping.scaled) {
@@ -4206,6 +4396,24 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
+        // the grids nested in its cells read which one holds them from the cells' indexes: told at
+        // the commit that renders them, when the active cell, or what is at it, can have changed
+        // (a sort, a move, rows inserted above: a new source; a new order; its row's data)
+        if (
+            nestedListeners.size > 0 &&
+            (after.activePosition !== before.activePosition ||
+                after.source !== before.source ||
+                after.columns !== before.columns ||
+                (after.rowsChanged !== before.rowsChanged &&
+                    after.activePosition !== null &&
+                    overlaps(
+                        after.rowsChanged,
+                        after.activePosition.rowIndex,
+                        after.activePosition.rowIndex + 1,
+                    )))
+        ) {
+            nestedStale = true;
+        }
         // what a fill drags from (E4.4), its handle's corner
         if (
             after.selectedRange !== before.selectedRange ||
@@ -4372,6 +4580,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             detachViewport?.();
             viewport = element;
             VIEWPORTS.add(element);
+            // a host for the grids nested in it, and the grids not hosted yet asked again (this
+            // one too: it may be nested in a grid attached already)
+            HOSTS.set(element, ownHost);
+            NESTINGS.add(findHost);
+            for (const find of [...NESTINGS]) find();
             const doc = element.ownerDocument;
             const defaultView = doc.defaultView;
             readSize();
@@ -4484,6 +4697,16 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 stopMeasuring();
                 pointerDown = false;
                 pendingFocus = false;
+                // nested no more: a grid on its own until it is attached again
+                HOSTS.delete(element);
+                NESTINGS.delete(findHost);
+                unlistenHost?.();
+                unlistenHost = null;
+                host = null;
+                if (!tabbable) {
+                    tabbable = true;
+                    viewStale = true;
+                }
                 if (viewport === element) {
                     // the committed view stays: a re-attach (StrictMode) shows the same layers
                     VIEWPORTS.delete(element);
@@ -4584,6 +4807,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (syncScroll() || moved) update();
             writeLayers();
             interaction.committed();
+            // the grids nested in its cells, now that their indexes are rendered (E5.2)
+            if (nestedStale) {
+                nestedStale = false;
+                for (const listener of [...nestedListeners]) listener();
+            }
             flushFocus();
             // an edit's editor, rendered now, takes focus (Epic #88)
             focusEditor(rendered);
@@ -4611,6 +4839,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (!next.reorderableRows && drag?.kind === "row") endDrag("lost");
             if (!next.fillable && drag?.kind === "fill") endDrag("lost");
             if (changed) relayout(true);
+            updateTabStop();
         },
     };
 

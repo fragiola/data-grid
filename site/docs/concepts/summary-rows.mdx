@@ -95,8 +95,9 @@ Their place in the grid is in its flow:
 - the bottom `Summary` last, after the `Body` and the `Empty` state.
 
 As a table, render the top one as a `<tbody>` and the bottom one as a `<tfoot>`, their rows as
-`<tr>` and their cells as `<td>`. Stacking is yours, as for the header: give each `Summary` a
-background and a `z-index` so the rows scroll under it. A row's cells are placed from its inner
+`<tr>` and their cells as `<td>`. They stack above the rows that scroll under them and below the
+header (a structural `z-index`, as the header's); give each `Summary` a background so the rows
+are hidden under it. A row's cells are placed from its inner
 edge: a line above a bottom summary row is a shadow (or the body's last row's border), never a
 top border, which would push its cells past the view's bottom edge.
 

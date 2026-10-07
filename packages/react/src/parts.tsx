@@ -1,4 +1,5 @@
 import {
+    ariaEmptyRowIndex,
     ariaRowCount,
     ariaRowIndex,
     type EngineLayer,
@@ -9,6 +10,8 @@ import {
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
+    cloneElement,
+    createElement,
     Fragment,
     isValidElement,
     type ReactNode,
@@ -157,7 +160,8 @@ export function Grid(props: GridProps) {
                 ? { "aria-multiselectable": true }
                 : {}),
             // the grid's tab stop until a cell is active (roving: then that cell is)
-            tabIndex: view.active ? -1 : 0,
+            // (a nested grid's only while its holder's active cell holds it: Epic #89, E5.2)
+            tabIndex: view.active || !view.tabbable ? -1 : 0,
             ...dataAttributes({ "grid-part": "grid", empty }),
             style: {
                 position: "relative",
@@ -189,10 +193,19 @@ export type HeaderProps = DivPrimitiveProps<Record<string, never>> & {
 };
 
 /**
- * The header (`role="rowgroup"`): sticky at the viewport's top, as tall as its header rows. A
- * `<thead>` through `render`. Nothing renders without a header. Stacking is the consumer's: give
- * it a background and a `z-index` so rows scroll under it. Without children, a header row per
- * level (`DataGrid.HeaderRows`).
+ * The layers the sticky parts take (Epic #89, E5.2): the header above the summary rows, both above
+ * the body (no `z-index`: a layer whose transform makes it a stacking context, its pinned cells'
+ * stacking the app's inside it).
+ */
+const HEADER_LAYER = 2;
+const SUMMARY_LAYER = 1;
+
+/**
+ * The header (`role="rowgroup"`): sticky at the viewport's top, as tall as its header rows, above
+ * the rows scrolling under it and the summary rows (a structural `z-index`). A `<thead>` through
+ * `render`. Nothing renders without a header. Its background is the consumer's: give it one so
+ * the rows are hidden under it. Without children, a header row per level
+ * (`DataGrid.HeaderRows`).
  */
 export function Header(props: HeaderProps) {
     const { children = <HeaderRows />, ...rest } = props;
@@ -206,6 +219,9 @@ export function Header(props: HeaderProps) {
             style: {
                 position: "sticky",
                 top: 0,
+                // above the rows scrolling under it and the summary rows (Epic #89, E5.2); its
+                // background is the app's
+                zIndex: HEADER_LAYER,
                 display: "block",
                 height: view.headerHeight,
                 boxSizing: "border-box",
@@ -346,20 +362,68 @@ export type EmptyProps = DivPrimitiveProps<Record<string, never>> & {
     children?: ReactNode;
 };
 
+/** The props the empty state's cell is given back as a table's `<td>`. */
+interface EmptyCellProps {
+    readonly role?: undefined;
+    readonly "aria-colspan"?: undefined;
+    readonly colSpan: number;
+    readonly style?: React.CSSProperties;
+}
+
+/** The structural style of the empty state's row: a block the area's full height. */
+const EMPTY_FILL = {
+    display: "block",
+    height: "100%",
+    boxSizing: "border-box",
+} as const;
+
 /**
- * What the grid shows while it has no rows: its children, in the body area (below the header, as
- * large as the visible body), staying in view when the grid scrolls sideways. Nothing renders
- * while there are rows. It has no text of its own. Place it after the `Header`: it sits in the flow
- * below it. As a table, render it as a `<tbody>` holding a row and a cell.
+ * The empty state's cell: the area's full height; a table's cell a block too (in a block row), a
+ * div's display left to the app (its content's layout: a flex column, a grid)
+ */
+const EMPTY_CELL = { height: "100%", boxSizing: "border-box" } as const;
+
+/**
+ * What the grid shows while it has no rows: its children, in a cell of its own (Epic #89, E5.2),
+ * in a row of its own, in an area below the header as large as the visible body that stays in
+ * view when the grid scrolls sideways. Nothing renders while there are rows; it has no text or
+ * name of its own. `Empty` is the cell (`role="gridcell"`, spanning every column, as tall as the
+ * area): your class, style and children go on it. Place it after the `Header`. As a table, render
+ * it as a `<td>`: its row and area are then a `<tr>` and a `<tbody>`.
  */
 export function Empty(props: EmptyProps) {
     const { children, ...rest } = props;
     const view = useGridView();
-    const element = useRenderElement("div", rest, {
+    const columns = Math.max(1, view.columnCount);
+    const rendered = useRenderElement("div", rest, {
         state: {},
         children,
         props: {
             ...dataAttributes({ "grid-part": "empty" }),
+            role: "gridcell",
+            ...(columns > 1 ? { "aria-colspan": columns } : {}),
+            style: EMPTY_CELL,
+        },
+    });
+    if (view.rowCount !== 0) return null;
+    // what it renders tells its structure: a table's cell (a `<td>`, from a `render` element or
+    // function) spans the columns natively, in a table's row and row group; else divs with roles
+    const table = rendered.type === "td";
+    const cell = table
+        ? cloneElement(rendered as React.ReactElement<EmptyCellProps>, {
+              role: undefined,
+              "aria-colspan": undefined,
+              colSpan: columns,
+              style: {
+                  ...(rendered.props as EmptyCellProps).style,
+                  ...EMPTY_FILL,
+              },
+          })
+        : rendered;
+    return createElement(
+        table ? "tbody" : "div",
+        {
+            "data-grid-part": "empty-area",
             style: {
                 position: "sticky",
                 [inlineSide(view.direction)]: 0,
@@ -369,8 +433,18 @@ export function Empty(props: EmptyProps) {
                 boxSizing: "border-box",
             },
         },
-    });
-    return view.rowCount === 0 ? element : null;
+        createElement(
+            table ? "tr" : "div",
+            {
+                "data-grid-part": "empty-row",
+                ...(table ? {} : { role: "row" }),
+                // the body's first line while it has no other (Epic #89, E5.2)
+                "aria-rowindex": ariaEmptyRowIndex(view),
+                style: EMPTY_FILL,
+            },
+            cell,
+        ),
+    );
 }
 
 // ── the body ─────────────────────────────────────────────────────────────────
@@ -607,8 +681,8 @@ export type SummaryProps = DivPrimitiveProps<SummaryState> & {
  * shorter than the view). Nothing renders while the grid has none there (`summaryRows` on the
  * root). Its place in the flow is the grid's: the top one after the `Header`, the bottom one last
  * (after `Body` and `Empty`). A `<tbody>` for the top, a `<tfoot>` for the bottom, through
- * `render`. Stacking is the consumer's: give it a background and a `z-index` so rows scroll under
- * it, as the header.
+ * `render`. Above the rows scrolling under it and below the header (a structural `z-index`); its
+ * background is the consumer's, as the header's.
  */
 export function Summary(props: SummaryProps) {
     const { position, children = <SummaryRows />, ...rest } = props;
@@ -629,6 +703,8 @@ export function Summary(props: SummaryProps) {
                     position === "top"
                         ? view.headerHeight
                         : `calc(100% - ${height}px)`,
+                // above the rows scrolling under them, below the header (E5.2)
+                zIndex: SUMMARY_LAYER,
                 display: "block",
                 height,
                 boxSizing: "border-box",

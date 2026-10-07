@@ -159,14 +159,8 @@ function Composition({
                 >
                     {summaryRows}
                 </DataGrid.Summary>
-                <DataGrid.Empty render={table ? <tbody /> : undefined}>
-                    {table ? (
-                        <tr>
-                            <td>No sales</td>
-                        </tr>
-                    ) : (
-                        "No sales"
-                    )}
+                <DataGrid.Empty render={table ? <td /> : undefined}>
+                    No sales
                 </DataGrid.Empty>
             </DataGrid.Grid>
         </DataGrid.Root>

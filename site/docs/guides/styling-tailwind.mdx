@@ -16,7 +16,7 @@ and a custom active cell. Switch the presets above it, and the gallery's themes 
 ```tsx title="grid.tsx"
 <DataGrid.Root className="h-96 overflow-auto rounded-lg border" columns={columns} rows={rows}>
     <DataGrid.Grid aria-label="People">
-        <DataGrid.Header className="z-10 bg-white">
+        <DataGrid.Header className="bg-white">
             <DataGrid.HeaderRow className="border-b font-semibold">
                 <DataGrid.HeaderCells<Person>>
                     {(cell) => <DataGrid.HeaderCell cell={cell} className="flex items-center px-3" />}

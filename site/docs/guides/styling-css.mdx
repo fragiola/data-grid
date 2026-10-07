@@ -14,10 +14,9 @@ without a single class.
     font: 14px/1.4 system-ui, sans-serif;
 }
 
-/* opaque, and above the rows: they scroll under it */
+/* opaque: the rows scroll under it (above them is the grid's own z-index) */
 [data-grid-part="header"] {
     background: #fafafa;
-    z-index: 1;
 }
 
 [data-grid-part="header-cell"],

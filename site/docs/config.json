@@ -165,6 +165,10 @@
                     "path": "guides/empty-state"
                 },
                 {
+                    "label": "Loading and errors",
+                    "path": "guides/loading-and-errors"
+                },
+                {
                     "label": "Server rendering",
                     "path": "guides/server-rendering"
                 },

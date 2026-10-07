@@ -18,8 +18,8 @@ export const root = cn(
 export const grid =
     "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
 
-/** opaque and above the rows: they scroll under it */
-export const header = "z-10 bg-palette-base";
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
 
 /** while empty, the header loses its rule: the empty area reads as one with it */
 export const headerRow = cn(
@@ -44,9 +44,7 @@ export const cell = cn(
     "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
-export const emptyRow = "block h-full";
-
-/** inside the empty area (its display is the grid's): the content centred in the visible body */
+/** the empty state's cell (as tall as the visible body): the content centred in it */
 export const empty =
     "flex h-full flex-col items-center justify-center gap-3 p-6 text-center";
 

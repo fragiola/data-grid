@@ -13,6 +13,7 @@ export {
 } from "./engine/dom";
 export { createDataGridEngine } from "./engine/engine";
 export {
+    ariaEmptyRowIndex,
     ariaHeaderCellSpans,
     ariaRowCount,
     ariaRowDetail,

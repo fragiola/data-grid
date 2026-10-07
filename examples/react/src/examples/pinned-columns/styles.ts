@@ -19,8 +19,8 @@ export const root = cn(
 export const grid =
     "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
 
-/** opaque and above the rows: they scroll under it */
-export const header = "z-10 bg-palette-base";
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
 
 /** the columns' row (-1) closes the header with a line; the groups' row sits above it */
 export const headerRow = (state: HeaderRowState) =>

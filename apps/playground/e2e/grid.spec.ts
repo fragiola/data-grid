@@ -406,6 +406,45 @@ for (const kind of KINDS) {
             }
         });
 
+        test("keeps the header and the summary rows above the rows scrolling under them (Epic #89)", async ({
+            page,
+        }) => {
+            // the fixture paints them but gives them no z-index: the stacking is the grid's
+            const viewport = await open(page, kind, {
+                rows: 1_000,
+                columns: 8,
+                summaryTop: 1,
+                summaryBottom: 1,
+            });
+            await scroll(page, viewport, 517);
+            const partAt = (selector: string) =>
+                page
+                    .locator(selector)
+                    .first()
+                    .evaluate((element) => {
+                        const box = element.getBoundingClientRect();
+                        const hit = document.elementFromPoint(
+                            box.x + box.width / 2,
+                            box.y + box.height / 2,
+                        );
+                        return hit
+                            ?.closest("[data-grid-part]")
+                            ?.getAttribute("data-grid-part");
+                    });
+            expect(
+                await partAt(
+                    '[data-grid-part="header-cell"][data-column-index="1"]',
+                ),
+            ).toBe("header-cell");
+            for (const position of ["top", "bottom"]) {
+                expect(
+                    await partAt(
+                        `[data-summary="${position}"] [data-grid-part="summary-cell"][data-column-index="1"]`,
+                    ),
+                ).toBe("summary-cell");
+            }
+        });
+
         test("shows the empty state below the header, in view while scrolling sideways", async ({
             page,
         }) => {
@@ -413,6 +452,16 @@ for (const kind of KINDS) {
             const empty = page.locator('[data-grid-part="empty"]');
             await expect(empty).toBeVisible();
             await expect(empty).toContainText("No rows");
+            // a cell spanning the columns, in a row of its own (Epic #89, E5.2)
+            await expect(empty).toHaveAttribute(
+                kind === "table" ? "colspan" : "aria-colspan",
+                "30",
+            );
+            await expect(
+                page.locator(
+                    '[data-grid-part="empty-area"] > [data-grid-part="empty-row"] > [data-grid-part="empty"]',
+                ),
+            ).toHaveCount(1);
             for (const part of ["root", "grid"]) {
                 await expect(
                     page.locator(`[data-grid-part="${part}"]`),

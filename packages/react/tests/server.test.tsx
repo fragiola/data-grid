@@ -83,6 +83,19 @@ describe("server rendering", () => {
         expect(empty).toContain("No sales");
         expect(empty).toMatch(/data-grid-part="root"[^>]*data-empty=""/);
         expect(empty).toMatch(/data-grid-part="empty"/);
+        // in a row and a cell of its own (Epic #89, E5.2), as divs and as a table
+        expect(empty).toMatch(
+            /<div data-grid-part="empty-row" role="row" aria-rowindex="2"/,
+        );
+        // the header row and the empty state's
+        expect(empty).toContain('aria-rowcount="2"');
+        expect(empty).toContain(
+            '<div data-grid-part="empty" role="gridcell" aria-colspan="4"',
+        );
+        const table = serverHtml(SERVER_GRIDS["an empty grid"](true));
+        expect(table).toMatch(
+            /<tbody data-grid-part="empty-area"[^>]*><tr data-grid-part="empty-row" aria-rowindex="2"[^>]*><td data-grid-part="empty"[^>]*colSpan="4"/,
+        );
         expect(rows).not.toContain("No sales");
     });
 });

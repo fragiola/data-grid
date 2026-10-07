@@ -426,27 +426,50 @@ export function gridRole<TRow, TNode>(
     return view.source.getRowMeta ? "treegrid" : "grid";
 }
 
-/** The grid's `aria-rowcount`: the header rows, every body row and the summary rows. */
+/**
+ * The rows the body counts for in ARIA: its rows, or while it has none the empty state's row
+ * (Epic #89, E5.2: `Empty`'s, at the body's first line).
+ */
+function bodyLines<TRow, TNode>(view: GridView<TRow, TNode>): number {
+    return view.rowCount === 0 ? 1 : view.rowCount;
+}
+
+/**
+ * The grid's `aria-rowcount`: the header rows, every body row (the empty state's row while there
+ * is none) and the summary rows.
+ */
 export function ariaRowCount<TRow, TNode>(view: GridView<TRow, TNode>): number {
     const { top, bottom } = view.summaryRows;
-    return view.rowCount + view.headerRowCount + top + bottom;
+    return bodyLines(view) + view.headerRowCount + top + bottom;
 }
 
 /**
  * A row's `aria-rowindex`: 1-based, top to bottom (`rowLine`): the header rows first (they are
- * -depth … -1), then the top summary rows, the body rows and the bottom summary rows (E2.1).
+ * -depth … -1), then the top summary rows, the body rows (the empty state's row while there is
+ * none) and the bottom summary rows (E2.1).
  */
 export function ariaRowIndex<TRow, TNode>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
 ): number {
     const { top } = view.summaryRows;
+    // the rows after the body's: past the empty state's row while there is no other
+    const past =
+        rowIndex >= view.rowCount ? bodyLines(view) - view.rowCount : 0;
     return (
         rowLine(rowIndex, view.header.depth, top) +
         view.headerRowCount +
         top +
-        1
+        1 +
+        past
     );
+}
+
+/** The empty state's row's `aria-rowindex` (Epic #89, E5.2): the body's first line. */
+export function ariaEmptyRowIndex<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): number {
+    return view.headerRowCount + view.summaryRows.top + 1;
 }
 
 /**

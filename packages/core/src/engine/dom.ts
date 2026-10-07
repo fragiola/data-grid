@@ -303,6 +303,24 @@ export const CLICK_SLOP = 4;
  */
 export const VIEWPORTS = new WeakSet<Element>();
 
+/** What a grid tells the grids nested in it (Epic #89, E5.2): whether its active cell holds one. */
+export interface NestingHost {
+    /** whether the outer grid's active cell (or row, for one in a detail) holds `element` */
+    holds(element: Element): boolean;
+    /** listens to the outer grid's active cell; returns the unsubscribe */
+    listen(listener: () => void): () => void;
+}
+
+/** Every attached viewport's host, for the grids nested in it. */
+export const HOSTS = new WeakMap<Element, NestingHost>();
+
+/**
+ * Every attached grid's search for the grid it is nested in (`findHost`): each attach asks them
+ * all again (an outer viewport attaches after the ones in its cells: refs attach child first; a
+ * grid between two others may attach after both).
+ */
+export const NESTINGS = new Set<() => void>();
+
 export function isElement(target: unknown): target is Element {
     return (
         typeof target === "object" &&
@@ -310,6 +328,16 @@ export function isElement(target: unknown): target is Element {
         "nodeType" in target &&
         target.nodeType === 1
     );
+}
+
+/** Whether an `overscroll-behavior` value keeps a scroll at the element's end from chaining. */
+export function keepsWheel(overscroll: string): boolean {
+    return overscroll === "contain" || overscroll === "none";
+}
+
+/** Whether an `overflow` value lets a person scroll the element (the wheel, a swipe). */
+export function scrollsOverflow(overflow: string): boolean {
+    return overflow === "auto" || overflow === "scroll";
 }
 
 /** The nearest attached viewport at or above `element`: the grid it belongs to. */

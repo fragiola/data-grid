@@ -347,8 +347,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `data-grid-part="summary-cell"`, `data-summary`); `Body` starts below the top ones and `Grid`
     holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells` (the body cells'
     span-aware walk, `cellsOf` in `hooks.ts`, shared with `useCells`), `useSummaryCell`;
-    `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Stacking is the app's,
-    as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
+    `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Their layer is the
+    grid's (a structural `z-index`, below the header's, Epic #89, E5.2); their background is the
+    app's, as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
     the main ones (their built files must not contain it): `@fragiola/data-grid/local` holds the
     framework-free pipeline (`createLocalRows` keeps the sort, filters, search and page;
     `derive(rows, columns)` filters, searches, sorts and pages in that order, each stage
@@ -1090,15 +1091,19 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **`className` and `style` accept a value or a `(state) => value` function.** Consumer style is
   merged *under* the structural style: structural keys always win.
 - **Structural inline style only**: `position` (`sticky` on the header, the summary rows'
-  `Summary`, `Empty`, pinned cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
+  `Summary`, `Empty`'s area, pinned cells, a row's detail and a group's label), `top`/`left`/`width`/`height`/`inset` (`right` in place of `left`
   right to left: `inlineSide`), `transform` on the layers,
   `display` (also to make table parts positionable, `flex` on rows and header rows with
   pinned columns, `grid` on a measured row, Epic #86), in a measured row `grid-area` on its
   cells and detail and its cells' inline start margin (`margin-left`, `margin-right` right to
   left: their place, in place of `left`), `align-self` on a measured detail in a row of pinned
-  cells, `overflow` on the viewport, `contain`, `box-sizing`, `z-index` between header
-  rows (with column groups, an upper row stays above the next, which a column spanning rows
-  reaches into), and on a row's detail `margin-top` (its place below the row's cells) and, in a
+  cells, `overflow` on the viewport, `contain`, `box-sizing`, `z-index` for the grid's layers
+  (Epic #89, E5.2: `Header` 2 above `Summary` 1, both above the body, which has none (its
+  transform makes it a context, its pinned cells' stacking the app's); `Grid` none (no stacking
+  context of its own: content placed in it, fixed or not, stacks against the page as the app
+  says); between header rows, with column groups, an upper row above the next, which a
+  column spanning rows reaches into; the header's and summary rows' background is the app's),
+  `height: 100%` on the empty state's row and cell, and on a row's detail `margin-top` (its place below the row's cells) and, in a
   row of pinned cells, `margin-left` (`margin-right` right to left) and `flex-shrink: 0` (its box
   from the row's start, never shrunk). Nothing cosmetic. (The root's `dir`, when a direction is
   given, is structural: `Root` renders `view.givenDirection`.)
@@ -1181,9 +1186,36 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   viewports, across engines). A grid nested in a cell is its own grid; to the outer grid, focus
   inside it is focus inside the cell that holds it, and its keys (and wheel) are never the outer
   grid's. The registry is module state: nesting needs one copy of `@fragiola/data-grid` in the app.
-- **`Empty` renders only while there are no rows (Epic #12, E3).** It sits in the body area (in
-  the flow after `Header`, sticky at the inline start, as large as the visible body), has no text or role
-  of its own, and `Root` and `Grid` carry `data-empty` meanwhile. With no rows, the grid's sizer
+  **Its tab stop is its holder's (Epic #89, E5.2):** a nested grid's tab stop (`view.tabbable`:
+  the active cell's and header cell's `tabIndex` 0, the grid's) is in the page's tab order only
+  while the outer grid's active cell holds it (`holdsNested`: the outer cell it is in, or, in a
+  detail, a row index and no column, its row) or focus is inside it (`updateTabStop`, from
+  `focusin`/`focusout`); a grid on its own always. Each engine registers a `NestingHost`
+  (`HOSTS`, `dom.ts`) on attach and tells its nested grids, at the commit that renders its
+  cells' indexes (`nestedStale`), when its active cell, or what is at it, can have changed (the
+  active position, a new source, new columns, `rows.changed` over the active row); an inner grid
+  takes the nearest attached viewport above its own for its host, every grid asked again on
+  every attach (`NESTINGS`: refs attach child first, and a grid between two others may attach
+  after both). A nested grid outside any row or cell of its host (in `Empty`) keeps its own tab
+  stop. `ownTabStop` (an engine option, a `Root` prop) keeps a tab stop of its own; a part's
+  `tabIndex` still overrides. **The wheel under scaling (E5.2):** a wheel along a scaled axis is
+  the engine's, decided per axis: its part on an axis goes to what still scrolls that way
+  between its target and the viewport (`scrollerBefore`: `overflow` auto/scroll with content
+  beyond that edge, right to left mirrored, or `overscroll-behavior` contain/none; a nested grid,
+  a panel or a field in a cell), else to the grid, moved exactly; every part an inner element's,
+  the browser's (not prevented), else prevented and an inner part scrolled there by the engine.
+  Not asked of the grid's own cells, rows and layers; the styles read once a gesture
+  (`wheelStyles`, reset after `WHEEL_GESTURE` ms), the scroll sizes only where they scroll. A
+  wheel along no scaled axis is the browser's.
+- **`Empty` renders only while there are no rows (Epic #12, E3).** It is a cell (Epic #89, E5.2:
+  `role="gridcell"`, `aria-colspan` every column; rendered as a `<td>`, `colSpan`, no role) in a
+  row of its own (`data-grid-part="empty-row"`, `role="row"`; a `<tr>` for a `<td>`), in an area
+  of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as large as
+  the visible body; a `<tbody>` for a `<td>`): the tags follow `render`, a `<td>` element making a
+  table's. The app's class, style and children go on the cell (`height: 100%`; a `<td>` a block,
+  a div's display the app's); it has no text or name of its own and no indexes (the keys, the
+  tab order and interaction leave its controls alone), and `Root` and `Grid` carry `data-empty`
+  meanwhile. With no rows, the grid's sizer
   spans at least the visible area (the view's `viewportWidth`/`viewportBodyHeight`).
 - **`RowDetail` renders only while its row is expanded (Epic #41, M3).** It holds only its
   children (no text, no names), is a block (its content's layout is the app's), and drops a

@@ -5,7 +5,6 @@ import {
     type Column,
     DataGrid,
     useDataGrid,
-    useGridView,
 } from "@fragiola/data-grid-react";
 import { ChevronRight } from "lucide-react";
 import type * as React from "react";
@@ -207,15 +206,11 @@ function Summary({ order }: { order: Order }) {
 }
 
 /**
- * An order's items: a grid of its own in the detail (its own active cell, keys and focus). Every
- * grid is a tab stop, so this one stays in the tab order only while its order's row holds the
- * orders grid's active cell (a `tabIndex` of the app's overrides the grid's): Tab goes from that
- * row into its items, and Shift+Tab comes back.
+ * An order's items: a grid of its own in the detail (its own active cell, keys and focus). A grid
+ * nested in another is in the tab order only while the orders grid's active cell is in its row:
+ * Tab goes from that row into its items, and Shift+Tab comes back.
  */
-function Items({ order, rowIndex }: { order: Order; rowIndex: number }) {
-    // the orders grid's view: the detail renders in its row, outside the items' root
-    const { active } = useGridView();
-    const tabIndex = active?.rowIndex === rowIndex ? undefined : -1;
+function Items({ order }: { order: Order }) {
     return (
         <DataGrid.Root
             columns={itemColumns}
@@ -225,17 +220,13 @@ function Items({ order, rowIndex }: { order: Order; rowIndex: number }) {
             className={styles.innerRoot}
             style={{ width: ITEMS_WIDTH, height: itemsHeight(order) }}
         >
-            <DataGrid.Grid
-                aria-label={`Items of order ${order.id}`}
-                tabIndex={tabIndex}
-            >
+            <DataGrid.Grid aria-label={`Items of order ${order.id}`}>
                 <DataGrid.Header className={styles.innerHeader}>
                     <DataGrid.HeaderRow className={styles.innerHeaderRow}>
                         <DataGrid.HeaderCells<Item>>
                             {(cell) => (
                                 <DataGrid.HeaderCell
                                     cell={cell}
-                                    tabIndex={tabIndex}
                                     className={styles.innerHeaderCell}
                                 />
                             )}
@@ -250,7 +241,6 @@ function Items({ order, rowIndex }: { order: Order; rowIndex: number }) {
                                     {(cell) => (
                                         <DataGrid.Cell
                                             cell={cell}
-                                            tabIndex={tabIndex}
                                             className={styles.innerCell}
                                         />
                                     )}
@@ -336,10 +326,7 @@ function Orders() {
                                     // the part is a block: the layout inside it is the app's
                                     <div className={styles.detailContent}>
                                         <Summary order={row.row} />
-                                        <Items
-                                            order={row.row}
-                                            rowIndex={row.rowIndex}
-                                        />
+                                        <Items order={row.row} />
                                     </div>
                                 ) : null}
                             </DataGrid.RowDetail>

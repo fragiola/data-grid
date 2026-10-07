@@ -27,8 +27,8 @@ export const root = cn(
 export const grid =
     "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
 
-/** opaque and above the rows: they scroll under it */
-export const header = "z-10 bg-palette-base";
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
 
 export const headerRow =
     "bg-(--dg-header-bg) text-palette-accent border-b-(length:--dg-gridline) border-(--dg-gridline-color)";
@@ -65,7 +65,7 @@ export const cell = (state: CellState) =>
     );
 
 /** the summary rows stay over the rows that scroll under them: opaque and above, as the header */
-export const summary = "z-10 bg-palette-base";
+export const summary = "bg-palette-base";
 
 /**
  * a line between a summary row and the body: a border below the top one, a shadow above the

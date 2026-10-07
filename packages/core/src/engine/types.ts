@@ -46,6 +46,12 @@ export interface DataGridEngineOptions {
      * never orders the rows). Refused while the grid is sorted. Default off
      */
     reorderableRows?: boolean;
+    /**
+     * a grid nested in another one's cell, row or detail keeps a tab stop of its own, as a grid on
+     * its own does (Epic #89, E5.2). Default off: its tab stops are in the page's tab order only
+     * while the outer grid's active cell (or row) holds it, or focus is inside it
+     */
+    ownTabStop?: boolean;
 }
 
 /** A header row a render shows: its index (-depth … -1) and its cells in the column window. */
@@ -214,6 +220,12 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * navigation
      */
     readonly interaction: CellPosition | null;
+    /**
+     * whether the grid's tab stop (its active cell, else the grid) is in the page's tab order: a
+     * grid on its own always; one nested in another grid only while the outer grid's active cell
+     * (or row, for a detail) holds it, or focus is inside it (Epic #89, E5.2; `ownTabStop`)
+     */
+    readonly tabbable: boolean;
     /** the column a drag is resizing (W4), or `null` */
     readonly columnResize: ColumnResize | null;
     /** the column or group a drag is moving, and where it would land (O4), or `null` */

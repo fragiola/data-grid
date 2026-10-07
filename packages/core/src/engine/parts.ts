@@ -547,7 +547,8 @@ export function cellPart<TRow, TNode>(
                   )
                 : undefined,
         },
-        tabIndex: active ? 0 : -1,
+        // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
+        tabIndex: active && view.tabbable ? 0 : -1,
         ariaColSpan: span > 1 ? span : undefined,
         ariaSelected: selected,
     };
@@ -664,7 +665,8 @@ export function headerCellPart<TRow, TNode>(
             pinnedSide,
             interacting: isHeldCell(view.interaction, cell),
         },
-        tabIndex: active ? 0 : -1,
+        // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
+        tabIndex: active && view.tabbable ? 0 : -1,
         ariaSort: sort.ariaSort,
     };
 }

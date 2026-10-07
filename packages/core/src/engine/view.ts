@@ -283,6 +283,7 @@ export interface ViewInputs<TRow, TNode>
         | "pinnedEndWidth"
         | "rowsRevision"
         | "interaction"
+        | "tabbable"
         | "columnResize"
         | "columnReorder"
         | "reorderableRows"
@@ -444,6 +445,7 @@ const VIEW_KEYS = [
     "collapsedGroupKeys",
     "expandedGroupKeys",
     "interaction",
+    "tabbable",
     "columnResize",
     "columnReorder",
     "reorderableRows",

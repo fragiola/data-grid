@@ -144,8 +144,61 @@ parent answers each key once.
 
 With `getRow`, a row not loaded has no key yet. A range or "select every row" that reaches one
 refuses as a whole (`not_loaded`) and changes nothing: the grid never selects half of what you
-asked. Selecting every row of a server's data is your policy: a middleware can answer
-`selected-rows.select-all` with your own request.
+asked.
+
+## Every row of a server's
+
+A grid of a server's data holds a page (`rows`) or the rows loaded so far (`getRow`): "select
+every row" there means every row of the server's, which the grid never sees. That selection is
+your state, kept the way your server takes it: "every row but these keys" rather than ten
+thousand keys. A middleware turns the grid's own select-all (Ctrl+A, your header checkbox running
+`selected-rows.select-all`) into it, and the grid keeps the part of it on screen, controlled:
+
+<Example id="server-selection" />
+
+```tsx title="server-selection.tsx"
+// the app's selection: every row but `keys` (all), or only `keys`
+const [selection, setSelection] = useState({ all: false, keys: new Set<RowKey>() });
+const grid = useDataGrid(gridRef);
+
+useEffect(
+    () =>
+        grid?.model.use((ctx, next) => {
+            if (ctx.command === "selected-rows.select-all") {
+                setSelection({ all: true, keys: new Set() });
+            }
+            // the grid then selects the rows it has: the page's part of "all"
+            return next();
+        }),
+    [grid],
+);
+
+<DataGrid.Root
+    rows={page}
+    gridRef={gridRef}
+    rowSelection="multiple"
+    // the page's rows the selection holds
+    selectedRowKeys={page.filter((row) => selection.all !== selection.keys.has(row.id)).map((row) => row.id)}
+    onSelectedRowKeysChange={(next) => {
+        // the page's rows as the grid has them now: in "all", the keys are the rows left out
+        const chosen = new Set(next);
+        setSelection((current) => {
+            const keys = new Set(current.keys);
+            for (const row of page) {
+                if (chosen.has(row.id) !== current.all) keys.add(row.id);
+                else keys.delete(row.id);
+            }
+            return { all: current.all, keys };
+        });
+    }}
+    …
+/>
+```
+
+An export, a delete or any action on the selection sends it as it is (`{ all: true, except:
+[...] }`), and the server applies it to its own rows. With `getRow`, the grid's own select-all
+refuses at the first row not loaded (`not_loaded`): the middleware sets your state before it, and
+`selectedRowKeys`, worked out from your state for the rows you have, shows it.
 
 ## The commands
 
