@@ -678,6 +678,60 @@ describe("the clipboard", () => {
         expect(selection.rangeCount).toBe(0);
     });
 
+    it("holds a selection in the cell for Ctrl/⌘+V too, whatever the page's, put back after the paste (Epic #89)", () => {
+        const { engine, cellAt, pastes } = setup({ activePosition: at(1, 1) });
+        const cell = cellAt(1, 1);
+        const text = document.createElement("p");
+        text.textContent = "page text";
+        document.body.append(text);
+        const selection = document.getSelection();
+        if (!selection) throw new Error("no selection");
+        // Firefox fires a paste at the selection, not at the focused cell: the cell's node holds it
+        selection.selectAllChildren(text);
+        const key = keydown(engine, cell, "v", { metaKey: true });
+        expect(key.handled).toBe(false);
+        expect(key.event.defaultPrevented).toBe(false);
+        const node = cell.lastElementChild;
+        if (!node) throw new Error("no node");
+        expect(node.contains(selection.anchorNode)).toBe(true);
+        // the paste comes from the node: the grid's, landing at the active cell
+        const { event } = clipboardEvent("paste", node, "a");
+        expect(engine.adapter.paste(event)).toBe(true);
+        expect(pastes).toEqual([
+            { range: range([1, 1], [1, 1]), values: [["a"]] },
+        ]);
+        expect(cell.contains(node)).toBe(false);
+        expect(String(selection)).toBe("page text");
+        // a layout whose letters are not Latin (Cyrillic: м on V, с on C): the key's place
+        const russian = { ctrlKey: true, code: "KeyV" };
+        keydown(engine, cell, "м", russian);
+        expect(cell.lastElementChild?.getAttribute("aria-hidden")).toBe("true");
+        const held = cell.lastElementChild;
+        if (!held) throw new Error("no node");
+        expect(
+            engine.adapter.paste(clipboardEvent("paste", held, "b").event),
+        ).toBe(true);
+        keydown(engine, cell, "с", { ctrlKey: true, code: "KeyC" });
+        const copied = cell.lastElementChild;
+        if (!copied) throw new Error("no node");
+        const copy = clipboardEvent("copy", copied);
+        expect(engine.adapter.copy(copy.event)).toBe(true);
+        expect(copy.data.get("text/plain")).toBe("1:1");
+        // a Latin layout's own letters win over their place (Dvorak's j is on C)
+        keydown(engine, cell, "j", { ctrlKey: true, code: "KeyC" });
+        expect(cell.childElementCount).toBe(0);
+        // even text selected inside the cell: a paste into a cell is the grid's
+        const content = document.createElement("span");
+        content.textContent = "cell text";
+        cell.append(content);
+        selection.selectAllChildren(content);
+        keydown(engine, cell, "v", { ctrlKey: true });
+        expect(cell.childElementCount).toBe(2);
+        expect(String(selection)).not.toBe("cell text");
+        content.remove();
+        text.remove();
+    });
+
     it("leaves a field's copy, a prevented one and one with no body cell to copy alone", () => {
         const { engine, model, cellAt } = setup({ activePosition: at(-1, 0) });
         const header = cellAt(-1, 0);

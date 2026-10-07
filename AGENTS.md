@@ -54,7 +54,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 4. **The primitive contract is Dockable's (D4)**, below.
 5. **Structure is the consumer's (D5).** The same primitives render `table/thead/tbody/tr/th/td` or
    `div`s (or anything through `render`). Two unstyled fixtures, one table and one div, are driven
-   by the **same** Playwright spec.
+   by the **same** Playwright spec, in Chromium, Firefox and WebKit (Epic #89), as is the examples
+   suite.
 6. **Data contract (D6).** `rows: TRow[]`, or `rowCount` + `getRow(index) => TRow | undefined`;
    `undefined` is "not loaded yet": the row keeps its space and renders with `data-loading`. The
    engine reports the row and column windows (visible and rendered ranges) and the end being
@@ -550,10 +551,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    grid's cells itself (`isCellElement`: a field inside one keeps its own clipboard, a nested
    grid's cell is that grid's) while cells are selectable. WebKit fires `copy` only while
    something is selected, and a copy goes to the selection: Ctrl/⌘+C on one of the grid's cells,
-   with something to copy, selects a hidden node appended to the cell (`selectForCopy`, through
-   the viewport document's Selection, the keydown never prevented), unless text inside that cell
-   is selected (its content, its editor: copied as it is); the copy takes the event from that
-   node as from its cell and `endCopySelection` removes it and puts the selection back (else the
+   with something to copy, or Ctrl/⌘+V (Epic #89: Firefox fires a paste at the page's selection,
+   not at the focused cell, whose text a press with `user-select: none` never selects; the letter
+   read through `shortcutLetter`: the key's own, else its `code` on a non-Latin layout), selects a
+   hidden node appended to the cell (`selectForClipboard`, through
+   the viewport document's Selection, the keydown never prevented), unless, for a copy, text inside
+   that cell is selected (its content, its editor: copied as it is); the copy takes the event from that
+   node as from its cell and `endClipboardSelection` (at the copy or the paste) removes it and puts the selection back (else the
    next task does, through the view's `setTimeout`). A copy writes the range, else the
    active body cell, as TSV into `event.clipboardData` and is prevented: the page's own event, no
    permission (`rangeText`: a loaded row's cell through `Column.getCopyText(CellRenderProps)`,
@@ -942,7 +946,42 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 13. **The core never touches global `document`/`window`** (nor `requestAnimationFrame`,
     `ResizeObserver`, …): DOM access goes through the root element's `ownerDocument`/`defaultView`,
     so the model loads in plain Node. **The core has zero runtime dependencies** and never imports
-    `react`. A guard test enforces both.
+    `react`. A guard test enforces both. **Server rendering (Epic #89, E5.1):** a `Root` renders
+    to a string in plain Node with no warning (React 19 no longer warns about layout effects on
+    the server: no isomorphic wrapper is needed) and hydrates without a mismatch: before it
+    attaches, the engine's view has no size, so the server and the client's first render hold the
+    same shell (the parts, the ARIA counts and roles, `data-empty` and `Empty`, the given `dir`,
+    structural styles) and no row or cell; the window renders at attach, before paint
+    (`packages/react/tests/server.test.tsx` in Node, `hydration.test.tsx` in jsdom, both over
+    `server-grids.tsx`: rows, groups, row groups, tree meta, summary rows, pinned columns, empty,
+    RTL, cell ranges, as divs and as a table). A table's header rows and rows must be `tr`s down to
+    the cells (the HTML parser moves a `div` out of a table). Docs: `guides/server-rendering`.
+    **Touch (Epic #89, E5.1):** the drags read pointer events of any type: a touch drags a
+    resizer, a reorderable header cell, a row's handle and the fill handle as a mouse does (their
+    `touch-action` is the app's: `none` on handles, `pan-y` on reorderable header cells in the
+    fixture and examples); a touch press on a body cell starts no range drag (the browser pans
+    the body; the grid sets no `touch-action`). While a press is held (`listen`), `selectstart`
+    and `dragstart` are prevented on the document, and for a touch `contextmenu` too: a long
+    press selects no text and opens no menu, the page's own again at the release (a mouse's
+    context menu, a macOS Ctrl+click's, stays the app's). A long press on a body cell, and
+    `-webkit-touch-callout`, are the browser's and the app's CSS (`user-select` is not
+    structural). The shared spec's `touch` block drives an emulated touch screen (`hasTouch`):
+    `touchDrag` (`examples/react/e2e/examples/helpers.ts`, the page's own touch pointer events,
+    every engine), `page.touchscreen.tap`, and in Chromium a finger through CDP
+    (`Input.dispatchTouchEvent`: touch-action and the native scroll). Docs: `guides/touch`.
+    **WebKit (Epic #89):** fixes where it differs. Scrolling is whole pixels, as WebKit drops a
+    fraction of `scrollTop` Chromium rounds (a measured row's edge left out of view), and the axis
+    holds exactly what the engine writes (`viewport/scaling.ts`): the physical size and its end
+    are rounded up (`createScrollMapping`); unscaled, the virtual offset is the physical scroll,
+    whole (`maxVirtual` = `maxPhysical`, `ScrollAxisState.offsetFor`, `scrollTo`), scaled it
+    stays exact and `toPhysical` rounds; the wheel's writes go through `scrollBy` on both axes,
+    an unscaled one keeping a delta's fraction for the next (`remainder`, reset by a scroll the
+    engine did not make). A scroll target's span start is rounded down and its end and maximum
+    up (`scrollTargetForSpan`), a column's worked out in the scroll's own space (less the pinned
+    width, fractional or not), and a move is compared with the clamped offset (`offsetFor`): a
+    key at the end is no move. A field's
+    default width is the browser's: the fixture sizes its own. Paste: Playwright's WebKit fires
+    `paste` at a focused cell; Firefox fires it at the page's selection (`selectForClipboard`).
 14. **App policy stays in the app.** The packages ship no fetching, caching, persistence or
     translations.
 
@@ -958,7 +997,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip): a report, after `pnpm build` |
-| `pnpm e2e` | Playwright: the playground (Chromium and Firefox) and the examples app (Chromium) |
+| `pnpm e2e` | Playwright: the playground and the examples app, each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
 | `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
 | `pnpm site:dev --base /data-grid --port <n>` | the examples app with hot reload, under the base `www` proxies in dev |

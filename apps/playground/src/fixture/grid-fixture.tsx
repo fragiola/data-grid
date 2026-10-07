@@ -426,10 +426,13 @@ function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
                     </button>
                 </>
             ),
+            // narrow enough for its cell: a field's default width is the browser's (WebKit's
+            // is wider than the column)
             renderCell: ({ row }) => (
                 <input
                     aria-label={`Field ${row.index}`}
                     data-testid={`field-${row.index}`}
+                    size={8}
                 />
             ),
         };
@@ -779,8 +782,10 @@ function reorderColumn(
 }
 
 // The drop indicator is the app's (O4): a line on the target's side, from its attribute (its
-// start: the right edge right to left)
+// start: the right edge right to left). A reorderable header cell leaves the browser only its
+// vertical pans: a touch moved sideways drags it (Epic #89)
 const DROP_TARGET_CSS = `
+[data-grid-part="header-cell"][data-reorderable] { touch-action: pan-y; }
 [data-drop-target="before"] { box-shadow: inset 3px 0 0 blue; }
 [data-drop-target="after"] { box-shadow: inset -3px 0 0 blue; }
 [dir="rtl"] [data-drop-target="before"] { box-shadow: inset -3px 0 0 blue; }

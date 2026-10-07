@@ -163,6 +163,14 @@
                 {
                     "label": "Empty state",
                     "path": "guides/empty-state"
+                },
+                {
+                    "label": "Server rendering",
+                    "path": "guides/server-rendering"
+                },
+                {
+                    "label": "Touch screens",
+                    "path": "guides/touch"
                 }
             ]
         },

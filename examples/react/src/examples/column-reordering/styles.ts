@@ -59,7 +59,7 @@ const pinnedEdge =
  * the target on the side the column would land (over a pinned edge's shadow).
  */
 const reorder = cn(
-    "data-reorderable:cursor-grab data-reorderable:select-none data-reorderable:data-dragging:cursor-grabbing",
+    "data-reorderable:cursor-grab data-reorderable:select-none data-reorderable:touch-pan-y data-reorderable:data-dragging:cursor-grabbing",
     "data-dragging:opacity-50",
     "data-[drop-target=before]:shadow-[inset_3px_0_0_var(--dg-active-line)]",
     "data-[drop-target=after]:shadow-[inset_-3px_0_0_var(--dg-active-line)]",

@@ -68,7 +68,7 @@ const pinnedEdge = (state: { pinnedSide: "start" | "end" | undefined }) =>
  * right to left).
  */
 const reorder = cn(
-    "data-reorderable:cursor-grab data-reorderable:select-none data-reorderable:data-dragging:cursor-grabbing",
+    "data-reorderable:cursor-grab data-reorderable:select-none data-reorderable:touch-pan-y data-reorderable:data-dragging:cursor-grabbing",
     "data-dragging:opacity-50",
     "ltr:data-[drop-target=before]:shadow-[inset_3px_0_0_var(--dg-active-line)]",
     "ltr:data-[drop-target=after]:shadow-[inset_-3px_0_0_var(--dg-active-line)]",

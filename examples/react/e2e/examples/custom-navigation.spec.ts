@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { openExample } from "../helpers";
-import { cell } from "./helpers";
+import { cell, pressTabOut } from "./helpers";
 
 test("Tab moves across the row, then to the next row's first cell", async ({
     page,
@@ -26,6 +26,6 @@ test("Tab loops over the row, or leaves the grid, as chosen", async ({
 
     await page.getByLabel("Tab leaves the grid").check();
     await cell(page, 4, 1).click();
-    await page.keyboard.press("Tab");
+    await pressTabOut(page);
     await expect(page.locator('[data-grid-part="cell"]:focus')).toHaveCount(0);
 });

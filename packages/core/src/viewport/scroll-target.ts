@@ -8,6 +8,9 @@ export type ScrollAlign = "nearest" | "start" | "center" | "end";
  * detail), from `offset`, with a viewport of `viewportSize` over content `totalSize` long.
  * `"nearest"` moves as little as possible (not at all when the span is already in view); the
  * others put the span at the viewport's start, centre or end. Clamped to the scrollable range.
+ * A span's start is reached rounded down and its end rounded up (Epic #89): a browser scrolls by
+ * whole pixels its own way (WebKit drops a fraction Chromium rounds), so a span with fractional
+ * edges (measured rows) still ends up wholly in view in every engine.
  */
 export function scrollTargetForSpan(
     start: number,
@@ -17,24 +20,27 @@ export function scrollTargetForSpan(
     totalSize: number,
     align: ScrollAlign = "nearest",
 ): number {
-    const max = Math.max(0, totalSize - viewportSize);
+    const max = Math.max(0, Math.ceil(totalSize - viewportSize));
     let target: number;
     switch (align) {
         case "start":
-            target = start;
+            target = Math.floor(start);
             break;
         case "end":
-            target = end - viewportSize;
+            target = Math.ceil(end - viewportSize);
             break;
         case "center":
             target = start - (viewportSize - (end - start)) / 2;
             break;
         default:
             if (start < offset) {
-                target = start;
+                target = Math.floor(start);
             } else if (end > offset + viewportSize) {
                 // an item larger than the viewport shows its start
-                target = Math.min(end - viewportSize, start);
+                target = Math.min(
+                    Math.ceil(end - viewportSize),
+                    Math.floor(start),
+                );
             } else {
                 target = offset;
             }

@@ -150,6 +150,9 @@ at the grid's last row and column: `range` is where they land, `values` the text
 (every row as long as the longest). The grid writes nothing: you convert each value and write it
 into your rows.
 
+As for a copy, Ctrl+V selects a hidden node of the focused cell until the paste is over: Firefox
+fires the paste where the page's selection is, not at the focused cell.
+
 ```tsx title="paste.tsx"
 <DataGrid.Root
     cellSelection="range"

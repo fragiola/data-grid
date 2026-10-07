@@ -337,10 +337,10 @@ const RESIZE_STEP = 10;
 const RESIZE_SHIFT_STEP = 50;
 
 /**
- * The style of the node a copy selects (`selectForCopy`, Epic #88): out of the cell's layout,
- * unseen, and selectable whatever the cell's `user-select`.
+ * The style of the node a copy or a paste selects (`selectForClipboard`, Epic #88): out of the
+ * cell's layout, unseen, and selectable whatever the cell's `user-select`.
  */
-const COPY_NODE_STYLE: readonly (readonly [string, string])[] = [
+const CLIPBOARD_NODE_STYLE: readonly (readonly [string, string])[] = [
     ["position", "absolute"],
     ["width", "1px"],
     ["height", "1px"],
@@ -350,6 +350,19 @@ const COPY_NODE_STYLE: readonly (readonly [string, string])[] = [
     ["user-select", "text"],
     ["-webkit-user-select", "text"],
 ];
+
+/**
+ * The Latin letter a shortcut is pressed with (Epic #89): its key's own, else, on a layout whose
+ * letters are not Latin (Cyrillic, Greek), its key's place on the keyboard (`code`), as the
+ * system's shortcuts read it.
+ */
+function shortcutLetter(event: KeyboardEvent): string {
+    const key = event.key.toLowerCase();
+    if (key.length === 1 && key >= "a" && key <= "z") return key;
+    return event.code.startsWith("Key")
+        ? event.code.slice(3).toLowerCase()
+        : key;
+}
 
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
@@ -869,6 +882,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (moves.left !== undefined) pendingScroll.left = moves.left;
     }
 
+    /** Writes the physical scroll: whole pixels, as the axes hold it (Epic #89). */
     function applyScroll(moves: ScrollMoves) {
         if (!viewport) return;
         if (moves.top !== undefined) viewport.scrollTop = moves.top;
@@ -1076,17 +1090,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         event.preventDefault();
         // a person's scroll: the cell it scrolled to is left (E2.2)
         cellScroll = null;
-        if (dy !== 0) {
-            if (yScaled) viewport.scrollTop = rowsY.scrollBy(dy);
-            else viewport.scrollTop += dy;
-        }
+        // each axis by its own rule: whole pixels, an unscaled one keeping a delta's fraction for
+        // the next delta (Epic #89: WebKit drops a fraction written to the scroll)
+        if (dy !== 0) viewport.scrollTop = rowsY.scrollBy(dy);
         if (dx !== 0) {
-            if (xScaled) {
-                const sign = inlineSign(direction);
-                viewport.scrollLeft = sign * columnsX.scrollBy(sign * dx);
-            } else {
-                viewport.scrollLeft += dx;
-            }
+            const sign = inlineSign(direction);
+            viewport.scrollLeft = sign * columnsX.scrollBy(sign * dx);
         }
         // the scroll event follows (or not, for a sub-pixel move): update now either way
         syncScroll();
@@ -1120,26 +1129,29 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 rowAxis.totalSize,
                 align,
             );
-            if (target !== rowsY.virtual) moves.top = rowsY.scrollTo(target);
+            // compared with what the axis would hold: a move to the end it is at is no move
+            if (rowsY.offsetFor(target) !== rowsY.virtual) {
+                moves.top = rowsY.scrollTo(target);
+            }
         }
         if (
             columnIndex !== undefined &&
             columnPart(columnIndex, pinnedCount, endFrom()) === undefined
         ) {
-            // into the view between the pinned columns; a pinned one is always in view
-            const from = columnsX.virtual + pinnedWidth;
-            const start = columnAxis.offsetOf(columnIndex);
+            // into the view between the pinned columns; a pinned one is always in view. Worked
+            // out in the scroll's own space (the column's offset less the pinned width), so its
+            // edges are rounded where the scroll is whole pixels, a fractional pinned width too
+            const start = columnAxis.offsetOf(columnIndex) - pinnedWidth;
             const target = scrollTargetForSpan(
                 start,
                 start + columnAxis.sizeOf(columnIndex),
-                from,
+                columnsX.virtual,
                 width - pinnedWidth - pinnedEndWidth,
-                columnAxis.totalSize - pinnedEndWidth,
+                columnAxis.totalSize - pinnedEndWidth - pinnedWidth,
                 align,
             );
-            // compared where it was computed: a column in view moves nothing, exactly
-            if (target !== from) {
-                moves.left = columnsX.scrollTo(target - pinnedWidth);
+            if (columnsX.offsetFor(target) !== columnsX.virtual) {
+                moves.left = columnsX.scrollTo(target);
             }
         }
         if (moves.top === undefined && moves.left === undefined) return;
@@ -1440,7 +1452,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     frame: null,
                 };
                 lastPress = drag;
-                listen(drag);
+                listen(drag, event.pointerType === "touch");
                 capture(drag);
                 setColumnResize({ columnKey, width: span.width });
                 return true;
@@ -1481,7 +1493,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 element: viewport,
             };
             lastPress = drag;
-            listen(drag);
+            listen(drag, event.pointerType === "touch");
             capture(drag);
             setFill({ source, target: null });
             return true;
@@ -1528,7 +1540,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
         }
         lastPress = drag;
-        listen(drag);
+        listen(drag, event.pointerType === "touch");
         return true;
     }
 
@@ -1614,9 +1626,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * Follows a press's pointer and keys wherever they go, and keeps the page's own drags (a text
-     * selection, a native drag of an image or a link) out of it.
+     * selection, a native drag of an image or a link) out of it, and, for a touch, its long press
+     * (Epic #89: the menu it would open; a mouse's context menu, a Ctrl+click on macOS too, stays
+     * the app's).
      */
-    function listen(current: Drag<TRow, TNode>) {
+    function listen(current: Drag<TRow, TNode>, touch: boolean) {
         const { doc } = current;
         doc.addEventListener("pointermove", onDragMove, true);
         // a press the grid never heard released: the next one ends it
@@ -1626,6 +1640,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         doc.addEventListener("keydown", onDragKey);
         doc.addEventListener("selectstart", preventDefault, true);
         doc.addEventListener("dragstart", preventDefault, true);
+        if (touch) doc.addEventListener("contextmenu", preventDefault, true);
         doc.defaultView?.addEventListener("blur", onWindowBlur);
     }
 
@@ -1792,6 +1807,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         doc.removeEventListener("keydown", onDragKey);
         doc.removeEventListener("selectstart", preventDefault, true);
         doc.removeEventListener("dragstart", preventDefault, true);
+        doc.removeEventListener("contextmenu", preventDefault, true);
         doc.defaultView?.removeEventListener("blur", onWindowBlur);
         ended.element.removeEventListener("lostpointercapture", onLostCapture);
         drag = null;
@@ -3025,8 +3041,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * one keeps its own clipboard; a nested grid's cell is that grid's); else `null`.
      */
     function clipboardRange(event: ClipboardEvent): CellRange | null {
-        // a copy's own selection (`selectForCopy`): the event comes from its node, in the cell
-        const held = copySelection?.node;
+        // the grid's own selection (`selectForClipboard`): the event comes from its node, in the
+        // cell
+        const held = clipboardSelection?.node;
         const target =
             held && isElement(event.target) && held.contains(event.target)
                 ? held.parentElement
@@ -3046,7 +3063,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     /** A copy in the grid (E4.2): its range's cells as TSV, on the clipboard. */
     function copy(event: ClipboardEvent): boolean {
         const range = clipboardRange(event);
-        endCopySelection();
+        endClipboardSelection();
         if (!range) return false;
         event.clipboardData?.setData("text/plain", rangeText(state, range));
         event.preventDefault();
@@ -3054,36 +3071,39 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /**
-     * the node a copy selects while the page's selection is collapsed (`selectForCopy`), and the
-     * selection's ranges before it
+     * the node a copy or a paste selects (`selectForClipboard`), and the selection's ranges
+     * before it
      */
-    let copySelection: {
+    let clipboardSelection: {
         readonly node: Element;
         readonly ranges: readonly ReturnType<Selection["getRangeAt"]>[];
     } | null = null;
 
     /**
-     * Ctrl/⌘+C on one of the grid's cells (E4.2), its keydown never prevented: the page's own
-     * `copy` follows, which WebKit fires only while something is selected, at the selection. A
-     * node of the cell's own, hidden and selectable, holds the selection (collapsed, as the grid
-     * keeps it, or text selected elsewhere on the page, which would take the copy) until the copy
-     * (`copy`) or, without one, the next task (`endCopySelection`, which puts the selection
-     * back); text selected inside the cell is left to copy as it is. No permission, every engine.
+     * Ctrl/⌘+C or Ctrl/⌘+V on one of the grid's cells (E4.2), its keydown never prevented: the
+     * page's own `copy` or `paste` follows, which WebKit fires (a copy) only while something is
+     * selected, and Firefox fires at the selection, not at the focused cell (Epic #89). A node of
+     * the cell's own, hidden and selectable, holds the selection (collapsed, as the grid keeps
+     * it, or text selected elsewhere on the page, which would take the event) until the event
+     * (`copy`, `paste`) or, without one, the next task (`endClipboardSelection`, which puts the
+     * selection back); for a copy, text selected inside the cell is left to copy as it is. No
+     * permission, every engine.
      */
-    function selectForCopy(cell: Element) {
+    function selectForClipboard(cell: Element, copying: boolean) {
         const doc = cell.ownerDocument;
         const selection = doc.getSelection();
         if (!selection) return;
         // text selected in the cell itself (its content, its editor) is copied as it is; a
         // selection anywhere else on the page is not the grid's copy: replaced until it is over
         if (
+            copying &&
             !selection.isCollapsed &&
             cell.contains(selection.anchorNode) &&
             cell.contains(selection.focusNode)
         ) {
             return;
         }
-        endCopySelection();
+        endClipboardSelection();
         const ranges = Array.from(
             { length: selection.rangeCount },
             (_, index) => selection.getRangeAt(index),
@@ -3091,20 +3111,20 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const node = doc.createElement("span");
         node.textContent = "\u200b";
         node.setAttribute("aria-hidden", "true");
-        for (const [property, value] of COPY_NODE_STYLE) {
+        for (const [property, value] of CLIPBOARD_NODE_STYLE) {
             node.style.setProperty(property, value);
         }
         cell.append(node);
         selection.selectAllChildren(node);
-        copySelection = { node, ranges };
-        doc.defaultView?.setTimeout(endCopySelection, 0);
+        clipboardSelection = { node, ranges };
+        doc.defaultView?.setTimeout(endClipboardSelection, 0);
     }
 
-    /** Puts the selection back as it was before `selectForCopy`, and removes its node. */
-    function endCopySelection() {
-        const held = copySelection;
+    /** Puts the selection back as it was before `selectForClipboard`, and removes its node. */
+    function endClipboardSelection() {
+        const held = clipboardSelection;
         if (!held) return;
-        copySelection = null;
+        clipboardSelection = null;
         const selection = held.node.ownerDocument.getSelection();
         selection?.removeAllRanges();
         for (const range of held.ranges) selection?.addRange(range);
@@ -3117,6 +3137,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function paste(event: ClipboardEvent): boolean {
         const range = clipboardRange(event);
+        endClipboardSelection();
         const values = range
             ? parseTsv(event.clipboardData?.getData("text/plain") ?? "")
             : [];
@@ -3682,20 +3703,22 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function keydown(event: KeyboardEvent): boolean {
         const target = event.target;
         const ctrl = event.ctrlKey || event.metaKey;
-        // Ctrl/⌘+C on one of its cells, something to copy (Epic #88): the page's own copy follows,
-        // with a selection for WebKit to fire it (`selectForCopy`); the key is never the grid's
+        // Ctrl/⌘+C or Ctrl/⌘+V on one of its cells, something to copy or paste into (Epic #88):
+        // the page's own copy or paste follows, with a selection in the cell for WebKit to fire a
+        // copy and Firefox to fire either at the cell (`selectForClipboard`); the key is never
+        // the grid's
+        const clipboardKey = ctrl ? shortcutLetter(event) : "";
         if (
-            ctrl &&
+            (clipboardKey === "c" || clipboardKey === "v") &&
             !event.shiftKey &&
             !event.altKey &&
             !event.defaultPrevented &&
-            event.key.toLowerCase() === "c" &&
             state.cellSelection &&
             isElement(target) &&
             isCellElement(target) &&
             selectedArea(state)
         ) {
-            selectForCopy(target);
+            selectForClipboard(target, clipboardKey === "c");
             return false;
         }
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
@@ -4446,8 +4469,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 endDrag("lost");
                 // a move told is no longer followed (E2.3)
                 movedRow = null;
-                // a copy's selection never outlives the viewport (Epic #88)
-                endCopySelection();
+                // a copy's or a paste's selection never outlives the viewport (Epic #88)
+                endClipboardSelection();
                 editPressDoc?.removeEventListener(
                     "pointerdown",
                     onEditPress,

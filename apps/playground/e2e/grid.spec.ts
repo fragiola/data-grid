@@ -5,10 +5,12 @@ import {
     contentWidth,
     dragBy,
     settle,
+    touchDrag,
 } from "../../../examples/react/e2e/examples/helpers.ts";
 
 // One spec, two structures (D5): every test runs against the same unstyled grid rendered as real
-// table elements (fixtures/table-grid) and as divs (fixtures/div-grid), in Chromium and Firefox.
+// table elements (fixtures/table-grid) and as divs (fixtures/div-grid), in Chromium, Firefox and
+// WebKit.
 
 const KINDS = ["table", "div"] as const;
 const OVERSCAN = { rows: 4, columns: 2 };
@@ -5488,6 +5490,43 @@ for (const kind of KINDS) {
                 });
             });
 
+            test("pastes at the focused cell whatever the page's selection, putting it back (Epic #89)", async ({
+                page,
+            }) => {
+                await open(page, kind, CELLS);
+                // something on the clipboard to paste: a cell's value
+                await cell(page, 1, 1).click();
+                await page.keyboard.press("ControlOrMeta+c");
+                // text selected outside the grid: Firefox fires a paste at the selection, not at
+                // the focused cell; the grid holds a selection in the cell for the paste
+                await page.evaluate(() => {
+                    const text = document.createElement("p");
+                    text.textContent = "page text";
+                    text.id = "page-text";
+                    document.body.prepend(text);
+                    const selection = document.getSelection();
+                    selection?.selectAllChildren(text);
+                });
+                await cell(page, 3, 3).focus();
+                await page.evaluate(() => {
+                    const selection = document.getSelection();
+                    const text = document.getElementById("page-text");
+                    if (text) selection?.selectAllChildren(text);
+                });
+                await page.keyboard.press("ControlOrMeta+v");
+                await settle(page);
+                // what is on the clipboard is the browser's: one paste, at the active cell
+                expect(
+                    (await page.evaluate(() => window.rangePastes)).map(
+                        (paste) => paste.range.anchor,
+                    ),
+                ).toEqual([{ rowIndex: 3, columnIndex: 3 }]);
+                expect(
+                    await page.evaluate(() => String(document.getSelection())),
+                ).toBe("page text");
+                await expect(cell(page, 3, 3)).toBeFocused();
+            });
+
             test("asks a controlled parent and follows its range", async ({
                 page,
             }) => {
@@ -6002,6 +6041,268 @@ for (const kind of KINDS) {
                     "aria-selected",
                     "false",
                 );
+            });
+        });
+
+        test.describe("touch", () => {
+            // an emulated touch screen (Epic #89): the drags' handles are the app's elements with
+            // `touch-action: none` (a reorderable header cell `pan-y`), the body the browser's
+            test.use({ hasTouch: true });
+
+            /** A finger's drag through Chromium's input pipeline: touch-action and scrolling. */
+            async function realTouch(
+                page: Page,
+                target: Locator,
+                { dx = 0, dy = 0 }: { dx?: number; dy?: number },
+            ) {
+                const box = await boxOf(target);
+                const x = box.x + box.width / 2;
+                const y = box.y + box.height / 2;
+                // a session for the gesture, detached once it is over
+                const cdp = await page.context().newCDPSession(page);
+                try {
+                    await cdp.send("Input.dispatchTouchEvent", {
+                        type: "touchStart",
+                        touchPoints: [{ x, y }],
+                    });
+                    for (let step = 1; step <= 8; step++) {
+                        await cdp.send("Input.dispatchTouchEvent", {
+                            type: "touchMove",
+                            touchPoints: [
+                                {
+                                    x: x + (dx * step) / 8,
+                                    y: y + (dy * step) / 8,
+                                },
+                            ],
+                        });
+                        await settle(page);
+                    }
+                    await cdp.send("Input.dispatchTouchEvent", {
+                        type: "touchEnd",
+                        touchPoints: [],
+                    });
+                } finally {
+                    await cdp.detach();
+                }
+                await settle(page);
+            }
+
+            const widthOf = (page: Page, columnKey: string) =>
+                page.evaluate(
+                    (key) =>
+                        window.grid?.model.get("column-width-by", {
+                            columnKey: key,
+                        }),
+                    columnKey,
+                );
+
+            const header = (page: Page, columnIndex: number) =>
+                page.locator(
+                    `[data-grid-part="header-cell"][data-column-index="${columnIndex}"]:not([data-group])`,
+                );
+
+            test("resizes a column by its handle", async ({ page }) => {
+                await open(page, kind, { rows: 1_000, columns: 20, resize: 1 });
+                const resizer = page.getByTestId("resizer-c1");
+                await expect(resizer).toHaveCSS("touch-action", "none");
+                const width = (await widthOf(page, "c1")) ?? 0;
+                await touchDrag(page, resizer, { dx: 50 });
+                expect(
+                    await page.evaluate(() => window.widthChanges.at(-1)),
+                ).toEqual({ c1: width + 50 });
+            });
+
+            test("moves a column by its header cell, and a row by its handle", async ({
+                page,
+            }) => {
+                await open(page, kind, { rows: 100, columns: 20, reorder: 1 });
+                await expect(header(page, 2)).toHaveCSS(
+                    "touch-action",
+                    "pan-y",
+                );
+                const target = await boxOf(header(page, 4));
+                const from = await boxOf(header(page, 2));
+                await touchDrag(page, header(page, 2), {
+                    dx:
+                        target.x +
+                        target.width -
+                        10 -
+                        (from.x + from.width / 2),
+                });
+                const order = await page.evaluate(() =>
+                    window.orderChanges.at(-1),
+                );
+                expect(order?.slice(0, 5)).toEqual([
+                    "c0",
+                    "c1",
+                    "c3",
+                    "c4",
+                    "c2",
+                ]);
+                // no sort, no click: the drag's
+                expect(await page.evaluate(() => window.sortChanges)).toEqual(
+                    [],
+                );
+
+                await open(page, kind, {
+                    rows: 100,
+                    columns: 8,
+                    rowReorder: 1,
+                });
+                const handle = page.getByTestId("handle-1");
+                await expect(handle).toHaveCSS("touch-action", "none");
+                const row = await boxOf(cell(page, 3, 1));
+                const start = await boxOf(handle);
+                await touchDrag(page, handle, {
+                    dy:
+                        row.y +
+                        row.height * 0.75 -
+                        (start.y + start.height / 2),
+                });
+                expect(await page.evaluate(() => window.rowMoves)).toEqual([
+                    { fromIndex: 1, toIndex: 3, rowKey: 1 },
+                ]);
+            });
+
+            test("a tap activates a cell, and the fill handle fills by touch", async ({
+                page,
+            }) => {
+                await open(page, kind, {
+                    rows: 1_000,
+                    columns: 20,
+                    cells: 1,
+                    fill: 1,
+                });
+                const tapped = await boxOf(cell(page, 1, 1));
+                await page.touchscreen.tap(
+                    tapped.x + tapped.width / 2,
+                    tapped.y + tapped.height / 2,
+                );
+                await settle(page);
+                expect(await active(page)).toEqual({
+                    rowIndex: 1,
+                    columnIndex: 1,
+                });
+                const handle = page.getByTestId("fill-handle");
+                await expect(handle).toHaveCSS("touch-action", "none");
+                const target = await boxOf(cell(page, 4, 1));
+                const start = await boxOf(handle);
+                await touchDrag(page, handle, {
+                    dy:
+                        target.y +
+                        target.height / 2 -
+                        (start.y + start.height / 2),
+                });
+                expect(await page.evaluate(() => window.fills)).toEqual([
+                    {
+                        source: {
+                            anchor: { rowIndex: 1, columnIndex: 1 },
+                            focus: { rowIndex: 1, columnIndex: 1 },
+                        },
+                        target: {
+                            anchor: { rowIndex: 2, columnIndex: 1 },
+                            focus: { rowIndex: 4, columnIndex: 1 },
+                        },
+                    },
+                ]);
+            });
+
+            test("a long press on a handle selects no text and opens no menu, only while held", async ({
+                page,
+            }) => {
+                await open(page, kind, {
+                    rows: 100,
+                    columns: 8,
+                    rowReorder: 1,
+                });
+                const prevented = await page
+                    .getByTestId("handle-2")
+                    .evaluate((handle) => {
+                        const touch = {
+                            bubbles: true,
+                            cancelable: true,
+                            pointerId: 12,
+                            pointerType: "touch",
+                            isPrimary: true,
+                        };
+                        // what a browser fires for a finger held still
+                        const longPress = () =>
+                            [
+                                new Event("selectstart", {
+                                    bubbles: true,
+                                    cancelable: true,
+                                }),
+                                new MouseEvent("contextmenu", {
+                                    bubbles: true,
+                                    cancelable: true,
+                                }),
+                            ].map((event) => {
+                                handle.dispatchEvent(event);
+                                return event.defaultPrevented;
+                            });
+                        handle.dispatchEvent(
+                            new PointerEvent("pointerdown", {
+                                ...touch,
+                                buttons: 1,
+                            }),
+                        );
+                        const held = longPress();
+                        handle.dispatchEvent(
+                            new PointerEvent("pointerup", touch),
+                        );
+                        return { held, released: longPress() };
+                    });
+                expect(prevented).toEqual({
+                    held: [true, true],
+                    released: [false, false],
+                });
+            });
+
+            test("a swipe on the body scrolls: no range, no drag, nothing prevented", async ({
+                page,
+                browserName,
+            }) => {
+                const viewport = await open(page, kind, {
+                    rows: 1_000,
+                    columns: 20,
+                    cells: 1,
+                    rowReorder: 1,
+                });
+                // the browser pans the body: the grid sets no touch-action
+                await expect(cell(page, 5, 2)).toHaveCSS(
+                    "touch-action",
+                    "auto",
+                );
+                await expect(viewport).toHaveCSS("touch-action", "auto");
+                expect(
+                    await touchDrag(page, cell(page, 5, 2), { dy: -150 }),
+                ).toBe(false);
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.get("selected-range"),
+                    ),
+                ).toBeNull();
+                expect(await page.evaluate(() => window.rowMoves)).toEqual([]);
+                // a finger's own swipe, through Chromium's input: the body scrolls
+                if (browserName !== "chromium") return;
+                await realTouch(page, cell(page, 5, 2), { dy: -200 });
+                expect(
+                    await viewport.evaluate((element) => element.scrollTop),
+                ).toBeGreaterThan(100);
+                expect(
+                    await page.evaluate(() =>
+                        window.grid?.model.get("selected-range"),
+                    ),
+                ).toBeNull();
+                // and a finger's drag on a handle with touch-action: none drags it
+                await open(page, kind, { rows: 1_000, columns: 20, resize: 1 });
+                const width = (await widthOf(page, "c1")) ?? 0;
+                await realTouch(page, page.getByTestId("resizer-c1"), {
+                    dx: 50,
+                });
+                expect(
+                    await page.evaluate(() => window.widthChanges.at(-1)),
+                ).toEqual({ c1: width + 50 });
             });
         });
     });

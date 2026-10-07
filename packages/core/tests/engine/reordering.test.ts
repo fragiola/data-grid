@@ -582,6 +582,37 @@ describe("a drag's pointer and the page", () => {
         press(cells.a, "pointerup", 235);
     });
 
+    it("drags by touch as by a mouse, a long press selecting no text and opening no menu (Epic #89)", () => {
+        const { cells, press, target, model } = setup();
+        const touch = { pointerType: "touch", pointerId: 3 } as const;
+        const longPress = () => {
+            const select = new Event("selectstart", { cancelable: true });
+            const menu = new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+            });
+            cells.a.dispatchEvent(select);
+            cells.a.dispatchEvent(menu);
+            return [select.defaultPrevented, menu.defaultPrevented];
+        };
+        press(cells.a, "pointerdown", 250, touch);
+        // held still: what a long press would do is the press's (a cell held may still drag)
+        expect(longPress()).toEqual([true, true]);
+        press(cells.a, "pointermove", 260, touch);
+        press(cells.a, "pointermove", 370, touch);
+        frame();
+        expect(target()).toMatchObject({ targetKey: "b", side: "after" });
+        press(cells.a, "pointerup", 370, touch);
+        const keys = model.state.columns.map((column) => column.key);
+        expect(keys.indexOf("a")).toBe(keys.indexOf("b") + 1);
+        // released: the page's own again
+        expect(longPress()).toEqual([false, false]);
+        // a mouse's press keeps its context menu (a Ctrl+click on macOS is one): the app's
+        press(cells.a, "pointerdown", 250, { ctrlKey: true });
+        expect(longPress()).toEqual([true, false]);
+        press(cells.a, "pointerup", 250);
+    });
+
     it("ends a press whose release the page never heard: the next press works, nothing blocked", () => {
         const { cells, press, pressed, target } = setup();
         const selectStart = () => {

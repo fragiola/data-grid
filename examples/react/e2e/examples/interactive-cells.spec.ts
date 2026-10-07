@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { openExample, part } from "../helpers";
-import { cell } from "./helpers";
+import { cell, pressTabOut } from "./helpers";
 
 // Interactive cells (Epic #52): controls in every cell, and the grid still one tab stop.
 
@@ -28,7 +28,7 @@ test("Enter reaches a cell's field, Escape comes back, Tab leaves the grid", asy
     await expect(field).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(cell(page, 0, 1)).toBeFocused();
-    await page.keyboard.press("Tab");
+    await pressTabOut(page);
     expect(await focusInGrid()).toBe(false);
 });
 

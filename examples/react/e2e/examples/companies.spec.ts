@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openExample, part } from "../helpers";
-import { boxOf, dragBy, header, rows } from "./helpers";
+import { boxOf, dragBy, header, pressTabOut, rows } from "./helpers";
 
 // The grid's selection (the app keeps the keys and deletes those rows), the grid's sort (the app
 // orders the rows by it), and its columns resized and moved.
@@ -115,7 +115,7 @@ test("the grid is one tab stop: Enter reaches a cell's control, Escape comes bac
     const focusInGrid = () =>
         root.evaluate((element) => element.contains(document.activeElement));
     await rows(page).first().locator('[data-column-index="2"]').click();
-    await page.keyboard.press("Tab");
+    await pressTabOut(page);
     expect(await focusInGrid()).toBe(false);
 
     // the arrows reach the checkbox's cell, Enter hands it the keys and Space toggles it
@@ -136,7 +136,7 @@ test("the grid is one tab stop: Enter reaches a cell's control, Escape comes bac
     await expect(
         rows(page).first().locator('[data-column-index="0"]'),
     ).toBeFocused();
-    await page.keyboard.press("Tab");
+    await pressTabOut(page);
     expect(await focusInGrid()).toBe(false);
 });
 
