@@ -79,7 +79,7 @@ A move outside the rules is refused, and a middleware can refuse or rewrite any 
 fixed `#` first, for instance:
 
 ```ts title="first-column.ts"
-import { veto } from "@fragiola/data-grid";
+import { veto } from "@fragiola/data-grid-react";
 
 model.use((ctx, next) =>
     ctx.command === "column-order.move" &&

@@ -9,12 +9,20 @@ It is built for **millions of cells**: virtualized on both axes, with a scroll s
 the whole dataset from the start, and windows (which rows and columns are in view) a developer
 loads data by.
 
+**v0 is reached** (Epics #85–#89): a stable grid at parity with React Data Grid 7.0.0-beta.60
+(every example of its website has a counterpart here: `site/docs/guides/from-react-data-grid.mdx`
+maps them and its props), plus four capabilities it lacks: **cell ranges** (with the clipboard
+and the fill handle), **measured row heights**, **collapsible column groups with sticky labels**
+and **row reordering**. It also takes rows by index (`rowCount` + `getRow`) and scales the scroll
+past the browser's size limit. What it leaves out is `site/docs/beyond-v0.mdx`; next come the
+maintainer's API review, then features and examples inspired by Bryntum Grid, then publishing.
+
 Other adapters may follow React, so **every piece of logic that isn't rendering lives in the core**.
 
 | package | name | contains | depends on |
 |---|---|---|---|
-| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; `/local`: the opt-in pipeline for rows in memory | DOM only |
-| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows` | peer `react`, `react-dom` (^19) |
+| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`) | DOM only |
+| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `react`, `react-dom` (^19) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react` |
 
 ## Non-negotiable rules
@@ -1034,7 +1042,9 @@ themes) and the source beside the stage; the state is in the URL
 (`?example=<slug>&theme=<name>&code=1`).
 
 - **Examples** live in `examples/react/src/examples` and are public: the site embeds them, readers
-  copy them. The playground reads them in place (`import.meta.glob`, the `#/` alias and the
+  copy them. Each of React Data Grid's website examples has one (the parity table of
+  `site/docs/guides/from-react-data-grid.mdx`); a menu, a filter or a checkbox in one is the app's
+  (Fragiola UI, vendored). The playground reads them in place (`import.meta.glob`, the `#/` alias and the
   pre-paint theme from `examples/react/vite.shared.ts`); it never keeps a second list.
 - **Fixtures** (`fixtures/<name>/`) are the unstyled pages Playwright drives; the sidebar links
   them. `stress-grid` (Epic #89, E5.3; `src/fixture/stress-fixture.tsx`, the grid fixture's parts)

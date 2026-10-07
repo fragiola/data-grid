@@ -126,7 +126,7 @@ A cell's `onKeyDown` runs before the grid's: `preventDefault` cancels the grid's
 A middleware can refuse or rewrite any move:
 
 ```ts title="no-header.ts"
-import { veto } from "@fragiola/data-grid";
+import { veto } from "@fragiola/data-grid-react";
 
 // ArrowUp from the first row stays there: the header never becomes active
 model.use((ctx, next) =>

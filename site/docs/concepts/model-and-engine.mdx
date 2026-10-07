@@ -24,13 +24,13 @@ Everything has the same verbs, each taking a key and a payload:
 | `use` | adds a middleware |
 | `subscribe` | listens to every committed command |
 
-The commands of this version are `columns.set`, `data.set`, `rows.changed`, `sizes.set`,
-`sort-columns.set`, `sort-columns.toggle`, `expanded-rows.set`, `expanded-rows.toggle`,
-`active-position.set`, `active-position.clear` and `active-position.move`. A command never
+Commands are named by the state they change, a dot, then the change: `columns.set`,
+`sort-columns.toggle`, `selected-rows.toggle`, `column-widths.resize`, `active-position.move`
+and the rest of the `CommandMap` type, which lists every one with its payload and result. A command never
 throws on bad input: it returns `{ ok: false, error }`.
 
 ```ts title="middleware.ts"
-import { veto } from "@fragiola/data-grid";
+import { veto } from "@fragiola/data-grid-react";
 
 // rows 0–9 are read-only: their cells cannot become active
 model.use((ctx, next) =>

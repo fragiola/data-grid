@@ -1,0 +1,85 @@
+---
+title: Beyond v0
+description: What v0 covers, what comes next and in which order, and what the grid leaves out for now, with what your app does meanwhile.
+---
+
+v0 is reached: a stable grid at parity with React Data Grid (7.0.0-beta.60), every example of its
+website having one here ([Coming from React Data Grid](/docs/guides/from-react-data-grid) maps
+them), plus what React Data Grid does not do: [ranges of cells](/docs/concepts/cell-selection)
+copied and pasted, rows [as tall as their content](/docs/concepts/measured-heights),
+[collapsible column groups](/docs/concepts/collapsible-groups) with labels that stay in view, and
+[rows reordered](/docs/concepts/row-reordering) by the grid, on top of what it was built on: rows
+[by index](/docs/concepts/data-loading) and [scroll scaling](/docs/concepts/scroll-scaling) to
+millions of rows and columns.
+
+## What comes next
+
+In this order:
+
+<Steps>
+
+<Step>
+
+### The API review
+
+The maintainer reads the whole API, every prop, command, hook and name, before anything is
+published. Names may still change until then.
+
+</Step>
+
+<Step>
+
+### More features and examples
+
+Features and examples inspired by Bryntum Grid, each one headless as the rest: the grid's
+behaviour, your look.
+
+</Step>
+
+<Step>
+
+### Publishing
+
+The packages are published once the API is settled. Until then they are not on the registry.
+
+</Step>
+
+</Steps>
+
+## What v0 leaves out
+
+Each of these is a known edge, with the reason it is there and what your app does meanwhile.
+
+| left out | why | meanwhile |
+| --- | --- | --- |
+| **Several ranges of cells.** Ctrl+click adds no second range, and a click on a header selects no column or row. | One range is what a copy, a paste and a fill read. | Select a column from your own control: `model.run("selected-range.set", …)` from its first body cell to its last ([Cell selection](/docs/concepts/cell-selection)). |
+| **A copy reads every cell of the range**, so a range of millions of cells makes a text that large. | The browser's copy event is answered at once, with the whole text. | Your `onCopy` on `Root` runs first: `preventDefault` and write what you choose, or refuse a range past a size ([Copying](/docs/concepts/cell-selection#copying)). |
+| **One value pasted over a larger range** lands in its first cell. | A paste lands as the clipboard's rows and columns are. | Read the range (`selectedRange`) in `onRangePaste` and fill it ([Pasting](/docs/concepts/cell-selection#pasting)). |
+| **Rows in memory need every row**: `useLocalRows` sorts, filters, groups and pages an array, not `getRow`. | Sorting or filtering what is not loaded means asking a server. | Past what the browser should hold, a server does it ([`server-side`](/examples/server-side)). |
+| **Sorted rows do not move**: the grid refuses a move while sorted. | A row dropped in a sorted grid would not stay where it was dropped. | A status that says so and a button that clears the sort ([Row reordering](/docs/concepts/row-reordering), [`row-reordering`](/examples/row-reordering)). |
+| **Grouped rows and a tree's rows do not move** by drag or by the keys. | A move in a grouped list is a change of group, which is your data's. | Move them in your data from a control or a menu of yours. |
+| **Live moves**: a column or a row stays where it is during its drag; no pinning by drag, no move between grids, no several rows at once. | v0 moves one column, group or row on release. | The indicator is yours, from `data-drop-target`; `pinned` and your rows are yours to change from any control. |
+| A **tree in memory** is not grouped too (`groupBy` is not read with `getSubRows`), and its filters do not open the parents of what they find. | A tree's rows have one parent each; a grouping would give them a second. | `expandAll()` after a search ([Tree data](/docs/concepts/tree-data)). |
+| A **page of grouped rows** in memory is of the rows shown: a group's rows may be on the next page. | Paging counts the rows on screen, group rows included. | Page the groups yourself, or let a server send each page grouped ([Row grouping](/docs/concepts/row-grouping)). |
+| **Measured heights** make the scrollbar approximate until the rows are measured: a jump to a far position lands near it. After a row move, the rows it shifted off screen count at the estimate until they render again. | Only rendered rows can be measured. | An `estimatedRowHeight` near the typical row ([Measured heights](/docs/concepts/measured-heights)). |
+| A **fit to content** measures the rendered rows only: rows scrolled into view later may be wider. A cell spanning columns is never measured. | Measuring every row would render every row. | Your own width for every row, set with `column-widths.set` ([Automatic widths](/docs/concepts/auto-widths)). |
+| A group's handle cannot move a **flex column that does not resize**: the group ends off the pointer. | Such a column takes its share, never a width. | Make the column `resizable`, or keep it out of a resizable group ([Automatic widths](/docs/concepts/auto-widths#a-group-with-a-column-that-flexes-and-does-not-resize)). |
+| **Nested grids need one copy** of `@fragiola/data-grid` in the app. | Which grid owns a cell is module state, shared by every grid on the page. | Keep one version installed, deduplicated by your package manager ([Nested grids](/docs/guides/nested-grids)). |
+| A **page direction changed** after the grid mounted is read at its next mount. | The page's direction is read when the grid attaches, never per frame. | Give the grid `direction` when the page's changes ([Right to left](/docs/concepts/right-to-left)). |
+| **React only.** | The core holds every piece of logic and is framework-free; other adapters may follow. | `@fragiola/data-grid`'s model and engine work without React. |
+
+## Yours by design
+
+These are not gaps: a headless grid leaves them to you, now and later.
+
+- **How it looks**: backgrounds (the header's and the summary rows', which stay above the rows),
+  indicators, icons and every word on screen. See [Styling with plain CSS](/docs/guides/styling-css).
+- **The controls**: checkboxes, editors, menus, a group's toggle, a resize or drag handle, and any
+  announcement in a live region.
+- **The figures**: summary rows' totals and groups' aggregates are your functions
+  ([Summary rows](/docs/concepts/summary-rows)).
+- **The data**: fetching, caching, writing edits, pastes and fills, undo, a fill's series, and
+  persisting widths or the column order. Selecting every row of a server's data is your state too:
+  a middleware turns `selected-rows.select-all` into an "every row but" state
+  ([Row selection](/docs/concepts/row-selection#every-row-of-a-servers),
+  [`server-selection`](/examples/server-selection)).
