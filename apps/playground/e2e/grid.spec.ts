@@ -4703,14 +4703,17 @@ for (const kind of KINDS) {
                 await dragTo(page, handle(page, 1), view.y + view.height - 5, {
                     hold: true,
                 });
+                // 20 px a frame: a slower frame rate (WebKit on CI) takes longer than 5 s
                 await expect
-                    .poll(() =>
-                        viewport.evaluate(
-                            (element) =>
-                                element.scrollHeight -
-                                element.clientHeight -
-                                element.scrollTop,
-                        ),
+                    .poll(
+                        () =>
+                            viewport.evaluate(
+                                (element) =>
+                                    element.scrollHeight -
+                                    element.clientHeight -
+                                    element.scrollTop,
+                            ),
+                        { timeout: 20_000 },
                     )
                     .toBeLessThan(1);
                 await expect(row(page, 99)).toHaveAttribute(
