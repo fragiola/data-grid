@@ -41,6 +41,7 @@ import {
     cellSpan,
     columnLeft,
     columnPinning,
+    columnSide,
     headerCellSort,
     resizeEdge,
     rowCellsHeight,
@@ -682,18 +683,16 @@ export function columnResizerPart<TRow, TNode>(
     const resizable = spanResizable(view.columnDefs, cell);
     const axis = view.columnAxis;
     // a cell whose columns do not resize is its width, with nothing to move within
-    const fixed =
-        axis.offsetOf(cell.columnIndex + cell.columnSpan) -
-        axis.offsetOf(cell.columnIndex);
-    const span: SpanWidths = resizable
-        ? spanWidths(view.columnDefs, axis, cell)
-        : { width: fixed, minWidth: fixed, maxWidth: fixed };
+    let span: SpanWidths;
+    if (resizable) span = spanWidths(view.columnDefs, axis, cell);
+    else {
+        const fixed =
+            axis.offsetOf(cell.columnIndex + cell.columnSpan) -
+            axis.offsetOf(cell.columnIndex);
+        span = { width: fixed, minWidth: fixed, maxWidth: fixed };
+    }
     const { width, minWidth, maxWidth } = span;
-    const { pinnedSide } = columnPinning(
-        view,
-        cell.columnIndex,
-        cell.columnSpan,
-    );
+    const pinnedSide = columnSide(view, cell.columnIndex);
     return {
         state: {
             columnKey: cell.key,

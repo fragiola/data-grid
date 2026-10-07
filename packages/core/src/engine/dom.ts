@@ -37,6 +37,15 @@ export const CTRL_KEYS: Record<string, Direction> = {
 /** The pixels a wheel "line" or "page" stands for (`deltaMode` 1 and 2). */
 export const LINE_HEIGHT = 40;
 
+/** Whether a key is Ctrl/⌘+A, without Shift: select all (the cells, the rows). */
+export function isSelectAll(event: KeyboardEvent): boolean {
+    return (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "a"
+    );
+}
+
 /**
  * Whether a key is part of a composition (an IME): `isComposing`, or the key code browsers give
  * its keys (229), which Safari's confirming Enter carries with `isComposing` false.
@@ -331,13 +340,87 @@ export function isElement(target: unknown): target is Element {
 }
 
 /** Whether an `overscroll-behavior` value keeps a scroll at the element's end from chaining. */
-export function keepsWheel(overscroll: string): boolean {
+function keepsWheel(overscroll: string): boolean {
     return overscroll === "contain" || overscroll === "none";
 }
 
 /** Whether an `overflow` value lets a person scroll the element (the wheel, a swipe). */
-export function scrollsOverflow(overflow: string): boolean {
+function scrollsOverflow(overflow: string): boolean {
     return overflow === "auto" || overflow === "scroll";
+}
+
+/**
+ * A wheel's gesture (Epic #89, E5.2): wheels this close together (ms) are one, the styles read for
+ * the first one kept for the others.
+ */
+export const WHEEL_GESTURE = 300;
+
+/** What a wheel reads of an element's style: where it scrolls, keeps a wheel, is laid out. */
+interface WheelStyle {
+    readonly x: boolean;
+    readonly y: boolean;
+    readonly keepsX: boolean;
+    readonly keepsY: boolean;
+    readonly rtl: boolean;
+}
+
+/** The styles read during a wheel's gesture, by element. */
+export type WheelStyles = WeakMap<Element, WheelStyle>;
+
+/** An element's styles a wheel reads, once a gesture (`styles`). */
+function wheelStyleOf(element: Element, styles: WheelStyles): WheelStyle {
+    let style = styles.get(element);
+    if (!style) {
+        const computed =
+            element.ownerDocument.defaultView?.getComputedStyle(element);
+        style = {
+            x: scrollsOverflow(computed?.overflowX ?? ""),
+            y: scrollsOverflow(computed?.overflowY ?? ""),
+            keepsX: keepsWheel(computed?.overscrollBehaviorX ?? ""),
+            keepsY: keepsWheel(computed?.overscrollBehaviorY ?? ""),
+            rtl: computed?.direction === "rtl",
+        };
+        styles.set(element, style);
+    }
+    return style;
+}
+
+/**
+ * The element from `target` up to the viewport (excluded) that still scrolls a wheel's part
+ * on one axis (`inline`: across, `delta` physical): one whose `overflow` scrolls on it, with
+ * content beyond its edge that way (right to left mirrored), or that never chains a wheel at
+ * its end (`overscroll-behavior`); `null` for none. Its scroll sizes are read only where its
+ * style lets it scroll.
+ */
+export function scrollerBefore(
+    target: Element,
+    viewport: Element | null,
+    inline: boolean,
+    delta: number,
+    styles: WheelStyles,
+): Element | null {
+    for (
+        let node: Element | null = target;
+        node && node !== viewport;
+        node = node.parentElement
+    ) {
+        const style = wheelStyleOf(node, styles);
+        if (!(inline ? style.x : style.y)) continue;
+        const max = inline
+            ? node.scrollWidth - node.clientWidth
+            : node.scrollHeight - node.clientHeight;
+        if (max < 1) continue;
+        if (inline ? style.keepsX : style.keepsY) return node;
+        // from the start, whatever the side it is laid out from
+        const at = inline
+            ? style.rtl
+                ? -node.scrollLeft
+                : node.scrollLeft
+            : node.scrollTop;
+        const toEnd = inline && style.rtl ? delta < 0 : delta > 0;
+        if (toEnd ? at < max - 0.5 : at > 0.5) return node;
+    }
+    return null;
 }
 
 /** The nearest attached viewport at or above `element`: the grid it belongs to. */
@@ -376,4 +459,66 @@ export function hiddenWithin(element: Element, cell: Element): boolean {
         }
     }
     return false;
+}
+
+/**
+ * The style of the node a copy or a paste selects (`holdSelection`, Epic #88): out of the
+ * cell's layout, unseen, and selectable whatever the cell's `user-select`.
+ */
+const CLIPBOARD_NODE_STYLE: readonly (readonly [string, string])[] = [
+    ["position", "absolute"],
+    ["width", "1px"],
+    ["height", "1px"],
+    ["overflow", "hidden"],
+    ["opacity", "0"],
+    ["pointer-events", "none"],
+    ["user-select", "text"],
+    ["-webkit-user-select", "text"],
+];
+
+/** The page's selection held in a cell's own node (`holdSelection`), and its ranges before. */
+export interface HeldSelection {
+    readonly node: Element;
+    readonly ranges: readonly ReturnType<Selection["getRangeAt"]>[];
+}
+
+/** Whether `selection` is text selected inside `cell` itself (its content, its editor). */
+export function selectedIn(selection: Selection, cell: Element): boolean {
+    return (
+        !selection.isCollapsed &&
+        cell.contains(selection.anchorNode) &&
+        cell.contains(selection.focusNode)
+    );
+}
+
+/**
+ * Selects a node of the cell's own, hidden and selectable, in place of the page's selection
+ * (collapsed, as the grid keeps it, or text selected elsewhere on the page, which would take a
+ * copy or a paste): the clipboard's events then come to the cell (Epic #89). Returns what puts
+ * the selection back (`releaseSelection`).
+ */
+export function holdSelection(
+    cell: Element,
+    selection: Selection,
+): HeldSelection {
+    const ranges = Array.from({ length: selection.rangeCount }, (_, index) =>
+        selection.getRangeAt(index),
+    );
+    const node = cell.ownerDocument.createElement("span");
+    node.textContent = "\u200b";
+    node.setAttribute("aria-hidden", "true");
+    for (const [property, value] of CLIPBOARD_NODE_STYLE) {
+        node.style.setProperty(property, value);
+    }
+    cell.append(node);
+    selection.selectAllChildren(node);
+    return { node, ranges };
+}
+
+/** Puts the selection back as it was before `holdSelection`, and removes its node. */
+export function releaseSelection({ node, ranges }: HeldSelection): void {
+    const selection = node.ownerDocument.getSelection();
+    selection?.removeAllRanges();
+    for (const range of ranges) selection?.addRange(range);
+    node.remove();
 }

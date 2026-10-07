@@ -12,7 +12,14 @@ import {
     nextPosition,
     sameCell,
 } from "../navigation/navigation";
-import { clamp, isIndex, keySet, sameKeys, toggledKey } from "../utils";
+import {
+    clamp,
+    isIndex,
+    isWidth,
+    keySet,
+    sameKeys,
+    toggledKey,
+} from "../utils";
 import { overlaps } from "../viewport/window";
 import {
     collapsingKeys,
@@ -43,7 +50,7 @@ import {
     siblingsOf,
 } from "./order";
 import { isBodyCell, isCellSelected, keptRange, sameCellRange } from "./range";
-import { done, fail, veto } from "./result";
+import { done, fail, ok, veto } from "./result";
 import {
     allKeys,
     extendedKeys,
@@ -68,16 +75,15 @@ import {
 } from "./sort";
 import {
     cellKeysAt,
-    cellValue,
     dataRowAt,
     groupAt,
-    groupCellValue,
     groupKeyAt,
     isGroupExpanded,
     keyOf,
     loadedRowKey,
     type RowsState,
     rowAt,
+    rowCellValue,
     rowCountOf,
     rowKeyAt,
     rowLoaded,
@@ -347,6 +353,11 @@ function cellsOff(): CommandFailure {
     return fail("refused", "cells are not selectable (no cellSelection)");
 }
 
+/** The refusal of a row index with no row. */
+function noRow(rowIndex: number): CommandFailure {
+    return fail("not_found", `no row ${rowIndex}`);
+}
+
 /** The refusal of a range corner that is no body cell. */
 function noBodyCell(position: CellPosition): CommandFailure {
     return fail(
@@ -560,7 +571,7 @@ function validRowKeys(
     if (!Array.isArray(rowKeys)) return invalid(`${name} must be an array`);
     const keys = uniqueRowKeys(rowKeys);
     return keys
-        ? { ok: true, value: keys }
+        ? ok(keys)
         : invalid("a row key must be a string or a finite number");
 }
 
@@ -575,11 +586,11 @@ function loadedKeyAt<TRow>(
     meta: RowMeta | undefined = rowMetaAt(state.source, rowIndex),
 ): CommandResult<RowKey> {
     if (!isIndex(rowIndex, state.rowCount)) {
-        return fail("not_found", `no row ${rowIndex}`);
+        return noRow(rowIndex);
     }
     const row = dataRowAt(state.source, rowIndex, meta);
     const key = row === undefined ? undefined : keyOf(state, row, rowIndex);
-    return key === undefined ? unloaded(rowIndex) : { ok: true, value: key };
+    return key === undefined ? unloaded(rowIndex) : ok(key);
 }
 
 /** A toggle's value: the keys, and the anchor it leaves (a controlled root keeps that part). */
@@ -592,6 +603,16 @@ function toggled<TRow, TNode>(
         rowKeys: state.selectedRowKeys,
         anchor: state.selectionAnchor,
     });
+}
+
+/** A range of rows toggled from the anchor (`extendedKeys`): selected, the anchor where it is. */
+function extendedTo<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    extended: CommandResult<readonly RowKey[]>,
+): Applied<TRow, TNode, ResultOf<"selected-rows.toggle">> {
+    return extended.ok
+        ? toggled(selected(state, extended.value, state.selectionAnchor))
+        : extended;
 }
 
 /** The state with the selected keys and the anchor, the same object when neither changed. */
@@ -629,6 +650,23 @@ function columnsOf<TRow, TNode>(
         span.columnIndex,
         span.columnIndex + span.columnSpan,
     );
+}
+
+/**
+ * The state with the sort (the same object when it is the same, else it as `kept` keeps it), and
+ * it.
+ */
+function withSort<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+    sortColumns: readonly SortColumn[],
+    kept: (sortColumns: readonly SortColumn[]) => readonly SortColumn[] = (
+        given,
+    ) => given,
+): Applied<TRow, TNode, readonly SortColumn[]> {
+    const next = sameSortColumns(sortColumns, state.sortColumns)
+        ? state
+        : { ...state, sortColumns: kept(sortColumns) };
+    return done(next, next.sortColumns);
 }
 
 /** The state with the columns' widths (the same object when they did not change), and them. */
@@ -754,10 +792,7 @@ function withSnappedActive<TRow, TNode>(
 }
 
 function validSize(size: unknown): boolean {
-    return (
-        typeof size === "function" ||
-        (typeof size === "number" && Number.isFinite(size) && size >= 0)
-    );
+    return typeof size === "function" || isWidth(size);
 }
 
 /** A row's or a detail's height: a size, a function, or `"auto"` (measured, E2.2). */
@@ -770,7 +805,7 @@ function validHeight(height: unknown): boolean {
  * them all).
  */
 function validEstimate(size: unknown): size is number {
-    return typeof size === "number" && Number.isFinite(size) && size > 0;
+    return isWidth(size) && size > 0;
 }
 
 /** The state with the expanded row groups' keys (a set: the same keys reordered change nothing). */
@@ -804,9 +839,7 @@ function toggledGroup<TRow, TNode>(
     // a range from the anchor; without one, a toggle (as a data row's)
     const extended = extend ? extendedKeys(state, rowIndex) : undefined;
     if (extended) {
-        return extended.ok
-            ? toggled(selected(state, extended.value, state.selectionAnchor))
-            : extended;
+        return extendedTo(state, extended);
     }
     // a toggle by index makes its row the anchor, with the state it gave (as a data row's)
     const was = isRowSelected(state, rowIndex);
@@ -936,10 +969,7 @@ function createHandlers<TRow, TNode>(
                 }
                 seen.add(entry.columnKey);
             }
-            const next = sameSortColumns(sortColumns, state.sortColumns)
-                ? state
-                : { ...state, sortColumns: copied(sortColumns) };
-            return done(next, next.sortColumns);
+            return withSort(state, sortColumns, copied);
         },
         "sort-columns.toggle": (state, { columnKey, multi }) => {
             const found = sortableColumn(state.columnEntries, columnKey);
@@ -949,10 +979,7 @@ function createHandlers<TRow, TNode>(
                 columnKey,
                 multi === true,
             );
-            const next = sameSortColumns(sortColumns, state.sortColumns)
-                ? state
-                : { ...state, sortColumns };
-            return done(next, next.sortColumns);
+            return withSort(state, sortColumns);
         },
         "expanded-rows.set": (state, { rowKeys }) => {
             const keys = validRowKeys(rowKeys);
@@ -1018,7 +1045,7 @@ function createHandlers<TRow, TNode>(
             let key: RowKey | undefined;
             if (payload.rowIndex !== undefined) {
                 if (!isIndex(payload.rowIndex, state.rowCount)) {
-                    return fail("not_found", `no row ${payload.rowIndex}`);
+                    return noRow(payload.rowIndex);
                 }
                 key = groupKeyAt(state, payload.rowIndex);
                 if (key === undefined) {
@@ -1076,15 +1103,7 @@ function createHandlers<TRow, TNode>(
                 const extended = extendedKeys(state, rowIndex);
                 // the range starts where it did: the anchor stays
                 if (extended) {
-                    return extended.ok
-                        ? toggled(
-                              selected(
-                                  state,
-                                  extended.value,
-                                  state.selectionAnchor,
-                              ),
-                          )
-                        : extended;
+                    return extendedTo(state, extended);
                 }
                 // nothing to extend from: a toggle
             }
@@ -1111,7 +1130,7 @@ function createHandlers<TRow, TNode>(
         "selection-anchor.set": (state, { rowIndex, selected: selects }) => {
             if (!state.rowSelection) return selectionOff();
             if (!isIndex(rowIndex, state.rowCount)) {
-                return fail("not_found", `no row ${rowIndex}`);
+                return noRow(rowIndex);
             }
             // a group row's anchor is its group key (Epic #87)
             const rowKey = rowKeyAt(state, rowIndex);
@@ -1421,12 +1440,7 @@ function createHandlers<TRow, TNode>(
             const units = cells.map((cell) =>
                 cell.group || cell.columnSpan === 1
                     ? [cell.key]
-                    : state.columns
-                          .slice(
-                              cell.columnIndex,
-                              cell.columnIndex + cell.columnSpan,
-                          )
-                          .map((column) => column.key),
+                    : columnsOf(state, cell).map((column) => column.key),
             );
             const [moved = [columnKey]] = units.splice(index, 1);
             units.splice(to, 0, moved);
@@ -1513,10 +1527,7 @@ function createHandlers<TRow, TNode>(
                 ["headerRowHeight", headerRowHeight],
                 ["summaryRowHeight", summaryRowHeight],
             ] as const) {
-                if (
-                    size !== undefined &&
-                    (typeof size !== "number" || !validSize(size))
-                ) {
+                if (size !== undefined && !isWidth(size)) {
                     return invalid(`${name} must be a size`);
                 }
             }
@@ -1759,9 +1770,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
                     // a payload of the wrong shape: the command never throws on bad input
                     applied = invalid(messageOf(error));
                 }
-                return applied.ok
-                    ? { ok: true, value: applied.value.value }
-                    : applied;
+                return applied.ok ? ok(applied.value.value) : applied;
             }
             let called = false;
             let nextResult: CommandResult<unknown> | undefined;
@@ -1784,16 +1793,13 @@ export function createDataGridModel<TRow, TNode = unknown>(
         if (!result.ok) return result;
         if (!applied?.ok) {
             // a middleware answered without running the command: nothing changes
-            return { ok: true, value: { state, value: result.value } };
+            return done(state, result.value);
         }
-        return {
-            ok: true,
-            value: {
-                state: applied.value.state,
-                value: result.value,
-                payload: ctx.payload,
-            },
-        };
+        return ok({
+            state: applied.value.state,
+            value: result.value,
+            payload: ctx.payload,
+        });
     }
 
     function commit(
@@ -1830,7 +1836,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
             // what was queued runs even when a listener threw
             drain();
         }
-        return outcome.ok ? { ok: true, value: outcome.value.value } : outcome;
+        return outcome.ok ? ok(outcome.value.value) : outcome;
     }
 
     function drain() {
@@ -1843,7 +1849,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
         payload: unknown,
     ): CommandResult<unknown> {
         const outcome = execute(command, payload, true);
-        return outcome.ok ? { ok: true, value: outcome.value.value } : outcome;
+        return outcome.ok ? ok(outcome.value.value) : outcome;
     }
 
     const queries: {
@@ -1870,11 +1876,12 @@ export function createDataGridModel<TRow, TNode = unknown>(
             const column = state.columns[columnIndex];
             if (!column) return undefined;
             const meta = rowMetaAt(state.source, rowIndex);
-            if (meta?.group) return groupCellValue(meta.group, column);
-            const row = dataRowAt(state.source, rowIndex, meta);
-            return row !== undefined
-                ? cellValue(column, row, rowIndex)
-                : undefined;
+            return rowCellValue(
+                column,
+                rowIndex,
+                meta?.group,
+                dataRowAt(state.source, rowIndex, meta),
+            );
         },
         "active-position": () => state.activePosition,
         "sort-columns": () => state.sortColumns,

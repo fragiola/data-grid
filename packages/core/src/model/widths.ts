@@ -37,7 +37,7 @@ export function isFlex(column: SizedColumn): boolean {
 }
 
 /** What a grid's columns ask of the widths: worked out once per list (`columnTraits`). */
-export interface ColumnTraits {
+interface ColumnTraits {
     /** a column is resizable */
     readonly resizable: boolean;
     /** a column flexes: the view's width lays the columns out */
@@ -79,7 +79,7 @@ export function hasEngineSized(columns: readonly SizedColumn[]): boolean {
  * A resizable column's limits, which a resize, a flex share and a fit keep to: `max` is infinite
  * without one, and `min` never passes it.
  */
-export function widthLimits(column: SizedColumn): {
+function widthLimits(column: SizedColumn): {
     readonly min: number;
     readonly max: number;
 } {
@@ -178,7 +178,7 @@ export function sameWidths(a: ColumnWidths, b: ColumnWidths): boolean {
 const EPSILON = 1e-6;
 
 /** A column's part of a width shared among columns (`sharedWidths`). */
-export interface WidthShare {
+interface WidthShare {
     /** what its part is in proportion to */
     readonly weight: number;
     /** the width its part is added to */

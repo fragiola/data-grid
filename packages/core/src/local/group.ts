@@ -10,7 +10,7 @@ import type {
 } from "../model/types";
 import { keySet } from "../utils";
 import { entryKeyOf, type RowEntry } from "./filter";
-import { sortEntries } from "./sort";
+import { sortedByEntry } from "./sort";
 import { subtreeKeysOf, type TreeNode } from "./tree";
 import { textOf } from "./values";
 
@@ -82,7 +82,7 @@ export interface GroupedRows<TRow> {
 const NO_KEYS: readonly RowKey[] = [];
 
 /** A group: its row, and its groups one column further (none at the last column) or its rows. */
-export interface GroupNode<TRow> {
+interface GroupNode<TRow> {
     readonly group: GroupRow;
     readonly groups: readonly GroupNode<TRow>[] | null;
     readonly entries: readonly RowEntry<TRow>[];
@@ -203,20 +203,13 @@ function orderedParts<TRow, TNode, P extends { entries: RowEntry<TRow>[] }>(
     column: Column<TRow, TNode>,
     direction: SortDirection,
 ): readonly P[] {
-    // each part by its first entry: the sort hands the same entries back, in order
-    const partOf = new Map<RowEntry<TRow>, P>();
-    for (const part of parts) {
-        const first = part.entries[0];
-        if (first) partOf.set(first, part);
-    }
-    return sortEntries(
-        [...partOf.keys()],
+    // each part by its first entry
+    return sortedByEntry(
+        parts,
+        (part) => part.entries[0],
         [{ columnKey: column.key, direction }],
         [column],
-    ).flatMap((entry) => {
-        const part = partOf.get(entry);
-        return part ? [part] : [];
-    });
+    );
 }
 
 /** Every group's key, at every depth, the outer ones first. */

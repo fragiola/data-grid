@@ -16,7 +16,7 @@ import {
 // `tabindex` kept); entering a cell gives them back and focuses one, leaving takes them out again.
 
 /** The interaction of one engine. */
-export interface Interaction {
+interface Interaction {
     /** the cell whose controls have the keys (its element's position), or `null` */
     readonly cell: CellPosition | null;
     /**
@@ -57,7 +57,7 @@ export interface Interaction {
 }
 
 /** What the interaction needs of its engine. */
-export interface InteractionContext {
+interface InteractionContext {
     /** the attached viewport, or `null` */
     readonly getViewport: () => HTMLElement | null;
     /** this grid's own element of a cell */

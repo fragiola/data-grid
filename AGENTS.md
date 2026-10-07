@@ -81,7 +81,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    `"auto"`, nothing otherwise (a grid of given heights reads, observes and allocates nothing
    more). A loaded measured row registers as the engine's `row` element (`EngineLayer`; React's
    `Row` through `useRowPart`'s `ref`, `useRow`'s props carry it), a detail as before (`detail`).
-   Each element is read once, at the commit that first renders it (`takeMeasures`: border-box
+   Each element is read once, at the commit that first renders it (`heights.take`,
+   `engine/heights.ts`, the engine's measuring: border-box
    height, `layoutScale` from the viewport as the fit; before the browser paints; not at the
    commit of a view already replaced, as when an automatic width changed meanwhile: the next
    commit reads), and from the
@@ -131,6 +132,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the layers' offsets imperatively; React never reconciles what the engine writes. A commit reads
    the scroll as it is first (`syncScroll`), so a scroll whose event has not run yet (a scroll and
    a click in one task) never has the layers written against the scroll the engine last knew.
+   A rendered range is kept while it covers what is in view. Through a scroll (any update but a
+   relayout: no size changed) it is kept even when larger than the view needs (`windowFor`'s
+   `scrolled`), so rows or columns of different sizes coming and going render nothing; a relayout
+   (the sizes or the content changed: `update("trim")`, `"fresh"`) trims it (Epic #89, E5.3). React's tests count commits with
+   `renderCounting` (`packages/react/tests/helpers.tsx`, a `Profiler`), one per feature in
+   `render-counts.test.tsx`; the stress fixture counts them in the browser (`window.commits`).
 10. **One generic: the row type (D10).** `Column<TRow>` is `{ key, name?, width, getValue?,
     renderHeaderCell?, renderCell?, renderSummaryCell?, renderGroupCell?, sortable?, pinned?, resizable?, minWidth?, maxWidth?,
     flex?, autoSize?, reorderable?, colSpan?, groupShow?, compare?, filter?, getCopyText?, editable?,
@@ -555,7 +562,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    with something to copy, or Ctrl/⌘+V (Epic #89: Firefox fires a paste at the page's selection,
    not at the focused cell, whose text a press with `user-select: none` never selects; the letter
    read through `shortcutLetter`: the key's own, else its `code` on a non-Latin layout), selects a
-   hidden node appended to the cell (`selectForClipboard`, through
+   hidden node appended to the cell (`selectForClipboard`, `holdSelection` in `dom.ts`, through
    the viewport document's Selection, the keydown never prevented), unless, for a copy, text inside
    that cell is selected (its content, its editor: copied as it is); the copy takes the event from that
    node as from its cell and `endClipboardSelection` (at the copy or the paste) removes it and puts the selection back (else the
@@ -1030,7 +1037,14 @@ themes) and the source beside the stage; the state is in the URL
   copy them. The playground reads them in place (`import.meta.glob`, the `#/` alias and the
   pre-paint theme from `examples/react/vite.shared.ts`); it never keeps a second list.
 - **Fixtures** (`fixtures/<name>/`) are the unstyled pages Playwright drives; the sidebar links
-  them.
+  them. `stress-grid` (Epic #89, E5.3; `src/fixture/stress-fixture.tsx`, the grid fixture's parts)
+  has every feature on at once: 1,000,000 rows through `getRow`, 1,000 columns, both axes scaled
+  (`maxScrollSize` 80,000), groups with a collapsible one and sticky labels, pinned columns at
+  both ends, spans, sorting, resizing, reordering columns and rows, row selection, details,
+  summary rows, cell ranges, the clipboard, editing, the fill handle and a direction toggle
+  (`?kind=table|div`; `&grouped=1`: 100,000 rows in memory grouped, `getRow` cannot feed
+  grouping). `e2e/stress.spec.ts` drives both structures in every browser, and counts React's
+  commits through the wheel's exact steps (`window.commits`).
 
 ## Conventions
 
@@ -1068,8 +1082,18 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
 - **Size is watched.** `pnpm size` (after `pnpm build`; CI prints it too) reports each entry point;
   a PR says when one grows noticeably, and why.
 - **Tests share their setup**, never a copy: `packages/core/tests/engine/harness.ts` (the engine
-  on a fake viewport), `packages/react/tests/helpers.tsx` and `examples/react/e2e/helpers.ts`,
-  `examples/react/e2e/examples/helpers.ts` (the playground's spec imports it too).
+  on a fake viewport), `packages/react/tests/helpers.tsx` (`renderCounting`, `scrollRoot` for
+  D9) and `examples/react/e2e/helpers.ts`, `examples/react/e2e/examples/helpers.ts` (the
+  playground's spec imports it too).
+- **The engine's modules** (`packages/core/src/engine/`): `engine.ts` (the closure binding one
+  grid to the DOM: scroll, windows, layers, focus, keys, drags, edits), `types`, `view` (pure: a
+  view from its inputs), `geometry` (pure per-view and per-cell math, axis anchors), `parts`
+  (part state and ARIA), `interaction` (a cell's controls), `heights` (measured rows and details:
+  observing, reading, forgetting), `measure` (their store and axis), `drag` (the drags' state and
+  pure geometry: edge steps, drop sides, a fill's target), `dom` (DOM predicates, attributes, the
+  wheel's scrollers, the clipboard's held selection). A helper only the main entry uses stays out
+  of `utils.ts` when `/local` imports that module too: a shared chunk carries every export the
+  main entry uses (`pnpm size` shows it).
 
 A review checks:
 

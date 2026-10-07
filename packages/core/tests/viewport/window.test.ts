@@ -105,6 +105,19 @@ describe("the window", () => {
         expect(short.rendered).toEqual({ start: 0, end: 8 });
     });
 
+    it("keeps a larger rendered range through a scroll, and trims it otherwise", () => {
+        // rows of 20 to 50px: fewer rows in view after a scroll, the same view
+        const varied = createAxis(1_000, (index) => 20 + (index % 4) * 10);
+        // rows 57–60 in view, then 58–60
+        const first = windowFor(varied, 2_005, 100, 3);
+        const scrolled = windowFor(varied, 2_010, 100, 3, first, true);
+        expect(scrolled.visible).toEqual({ start: 58, end: 61 });
+        expect(scrolled.rendered).toBe(first.rendered);
+        // not a scroll (a relayout): the range larger than the view needs is made again
+        const laidOut = windowFor(varied, 2_010, 100, 3, first);
+        expect(laidOut.rendered).toEqual({ start: 55, end: 64 });
+    });
+
     it("compares windows by their ranges", () => {
         const a = windowFor(rows, 0, 100, 3);
         expect(sameWindow(a, windowFor(rows, 0, 100, 3))).toBe(true);

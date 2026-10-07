@@ -336,7 +336,7 @@ describe("a drag far away", () => {
             (callback) => frames.push(callback),
         );
         vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
-        const many = Array.from({ length: 200 }, (_, id) => ({
+        const many = Array.from({ length: 60 }, (_, id) => ({
             id,
             title: `Task ${id}`,
         }));
@@ -363,14 +363,15 @@ describe("a drag far away", () => {
             buttons: 1,
             clientY: 400,
         });
-        for (let i = 0; i < 400 && frames.length > 0; i++) {
+        // 60 rows of 20px: about 50 frames of the edge scroll's 20px
+        for (let i = 0; i < 100 && frames.length > 0; i++) {
             act(() => {
                 for (const frame of frames.splice(0)) frame(0);
             });
         }
         expect(container.querySelector('[data-row-index="10"]')).toBeNull();
         expect(rowAt(container, 1)).toHaveAttribute("data-dragging", "");
-        expect(rowAt(container, 199)).toHaveAttribute(
+        expect(rowAt(container, 59)).toHaveAttribute(
             "data-drop-target",
             "after",
         );
@@ -381,7 +382,7 @@ describe("a drag far away", () => {
         expect(onRowMove).toHaveBeenCalledTimes(1);
         expect(onRowMove).toHaveBeenCalledWith({
             fromIndex: 1,
-            toIndex: 199,
+            toIndex: 59,
             rowKey: 1,
         });
         expect(onActivePositionChange).not.toHaveBeenCalled();

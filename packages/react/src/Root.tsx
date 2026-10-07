@@ -517,10 +517,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
             collapsedGroupKeys: collapsedGroupKeys ?? defaultCollapsedGroupKeys,
             direction,
         });
-        const flags: ControlledFlags = {
-            syncing: { current: false },
-            applying: { current: false },
-        };
+        const flags: ControlledFlags = { syncing: false, applying: false };
         // each piece guarded on its own commands (the order they are bound in tells uncontrolled
         // changes in that order)
         const bind = <V,>(spec: ControlledState<TRow, V>) =>
@@ -784,23 +781,17 @@ export function Root<TRow>(props: RootProps<TRow>) {
             onPaste: (event: React.ClipboardEvent) =>
                 engine.adapter.paste(event.nativeEvent),
         };
+        // followed before paint, in this order: the layout inputs, then the active position
+        const layout = [widths, order, collapsed, position];
         return {
             context,
             flags,
-            position,
-            sort,
-            selection,
-            widths,
-            order,
-            collapsed,
+            layout,
             // settled (and started) in this order: the layout inputs first, so a position the order
             // or a collapse moved settles in the same pass; then the selection before the sort, as
             // their values to start with are told
             controlled: [
-                widths,
-                order,
-                collapsed,
-                position,
+                ...layout,
                 editing,
                 selection,
                 range,
@@ -833,11 +824,8 @@ export function Root<TRow>(props: RootProps<TRow>) {
         // a collapse moves the active cell with its column: there it stays unless its own prop
         // changed, told at the settle). Then a controlled position: valid before the data changes
         // (rows filtered down), it survives them
-        grid.widths.follow();
-        grid.order.follow();
-        grid.collapsed.follow();
-        grid.position.follow();
-        flags.applying.current = true;
+        for (const piece of grid.layout) piece.follow();
+        flags.applying = true;
     });
 
     useLayoutEffect(() => {
@@ -955,7 +943,7 @@ export function Root<TRow>(props: RootProps<TRow>) {
     // one the data made impossible was clamped by the model, and the parent is told where. A
     // controlled sort follows the columns, and one they cannot take is told as it settled
     useLayoutEffect(() => {
-        flags.applying.current = false;
+        flags.applying = false;
         for (const piece of grid.controlled) piece.settle();
     });
 

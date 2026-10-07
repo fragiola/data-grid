@@ -195,6 +195,43 @@ describe("windows", () => {
         expect(lookups).not.toHaveBeenCalled();
     });
 
+    it("keep a rendered range larger than the view needs through a scroll, and trim it on a relayout", () => {
+        // rows of 20 to 50px: fewer rows in view after some scrolls, the view the same
+        const { engine, model, scrollTo, view } = setup({
+            rowHeight: (index) => 20 + (index % 4) * 10,
+        });
+        const oversized = () => {
+            const { visible, rendered } = engine.get("row-window");
+            return (
+                rendered.end - rendered.start > visible.end - visible.start + 6
+            );
+        };
+        scrollTo(2_000);
+        const renders = vi.fn();
+        engine.adapter.subscribe(renders);
+        let top = 2_000;
+        while (!oversized() && top < 2_100) {
+            top += 5;
+            scrollTo(top);
+        }
+        // a scroll changes no size: the larger range stays, nothing renders (D9)
+        expect(oversized()).toBe(true);
+        expect(renders).not.toHaveBeenCalled();
+        // rows changed on screen (data-dependent sizes may have): laid out again, trimmed
+        const { rendered } = engine.get("row-window");
+        model.run("rows.changed", { start: rendered.start, end: rendered.end });
+        expect(oversized()).toBe(false);
+        expect(view().renderedRows).toEqual(engine.get("row-window").rendered);
+        // and the same after a resize of the same size (a relayout)
+        while (!oversized() && top < 2_300) {
+            top += 5;
+            scrollTo(top);
+        }
+        expect(oversized()).toBe(true);
+        resize?.();
+        expect(oversized()).toBe(false);
+    });
+
     it("follow a resize", () => {
         const { engine, size } = setup();
         size.height = 430;

@@ -253,6 +253,36 @@ export function createLocalRows<TRow, TNode = unknown>(
     const rowsOf = memo((ordered: readonly RowEntry<TRow>[]) =>
         ordered.map((entry) => entry.row),
     );
+    /**
+     * A view of a page: its data rows (`entries`), the rows filtered (`ordered`: `given` itself
+     * when `allGiven`, the caller's to say), the rows' total, and the page's place and groups.
+     */
+    function pagedView(
+        entries: readonly RowEntry<TRow>[],
+        ordered: readonly RowEntry<TRow>[],
+        allGiven: boolean,
+        given: readonly TRow[],
+        total: number,
+        paging: Pick<
+            LocalRowsView<TRow>,
+            "pageIndex" | "pageSize" | "pageCount" | "groups"
+        >,
+    ): LocalRowsView<TRow> {
+        let rowIndexes: readonly number[] | undefined;
+        return {
+            rows: entries.map((entry) => entry.row),
+            get rowIndexes() {
+                rowIndexes ??= entries.map((entry) => entry.index);
+                return rowIndexes;
+            },
+            total,
+            filteredCount: ordered.length,
+            get filteredRows() {
+                return allGiven ? given : rowsOf(ordered);
+            },
+            ...paging,
+        };
+    }
     const view = memo(
         (
             ordered: readonly RowEntry<TRow>[],
@@ -264,23 +294,12 @@ export function createLocalRows<TRow, TNode = unknown>(
         ): LocalRowsView<TRow> => {
             const index = clampPageIndex(pageIndex, ordered.length, pageSize);
             const page = pageOf(ordered, index, pageSize);
-            let rowIndexes: readonly number[] | undefined;
-            return {
-                rows: page.map((entry) => entry.row),
-                get rowIndexes() {
-                    rowIndexes ??= page.map((entry) => entry.index);
-                    return rowIndexes;
-                },
-                total,
-                filteredCount: ordered.length,
-                get filteredRows() {
-                    return ordered === all ? given : rowsOf(ordered);
-                },
+            return pagedView(page, ordered, ordered === all, given, total, {
                 pageIndex: index,
                 pageSize,
                 pageCount: pageCount(ordered.length, pageSize),
                 groups: null,
-            };
+            });
         },
     );
     // grouped (Epic #87): the groups, the rows shown, and their page
@@ -311,21 +330,9 @@ export function createLocalRows<TRow, TNode = unknown>(
             const entries = page.flatMap((row) =>
                 row.entry ? [row.entry] : [],
             );
-            let rowIndexes: readonly number[] | undefined;
-            return {
-                rows: entries.map((entry) => entry.row),
-                get rowIndexes() {
-                    rowIndexes ??= entries.map((entry) => entry.index);
-                    return rowIndexes;
-                },
-                // a tree's rows at every depth
-                total: all.length,
-                filteredCount: ordered.length,
-                get filteredRows() {
-                    return ordered === all && all.length === given.length
-                        ? given
-                        : rowsOf(ordered);
-                },
+            // a tree's rows at every depth (more than `given`, its top rows)
+            const allGiven = ordered === all && all.length === given.length;
+            return pagedView(entries, ordered, allGiven, given, all.length, {
                 pageIndex: index,
                 pageSize,
                 pageCount: pageCount(shown.length, pageSize),
@@ -336,7 +343,7 @@ export function createLocalRows<TRow, TNode = unknown>(
                     rowKey,
                     isRowSelectable,
                 ),
-            };
+            });
         },
     );
 

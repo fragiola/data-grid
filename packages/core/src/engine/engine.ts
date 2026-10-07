@@ -9,7 +9,7 @@ import {
 } from "../header/header";
 import { shownColumnOf } from "../model/collapse";
 import { hasEditable } from "../model/editing";
-import { detailsChanged, newRowsOf } from "../model/expansion";
+import { detailsChanged } from "../model/expansion";
 import type { DataGridModel } from "../model/model";
 import {
     cellKeyAt,
@@ -32,7 +32,6 @@ import {
     groupKeyAt,
     loadedRowKey,
     rowAt,
-    rowKeyAt,
     rowLoaded,
     rowMetaAt,
     sameKnownKeys,
@@ -47,10 +46,7 @@ import type {
     ColumnWidths,
     GridDirection,
     HeaderCellLayout,
-    HeaderLayout,
     PinnedSide,
-    RangeKeys,
-    ReorderSide,
     RowKey,
 } from "../model/types";
 import {
@@ -71,13 +67,7 @@ import {
     withoutWidths,
 } from "../model/widths";
 import { type Direction, sameCell } from "../navigation/navigation";
-import {
-    clamp,
-    indexAfterMove,
-    isIndex,
-    keptIfSame,
-    lowerBound,
-} from "../utils";
+import { clamp, indexAfterMove, isIndex, lowerBound } from "../utils";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
@@ -105,7 +95,9 @@ import {
     FOCUSABLE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
+    type HeldSelection,
     HOSTS,
+    holdSelection,
     inlineKey,
     isAltCharacter,
     isCellNode,
@@ -116,10 +108,9 @@ import {
     isGridControl,
     isPagelessControl,
     isResizer,
+    isSelectAll,
     KEYS,
-    keepsWheel,
     LINE_HEIGHT,
-    layoutScale,
     maxContentWidths,
     movesWithArrows,
     NESTINGS,
@@ -127,14 +118,36 @@ import {
     ownerViewport,
     PAGE_KEYS,
     ROW_DRAG_HANDLE_ATTRIBUTE,
-    scrollsOverflow,
+    releaseSelection,
+    scrollerBefore,
+    selectedIn,
     TAB_STOP_ATTRIBUTE,
     VIEWPORTS,
+    WHEEL_GESTURE,
+    type WheelStyles,
 } from "./dom";
 import {
+    type Drag,
+    type DragEnd,
+    dropTargetOf,
+    edgeStep,
+    type FillHandleDrag,
+    fillTargetOf,
+    type RangeDrag,
+    RESIZE_KEYS,
+    RESIZE_SHIFT_STEP,
+    RESIZE_STEP,
+    type ReorderDrag,
+    type ResizeDrag,
+    type RowDrag,
+} from "./drag";
+import {
+    type AxisAnchor,
+    anchoredOffset,
+    anchorOf,
     cellSpan,
     cellsSizeOf,
-    columnPinning,
+    columnSide,
     endPartFrom,
     inlineSign,
     inlineStart,
@@ -143,8 +156,8 @@ import {
     resizeEdge,
     summaryHeight,
 } from "./geometry";
+import { createHeights, measuring } from "./heights";
 import { createInteraction } from "./interaction";
-import { type HeightObserver, type Measure, MeasuredHeights } from "./measure";
 import { isHeldCell, rowsMove } from "./parts";
 import type {
     CellEdit,
@@ -212,151 +225,6 @@ function isInsetLayer(layer: EngineLayer): layer is InsetLayer {
 type ScrollMoves = { top?: number | undefined; left?: number | undefined };
 
 /**
- * A drag the engine follows with the pointer: where it started, and where the pointer is. A
- * column's drags follow its x, a row's its y.
- */
-interface PointerDrag {
-    /** it moved past a click's slop (a resizer's at once): Escape and its click are its */
-    dragged: boolean;
-    readonly pointerId: number;
-    readonly startX: number;
-    readonly startY: number;
-    /**
-     * what holds the pointer: the resizer, the dragged header cell, the row's handle, or the
-     * viewport (a range's: the cells it was pressed in may scroll out of the rendered ones)
-     */
-    readonly element: Element;
-    readonly doc: Document;
-    /** the pointer's last place */
-    x: number;
-    y: number;
-    /** the animation frame the next step waits for, if any */
-    frame: number | null;
-}
-
-/** A drag on a column resizer (W4). */
-interface ResizeDrag extends PointerDrag {
-    readonly kind: "resize";
-    /** the column's or the group's key */
-    readonly columnKey: string;
-    /** the column's (or the group's) width when it started */
-    readonly startWidth: number;
-    /** which way it grows on screen (`resizeSign`) */
-    readonly sign: number;
-    /** the engine's widths when it started: its columns resized back to them need none of theirs */
-    readonly autoWidths: ColumnWidths;
-    /** the x the last resize was for */
-    appliedX: number;
-}
-
-/**
- * A drag of a reorderable header cell (Epic #75, O3): a press that drags once it moves past a
- * click's slop (until then, it may be a click), and its siblings, found again when the header
- * changes.
- */
-interface ReorderDrag<TRow, TNode> extends PointerDrag {
-    readonly kind: "reorder";
-    /** the column's or the group's key */
-    readonly columnKey: string;
-    /** the header its siblings were found in, and them */
-    header: HeaderLayout<TRow, TNode> | null;
-    siblings: Siblings<TRow, TNode> | null;
-}
-
-/**
- * A drag of a row by its handle (Epic #86, E2.3): a press that drags once it moves past a click's
- * slop, the row followed by its key.
- */
-interface RowDrag extends PointerDrag {
-    readonly kind: "row";
-    readonly rowIndex: number;
-    readonly rowKey: RowKey;
-    /**
-     * the pointer's y in the view, as last read (a layout read: at the drag's start, once a frame
-     * and on the release, never during a model change)
-     */
-    viewY: number;
-}
-
-/**
- * A drag selecting a range of cells (Epic #88, E4.1): a press on a body cell that drags once it
- * moves past a click's slop, from its anchor to the cell under the pointer.
- */
-interface RangeDrag extends PointerDrag {
-    readonly kind: "range";
-    /** the range's anchor: the pressed cell, or with Shift the range's own */
-    readonly anchor: CellPosition;
-    /** the keys at the anchor at the press: other ones there end the drag */
-    readonly anchorKeys: CellKeys | undefined;
-    /** the cell the range reaches, as last set */
-    focus: CellPosition;
-}
-
-/**
- * A fill handle's drag (Epic #88, E4.4): from the press on, the source (the range or the active
- * cell when it started, widened to the spans it cuts) and the cell the selection is anchored at
- * then, the target following the cell under the pointer.
- */
-interface FillHandleDrag extends PointerDrag {
-    readonly kind: "fill";
-    readonly source: CellRange;
-    /** the keys at the source's corners at the press: other ones there end the drag */
-    readonly sourceKeys: RangeKeys;
-    readonly anchor: CellPosition;
-    /** the body cell the pointer was last over, `null` before a move */
-    cell: CellPosition | null;
-}
-
-type Drag<TRow, TNode> =
-    | ResizeDrag
-    | ReorderDrag<TRow, TNode>
-    | RowDrag
-    | RangeDrag
-    | FillHandleDrag;
-
-/**
- * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
- * move with no button, the viewport detached). A resize keeps its width but on a cancel; a
- * reorder (a column's, a row's) moves only on a release.
- */
-type DragEnd = "release" | "cancel" | "lost";
-
-/**
- * How near the view's edges a header cell's drag scrolls the columns (O3), and a row's the rows
- * (E2.3), in pixels.
- */
-const EDGE_ZONE = 40;
-/** The edge scroll's pixels per frame at the edge or past it; fewer farther from it. */
-const EDGE_STEP = 20;
-
-/** The keys a focused resizer resizes with (W6). */
-const RESIZE_KEYS: ReadonlySet<string> = new Set([
-    "ArrowLeft",
-    "ArrowRight",
-    "Home",
-    "End",
-]);
-
-/** The resizer keys' steps in pixels (W6): an arrow, and Shift with it. */
-const RESIZE_STEP = 10;
-const RESIZE_SHIFT_STEP = 50;
-
-/**
- * The style of the node a copy or a paste selects (`selectForClipboard`, Epic #88): out of the
- * cell's layout, unseen, and selectable whatever the cell's `user-select`.
- */
-const CLIPBOARD_NODE_STYLE: readonly (readonly [string, string])[] = [
-    ["position", "absolute"],
-    ["width", "1px"],
-    ["height", "1px"],
-    ["overflow", "hidden"],
-    ["opacity", "0"],
-    ["pointer-events", "none"],
-    ["user-select", "text"],
-    ["-webkit-user-select", "text"],
-];
-
-/**
  * The Latin letter a shortcut is pressed with (Epic #89): its key's own, else, on a layout whose
  * letters are not Latin (Cyrillic, Greek), its key's place on the keyboard (`code`), as the
  * system's shortcuts read it.
@@ -369,28 +237,13 @@ function shortcutLetter(event: KeyboardEvent): string {
         : key;
 }
 
-/**
- * A wheel's gesture (Epic #89, E5.2): wheels this close together (ms) are one, the styles read for
- * the first one kept for the others.
- */
-const WHEEL_GESTURE = 300;
-
-/** What a wheel reads of an element's style: where it scrolls, keeps a wheel, is laid out. */
-interface WheelStyle {
-    readonly x: boolean;
-    readonly y: boolean;
-    readonly keepsX: boolean;
-    readonly keepsY: boolean;
-    readonly rtl: boolean;
-}
-
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
 
-/** Creates the engine of one grid on screen. */
 /** The engines made so far: each one's edits are named apart from another's (`editorProps`). */
 let engineCount = 0;
 
+/** Creates the engine of one grid on screen. */
 export function createDataGridEngine<TRow, TNode = unknown>(
     model: DataGridModel<TRow, TNode>,
     initialOptions: DataGridEngineOptions = {},
@@ -418,9 +271,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     let state = model.state;
     /** the direction in effect: the model's, else the viewport's (`updateDirection`) */
     let direction: GridDirection = state.direction ?? "ltr";
-    /** the heights measured of rows and of details (`"auto"`, Epic #86, E2.2) */
-    const measuredRows = new MeasuredHeights();
-    const measuredDetails = new MeasuredHeights();
+    /** the rows and details measured (`"auto"`, Epic #86, E2.2) */
+    const heights = createHeights<TRow, TNode>({
+        getViewport: () => viewport,
+        getState: () => state,
+        rows: layers.row,
+        details: layers.detail,
+        remeasured,
+    });
     /** the rows' own heights (measured ones at their estimate); `rowAxis` adds the details */
     let baseRowAxis = rowAxisOf(state);
     let rowAxis = rowAxisFor();
@@ -450,6 +308,15 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     // the summary rows (E2.1) are always in view: the body is what they leave
     const bodyHeight = () =>
         Math.max(0, height - bodyTop() - summaryHeight(state, "bottom"));
+    /** the width of the columns that scroll: the view's between the pinned ones */
+    const scrollingWidth = () => width - pinnedWidth - pinnedEndWidth;
+    /** the virtual row offset under a pointer at `y` in the view, kept over the body */
+    const rowOffsetAt = (y: number) =>
+        rowsY.virtual + clamp(y - bodyTop(), 0, bodyHeight());
+    /** the edge scroll's step for a pointer at `y` over the body, `x` over the columns that scroll */
+    const rowEdgeStepAt = (y: number) => edgeStep(y, bodyTop(), bodyHeight());
+    const columnEdgeStepAt = (x: number) =>
+        edgeStep(x, pinnedWidth, scrollingWidth());
     const rowMapping = () =>
         createScrollMapping(rowAxis.totalSize, bodyHeight(), maxScroll());
     const columnMapping = () =>
@@ -618,10 +485,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function rowAxisFor(): Axis {
         return withDetails(
             state.rowHeight === "auto"
-                ? measuredRows.axis(state.rowCount, state.estimatedRowHeight)
+                ? heights.rows.axis(state.rowCount, state.estimatedRowHeight)
                 : baseRowAxis,
             state,
-            measuredDetails,
+            heights.details,
         );
     }
 
@@ -696,25 +563,31 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /**
      * Recomputes the windows and the view from the scroll state; tells the window listeners and
-     * the view listeners what changed; writes the layers' offsets.
+     * the view listeners what changed; writes the layers' offsets. A relayout (`layout`: the
+     * sizes or the content changed) works the rendered ranges out again, from scratch when
+     * `fresh`; any other update (a scroll, a state of the engine's) changes no size, and keeps a
+     * rendered range while it covers the view (`windowFor`'s `scrolled`).
      */
-    function update(fresh = false) {
+    function update(layout?: "fresh" | "trim") {
         const overscan = options.overscan ?? NO_OVERSCAN;
+        const scrolled = layout === undefined;
         const nextRows = windowFor(
             rowAxis,
             rowsY.virtual,
             bodyHeight(),
             overscan.rows ?? 4,
-            fresh ? undefined : rowWindow,
+            layout === "fresh" ? undefined : rowWindow,
+            scrolled,
         );
         // the columns that scroll, in the view between the pinned ones
         const nextColumns = scrollingWindow(
             windowFor(
                 columnAxis,
                 columnsX.virtual + pinnedWidth,
-                width - pinnedWidth - pinnedEndWidth,
+                scrollingWidth(),
                 overscan.columns ?? 2,
-                fresh ? undefined : columnWindow,
+                layout === "fresh" ? undefined : columnWindow,
+                scrolled,
             ),
             pinnedCount,
             endFrom(),
@@ -835,8 +708,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 element.getAttribute(GROUP_LABEL_ATTRIBUTE) ?? "",
             );
             element.style[side] =
-                cell &&
-                !columnPinning(shown, cell.columnIndex, cell.columnSpan).pinned
+                cell && columnSide(shown, cell.columnIndex) === undefined
                     ? `${shown.pinnedWidth - x}px`
                     : "";
             return;
@@ -1002,7 +874,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     function collapseAnchor(
         before: DataGridModel<TRow, TNode>["state"],
         after: DataGridModel<TRow, TNode>["state"],
-    ): { index: number; within: number } | null {
+    ): AxisAnchor | null {
         const anchor = columnAnchor();
         if (!anchor) return null;
         const kept = after.header.cellByKey(
@@ -1014,7 +886,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /** Keeps the view on an anchor's column, as far into it as it was, on a new column axis. */
-    function keepColumnAnchor(anchor: { index: number; within: number }) {
+    function keepColumnAnchor(anchor: AxisAnchor) {
         columnsX.virtual = Math.max(
             0,
             anchoredOffset(columnAxis, anchor) - pinnedWidth,
@@ -1053,7 +925,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         updateDirection(true);
         viewStale = true;
         const moves = remap();
-        update(fresh);
+        update(fresh ? "fresh" : "trim");
         // the sizer gets its new size when the adapter commits this view
         scrollWhenReady(moves);
     }
@@ -1145,9 +1017,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         }
         wheelAt = event.timeStamp;
         const innerY =
-            plain || dy === 0 ? null : scrollerBefore(target, false, dy);
+            plain || dy === 0
+                ? null
+                : scrollerBefore(target, viewport, false, dy, wheelStyles);
         const innerX =
-            plain || dx === 0 ? null : scrollerBefore(target, true, dx);
+            plain || dx === 0
+                ? null
+                : scrollerBefore(target, viewport, true, dx, wheelStyles);
         if ((dy === 0 || innerY) && (dx === 0 || innerX)) return;
         event.preventDefault();
         // a person's scroll: the cell it scrolled to is left (E2.2)
@@ -1170,61 +1046,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** when the last wheel came (its `timeStamp`), and the styles read during its gesture */
     let wheelAt = Number.NEGATIVE_INFINITY;
-    let wheelStyles = new WeakMap<Element, WheelStyle>();
-
-    /** An element's styles a wheel reads, once a gesture (`wheelStyles`). */
-    function wheelStyleOf(element: Element): WheelStyle {
-        let style = wheelStyles.get(element);
-        if (!style) {
-            const computed =
-                element.ownerDocument.defaultView?.getComputedStyle(element);
-            style = {
-                x: scrollsOverflow(computed?.overflowX ?? ""),
-                y: scrollsOverflow(computed?.overflowY ?? ""),
-                keepsX: keepsWheel(computed?.overscrollBehaviorX ?? ""),
-                keepsY: keepsWheel(computed?.overscrollBehaviorY ?? ""),
-                rtl: computed?.direction === "rtl",
-            };
-            wheelStyles.set(element, style);
-        }
-        return style;
-    }
-
-    /**
-     * The element from `target` up to the viewport (excluded) that still scrolls a wheel's part
-     * on one axis (`inline`: across, `delta` physical): one whose `overflow` scrolls on it, with
-     * content beyond its edge that way (right to left mirrored), or that never chains a wheel at
-     * its end (`overscroll-behavior`); `null` for none. Its scroll sizes are read only where its
-     * style lets it scroll.
-     */
-    function scrollerBefore(
-        target: Element,
-        inline: boolean,
-        delta: number,
-    ): Element | null {
-        for (
-            let node: Element | null = target;
-            node && node !== viewport;
-            node = node.parentElement
-        ) {
-            const style = wheelStyleOf(node);
-            if (!(inline ? style.x : style.y)) continue;
-            const max = inline
-                ? node.scrollWidth - node.clientWidth
-                : node.scrollHeight - node.clientHeight;
-            if (max < 1) continue;
-            if (inline ? style.keepsX : style.keepsY) return node;
-            // from the start, whatever the side it is laid out from
-            const at = inline
-                ? style.rtl
-                    ? -node.scrollLeft
-                    : node.scrollLeft
-                : node.scrollTop;
-            const toEnd = inline && style.rtl ? delta < 0 : delta > 0;
-            if (toEnd ? at < max - 0.5 : at > 0.5) return node;
-        }
-        return null;
-    }
+    let wheelStyles: WheelStyles = new WeakMap();
 
     /** a scroll to a cell asked for before the viewport attached: applied on attach */
     let pendingCellScroll: EngineActionMap["scroll-to-cell"] | null = null;
@@ -1269,7 +1091,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 start,
                 start + columnAxis.sizeOf(columnIndex),
                 columnsX.virtual,
-                width - pinnedWidth - pinnedEndWidth,
+                scrollingWidth(),
                 columnAxis.totalSize - pinnedEndWidth - pinnedWidth,
                 align,
             );
@@ -1620,7 +1442,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 // a press on a resizer is a drag: no focus (which would activate its header cell
                 // and scroll it into view, away from the pointer), no text selection
                 event.preventDefault();
-                drag = {
+                press(event, {
                     kind: "resize",
                     columnKey,
                     dragged: true,
@@ -1636,17 +1458,14 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     y: event.clientY,
                     appliedX: event.clientX,
                     frame: null,
-                };
-                lastPress = drag;
-                listen(drag, event.pointerType === "touch");
-                capture(drag);
+                });
                 setColumnResize({ columnKey, width: span.width });
                 return true;
             }
         }
         // a header cell's or a handle's press is not prevented: under the slop it is a click
         // (focus, a sort)
-        const press = {
+        const pressed = {
             dragged: false,
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -1665,8 +1484,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const anchor = state.activePosition ?? state.selectedRange?.anchor;
         if (source && anchor) {
             event.preventDefault();
-            drag = {
-                ...press,
+            press(event, {
+                ...pressed,
                 kind: "fill",
                 dragged: true,
                 source,
@@ -1677,10 +1496,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 anchor,
                 cell: null,
                 element: viewport,
-            };
-            lastPress = drag;
-            listen(drag, event.pointerType === "touch");
-            capture(drag);
+            });
             setFill({ source, target: null });
             return true;
         }
@@ -1694,39 +1510,46 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (
                 rowKey === undefined ||
                 !rowsMove(options.reorderableRows, state)
-            )
+            ) {
                 return false;
-            drag = {
-                ...press,
+            }
+            return press(event, {
+                ...pressed,
                 kind: "row",
                 rowIndex,
                 rowKey,
                 element: handle.element,
                 viewY: 0,
-            };
-        } else {
-            const header =
-                hasReorderable(state.columnEntries) && inViewport(event.target)
-                    ? headerCellOf(event.target)
-                    : null;
-            if (header && isReorderable(header.cell)) {
-                drag = {
-                    ...press,
-                    kind: "reorder",
-                    columnKey: header.cell.key,
-                    element: header.element,
-                    header: null,
-                    siblings: null,
-                };
-            } else {
-                // a body cell's press, cells selectable (Epic #88): a range
-                const range = rangePress(event, press, viewport);
-                if (!range) return false;
-                drag = range;
-            }
+            });
         }
-        lastPress = drag;
-        listen(drag, event.pointerType === "touch");
+        const header =
+            hasReorderable(state.columnEntries) && inViewport(event.target)
+                ? headerCellOf(event.target)
+                : null;
+        if (header && isReorderable(header.cell)) {
+            return press(event, {
+                ...pressed,
+                kind: "reorder",
+                columnKey: header.cell.key,
+                element: header.element,
+                header: null,
+                siblings: null,
+            });
+        }
+        // a body cell's press, cells selectable (Epic #88): a range
+        const range = rangePress(event, pressed, viewport);
+        return range !== null && press(event, range);
+    }
+
+    /**
+     * A press the grid takes: its drag (or a press that may become one) followed wherever the
+     * pointer goes, and held by its element at once when it drags from the start.
+     */
+    function press(event: PointerEvent, next: Drag<TRow, TNode>): true {
+        drag = next;
+        lastPress = next;
+        listen(next, event.pointerType === "touch");
+        if (next.dragged) capture(next);
         return true;
     }
 
@@ -2475,7 +2298,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         );
     }
 
-    /** A frame of a header cell's drag: the edge scroll, then the target. */
     /**
      * A frame of a header cell's or a row's drag, on its axis: the pointer's place in the view
      * read once (before the scroll writes; a row's kept as `viewY`), the edge scroll, then the
@@ -2485,9 +2307,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const row = current.kind === "row";
         const at = row ? viewYOf(current.y) : viewXOf(current.x);
         if (row) current.viewY = at;
-        const step = row
-            ? edgeStep(at, bodyTop(), bodyHeight())
-            : columnEdgeStep(current, at);
+        const step = row ? rowEdgeStepAt(at) : columnEdgeStep(current, at);
         const scrolled = edgeScrollBy(row ? step : 0, row ? 0 : step);
         if (row) {
             const target = rowReorderTarget(current, at);
@@ -2497,49 +2317,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             if (target && target !== columnReorder) setColumnReorder(target);
         }
         if (scrolled) askFrame(current);
-    }
-
-    /**
-     * Where a drag would drop (O3, E2.3): beside the item at `at` (from `start` to `end` on its
-     * axis), on the side of its middle `offset` is on, when that moves the dragged item at
-     * `index` and `allowed`; else nowhere (`make(null)`). The current state while the same.
-     */
-    function dropTargetOf<T extends object>(
-        current: T | null,
-        offset: number,
-        index: number,
-        at: number,
-        start: number,
-        end: number,
-        allowed: boolean,
-        make: (side: ReorderSide | null) => T,
-    ): T {
-        const side = offset < (start + end) / 2 ? "before" : "after";
-        return keptIfSame(
-            current,
-            make(
-                allowed && landingIndex(index, at, side) !== index
-                    ? side
-                    : null,
-            ),
-        );
-    }
-
-    /**
-     * The edge scroll's step (signed, 0 for none) for a pointer at `at` over a part of the view
-     * `length` long from `start`: near its start or end edge (or past it), toward it, faster
-     * nearer. The two zones never overlap: in a narrow part each is half of it.
-     */
-    function edgeStep(at: number, start: number, length: number): number {
-        const zone = Math.min(EDGE_ZONE, length / 2);
-        if (zone <= 0) return 0;
-        const low = start + zone;
-        const high = start + length - zone;
-        const depth = at < low ? at - low : at > high ? at - high : 0;
-        return (
-            Math.sign(depth) *
-            Math.ceil(EDGE_STEP * Math.min(1, Math.abs(depth) / zone))
-        );
     }
 
     /**
@@ -2569,11 +2346,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     ): number {
         const siblings = siblingsFor(current);
         if (!siblings || inPinnedStrip(siblings)) return 0;
-        const step = edgeStep(
-            x,
-            pinnedWidth,
-            width - pinnedWidth - pinnedEndWidth,
-        );
+        const step = columnEdgeStepAt(x);
         if (step === 0) return 0;
         // nothing more comes into reach that way: the siblings end inside the view on that side
         const { cells, start, end } = siblings;
@@ -2951,16 +2724,30 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         editorFocus = null;
         const doc = viewport.ownerDocument;
         const focused = doc.activeElement;
-        const inGrid =
-            !focused || focused === doc.body || viewport.contains(focused);
-        if (isElement(focused) && focused !== cell && partOfEdit(focused)) {
-            return;
-        }
+        const inGrid = inGridOrNowhere(focused, doc);
+        if (editorHolds(focused, cell)) return;
         const focusedEditor =
             anywhere || inGrid
                 ? focusEditorIn(cell)
                 : editorControlsIn(cell)[0];
         if (!focusedEditor) cancelWithoutEditor(inGrid);
+    }
+
+    /** Whether focus is in the grid or nowhere (none, the page's body): the grid's to move. */
+    function inGridOrNowhere(focused: Element | null, doc: Document): boolean {
+        return (
+            !focused ||
+            focused === doc.body ||
+            Boolean(viewport?.contains(focused))
+        );
+    }
+
+    /** Whether focus is in the edit elsewhere than its cell (an editor's control, its popover). */
+    function editorHolds(
+        focused: Element | null,
+        cell: Element | null,
+    ): boolean {
+        return isElement(focused) && focused !== cell && partOfEdit(focused);
     }
 
     /** `focusEditor`'s cancel of an edit with no editor, in the next task (`noEditorTimer`). */
@@ -2974,19 +2761,9 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             const editing = state.editingCell;
             if (!editing || state.editingKeys !== keys) return;
             const focused = win.document.activeElement;
-            if (
-                isElement(focused) &&
-                focused !== cellElement(editing) &&
-                partOfEdit(focused)
-            ) {
-                return;
-            }
+            if (editorHolds(focused, cellElement(editing))) return;
             // focus back on the cell only from the grid (nothing focused anywhere else since)
-            const inGrid =
-                !focused ||
-                focused === win.document.body ||
-                Boolean(viewport?.contains(focused));
-            endEdit(null, focusCell && inGrid);
+            endEdit(null, focusCell && inGridOrNowhere(focused, win.document));
         }, 0);
     }
 
@@ -3011,10 +2788,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const y = viewYOf(current.y);
         const part = columnPartAt(x);
         const scrolled = edgeScrollBy(
-            edgeStep(y, bodyTop(), bodyHeight()),
-            part === undefined
-                ? edgeStep(x, pinnedWidth, width - pinnedWidth - pinnedEndWidth)
-                : 0,
+            rowEdgeStepAt(y),
+            part === undefined ? columnEdgeStepAt(x) : 0,
         );
         if (current.kind === "range") {
             const cell = cellAtView(x, y, current.focus, part);
@@ -3048,9 +2823,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         part = columnPartAt(x),
     ): CellPosition | null {
         if (state.rowCount === 0 || columnAxis.count === 0) return null;
-        const rowIndex = rowAxis.indexAt(
-            rowsY.virtual + clamp(y - bodyTop(), 0, bodyHeight()),
-        );
+        const rowIndex = rowAxis.indexAt(rowOffsetAt(y));
         const columnIndex = columnAxis.indexAt(partOffsetAt(part, x));
         return known &&
             known.rowIndex === rowIndex &&
@@ -3083,42 +2856,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const area =
             options.fillable && !state.editingCell ? selectedArea(state) : null;
         return area && spannedArea(state, area);
-    }
-
-    /**
-     * The cells a fill from `source` reaches with the pointer over `cell` (E4.4): below it, as
-     * wide, down to the cell's row; or to its end, as tall, to the cell's column; whichever the
-     * pointer went farther past (down on a tie); `null` over the source, above it or before it.
-     */
-    function fillTargetOf(
-        source: CellRange,
-        cell: CellPosition,
-    ): CellRange | null {
-        const { anchor: first, focus: last } = source;
-        const down = cell.rowIndex - last.rowIndex;
-        const across = cell.columnIndex - last.columnIndex;
-        if (down <= 0 && across <= 0) return null;
-        return down >= across
-            ? {
-                  anchor: {
-                      rowIndex: last.rowIndex + 1,
-                      columnIndex: first.columnIndex,
-                  },
-                  focus: {
-                      rowIndex: cell.rowIndex,
-                      columnIndex: last.columnIndex,
-                  },
-              }
-            : {
-                  anchor: {
-                      rowIndex: first.rowIndex,
-                      columnIndex: last.columnIndex + 1,
-                  },
-                  focus: {
-                      rowIndex: last.rowIndex,
-                      columnIndex: cell.columnIndex,
-                  },
-              };
     }
 
     /**
@@ -3195,12 +2932,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             model.run("selected-range.clear", {});
             return true;
         }
-        if (
-            ctrl &&
-            !event.shiftKey &&
-            event.key.toLowerCase() === "a" &&
-            isCellElement(target)
-        ) {
+        if (isSelectAll(event) && isCellElement(target)) {
             // handled even when refused: the page's text is never selected instead
             event.preventDefault();
             if (!event.repeat) model.run("selected-range.select-all", {});
@@ -3256,53 +2988,23 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return true;
     }
 
-    /**
-     * the node a copy or a paste selects (`selectForClipboard`), and the selection's ranges
-     * before it
-     */
-    let clipboardSelection: {
-        readonly node: Element;
-        readonly ranges: readonly ReturnType<Selection["getRangeAt"]>[];
-    } | null = null;
+    /** the selection a copy or a paste holds in a cell (`selectForClipboard`) */
+    let clipboardSelection: HeldSelection | null = null;
 
     /**
      * Ctrl/⌘+C or Ctrl/⌘+V on one of the grid's cells (E4.2), its keydown never prevented: the
      * page's own `copy` or `paste` follows, which WebKit fires (a copy) only while something is
      * selected, and Firefox fires at the selection, not at the focused cell (Epic #89). A node of
-     * the cell's own, hidden and selectable, holds the selection (collapsed, as the grid keeps
-     * it, or text selected elsewhere on the page, which would take the event) until the event
-     * (`copy`, `paste`) or, without one, the next task (`endClipboardSelection`, which puts the
-     * selection back); for a copy, text selected inside the cell is left to copy as it is. No
-     * permission, every engine.
+     * the cell's own holds the selection (`holdSelection`) until the event (`copy`, `paste`) or,
+     * without one, the next task (`endClipboardSelection`, which puts the selection back); for a
+     * copy, text selected inside the cell is left to copy as it is. No permission, every engine.
      */
     function selectForClipboard(cell: Element, copying: boolean) {
         const doc = cell.ownerDocument;
         const selection = doc.getSelection();
-        if (!selection) return;
-        // text selected in the cell itself (its content, its editor) is copied as it is; a
-        // selection anywhere else on the page is not the grid's copy: replaced until it is over
-        if (
-            copying &&
-            !selection.isCollapsed &&
-            cell.contains(selection.anchorNode) &&
-            cell.contains(selection.focusNode)
-        ) {
-            return;
-        }
+        if (!selection || (copying && selectedIn(selection, cell))) return;
         endClipboardSelection();
-        const ranges = Array.from(
-            { length: selection.rangeCount },
-            (_, index) => selection.getRangeAt(index),
-        );
-        const node = doc.createElement("span");
-        node.textContent = "\u200b";
-        node.setAttribute("aria-hidden", "true");
-        for (const [property, value] of CLIPBOARD_NODE_STYLE) {
-            node.style.setProperty(property, value);
-        }
-        cell.append(node);
-        selection.selectAllChildren(node);
-        clipboardSelection = { node, ranges };
+        clipboardSelection = holdSelection(cell, selection);
         doc.defaultView?.setTimeout(endClipboardSelection, 0);
     }
 
@@ -3311,10 +3013,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         const held = clipboardSelection;
         if (!held) return;
         clipboardSelection = null;
-        const selection = held.node.ownerDocument.getSelection();
-        selection?.removeAllRanges();
-        for (const range of held.ranges) selection?.addRange(range);
-        held.node.remove();
+        releaseSelection(held);
     }
 
     /**
@@ -3351,7 +3050,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     /** Asks for a row's drag's next frame while its pointer is in an edge zone: it scrolls on. */
     function scrollAtEdge(current: RowDrag) {
-        if (edgeStep(current.viewY, bodyTop(), bodyHeight()) !== 0) {
+        if (rowEdgeStepAt(current.viewY) !== 0) {
             askFrame(current);
         }
     }
@@ -3373,7 +3072,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      * `followRowDrag`); the current state while the same.
      */
     function rowReorderTarget(current: RowDrag, y: number): RowReorder {
-        const offset = rowsY.virtual + clamp(y - bodyTop(), 0, bodyHeight());
+        const offset = rowOffsetAt(y);
         const at = rowAxis.indexAt(offset);
         const start = rowAxis.offsetOf(at);
         const { rowIndex, rowKey } = current;
@@ -3731,7 +3430,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return true;
         }
         if (mode !== "multiple") return false;
-        if (ctrl && !event.shiftKey && event.key.toLowerCase() === "a") {
+        if (isSelectAll(event)) {
             // handled even when refused: the page's text is never selected instead
             event.preventDefault();
             if (!event.repeat) model.run("selected-rows.select-all", {});
@@ -4056,17 +3755,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
 
     // ── measured heights (Epic #86, E2.2) ────────────────────────────────────
 
-    /** each measured element's border-box height, as last read or told by its observer */
-    let heights = new WeakMap<Element, number>();
-    /** the observer of the measured rows and details (the viewport's window's), while attached */
-    let measurer: HeightObserver | null = null;
-    /**
-     * the elements to observe from the next frame on: an observer's first report of an element
-     * rendered while observers report (a resize laid out again) would come in that same frame at
-     * the same depth, which a browser defers with an error. The engine reads it at its commit.
-     */
-    const unobserved = new Set<Element>();
-    let observeFrame: number | null = null;
     /**
      * the row of the last scroll to a cell, until a scroll the engine did not make (either axis):
      * scrolled to again when heights change, so the cell lands where its measured height puts it;
@@ -4076,140 +3764,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         EngineActionMap["scroll-to-cell"],
         "rowIndex" | "align"
     > | null = null;
-    /** a pass of `takeMeasures`: the heights that changed (none: nothing allocated), the scale */
-    let rowChanges: Measure[] | null = null;
-    let detailChanges: Measure[] | null = null;
-    let scale = 0;
-    /** the height of the details inside the row `takeRow` reads */
-    let detailsInRow = 0;
-
-    /** Whether a state's rows or details are measured. */
-    function measuring(grid: DataGridModel<TRow, TNode>["state"]): boolean {
-        return grid.rowHeight === "auto" || grid.detailHeight === "auto";
-    }
-
-    /** Observes a row or a detail from the next frame on, while they are measured. */
-    function observeLater(element: Element) {
-        const win = viewport?.ownerDocument.defaultView;
-        if (!measuring(state) || !win || !("ResizeObserver" in win)) return;
-        unobserved.add(element);
-        if (observeFrame !== null) return;
-        observeFrame = win.requestAnimationFrame(() => {
-            observeFrame = null;
-            measurer ??= new win.ResizeObserver(onMeasured);
-            for (const waiting of unobserved) measurer.observe(waiting);
-            unobserved.clear();
-        });
-    }
-
-    /** Stops observing an element: its height is read again if it comes back. */
-    function unobserve(element: Element) {
-        unobserved.delete(element);
-        heights.delete(element);
-        measurer?.unobserve(element);
-    }
-
-    /** Observes the rows and details registered so far (attached, or measured from now on). */
-    function observeRegistered() {
-        for (const element of layers.row) observeLater(element);
-        for (const element of layers.detail) observeLater(element);
-    }
-
-    /** Observes nothing more, every height read forgotten (detached, or nothing measured). */
-    function stopMeasuring() {
-        measurer?.disconnect();
-        measurer = null;
-        unobserved.clear();
-        heights = new WeakMap();
-        if (observeFrame !== null) {
-            viewport?.ownerDocument.defaultView?.cancelAnimationFrame(
-                observeFrame,
-            );
-            observeFrame = null;
-        }
-    }
-
-    /** Elements resized (or observed for the first time): their heights, taken in. */
-    function onMeasured(entries: readonly ResizeObserverEntry[]) {
-        for (const { target, borderBoxSize } of entries) {
-            const height = borderBoxSize?.[0]?.blockSize;
-            // without a box size, read once more
-            if (height === undefined) heights.delete(target);
-            else heights.set(target, height);
-        }
-        takeMeasures();
-    }
-
-    /** An element's border-box height in layout pixels: as last told, else read once. */
-    function heightOf(element: Element): number {
-        let height = heights.get(element);
-        if (height === undefined) {
-            if (scale === 0 && viewport) scale = layoutScale(viewport);
-            height = element.getBoundingClientRect().height / (scale || 1);
-            heights.set(element, height);
-        }
-        return height;
-    }
-
-    /** The row index an element carries (NaN without one). */
-    function rowIndexOf(element: Element): number {
-        const attribute = element.getAttribute("data-row-index");
-        return attribute === null ? Number.NaN : Number(attribute);
-    }
-
-    /** A rendered detail's height, kept when it changed (a loaded row's only). */
-    function takeDetail(element: HTMLElement) {
-        const index = rowIndexOf(element);
-        const key = loadedRowKey(state, index);
-        if (key === undefined) return;
-        const height = heightOf(element);
-        if (measuredDetails.holds(index, height, key)) return;
-        if (!detailChanges) detailChanges = [];
-        detailChanges.push({ index, height, key });
-    }
-
-    /** Adds a detail's height when it is inside the row `this` (a row's own height leaves it out). */
-    function addDetailIn(this: Element, detail: HTMLElement) {
-        if (this.contains(detail)) detailsInRow += heightOf(detail);
-    }
-
-    /**
-     * A rendered row's own height, its element's less its details', kept when it changed (a loaded
-     * row's only; one measured 0, hidden, keeps the height it had).
-     */
-    function takeRow(element: HTMLElement) {
-        const index = rowIndexOf(element);
-        // a group row's key is its group's (Epic #87)
-        const key = rowKeyAt(state, index);
-        if (key === undefined) return;
-        detailsInRow = 0;
-        layers.detail.forEach(addDetailIn, element);
-        const height = heightOf(element) - detailsInRow;
-        if (height <= 0 || measuredRows.holds(index, height, key)) return;
-        if (!rowChanges) rowChanges = [];
-        rowChanges.push({ index, height, key });
-    }
-
-    /**
-     * Takes the heights of the rendered rows and details in: each element's as its observer last
-     * told, else read once (at a commit, before the browser paints). Nothing is allocated while
-     * none changed; when one did, the rows are laid out again (`remeasured`).
-     */
-    function takeMeasures() {
-        if (!viewport || !measuring(state)) return;
-        scale = 0;
-        if (state.detailHeight === "auto") layers.detail.forEach(takeDetail);
-        if (state.rowHeight === "auto") layers.row.forEach(takeRow);
-        const details = detailChanges;
-        const rows = rowChanges;
-        if (!details && !rows) return;
-        detailChanges = null;
-        rowChanges = null;
-        remeasured([
-            ...(details ? measuredDetails.set(details) : []),
-            ...(rows ? measuredRows.set(rows) : []),
-        ]);
-    }
 
     /**
      * Lays the rows out again for new heights (of the rows at `changed`): the view kept on the
@@ -4234,9 +3788,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
     }
 
     /** The row `remeasured` keeps the view on, and how far into it the view starts. */
-    function measureAnchor(
-        changed: readonly number[],
-    ): { index: number; within: number } | null {
+    function measureAnchor(changed: readonly number[]): AxisAnchor | null {
         const first = anchorOf(rowAxis, rowsY.virtual);
         if (!first) return null;
         const resized = new Set(changed);
@@ -4249,45 +3801,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             }
         }
         return first;
-    }
-
-    /**
-     * Drops the heights measured for rows no longer at their index (a new source, rows changed),
-     * and every one once rows, or details, are no longer measured. Returns whether one was.
-     */
-    function forgetMeasures(
-        before: DataGridModel<TRow, TNode>["state"],
-        after: DataGridModel<TRow, TNode>["state"],
-    ): boolean {
-        const keyAt = (index: number) => rowKeyAt(after, index);
-        const newSource =
-            after.source !== before.source || after.rowKey !== before.rowKey;
-        const changed = after.rowsChanged !== before.rowsChanged;
-        let dropped = false;
-        for (const [store, measured] of [
-            [measuredRows, after.rowHeight === "auto"],
-            [measuredDetails, after.detailHeight === "auto"],
-        ] as const) {
-            if (!measured) {
-                dropped = store.clear() || dropped;
-                continue;
-            }
-            if (newSource) {
-                // behind the same `getRow`, only rows added or gone (D6)
-                const { start } = newRowsOf(before, after);
-                dropped =
-                    store.keep(
-                        Math.min(start, after.rowCount),
-                        Number.POSITIVE_INFINITY,
-                        keyAt,
-                    ) || dropped;
-            }
-            if (changed) {
-                const { start, end } = after.rowsChanged;
-                dropped = store.keep(start, end, keyAt) || dropped;
-            }
-        }
-        return dropped;
     }
 
     // ── the model ────────────────────────────────────────────────────────────
@@ -4304,28 +3817,6 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 overlaps(range, active.rowIndex, active.rowIndex + 1)) ||
             (rowReorder !== null &&
                 overlaps(range, rowReorder.rowIndex, rowReorder.rowIndex + 1))
-        );
-    }
-
-    /** The row at the view's top, and how far into it the view starts. */
-    function anchorOf(
-        axis: Axis,
-        virtual: number,
-        offset = virtual,
-    ): { index: number; within: number } | null {
-        if (axis.count === 0 || virtual <= 0) return null;
-        const index = axis.indexAt(offset);
-        return { index, within: offset - axis.offsetOf(index) };
-    }
-
-    /** Where an anchor is on an axis that changed: its item's offset, as far into it as it fits. */
-    function anchoredOffset(
-        axis: Axis,
-        anchor: { index: number; within: number },
-    ): number {
-        return (
-            axis.offsetOf(anchor.index) +
-            Math.min(anchor.within, axis.sizeOf(anchor.index))
         );
     }
 
@@ -4432,7 +3923,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         followMovedRow(before, after);
         const changedDetails = detailsChanged(before, after);
         // measured heights follow their rows (E2.2)
-        const remeasure = forgetMeasures(before, after);
+        const remeasure = heights.forget(before, after);
         if (after.rowsChanged !== before.rowsChanged) {
             const rendered = rendersRows(after.rowsChanged);
             // rows' data changed, and nothing else did: off screen, there is nothing to do
@@ -4451,12 +3942,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // measuring starts or stops with "auto" (E2.2)
         const wasMeasuring = measuring(before);
         if (measuring(after) !== wasMeasuring) {
-            if (wasMeasuring) stopMeasuring();
-            else observeRegistered();
+            if (wasMeasuring) heights.stop();
+            else heights.observeRegistered();
         }
         // a row expanding or collapsing grows or shrinks its element: read it again
         if (changedDetails && after.rowHeight === "auto") {
-            for (const element of layers.row) heights.delete(element);
+            heights.rereadRows();
         }
         let anchored = false;
         if (rowsResized || changedDetails || remeasure) {
@@ -4633,7 +4124,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             });
             interaction.manageCellsUnder(element);
             // the rows and details measured (E2.2), from the next frame on
-            observeRegistered();
+            heights.observeRegistered();
             // an edit given to start with listens to the page's presses (Epic #88)
             listenEditPresses();
             // the wheel's listener follows the scaling (`listenToWheel`)
@@ -4694,7 +4185,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     doc.defaultView?.clearTimeout(noEditorTimer);
                     noEditorTimer = null;
                 }
-                stopMeasuring();
+                heights.stop();
                 pointerDown = false;
                 pendingFocus = false;
                 // nested no more: a grid on its own until it is attached again
@@ -4722,13 +4213,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             layers[layer].add(element);
             // a measured row is only read (E2.2)
             if (layer === "row") {
-                observeLater(element);
+                heights.observeLater(element);
                 return () => {
                     layers.row.delete(element);
-                    unobserve(element);
+                    heights.unobserve(element);
                 };
             }
-            if (layer === "detail") observeLater(element);
+            if (layer === "detail") heights.observeLater(element);
             written.delete(element);
             // only this element: a row of pinned cells mounting does not rewrite every other one
             if (!isInsetLayer(layer)) {
@@ -4762,7 +4253,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             return () => {
                 layers[layer].delete(element);
                 written.delete(element);
-                if (layer === "detail") unobserve(element);
+                if (layer === "detail") heights.unobserve(element);
                 // a cell no longer pinned keeps no inset of the engine's, on either side: its
                 // adapter places it
                 if (isInsetLayer(layer)) {
@@ -4818,7 +4309,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             autoSize(rendered);
             // the rows and details rendered for the first time, read before the browser paints;
             // not while a new view waits (widths an automatic width changed): its commit reads
-            if (view === committed) takeMeasures();
+            if (view === committed) heights.take();
         },
         keydown,
         click,

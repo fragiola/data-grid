@@ -14,6 +14,7 @@ import {
     createElement,
     Fragment,
     isValidElement,
+    type Key,
     type ReactNode,
     useLayoutEffect,
 } from "react";
@@ -117,6 +118,17 @@ function withTableSpans(
         ...(colSpan > 1 ? { colSpan } : {}),
         ...(rowSpan > 1 ? { rowSpan } : {}),
     };
+}
+
+/** Each item rendered in a fragment keyed by `key`: what the parts over a list render. */
+function keyed<T>(
+    items: readonly T[],
+    key: (item: T) => Key,
+    render: (item: T) => ReactNode,
+): ReactNode[] {
+    return items.map((item) => (
+        <Fragment key={key(item)}>{render(item)}</Fragment>
+    ));
 }
 
 // ── the grid ─────────────────────────────────────────────────────────────────
@@ -319,11 +331,11 @@ export function HeaderCells<TRow = unknown>({
     children,
 }: HeaderCellsProps<TRow>) {
     const cells = useHeaderCells<TRow>();
-    return cells.map((cell) => (
-        <Fragment key={cell.key}>
-            {children ? children(cell) : <HeaderCell cell={cell} />}
-        </Fragment>
-    ));
+    return keyed(
+        cells,
+        (cell) => cell.key,
+        children ?? ((cell) => <HeaderCell cell={cell} />),
+    );
 }
 
 export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
@@ -340,20 +352,14 @@ export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {
 export function HeaderCell<TRow>(props: HeaderCellProps<TRow>) {
     const { cell, children, ...rest } = props;
     const own = useHeaderCell(cell);
-    const { engine } = useRootGrid();
-    return useRenderElement("div", rest, {
-        state: own.state,
-        props: withTableSpans(
-            own.props,
-            rest.render,
-            cell.columnSpan,
-            cell.rowSpan,
-        ),
-        children: children !== undefined ? children : headerCellContent(cell),
-        // a pinned cell's inset is the engine's (sticky, it stays in view sideways)
-        ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
-        drop: own.state.pinned ? PINNED_KEYS : undefined,
-    });
+    return useCellElement(
+        rest,
+        own,
+        children !== undefined ? children : headerCellContent(cell),
+        cell.columnSpan,
+        false,
+        cell.rowSpan,
+    );
 }
 
 // ── the empty state ──────────────────────────────────────────────────────────
@@ -486,17 +492,15 @@ export interface RowsProps<TRow> {
 /** The rendered rows (the row window, plus the active row), in order. */
 export function Rows<TRow = unknown>({ children }: RowsProps<TRow>) {
     const rows = useRows<TRow>();
-    const keyed = useGridView().rowKey !== undefined;
-    return rows.map((row) => (
+    const byKey = useGridView().rowKey !== undefined;
+    return keyed(
+        rows,
         // keyed by the app's keys when it gives some (a row not loaded yet has none: its index),
         // else by index, so a row loading in place keeps its elements (and focus); the prefixes
         // keep a key and an index apart
-        <Fragment
-            key={keyed && row.loaded ? `k${row.key}` : `i${row.rowIndex}`}
-        >
-            {children ? children(row) : <Row row={row} />}
-        </Fragment>
-    ));
+        (row) => (byKey && row.loaded ? `k${row.key}` : `i${row.rowIndex}`),
+        children ?? ((row) => <Row row={row} />),
+    );
 }
 
 export type RowProps<TRow> = DivPrimitiveProps<RowState> & {
@@ -531,35 +535,36 @@ export interface CellsProps<TRow> {
 export function Cells<TRow = unknown>({ children }: CellsProps<TRow>) {
     const row = useRowContext<TRow>("Cells");
     const cells = useCells(row);
-    return cells.map((cell) => (
-        <Fragment key={cell.column.key}>
-            {children ? children(cell) : <Cell cell={cell} />}
-        </Fragment>
-    ));
+    return keyed(
+        cells,
+        (cell) => cell.column.key,
+        children ?? ((cell) => <Cell cell={cell} />),
+    );
 }
 
 /**
- * A body or summary row cell's element: its part's props with its table span, its content, and,
- * pinned, the engine's inset (sticky, it stays in view sideways).
+ * A cell's element (a header cell's, a body or summary row cell's): its part's props with its
+ * table spans, its content, and, pinned, the engine's inset (sticky, it stays in view sideways).
  */
 function useCellElement<State extends { readonly pinned: boolean }>(
     rest: DivPrimitiveProps<State>,
     own: {
         readonly state: State;
         readonly props: Record<string, unknown>;
-        readonly columnSpan: number;
-        /** in a measured row (Epic #86): placed by the grid, its insets dropped as a pinned cell's */
-        readonly measured: boolean;
     },
     content: ReactNode,
+    columnSpan: number,
+    /** in a measured row (Epic #86): placed by the grid, its insets dropped as a pinned cell's */
+    measured: boolean,
+    rowSpan?: number,
 ) {
     const { engine } = useRootGrid();
     return useRenderElement("div", rest, {
         state: own.state,
-        props: withTableSpans(own.props, rest.render, own.columnSpan),
+        props: withTableSpans(own.props, rest.render, columnSpan, rowSpan),
         children: content,
         ref: own.state.pinned ? layerRef(engine, "pinned") : undefined,
-        drop: own.state.pinned || own.measured ? PINNED_KEYS : undefined,
+        drop: own.state.pinned || measured ? PINNED_KEYS : undefined,
     });
 }
 
@@ -621,7 +626,7 @@ export function Cell<TRow>(props: CellProps<TRow>) {
               })
             : plain(cell.value);
     }
-    return useCellElement(rest, own, content);
+    return useCellElement(rest, own, content, own.columnSpan, own.measured);
 }
 
 /**
@@ -724,11 +729,11 @@ export interface SummaryRowsProps {
 /** A position's summary rows, the first one first. */
 export function SummaryRows({ children, position }: SummaryRowsProps) {
     const rows = useSummaryRows(position);
-    return rows.map((row) => (
-        <Fragment key={row.summaryIndex}>
-            {children ? children(row) : <SummaryRow row={row} />}
-        </Fragment>
-    ));
+    return keyed(
+        rows,
+        (row) => row.summaryIndex,
+        children ?? ((row) => <SummaryRow row={row} />),
+    );
 }
 
 export type SummaryRowProps = DivPrimitiveProps<SummaryRowState> & {
@@ -761,11 +766,11 @@ export function SummaryCells<TRow = unknown>({
     children,
 }: SummaryCellsProps<TRow>) {
     const cells = useSummaryCells<TRow>();
-    return cells.map((cell) => (
-        <Fragment key={cell.column.key}>
-            {children ? children(cell) : <SummaryCell cell={cell} />}
-        </Fragment>
-    ));
+    return keyed(
+        cells,
+        (cell) => cell.column.key,
+        children ?? ((cell) => <SummaryCell cell={cell} />),
+    );
 }
 
 export type SummaryCellProps<TRow> = DivPrimitiveProps<SummaryCellState> & {
@@ -793,5 +798,5 @@ export function SummaryCell<TRow>(props: SummaryCellProps<TRow>) {
                   column,
                   columnIndex: cell.columnIndex,
               }) ?? null);
-    return useCellElement(rest, own, content);
+    return useCellElement(rest, own, content, own.columnSpan, own.measured);
 }

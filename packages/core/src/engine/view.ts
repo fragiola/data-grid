@@ -25,7 +25,7 @@ import type {
     HeaderLayout,
 } from "../model/types";
 import { columnWidth, NO_WIDTHS } from "../model/widths";
-import { memo } from "../utils";
+import { clamp, memo } from "../utils";
 import {
     type AxisWindow,
     overlaps,
@@ -127,8 +127,8 @@ export function scrollingWindow(
 /** A range kept between the pinned columns: from `from` on, before `to`. */
 function between(range: Range, from: number, to: number): Range {
     if (range.start >= from && range.end <= to) return range;
-    const start = Math.min(Math.max(range.start, from), to);
-    return { start, end: Math.min(Math.max(range.end, start), to) };
+    const start = clamp(range.start, from, to);
+    return { start, end: clamp(range.end, start, to) };
 }
 
 /**
@@ -169,7 +169,7 @@ export function activeColumn<TRow, TNode>(
 }
 
 /** The header rows for the rendered columns (`createHeaderRows`). */
-export type HeaderRowsFor<TRow, TNode> = (
+type HeaderRowsFor<TRow, TNode> = (
     header: HeaderLayout<TRow, TNode>,
     count: number,
     start: number,

@@ -117,6 +117,7 @@ export {
     groupAt,
     groupCellValue,
     rowAt,
+    rowCellValue,
     rowKeyAt,
     rowKeyOf,
     rowMetaAt,
