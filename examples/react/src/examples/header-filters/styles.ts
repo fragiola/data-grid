@@ -30,7 +30,7 @@ export const headerRow = cn(
 );
 
 const active =
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]";
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]";
 
 /** the name on top, the filter below: a column of two lines */
 export const headerCell = cn(
@@ -51,8 +51,9 @@ export const sortIcon = "size-3.5 shrink-0";
 export const textFilter =
     "h-7 w-full cursor-text rounded-sm border border-palette-line bg-palette-base px-2 text-sm font-normal normal-case tracking-normal";
 
+/** the same box as the text filter: its height, padding, radius and background */
 export const selectFilter =
-    "h-7 w-full min-w-0 text-sm font-normal normal-case tracking-normal";
+    "h-7 w-full min-w-0 flex-nowrap rounded-sm bg-palette-base px-2 py-0 text-sm font-normal normal-case tracking-normal";
 
 export const row = (state: RowState) =>
     cn(

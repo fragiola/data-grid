@@ -68,3 +68,25 @@ test("the filters hide, and the header is one line again", async ({ page }) => {
     await task.click();
     await expect(task).toHaveAttribute("aria-sort", "ascending");
 });
+
+test("its select filters line up with the text filter (Epic #113)", async ({
+    page,
+}) => {
+    await openExample(page, "header-filters");
+    const boxes = await page
+        .locator('[data-grid-part="header-cell"]')
+        .evaluateAll((cells) =>
+            cells
+                .map((cell) => cell.querySelector("input, button"))
+                .filter((field) => field !== null)
+                .map((field) => {
+                    const box = field.getBoundingClientRect();
+                    return {
+                        top: Math.round(box.top),
+                        height: Math.round(box.height),
+                    };
+                }),
+        );
+    expect(boxes.length).toBeGreaterThan(2);
+    for (const box of boxes) expect(box).toEqual(boxes[0]);
+});

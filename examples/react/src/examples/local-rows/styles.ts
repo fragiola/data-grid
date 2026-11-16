@@ -3,14 +3,18 @@ import { cn } from "#/lib/cn";
 
 export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";
 
+/** the filters in two rows: the text ones and the salary, then the teams, the clear and the count */
 export const toolbar =
-    "palette-surface flex flex-wrap items-center gap-2 text-sm text-palette-contrast font-(family-name:--dg-font)";
+    "palette-surface flex flex-col gap-2 text-sm text-palette-contrast font-(family-name:--dg-font)";
+
+export const toolbarRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
 
 export const icon = "size-4 opacity-70";
 
-export const search = "w-52";
+/** the fields share the first row, wrapping on a narrow frame */
+export const search = "min-w-48 flex-[2_1_0%]";
 
-export const nameFilter = "w-44";
+export const nameFilter = "min-w-40 flex-1";
 
 export const select = "w-40 flex-none";
 
@@ -52,7 +56,7 @@ export const headerCell = cn(
     // a sortable header cell sorts on a click: it reads as one, and its text is not selected
     "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const row = (state: RowState) =>
@@ -64,7 +68,7 @@ export const row = (state: RowState) =>
 /** the active cell's outline sits inside it, so neighbours never cover it */
 export const cell = cn(
     "flex items-center overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 /** the empty state's cell (as tall as the visible body): the message centred in it */

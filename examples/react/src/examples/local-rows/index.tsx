@@ -75,84 +75,99 @@ export default function LocalRows() {
     return (
         <div className={styles.frame}>
             <div className={styles.toolbar}>
-                <Input.Template.Simple
-                    aria-label="Search every column"
-                    placeholder="Search"
-                    value={local.filter.search}
-                    onValueChange={local.filter.setSearch}
-                    inset={{
-                        start: <Search aria-hidden className={styles.icon} />,
-                    }}
-                    className={styles.search}
-                />
-                <Input.Template.Simple
-                    aria-label="Name contains"
-                    placeholder="Name contains"
-                    value={
-                        typeof local.filter.values.name === "string"
-                            ? local.filter.values.name
-                            : ""
-                    }
-                    onValueChange={(name) => local.filter.set("name", name)}
-                    className={styles.nameFilter}
-                />
-                <Select.Root
-                    items={SALARIES}
-                    value={
-                        typeof minimum === "number" ? String(minimum) : "any"
-                    }
-                    onValueChange={(choice) =>
-                        local.filter.set(
-                            "salary",
-                            choice === "any" || choice === null
-                                ? undefined
-                                : Number(choice),
-                        )
-                    }
-                >
-                    <Select.Trigger
-                        className={styles.select}
-                        aria-label="Salary"
+                <div className={styles.toolbarRow}>
+                    <div className={styles.search}>
+                        <Input.Template.Simple
+                            aria-label="Search every column"
+                            placeholder="Search"
+                            value={local.filter.search}
+                            onValueChange={local.filter.setSearch}
+                            inset={{
+                                start: (
+                                    <Search
+                                        aria-hidden
+                                        className={styles.icon}
+                                    />
+                                ),
+                            }}
+                        />
+                    </div>
+                    <div className={styles.nameFilter}>
+                        <Input.Template.Simple
+                            aria-label="Name contains"
+                            placeholder="Name contains"
+                            value={
+                                typeof local.filter.values.name === "string"
+                                    ? local.filter.values.name
+                                    : ""
+                            }
+                            onValueChange={(name) =>
+                                local.filter.set("name", name)
+                            }
+                        />
+                    </div>
+                    <Select.Root
+                        items={SALARIES}
+                        value={
+                            typeof minimum === "number"
+                                ? String(minimum)
+                                : "any"
+                        }
+                        onValueChange={(choice) =>
+                            local.filter.set(
+                                "salary",
+                                choice === "any" || choice === null
+                                    ? undefined
+                                    : Number(choice),
+                            )
+                        }
                     >
-                        <Select.Value />
-                    </Select.Trigger>
-                    <Select.Content>
-                        {Object.entries(SALARIES).map(([value, label]) => (
-                            <Select.Item key={value} value={value}>
-                                {label}
-                            </Select.Item>
+                        <Select.Trigger
+                            className={styles.select}
+                            aria-label="Salary"
+                        >
+                            <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                            {Object.entries(SALARIES).map(([value, label]) => (
+                                <Select.Item key={value} value={value}>
+                                    {label}
+                                </Select.Item>
+                            ))}
+                        </Select.Content>
+                    </Select.Root>
+                </div>
+                <div className={styles.toolbarRow}>
+                    <fieldset className={styles.teams}>
+                        <legend className={styles.teamsTitle}>Teams</legend>
+                        {TEAMS.map((team) => (
+                            // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders the control
+                            <label key={team} className={styles.team}>
+                                <Checkbox.Root
+                                    checked={checkedTeams.includes(team)}
+                                    onCheckedChange={() => toggleTeam(team)}
+                                >
+                                    <Checkbox.Indicator />
+                                </Checkbox.Root>
+                                {team}
+                            </label>
                         ))}
-                    </Select.Content>
-                </Select.Root>
-                <fieldset className={styles.teams}>
-                    <legend className={styles.teamsTitle}>Teams</legend>
-                    {TEAMS.map((team) => (
-                        // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders the control
-                        <label key={team} className={styles.team}>
-                            <Checkbox.Root
-                                checked={checkedTeams.includes(team)}
-                                onCheckedChange={() => toggleTeam(team)}
-                            >
-                                <Checkbox.Indicator />
-                            </Checkbox.Root>
-                            {team}
-                        </label>
-                    ))}
-                </fieldset>
-                <Clickable.Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                        local.filter.clear();
-                        local.filter.setSearch("");
-                    }}
-                >
-                    Clear filters
-                </Clickable.Button>
-                <span className={styles.count} data-testid="count">
-                    {formatNumber(local.filteredCount)} of{" "}
-                    {formatNumber(local.total)} people
-                </span>
+                    </fieldset>
+                    <Clickable.Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                            local.filter.clear();
+                            local.filter.setSearch("");
+                        }}
+                    >
+                        Clear filters
+                    </Clickable.Button>
+                    <span className={styles.count} data-testid="count">
+                        {formatNumber(local.filteredCount)} of{" "}
+                        {formatNumber(local.total)} people
+                    </span>
+                </div>
             </div>
             <DataGrid.Root
                 columns={columns}
