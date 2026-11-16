@@ -183,6 +183,16 @@
             ]
         },
         {
+            "label": "API: Vue (@fragiola/data-grid-vue)",
+            "collapsible": true,
+            "pages": [
+                {
+                    "label": "Vue primitives",
+                    "path": "api/vue"
+                }
+            ]
+        },
+        {
             "label": "Project",
             "pages": [
                 {

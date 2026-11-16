@@ -14,6 +14,8 @@ This page builds the grid of the [`hello-grid`](/examples/hello-grid) example, s
 A column is a plain object, typed by your row. `key` names it (and reads `row[key]` by default),
 `name` is the header's text, `width` is in pixels.
 
+<Framework name="react">
+
 ```tsx title="columns.ts"
 import type { Column } from "@fragiola/data-grid-react";
 
@@ -37,6 +39,39 @@ export const columns: Column<Person>[] = [
 ];
 ```
 
+</Framework>
+
+<Framework name="vue">
+
+```ts title="columns.ts"
+import type { Column } from "@fragiola/data-grid-vue";
+import type { VNodeChild } from "vue";
+
+export interface Person {
+    id: number;
+    name: string;
+    email: string;
+    salary: number;
+}
+
+export const columns: Column<Person, VNodeChild>[] = [
+    { key: "id", name: "#", width: 64 },
+    { key: "name", name: "Name", width: 180 },
+    { key: "email", name: "Email", width: 260 },
+    {
+        key: "salary",
+        name: "Salary",
+        width: 120,
+        renderCell: ({ row }) => `$${row.salary.toLocaleString()}`,
+    },
+];
+```
+
+In Vue a column's renderers return vnodes (`VNodeChild`: a string, or `h("b", row.name)`), so
+the column type names it.
+
+</Framework>
+
 </Step>
 
 <Step>
@@ -45,6 +80,8 @@ export const columns: Column<Person>[] = [
 
 `Root` takes the data; `Grid`, `Header` and `Body` are the structure. With no children, the header
 renders a cell per column and the body a row per row, each with its cells.
+
+<Framework name="react">
 
 ```tsx title="people-grid.tsx"
 import { DataGrid } from "@fragiola/data-grid-react";
@@ -61,6 +98,35 @@ export function PeopleGrid({ people }: { people: Person[] }) {
 }
 ```
 
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people-grid.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { columns, type Person } from "./columns";
+
+defineProps<{ people: Person[] }>();
+
+const DataGrid = typedDataGrid<Person>();
+</script>
+
+<template>
+    <DataGrid.Root :columns="columns" :rows="people" :row-key="(row) => row.id" style="height: 400px">
+        <DataGrid.Grid aria-label="People">
+            <DataGrid.Header />
+            <DataGrid.Body />
+        </DataGrid.Grid>
+    </DataGrid.Root>
+</template>
+```
+
+A template cannot pass a type argument, so `typedDataGrid<Person>()` returns the same components
+typed by your row: the `row` of `rowKey` and of the slots below is a `Person`.
+
+</Framework>
+
 It already scrolls, renders only the rows in view, and answers the arrow keys. It has no look:
 the next step gives it one.
 
@@ -70,8 +136,11 @@ the next step gives it one.
 
 ## Style the parts
 
-Every part takes `className` (a string, or a function of its state), and exposes its state as
-`data-*` attributes. Write the parts out to style each one.
+Every part exposes its state as `data-*` attributes. Write the parts out to style each one.
+
+<Framework name="react">
+
+A part takes `className` (a string, or a function of its state).
 
 ```tsx title="people-grid.tsx"
 <DataGrid.Body>
@@ -89,6 +158,27 @@ Every part takes `className` (a string, or a function of its state), and exposes
 </DataGrid.Body>
 ```
 
+</Framework>
+
+<Framework name="vue">
+
+A part takes `class` and `style` as attributes, merged under its structural style. The
+collection parts take a default scoped slot in place of React's children function.
+
+```vue title="people-grid.vue"
+<DataGrid.Body>
+    <DataGrid.Rows v-slot="{ row }">
+        <DataGrid.Row :row="row" class="border-b">
+            <DataGrid.Cells v-slot="{ cell }">
+                <DataGrid.Cell :cell="cell" class="px-3 data-active:outline-2" />
+            </DataGrid.Cells>
+        </DataGrid.Row>
+    </DataGrid.Rows>
+</DataGrid.Body>
+```
+
+</Framework>
+
 The header needs a background: it stays at the top while the rows scroll under it. Its place
 above them is the grid's own (a structural `z-index`); the color is yours.
 
@@ -98,7 +188,8 @@ above them is the grid's own (a structural `z-index`); the color is yours.
 
 ## Render it as a table, if you like
 
-`render` swaps the element of any part, so the same grid can be a real table. See
+`render` swaps the element of any part (in Vue, `as` or the `render` slot:
+`<DataGrid.Grid as="table">`), so the same grid can be a real table. See
 [Tables or divs](/docs/concepts/tables-or-divs) and the [`table-elements`](/examples/table-elements)
 example.
 
