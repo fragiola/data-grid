@@ -9,6 +9,7 @@ import {
     onScopeDispose,
     onUpdated,
     provide,
+    queuePostFlushCb,
     shallowRef,
     type VNodeChild,
     watch,
@@ -108,7 +109,21 @@ export const Root: DataGridComponent<RootProps, RootSlots> = definePrimitive<
         // controlled pieces settle, and the engine takes its options
         onMounted(() => root.sync());
         onUpdated(() => root.sync());
-        const ref = elementRef((element) => engine.adapter.attach(element));
+        // a function ref runs while Vue patches, before the element is in the page: the engine
+        // attaches once it is (after the render, before the mounted hooks' sync), so it reads
+        // the page's direction and the grid it is nested in
+        const ref = elementRef((element) => {
+            if (element.isConnected) return engine.adapter.attach(element);
+            let live = true;
+            let detach: (() => void) | undefined;
+            queuePostFlushCb(() => {
+                if (live) detach = engine.adapter.attach(element);
+            });
+            return () => {
+                live = false;
+                detach?.();
+            };
+        });
         // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after
         // the consumer's listeners, so preventDefault cancels them
         const after = {

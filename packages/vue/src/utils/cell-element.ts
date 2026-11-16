@@ -28,6 +28,9 @@ export function renderCellElement<
 }): VNodeChild {
     const { own, as } = options;
     const { pinned } = own.state;
+    // unpinned: the engine lets go of its inset before the patch writes the cell's own (Vue
+    // calls a dropped ref after the patch, whose cleanup would clear that `left`), as React does
+    if (!pinned) options.pinnedRef(null);
     return renderElement({
         tag: "div",
         as,

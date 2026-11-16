@@ -139,7 +139,7 @@ describe("core package guard", () => {
                 expect(rootLicence).toContain(line);
             }
         }
-        for (const pkg of ["core", "react"]) {
+        for (const pkg of ["core", "react", "vue"]) {
             expect(readFileSync(join(root, "..", pkg, "LICENSE"), "utf8")).toBe(
                 rootLicence,
             );

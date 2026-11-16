@@ -33,23 +33,28 @@ export const Grid: DataGridComponent<GridProps, GridSlots> = definePrimitive<
     const ref = layerRef(engine, "grid");
     // a `<table>`: what it holds takes a table's structure (`Empty`)
     provide(TableKey, props.as === "table");
-    // the view is on screen: the engine writes the layers' offsets for it and moves focus
+    // the view is on screen: the engine writes the layers' offsets for it and moves focus. The
+    // view rendered, not the latest: one the engine emits during the patch (the root's attach)
+    // is committed once its own render is done
+    let rendered = view.value;
     let committed: unknown = null;
     const commit = () => {
-        if (committed === view.value) return;
-        committed = view.value;
-        engine.adapter.commit(view.value);
+        if (committed === rendered) return;
+        committed = rendered;
+        engine.adapter.commit(rendered);
     };
     onMounted(commit);
     onUpdated(commit);
-    return () =>
-        renderElement({
+    return () => {
+        rendered = view.value;
+        return renderElement({
             tag: "div",
             as: props.as,
             attrs,
             render: slots.render,
-            ...gridPartOf(view.value),
+            ...gridPartOf(rendered),
             ref,
             children: () => slots.default?.({}),
         });
+    };
 });
