@@ -59,18 +59,18 @@ import {
     SummaryContext,
     SummaryRowContext,
     ViewContext,
-} from "./context";
-import { attachGridRef, type DataGridRef } from "./gridRef";
+} from "../context";
+import { attachGridRef, type DataGridRef } from "../hooks/use-data-grid-ref";
 import {
     bindControlled,
     type ControlledFlags,
     type ControlledState,
-} from "./utils/controlled";
+} from "../utils/controlled";
 import {
     type DivPrimitiveProps,
     dataAttributes,
     useRenderElement,
-} from "./utils/useRender";
+} from "../utils/use-render";
 
 /** The root's state: what its `className`/`style` functions and `render` receive. */
 export type RootState = Record<string, never>;

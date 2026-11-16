@@ -1,6 +1,6 @@
 // From Dockable (fragiola/dockable, packages/react/src/utils), same author and licence.
 import * as React from "react";
-import { mergeProps, mergeRefs } from "./mergeProps";
+import { mergeProps, mergeRefs } from "./merge-props";
 
 /**
  * Props a `render` function receives: spread them onto the element it returns. `ref` is a callback

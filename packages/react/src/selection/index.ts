@@ -10,7 +10,7 @@ import {
 } from "@fragiola/data-grid/selection";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useDataGrid } from "../context";
-import { type DataGridRef, noSubscription } from "../gridRef";
+import { type DataGridRef, noSubscription } from "../hooks/use-data-grid-ref";
 
 export {
     type SelectionStatus,

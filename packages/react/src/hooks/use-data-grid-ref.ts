@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import type { DataGridContextValue } from "./context";
+import type { DataGridContextValue } from "../context";
 
 /**
  * A handle on a grid from outside its `DataGrid.Root`: `current` is the grid's model and engine

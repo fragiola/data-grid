@@ -361,7 +361,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     height, `useCellElement`: roving tab stop, pinned, spans, interaction;
     `data-grid-part="summary-cell"`, `data-summary`); `Body` starts below the top ones and `Grid`
     holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells` (the body cells'
-    span-aware walk, `cellsOf` in `hooks.ts`, shared with `useCells`), `useSummaryCell`;
+    span-aware walk, `cellsOf` in `utils/cells-of.ts`, shared with `useCells`), `useSummaryCell`;
     `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Their layer is the
     grid's (a structural `z-index`, below the header's, Epic #89, E5.2); their background is the
     app's, as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
