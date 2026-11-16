@@ -1,4 +1,4 @@
-import type { SummaryCellState } from "@fragiola/data-grid";
+import { type SummaryCellState, summaryCellContent } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import type { SummaryCellInfo } from "../context";
 import { useCellElement, useSummaryCellPart } from "../hooks/internal";
@@ -19,15 +19,7 @@ export type SummaryCellProps<TRow> = DivPrimitiveProps<SummaryCellState> & {
 export function SummaryCell<TRow>(props: SummaryCellProps<TRow>) {
     const { cell, children, ...rest } = props;
     const own = useSummaryCellPart(cell);
-    const { column } = cell;
     const content =
-        children !== undefined
-            ? children
-            : (column.renderSummaryCell?.({
-                  position: cell.position,
-                  summaryIndex: cell.summaryIndex,
-                  column,
-                  columnIndex: cell.columnIndex,
-              }) ?? null);
+        children !== undefined ? children : summaryCellContent(cell);
     return useCellElement(rest, own, content, own.columnSpan, own.measured);
 }

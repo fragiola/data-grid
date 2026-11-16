@@ -1,6 +1,5 @@
-import { type FillHandleState, fillHandlePart } from "@fragiola/data-grid";
+import { type FillHandleState, fillHandlePartOf } from "@fragiola/data-grid";
 
-import { controlPart, fillHandleData } from "../utils/control-part";
 import type { PartHookResult } from "./internal";
 import { useGridView } from "./use-grid-view";
 
@@ -18,7 +17,5 @@ export function useFillHandle(cell: {
     readonly rowIndex: number;
     readonly columnIndex: number;
 }): PartHookResult<FillHandleState> {
-    const view = useGridView();
-    const { state, attributes } = fillHandlePart(view, cell);
-    return controlPart(state, attributes, fillHandleData);
+    return fillHandlePartOf(useGridView(), cell);
 }

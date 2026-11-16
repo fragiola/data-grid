@@ -1,22 +1,16 @@
-import { ariaRowIndex } from "@fragiola/data-grid";
+import {
+    type HeaderRowState,
+    headerRowPartOf,
+    LAYER_KEYS,
+} from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import { HeaderRowContext, type HeaderRowInfo } from "../context";
 import { useHeaderRowOf, useLayer } from "../hooks/internal";
 import { useGridView } from "../hooks/use-grid-view";
-import { LAYER_KEYS } from "../utils/drop-keys";
-import { rowStyle } from "../utils/row-style";
-import {
-    type DivPrimitiveProps,
-    dataAttributes,
-    useRenderElement,
-} from "../utils/use-render";
+import { type DivPrimitiveProps, useRenderElement } from "../utils/use-render";
 import { HeaderCells } from "./header-cells";
 
-/** The state of a header row. */
-export interface HeaderRowState {
-    /** -1 for the columns' row, above it for groups */
-    readonly rowIndex: number;
-}
+export type { HeaderRowState } from "@fragiola/data-grid";
 
 export type HeaderRowProps<TRow = unknown> =
     DivPrimitiveProps<HeaderRowState> & {
@@ -39,7 +33,7 @@ export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
     const row = useHeaderRowOf(given);
     const rowIndex = row?.rowIndex ?? -1;
     return useRenderElement("div", rest, {
-        state: { rowIndex },
+        ...headerRowPartOf(view, rowIndex),
         ref: useLayer("header"),
         drop: LAYER_KEYS,
         children: (
@@ -49,20 +43,5 @@ export function HeaderRow<TRow = unknown>(props: HeaderRowProps<TRow>) {
                 {children}
             </HeaderRowContext>
         ),
-        props: {
-            role: "row",
-            "aria-rowindex": ariaRowIndex(view, rowIndex),
-            ...dataAttributes({ "grid-part": "header-row" }),
-            style: {
-                ...rowStyle(
-                    view,
-                    (rowIndex + view.headerRowCount) * view.headerRowHeight,
-                    view.headerRowHeight,
-                ),
-                // with several rows, an upper one stays above the next: a cell spanning down
-                // from it is not covered by the row it reaches into
-                ...(view.headerRowCount > 1 ? { zIndex: -rowIndex } : {}),
-            },
-        },
     });
 }

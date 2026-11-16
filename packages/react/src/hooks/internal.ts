@@ -1,21 +1,18 @@
 import {
     type AxisWindow,
-    ariaRowIndex,
     type CellState,
-    cellPart,
+    cellPartOf,
     type DataGridEngine,
     EMPTY_WINDOW,
     type EngineEventKey,
     type EngineLayer,
     type EngineQueryKey,
     type EngineQueryMap,
-    measuredRow,
+    PINNED_KEYS,
     type RowState,
-    rowPart,
-    rowTop,
-    rowWidth,
+    rowPartOf,
     type SummaryCellState,
-    summaryCellPart,
+    summaryCellPartOf,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -33,15 +30,8 @@ import {
     useGrid,
     useRootGrid,
 } from "../context";
-import { cellPartProps } from "../utils/cell-part-props";
-import { PINNED_KEYS } from "../utils/drop-keys";
 import { layerRef } from "../utils/layer-ref";
-import { rowStyle } from "../utils/row-style";
-import {
-    type DivPrimitiveProps,
-    dataAttributes,
-    useRenderElement,
-} from "../utils/use-render";
+import { type DivPrimitiveProps, useRenderElement } from "../utils/use-render";
 import { withTableSpans } from "../utils/with-table-spans";
 import { type DataGridRef, noSubscription } from "./use-data-grid-ref";
 import { useGridView } from "./use-grid-view";
@@ -91,49 +81,12 @@ export function useRowPart<TRow>(
 } {
     const view = useGridView<TRow>();
     const { engine } = useRootGrid();
-    // the row's kind, read once by `useRows`
-    const { state, ariaSelected, ariaTree } = rowPart(
-        view,
-        row.rowIndex,
-        row.loaded,
-        row,
-    );
-    const measured = measuredRow(view, row.loaded);
+    const { state, props, measured } = rowPartOf(view, row);
     return {
         state,
+        // a measured row's height is read by the engine (Epic #86)
         ref: measured ? layerRef(engine, "row") : undefined,
-        props: {
-            role: "row",
-            "aria-rowindex": ariaRowIndex(view, row.rowIndex),
-            ...(ariaSelected === undefined
-                ? {}
-                : { "aria-selected": ariaSelected }),
-            // a treegrid's row (Epic #87): its level, expansion and set
-            ...ariaTree,
-            ...dataAttributes({
-                "grid-part": "row",
-                "row-index": row.rowIndex,
-                loading: !row.loaded,
-                active: state.active,
-                expanded: state.expanded,
-                selected: state.selected,
-                // while a drag moves it, or would drop beside it (Epic #86)
-                dragging: state.dragging,
-                "drop-target": state.dropTarget ?? undefined,
-                // its kind (Epic #87): a group row, a row group expanded, its depth
-                "group-row": state.group !== undefined,
-                "group-expanded": state.groupExpanded,
-                depth: state.depth,
-            }),
-            // an expanded row's box holds its detail, below its cells
-            style: rowStyle(
-                view,
-                rowTop(view, row.rowIndex),
-                view.rowAxis.sizeOf(row.rowIndex),
-                rowWidth(view, row.rowIndex),
-                measured,
-            ),
-        },
+        props,
     };
 }
 
@@ -141,14 +94,7 @@ export function useRowPart<TRow>(
 export function useCellPart<TRow>(
     cell: CellInfo<TRow>,
 ): PartHookResult<CellState> & { columnSpan: number; measured: boolean } {
-    const view = useGridView<TRow>();
-    return cellPartProps(
-        view,
-        cellPart(view, cell),
-        cell,
-        undefined,
-        measuredRow(view, cell.loaded),
-    );
+    return cellPartOf(useGridView<TRow>(), cell);
 }
 
 /**
@@ -173,13 +119,7 @@ export function useSummaryCellPart<TRow>(
     columnSpan: number;
     measured: boolean;
 } {
-    const view = useGridView<TRow>();
-    return cellPartProps(
-        view,
-        summaryCellPart(view, cell),
-        cell,
-        view.summaryRowHeight,
-    );
+    return summaryCellPartOf(useGridView<TRow>(), cell);
 }
 
 /** A ref that registers an element as one of the layers the engine of the `Root` around writes. */

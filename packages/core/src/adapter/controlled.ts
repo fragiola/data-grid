@@ -1,10 +1,6 @@
-import {
-    type CommandName,
-    type DataGridModel,
-    type DataGridState,
-    veto,
-} from "@fragiola/data-grid";
-import type { ReactNode } from "react";
+import type { DataGridModel } from "../model/model";
+import { veto } from "../model/result";
+import type { CommandName, DataGridState } from "../model/types";
 
 // A piece of the model's state a root prop can control (D3): the column widths and order, the
 // active position, the selection, the sort, the expanded rows. One way for all of them:
@@ -17,13 +13,13 @@ import type { ReactNode } from "react";
 // by another piece's prop (as when the data props move it), or at once, moved by another
 // piece's own commit (an uncontrolled order's drop); a prop that changes wins again.
 
-export interface ControlledState<TRow, V> {
+export interface ControlledState<TRow, TNode, V> {
     /** the commands that change it: their names start with this */
     readonly prefix: string;
     /** the prop: `undefined` when uncontrolled */
     readonly prop: () => V | undefined;
     /** where it is in the model's state */
-    readonly read: (state: DataGridState<TRow, ReactNode>) => V;
+    readonly read: (state: DataGridState<TRow, TNode>) => V;
     readonly same: (a: V, b: V) => boolean;
     /** what a command that changes it makes it, from the command's value */
     readonly valueOf: (command: CommandName, value: unknown) => V;
@@ -64,10 +60,10 @@ export interface ControlledFlags {
  * Guards a controlled piece of state: a command that would change it asks the parent and is
  * vetoed; a change the guard let through (uncontrolled, or the grid's shape moved it) is told.
  */
-export function bindControlled<TRow, V>(
-    model: DataGridModel<TRow, ReactNode>,
+export function bindControlled<TRow, TNode, V>(
+    model: DataGridModel<TRow, TNode>,
     flags: ControlledFlags,
-    spec: ControlledState<TRow, V>,
+    spec: ControlledState<TRow, TNode, V>,
 ): Controlled {
     model.use((ctx, next) => {
         if (!ctx.command.startsWith(spec.prefix)) return next();
@@ -125,10 +121,10 @@ interface Sync<V> {
  * Moves the model to the controlled value, when it is not there; not when another piece moved it
  * and its prop is the one it settled with (the moved value stands, told at the settle).
  */
-function followControlled<TRow, V>(
-    model: DataGridModel<TRow, ReactNode>,
+function followControlled<TRow, TNode, V>(
+    model: DataGridModel<TRow, TNode>,
     flags: ControlledFlags,
-    spec: ControlledState<TRow, V>,
+    spec: ControlledState<TRow, TNode, V>,
     sync: Sync<V>,
 ): void {
     const value = spec.prop();
@@ -153,10 +149,10 @@ function followControlled<TRow, V>(
  * the rows no longer have, a column no longer sortable) or another piece moved is told to the
  * parent as it settled.
  */
-function settleControlled<TRow, V>(
-    model: DataGridModel<TRow, ReactNode>,
+function settleControlled<TRow, TNode, V>(
+    model: DataGridModel<TRow, TNode>,
     flags: ControlledFlags,
-    spec: ControlledState<TRow, V>,
+    spec: ControlledState<TRow, TNode, V>,
     sync: Sync<V>,
 ): void {
     followControlled(model, flags, spec, sync);
@@ -176,9 +172,9 @@ function settleControlled<TRow, V>(
  * At mount, uncontrolled: a value to start with that the model could not take as given (a column
  * not sortable, single mode keeping one key) is told to the app as the grid holds it.
  */
-function startControlled<TRow, V>(
-    model: DataGridModel<TRow, ReactNode>,
-    spec: ControlledState<TRow, V>,
+function startControlled<TRow, TNode, V>(
+    model: DataGridModel<TRow, TNode>,
+    spec: ControlledState<TRow, TNode, V>,
 ): void {
     const start = spec.start?.();
     if (start === undefined || spec.prop() !== undefined) return;

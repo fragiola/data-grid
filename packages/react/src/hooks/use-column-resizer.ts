@@ -1,10 +1,8 @@
 import {
     type ColumnResizerState,
-    columnResizerPart,
+    columnResizerPartOf,
 } from "@fragiola/data-grid";
 import type { HeaderCellInfo } from "../context";
-
-import { controlPart, resizerData } from "../utils/control-part";
 import type { PartHookResult } from "./internal";
 import { useGridView } from "./use-grid-view";
 
@@ -20,11 +18,5 @@ import { useGridView } from "./use-grid-view";
 export function useColumnResizer<TRow>(
     cell: HeaderCellInfo<TRow>,
 ): PartHookResult<ColumnResizerState> {
-    const view = useGridView<TRow>();
-    const { state, tabIndex, attributes } = columnResizerPart(view, cell);
-    return controlPart(
-        state,
-        state.resizable ? { ...attributes, tabIndex } : undefined,
-        resizerData,
-    );
+    return columnResizerPartOf(useGridView<TRow>(), cell);
 }

@@ -9,11 +9,9 @@ import type {
 } from "@fragiola/data-grid";
 import {
     createLocalRows,
-    indexAfterMove,
     type LocalFilters,
     type LocalRowsOptions,
-    moveRow as moveRowIn,
-    shownRowMove,
+    moveShownRowAt,
 } from "@fragiola/data-grid/local";
 import {
     type ReactNode,
@@ -292,19 +290,19 @@ export function useLocalRows<TRow>(
                 // a tree's rows are not one list: nothing moves (the grid moves no row while its
                 // rows have kinds)
                 if (latestOptions.current?.getSubRows) return given;
-                const move = shownRowMove(shown.rowIndexes, fromIndex, toIndex);
-                if (!move) return given;
-                const next = moveRowIn(given, move.fromIndex, move.toIndex);
-                // where the rows shown are now: each one where the move put it, in their new order
-                const rowIndexes = moveRowIn(
-                    shown.rowIndexes.map((index) =>
-                        indexAfterMove(index, move.fromIndex, move.toIndex),
-                    ),
+                const next = moveShownRowAt(
+                    given,
+                    shown.rowIndexes,
                     fromIndex,
                     toIndex,
                 );
-                moved.current = { rows: next, view: { rowIndexes } };
-                return next;
+                if (!next) return given;
+                // where the rows shown are now: each one where the move put it, in their new order
+                moved.current = {
+                    rows: next.rows,
+                    view: { rowIndexes: next.rowIndexes },
+                };
+                return next.rows;
             },
     );
     const last = view.pageCount - 1;

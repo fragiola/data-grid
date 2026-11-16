@@ -9,7 +9,7 @@ export {
     groupKeyOf,
     type LocalGrouping,
 } from "./group";
-export { moveRow, moveShownRow, shownRowMove } from "./move";
+export { moveRow, moveShownRow, moveShownRowAt, shownRowMove } from "./move";
 export { pageCount } from "./page";
 export {
     createLocalRows,

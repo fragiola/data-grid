@@ -1,3 +1,4 @@
+import { rowElementKey } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import type { RowInfo } from "../context";
 import { useGridView } from "../hooks/use-grid-view";
@@ -13,13 +14,10 @@ export interface RowsProps<TRow> {
 /** The rendered rows (the row window, plus the active row), in order. */
 export function Rows<TRow = unknown>({ children }: RowsProps<TRow>) {
     const rows = useRows<TRow>();
-    const byKey = useGridView().rowKey !== undefined;
+    const view = useGridView<TRow>();
     return keyed(
         rows,
-        // keyed by the app's keys when it gives some (a row not loaded yet has none: its index),
-        // else by index, so a row loading in place keeps its elements (and focus); the prefixes
-        // keep a key and an index apart
-        (row) => (byKey && row.loaded ? `k${row.key}` : `i${row.rowIndex}`),
+        (row) => rowElementKey(view, row),
         children ?? ((row) => <Row row={row} />),
     );
 }

@@ -1,11 +1,5 @@
-import {
-    ariaRowIndex,
-    type SummaryRowState,
-    summaryRowPart,
-} from "@fragiola/data-grid";
+import { type SummaryRowState, summaryRowPartOf } from "@fragiola/data-grid";
 import type { SummaryRowInfo } from "../context";
-import { rowStyle } from "../utils/row-style";
-import { dataAttributes } from "../utils/use-render";
 import type { PartHookResult } from "./internal";
 import { useGridView } from "./use-grid-view";
 
@@ -18,24 +12,5 @@ import { useGridView } from "./use-grid-view";
 export function useSummaryRow<TRow>(
     row: SummaryRowInfo,
 ): PartHookResult<SummaryRowState> {
-    const view = useGridView<TRow>();
-    const { state } = summaryRowPart(view, row);
-    return {
-        state,
-        props: {
-            role: "row",
-            "aria-rowindex": ariaRowIndex(view, row.rowIndex),
-            ...dataAttributes({
-                "grid-part": "summary-row",
-                summary: row.position,
-                "row-index": row.rowIndex,
-                active: state.active,
-            }),
-            style: rowStyle(
-                view,
-                row.summaryIndex * view.summaryRowHeight,
-                view.summaryRowHeight,
-            ),
-        },
-    };
+    return summaryRowPartOf(useGridView<TRow>(), row);
 }
