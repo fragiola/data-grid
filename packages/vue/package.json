@@ -1,0 +1,85 @@
+{
+    "name": "@fragiola/data-grid-vue",
+    "version": "0.0.0",
+    "description": "Composable, unstyled Vue primitives for @fragiola/data-grid: render the grid as a table, as divs, or as anything else.",
+    "license": "MIT",
+    "type": "module",
+    "author": {
+        "name": "Mauro de Souza",
+        "email": "maurodesouza.me@gmail.com",
+        "url": "https://github.com/maurodesouza"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/fragiola/data-grid.git",
+        "directory": "packages/vue"
+    },
+    "homepage": "https://fragiola.com/data-grid",
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "@fragiola/source": "./src/index.ts",
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        },
+        "./local": {
+            "@fragiola/source": "./src/local/index.ts",
+            "types": "./dist/local.d.ts",
+            "import": "./dist/local.js",
+            "default": "./dist/local.js"
+        },
+        "./selection": {
+            "@fragiola/source": "./src/selection/index.ts",
+            "types": "./dist/selection.d.ts",
+            "import": "./dist/selection.js",
+            "default": "./dist/selection.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "dist",
+        "LICENSE"
+    ],
+    "publishConfig": {
+        "exports": {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/index.js",
+                "default": "./dist/index.js"
+            },
+            "./local": {
+                "types": "./dist/local.d.ts",
+                "import": "./dist/local.js",
+                "default": "./dist/local.js"
+            },
+            "./selection": {
+                "types": "./dist/selection.d.ts",
+                "import": "./dist/selection.js",
+                "default": "./dist/selection.js"
+            },
+            "./package.json": "./package.json"
+        }
+    },
+    "scripts": {
+        "build": "tsdown",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@fragiola/data-grid": "workspace:*"
+    },
+    "peerDependencies": {
+        "vue": "^3.5.0"
+    },
+    "devDependencies": {
+        "@testing-library/jest-dom": "7.0.1",
+        "@vue/test-utils": "2.5.1",
+        "jsdom": "30.1.1",
+        "tsdown": "0.23.0",
+        "typescript": "7.0.2",
+        "vite": "8.3.1",
+        "vitest": "5.0.2",
+        "vue": "3.5.45"
+    }
+}

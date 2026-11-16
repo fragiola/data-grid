@@ -12,6 +12,14 @@ export {
 export { moveRow, moveShownRow, moveShownRowAt, shownRowMove } from "./move";
 export { pageCount } from "./page";
 export {
+    type LocalRowsInputs,
+    type LocalRowsProps,
+    type LocalRowsResult,
+    localRowsResult,
+    plainRowKey,
+    type UseLocalRowsOptions,
+} from "./result";
+export {
     createLocalRows,
     filterRows,
     groupRows,
