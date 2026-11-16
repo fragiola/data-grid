@@ -1,6 +1,6 @@
+import { THEMES } from "examples-shared/themes";
 import { Badge } from "#/components/atoms/badge";
 import { Clickable } from "#/components/atoms/clickable";
-import { THEMES } from "#/examples/_themes/themes";
 import type { Entry } from "./catalog";
 import type { View } from "./view";
 

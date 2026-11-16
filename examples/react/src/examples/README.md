@@ -1,22 +1,36 @@
 # Examples
 
 Each folder is one example of the site's gallery (`fragiola.com/data-grid/examples/<folder>`),
-rendered alone by this app at `index.html?id=<folder>`.
+rendered alone by this app at `index.html?id=<folder>`. What a reader copies lives here; what
+every framework's examples share lives once in `examples/shared` (`examples-shared`, private,
+imports no framework): each example's metadata, the themes, the embed's messages, the manifest
+builder, the loader generator and every e2e spec.
 
 ```
-src/examples/
+examples/react/src/examples/
   <slug>/index.tsx     the example (default export, "use client")
-  <slug>/meta.ts       title, description, category, order, features, docs link, layout, height
   <slug>/styles.ts     how it looks: one class string (or state function) per part
   <slug>/*.ts(x)       optional sibling files, shown in the code panel
   _kit/                shared demo content and app logic (data generators, the fake API, the
                        range cache); no DataGrid assembly, no styles
-  _themes/             the five themes (one CSS file each, values only) and their list
+
+examples/shared/
+  src/meta/<slug>.ts   title, description, category, order, features, docs link, layout, height
+                       (one per example, whatever the framework; `src/meta-types.ts`)
+  src/themes/          the five themes (one CSS file each, values only) and their list
+  src/embed/           the messages between the embed and the site
+  scripts/             the manifest builder and the loader generator, by framework
+  e2e/                 the Playwright helpers and specs every framework's embed runs
+  tests/               the metadata, the themes, the manifest, no framework import
 ```
+
+An example keeps its folder name (its id) in every framework. A folder without metadata, or
+metadata no framework has a folder for, fails `examples/shared/tests/meta.test.ts`.
 
 ## Categories
 
-The gallery groups examples by the feature they show (`CATEGORIES` in `meta-types.ts`, in sidebar
+The gallery groups examples by the feature they show (`CATEGORIES` in
+`examples/shared/src/meta-types.ts`, in sidebar
 order; the site export contract calls a category a `level`). An example belongs where a reader
 looking for its feature would search, and `order` is its place inside the category.
 
@@ -33,14 +47,20 @@ looking for its feature would search, and `order` is its place inside the catego
 
 ## Adding an example
 
-1. Create `src/examples/<slug>/index.tsx`, `meta.ts` and `styles.ts` (see `meta-types.ts`).
+1. Create `src/examples/<slug>/index.tsx` and `styles.ts`, and its metadata in
+   `examples/shared/src/meta/<slug>.ts` (see `examples/shared/src/meta-types.ts`).
 2. `pnpm dev` at the root lists it in the playground (`apps/playground`), with hot reload, the five
    themes and its source: `http://localhost:5173/?example=<slug>`. The embed alone is
    `pnpm --filter examples-react dev` (`http://localhost:5180/?id=<slug>`, it regenerates the
    loaders).
 3. The smoke e2e visits it in the reference theme (every theme only for the representative
-   examples in `e2e/smoke.spec.ts`; `E2E_ALL_THEMES=1` runs them all), and inside an iframe. Add
-   a spec for its main behaviour in `e2e/examples/<slug>.spec.ts`.
+   examples in `examples/shared/e2e/smoke.spec.ts`; `E2E_ALL_THEMES=1` runs them all), and inside
+   an iframe. Add a spec for its main behaviour in `examples/shared/e2e/examples/<slug>.spec.ts`.
+   The specs are every framework's: they reach the example only through the grid's
+   `data-grid-part` and `data-*` state, roles, accessible names, and the markup and test ids the
+   example renders itself, never a class name or a React detail. A spec opening an example a
+   framework lacks is skipped there (`openExample`, `requireExamples`), except in a framework
+   that ships them all (`COMPLETE_FRAMEWORKS`, React).
 
 ## Anatomy of an example
 
@@ -61,7 +81,8 @@ example's files, the shared demo content it imports and the theme's CSS, and not
 - **A class that does a job beyond looks keeps a short comment** in `styles.ts`.
 - **Accessible names inline**: the grid's `aria-label`, each icon button's.
 - **Tokens, not values that differ per theme**: fonts, padding, lines, the header and the active
-  cell read the `--dg-*` tokens each theme declares (listed in `_themes/<name>.css`).
+  cell read the `--dg-*` tokens each theme declares (listed in
+  `examples/shared/src/themes/<name>.css`).
 
 ## Rules
 

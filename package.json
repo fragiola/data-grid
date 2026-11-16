@@ -25,7 +25,7 @@
         "bench": "vitest bench --run",
         "build": "pnpm -r build && node scripts/check-dts.ts",
         "size": "node scripts/size-report.ts",
-        "e2e": "pnpm --workspace-concurrency=1 --filter playground --filter examples-react e2e",
+        "e2e": "pnpm --workspace-concurrency=1 --filter playground --filter \"./examples/*\" e2e",
         "dev": "pnpm --filter playground dev",
         "site:export": "node site/export.ts",
         "site:dev": "node site/dev.ts"

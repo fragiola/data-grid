@@ -1,21 +1,24 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { beforeAll, describe, expect, it } from "vitest";
 import {
     collectFiles,
-    EXAMPLES_DIR,
     type ExampleEntry,
+    examplesApp,
     importsOf,
-    listExampleSlugs,
+    listExampleSlugs as listSlugs,
     loadExamples,
-    validateMeta,
-} from "../scripts/examples-lib.ts";
-import { CATEGORIES } from "../src/examples/meta-types.ts";
+} from "examples-shared/scripts/examples-lib";
+import { beforeAll, describe, expect, it } from "vitest";
 
-// The example contract (README, and `#/` imports per §6 of the site export contract): every
-// example has a valid meta.ts, is in the manifest, imports only what a consumer can copy, the
-// code panel lists exactly the files it is compiled from, and each example assembles the grid
-// itself: `_kit/` is shared demo content and app logic only.
+// The React side of the example contract (README, and `#/` imports per §6 of the site export
+// contract): every example is in the manifest, imports only what a consumer can copy, the code
+// panel lists exactly the files it is compiled from, and each example assembles the grid itself:
+// `_kit/` is shared demo content and app logic only. What every framework shares (the metadata,
+// its categories and its consistency with the folders) is checked in examples/shared/tests.
+
+const APP = examplesApp("react");
+const EXAMPLES_DIR = APP.examplesDir;
+const listExampleSlugs = () => listSlugs(APP);
 
 /** What an example file may import, besides relative files inside examples/. */
 const ALLOWED = [
@@ -31,14 +34,7 @@ const ALLOWED = [
 ];
 
 /** Site files under examples/ that are not example code. */
-const SITE_FILES = [
-    /^[a-z-]+\/meta\.ts$/,
-    /^meta-types\.ts$/,
-    /\.generated\.ts$/,
-    /^_themes\/themes\.ts$/,
-    /\.md$/,
-    /\.css$/,
-];
+const SITE_FILES = [/\.generated\.ts$/, /\.md$/, /\.css$/];
 
 const KIT = join(EXAMPLES_DIR, "_kit");
 
@@ -86,42 +82,12 @@ function walk(dir: string): string[] {
 let examples: ExampleEntry[] = [];
 
 beforeAll(async () => {
-    examples = await loadExamples();
+    examples = await loadExamples(APP);
 });
 
 describe("the examples", () => {
-    it("are all in the manifest, each with a valid meta", () => {
+    it("are all in the manifest, each with valid metadata", () => {
         expect(examples.map((e) => e.slug).sort()).toEqual(listExampleSlugs());
-    });
-
-    it("each belong to a category, and a meta with an unknown one is rejected", () => {
-        for (const example of examples) {
-            expect(CATEGORIES, example.slug).toContain(example.meta.category);
-        }
-        const meta = { title: "T", description: "D", order: 1, features: [] };
-        expect(() =>
-            validateMeta("x", { ...meta, category: "intermediate" }),
-        ).toThrow(/category must be one of/);
-        expect(() =>
-            validateMeta("x", { ...meta, category: "virtualization" }),
-        ).not.toThrow();
-    });
-
-    it("have unique titles and orders within a category", () => {
-        const titles = examples.map((e) => e.meta.title);
-        expect(new Set(titles).size).toBe(titles.length);
-        const orders = examples.map(
-            (e) => `${e.meta.category}:${e.meta.order}`,
-        );
-        expect(new Set(orders).size).toBe(orders.length);
-    });
-
-    it("link their guide under /docs/ when they name one", () => {
-        for (const example of examples) {
-            if (example.meta.docs) {
-                expect(example.meta.docs, example.slug).toMatch(/^\/docs\//);
-            }
-        }
     });
 
     it("import only what a consumer can copy", () => {
@@ -144,7 +110,7 @@ describe("the examples", () => {
 
     it("show in the code panel exactly the files they are compiled from", () => {
         for (const example of examples) {
-            const { files } = collectFiles(example.slug);
+            const { files } = collectFiles(APP, example.slug);
             expect(example.files).toEqual(files);
             expect(files[0]).toBe(`${example.slug}/index.tsx`);
             // closure: every relative import of a listed file is listed too

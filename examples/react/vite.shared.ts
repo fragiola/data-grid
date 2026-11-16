@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { THEMES } from "examples-shared/themes";
 import {
     defaultClientConditions,
     defaultServerConditions,
@@ -6,7 +7,6 @@ import {
     type UserConfig,
 } from "vite";
 import { withSourceCondition } from "../../scripts/source-condition.ts";
-import { THEMES } from "./src/examples/_themes/themes.ts";
 
 // How an app renders the examples in place: shared by this app's Vite config and
 // apps/playground's, so the two cannot drift.
@@ -53,7 +53,7 @@ export function examplesResolve(
  * everything in the document takes it: the example, and the menus and popups portalled into
  * `<body>`.
  * Missing or unknown → the first light theme. The theme list comes from
- * src/examples/_themes/themes.ts, so the two cannot drift.
+ * examples/shared/src/themes/themes.ts, so the two cannot drift.
  */
 export function prePaintTheme(): Plugin {
     const schemes = Object.fromEntries(

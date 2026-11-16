@@ -2,10 +2,11 @@ import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+    examplesApp,
     listExampleSlugs,
     loadExamples,
-} from "../../../examples/react/scripts/examples-lib.ts";
-import { CATEGORIES } from "../../../examples/react/src/examples/meta-types.ts";
+} from "../../../examples/shared/scripts/examples-lib.ts";
+import { CATEGORIES } from "../../../examples/shared/src/meta-types.ts";
 import {
     entries,
     exampleSlug,
@@ -15,15 +16,17 @@ import {
     sections,
 } from "../src/shell/catalog.ts";
 
-// The catalog reads examples/react where it lives: every example it lists is one the site shows,
-// none is missing, and there is no second list to keep in step.
+// The catalog reads examples/react where it lives, with the metadata of examples/shared: every
+// example it lists is one the site shows, none is missing, and there is no second list to keep
+// in step.
 
-const examples = await loadExamples();
+const app = examplesApp("react");
+const examples = await loadExamples(app);
 
 describe("the catalog", () => {
     it("lists every example of examples/react once, and no `_` folder", () => {
         const listed = entries.map((e) => e.id).sort();
-        expect(listed).toEqual(listExampleSlugs());
+        expect(listed).toEqual(listExampleSlugs(app));
         expect(listed.some((id) => id.startsWith("_"))).toBe(false);
     });
 
@@ -55,7 +58,7 @@ describe("the catalog", () => {
         }
     });
 
-    it("shows each example's own files, entry first, without meta.ts", async () => {
+    it("shows each example's own files, entry first", async () => {
         for (const entry of entries) {
             const [first, ...rest] = entry.files;
             expect(first?.path, entry.id).toBe(
@@ -66,7 +69,6 @@ describe("the catalog", () => {
                 expect(file.path).toMatch(
                     new RegExp(`^examples/react/src/examples/${entry.id}/`),
                 );
-                expect(file.path).not.toMatch(/\/meta\.ts$/);
             }
         }
     });
@@ -93,7 +95,7 @@ describe("paths", () => {
         const base = "../../../examples/react/src/examples";
         expect(exampleSlug(`${base}/hello-grid/index.tsx`)).toBe("hello-grid");
         expect(exampleSlug(`${base}/_kit/data.ts`)).toBeUndefined();
-        expect(exampleSlug(`${base}/meta-types.ts`)).toBeUndefined();
+        expect(exampleSlug(`${base}/README.md`)).toBeUndefined();
     });
 
     it("writes glob keys from the repository root", () => {

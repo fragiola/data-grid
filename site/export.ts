@@ -3,9 +3,11 @@
 //
 //   <out>/project.json               site/project.json
 //   <out>/docs/                      site/docs, as written (links are base-free)
-//   <out>/examples.json              the categories as levels (meta-types.ts) and the themes (_themes/), with CSS
-//   <out>/embed/react/               the examples app (examples/react), built for
-//                                    <base>/embed/react/, with manifest.json
+//   <out>/examples.json              the categories as levels (meta-types.ts) and the themes, with CSS
+//                                    (both from examples/shared)
+//   <out>/embed/<framework>/         for every framework of project.json, its examples app
+//                                    (examples/<framework>), built for <base>/embed/<framework>/,
+//                                    with manifest.json
 //
 // Then it validates the output against the contract (site/contract.ts) and exits non-zero on
 // any problem. It only deletes --out when the folder holds a previous export.
@@ -26,6 +28,8 @@ import {
     buildExamplesConfig,
     buildManifests,
     DOCS_DIR,
+    embedBuilds,
+    frameworksOf,
     readProject,
 } from "./sources.ts";
 
@@ -70,29 +74,20 @@ const json = (value: unknown) => `${JSON.stringify(value, null, 4)}\n`;
 const project = readProject();
 
 // ─── embed apps ─────────────────────────────────────────────────────────────
-// Built against the packages' dist, like any consumer.
-run([
-    "--filter",
-    "@fragiola/data-grid",
-    "--filter",
-    "@fragiola/data-grid-react",
-    "build",
-]);
-const manifests = await buildManifests();
-for (const framework of project.frameworks) {
-    const embed = join(out, "embed", framework);
-    run(
-        [
-            "--filter",
-            `examples-${framework}`,
-            "exec",
-            "sh",
-            "-c",
-            `node scripts/generate.ts && vite build --outDir "${embed}" --emptyOutDir`,
-        ],
-        { EMBED_BASE: `${base}/embed/${framework}/` },
+// Built against the packages' dist, like any consumer: every package, the core and each adapter.
+run(["--filter", "./packages/*", "build"]);
+const frameworks = frameworksOf(project);
+const manifests = await buildManifests(frameworks);
+for (const embed of embedBuilds(frameworks, base, out)) {
+    // every framework app's `build` builds its embed for EMBED_BASE into EMBED_OUT_DIR
+    run(["--filter", embed.package, "run", "build"], {
+        EMBED_BASE: embed.base,
+        EMBED_OUT_DIR: embed.dir,
+    });
+    write(
+        join(embed.dir, "manifest.json"),
+        json(manifests.get(embed.framework)),
     );
-    write(join(embed, "manifest.json"), json(manifests.get(framework)));
 }
 
 // ─── pages, gallery, project ─────────────────────────────────────────────────

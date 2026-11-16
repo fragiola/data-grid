@@ -6,7 +6,7 @@ import {
     scrollTo,
     settle,
     viewport,
-} from "../../../examples/react/e2e/examples/helpers.ts";
+} from "../../../examples/shared/e2e/examples/helpers.ts";
 
 // The combined stress spec (Epic #89, E5.3): every feature on at once (fixtures/stress-grid),
 // 1,000,000 rows and 1,000 columns, both axes scaled, as a table and as divs, in Chromium, Firefox

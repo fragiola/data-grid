@@ -1,17 +1,18 @@
-import type { ComponentType } from "react";
 import {
     CATEGORIES,
     CATEGORY_TITLES,
     type ExampleLayout,
     type ExampleMeta,
-} from "#/examples/meta-types";
+} from "examples-shared/meta-types";
+import type { ComponentType } from "react";
 import type { ItemRef, Kind } from "./view";
 
 // Everything the playground can show, read where it lives. Components and sources are loaded
 // only when shown.
 //
-//   examples   examples/react/src/examples/<slug>/ (index.tsx + meta.ts), the site's gallery:
-//              public, contract-bound; there is no second list here
+//   examples   examples/react/src/examples/<slug>/index.tsx, with its metadata in
+//              examples/shared/src/meta/<slug>.ts: the site's gallery, public, contract-bound;
+//              there is no second list here
 //   fixtures   fixtures/<name>/index.html, the unstyled pages Playwright drives: links out
 
 export type SourceFile = {
@@ -58,20 +59,20 @@ export function repositoryPath(key: string): string {
 // ─── Examples ───────────────────────────────────────────────────────────────
 
 const EXAMPLES = "../../../examples/react/src/examples";
+const METAS = "../../../examples/shared/src/meta";
 
 const exampleModules = import.meta.glob<{ default: ComponentType }>(
     "../../../examples/react/src/examples/*/index.tsx",
     { base: "../" },
 );
 const exampleMetas = import.meta.glob<{ default: ExampleMeta }>(
-    "../../../examples/react/src/examples/*/meta.ts",
+    "../../../examples/shared/src/meta/*.ts",
     { eager: true, base: "../" },
 );
 const exampleSources = import.meta.glob<string>(
     [
         "../../../examples/react/src/examples/*/*.{ts,tsx,css}",
         "!../../../examples/react/src/examples/_*/**",
-        "!../../../examples/react/src/examples/*/meta.ts",
     ],
     { query: "?raw", import: "default", base: "../" },
 );
@@ -97,7 +98,7 @@ function exampleFiles(slug: string): SourceFile[] {
 const exampleEntries: Entry[] = Object.entries(exampleModules)
     .flatMap(([key, load]) => {
         const slug = exampleSlug(key);
-        const meta = exampleMetas[`${EXAMPLES}/${slug}/meta.ts`]?.default;
+        const meta = exampleMetas[`${METAS}/${slug}.ts`]?.default;
         if (!slug || !meta) return [];
         return [
             {

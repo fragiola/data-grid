@@ -1,20 +1,59 @@
-// Shared by scripts/generate.ts, scripts/manifest.ts and the tests: finds the examples, reads
-// their meta.ts, and computes the files each one is made of by following its relative imports.
-// What the code panel shows is exactly this list.
+// Shared by scripts/generate.ts, scripts/manifest.ts, the tests and the e2e helpers: finds a
+// framework app's examples, reads their metadata (src/meta/<slug>.ts, one file per example, shared
+// by every framework), and computes the files each one is made of by following its relative
+// imports. What the code panel shows is exactly this list.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-    CATEGORIES,
-    type ExampleMeta,
-    LAYOUTS,
-} from "../src/examples/meta-types.ts";
+    ENTRY_FILES,
+    FRAMEWORKS,
+    type Framework,
+    ICON_PACKAGES,
+} from "../src/framework.ts";
+import { CATEGORIES, type ExampleMeta, LAYOUTS } from "../src/meta-types.ts";
 
-export const APP_ROOT = resolve(import.meta.dirname, "..");
-/** What `#/` points at: the examples, and the Fragiola UI files vendored next to them. */
-export const SRC = join(APP_ROOT, "src");
-export const EXAMPLES_DIR = join(SRC, "examples");
+/** examples/shared */
+export const SHARED_ROOT = resolve(import.meta.dirname, "..");
+/** examples/: one app per framework, and this package */
+export const EXAMPLES_ROOT = resolve(SHARED_ROOT, "..");
+/** Every example's metadata, `<slug>.ts`, whatever the framework. */
+export const META_DIR = join(SHARED_ROOT, "src", "meta");
+
+/** A framework's examples app, `examples/<framework>`, and where its examples live. */
+export interface ExamplesApp {
+    framework: Framework;
+    /** the app's directory */
+    root: string;
+    /** what `#/` points at: the examples, and the UI files vendored next to them */
+    src: string;
+    /** `src/examples`: one folder per example, plus the `_` ones (the kit) */
+    examplesDir: string;
+    /** the file an example's folder is found by (`index.tsx`, `index.vue`, `index.ts`) */
+    entry: string;
+}
+
+export function examplesApp(
+    framework: Framework,
+    root: string = join(EXAMPLES_ROOT, framework),
+): ExamplesApp {
+    const src = join(root, "src");
+    return {
+        framework,
+        root,
+        src,
+        examplesDir: join(src, "examples"),
+        entry: ENTRY_FILES[framework],
+    };
+}
+
+/** The framework apps this repository has (`examples/<framework>/package.json`). */
+export function existingApps(): ExamplesApp[] {
+    return FRAMEWORKS.filter((framework) =>
+        existsSync(join(EXAMPLES_ROOT, framework, "package.json")),
+    ).map((framework) => examplesApp(framework));
+}
 
 export interface ExampleEntry {
     slug: string;
@@ -27,19 +66,28 @@ export interface ExampleEntry {
     packages: string[];
 }
 
-/** Every folder under examples/ with an index.tsx, except the `_` ones (kit, themes). */
-export function listExampleSlugs(): string[] {
-    return readdirSync(EXAMPLES_DIR)
+/** Every folder of the app's examples with its entry file, except the `_` ones (the kit). */
+export function listExampleSlugs(app: ExamplesApp): string[] {
+    if (!existsSync(app.examplesDir)) return [];
+    return readdirSync(app.examplesDir)
         .filter((name) => !name.startsWith("_"))
-        .filter((name) => statSync(join(EXAMPLES_DIR, name)).isDirectory())
-        .filter((name) => existsSync(join(EXAMPLES_DIR, name, "index.tsx")))
+        .filter((name) => statSync(join(app.examplesDir, name)).isDirectory())
+        .filter((name) => existsSync(join(app.examplesDir, name, app.entry)))
+        .sort();
+}
+
+/** Every example that has metadata (src/meta/<slug>.ts), in any framework. */
+export function listMetaSlugs(): string[] {
+    return readdirSync(META_DIR)
+        .filter((name) => name.endsWith(".ts"))
+        .map((name) => name.slice(0, -".ts".length))
         .sort();
 }
 
 /** Throws with a readable message when a meta.ts is not an ExampleMeta. */
 export function validateMeta(slug: string, value: unknown): ExampleMeta {
     const fail = (why: string): never => {
-        throw new Error(`examples/${slug}/meta.ts: ${why}`);
+        throw new Error(`examples/shared/src/meta/${slug}.ts: ${why}`);
     };
     if (!value || typeof value !== "object") fail("no default export object");
     const meta = value as Record<string, unknown>;
@@ -74,9 +122,11 @@ export function validateMeta(slug: string, value: unknown): ExampleMeta {
 }
 
 export async function readMeta(slug: string): Promise<ExampleMeta> {
-    const file = join(EXAMPLES_DIR, slug, "meta.ts");
+    const file = join(META_DIR, `${slug}.ts`);
     if (!existsSync(file)) {
-        throw new Error(`examples/${slug}: meta.ts is missing`);
+        throw new Error(
+            `${slug}: examples/shared/src/meta/${slug}.ts is missing`,
+        );
     }
     const module = (await import(pathToFileURL(file).href)) as {
         default?: unknown;
@@ -105,6 +155,7 @@ function resolveRelative(from: string, specifier: string): string | undefined {
         base,
         `${base}.tsx`,
         `${base}.ts`,
+        `${base}.vue`,
         join(base, "index.tsx"),
         join(base, "index.ts"),
     ];
@@ -118,9 +169,12 @@ function resolveRelative(from: string, specifier: string): string | undefined {
  * `select`, `#/components/atoms/fields` → `input`). Read from the header that
  * scripts/vendor-fragiola.ts writes on every vendored file, so it is exact.
  */
-export function registryItemOf(specifier: string): string | undefined {
+export function registryItemOf(
+    app: ExamplesApp,
+    specifier: string,
+): string | undefined {
     if (!specifier.startsWith("#/")) return undefined;
-    const base = join(SRC, specifier.slice(2));
+    const base = join(app.src, specifier.slice(2));
     const file = [
         `${base}.tsx`,
         `${base}.ts`,
@@ -132,20 +186,22 @@ export function registryItemOf(specifier: string): string | undefined {
     return /registry \([^)]*\/r\/([a-z0-9-]+)\.json/.exec(header)?.[1];
 }
 
-/** npm packages an example imports that the consumer installs themselves (not React, not
- * the data grid, not a registry item's own dependency). */
-const OWN_PACKAGES = new Set(["lucide-react"]);
-
 /**
- * The example's files: its index.tsx and everything reachable through relative imports, all
- * inside examples/. Returned relative to examples/, the entry first, the rest sorted.
+ * The example's files: its entry file and everything reachable through relative imports, all
+ * inside the app's examples/. Returned relative to examples/, the entry first, the rest sorted.
+ * `packages` are the npm packages it imports that the consumer installs themselves (the icons:
+ * not the framework, not the data grid, not a registry item's own dependency).
  */
-export function collectFiles(slug: string): {
+export function collectFiles(
+    app: ExamplesApp,
+    slug: string,
+): {
     files: string[];
     registry: string[];
     packages: string[];
 } {
-    const entry = join(EXAMPLES_DIR, slug, "index.tsx");
+    const ownPackages = new Set([ICON_PACKAGES[app.framework]]);
+    const entry = join(app.examplesDir, slug, app.entry);
     const seen = new Set<string>();
     const registry = new Set<string>();
     const packages = new Set<string>();
@@ -159,25 +215,25 @@ export function collectFiles(slug: string): {
                 const target = resolveRelative(file, specifier);
                 if (!target) {
                     throw new Error(
-                        `${relative(APP_ROOT, file)}: cannot resolve "${specifier}"`,
+                        `${relative(app.root, file)}: cannot resolve "${specifier}"`,
                     );
                 }
-                if (!target.startsWith(EXAMPLES_DIR)) {
+                if (!target.startsWith(app.examplesDir)) {
                     throw new Error(
-                        `${relative(APP_ROOT, file)}: "${specifier}" leaves examples/`,
+                        `${relative(app.root, file)}: "${specifier}" leaves examples/`,
                     );
                 }
                 queue.push(target);
-            } else if (OWN_PACKAGES.has(specifier)) {
+            } else if (ownPackages.has(specifier)) {
                 packages.add(specifier);
             } else {
-                const item = registryItemOf(specifier);
+                const item = registryItemOf(app, specifier);
                 if (item) registry.add(item);
             }
         }
     }
     const [first, ...rest] = [...seen].map((file) =>
-        relative(EXAMPLES_DIR, file),
+        relative(app.examplesDir, file),
     );
     return {
         files: first === undefined ? [] : [first, ...rest.sort()],
@@ -186,11 +242,12 @@ export function collectFiles(slug: string): {
     };
 }
 
-export async function loadExamples(): Promise<ExampleEntry[]> {
+/** The app's examples with their metadata, in gallery order (category, order, slug). */
+export async function loadExamples(app: ExamplesApp): Promise<ExampleEntry[]> {
     const entries: ExampleEntry[] = [];
-    for (const slug of listExampleSlugs()) {
+    for (const slug of listExampleSlugs(app)) {
         const meta = await readMeta(slug);
-        entries.push({ slug, meta, ...collectFiles(slug) });
+        entries.push({ slug, meta, ...collectFiles(app, slug) });
     }
     return entries.sort(
         (a, b) =>

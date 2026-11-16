@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { THEMES } from "../src/examples/_themes/themes";
+import { THEMES } from "../src/themes/themes.ts";
 import { blend, contrast, oklchToSrgb, parseOklch, type RGB } from "./color";
 
 // The theme contract: every palette of every theme declares the six
@@ -9,7 +9,7 @@ import { blend, contrast, oklchToSrgb, parseOklch, type RGB } from "./color";
 // meets WCAG AA on the surfaces it is drawn on, and a theme only sets values:
 // it styles no markup, so everything an example looks like is in its own code.
 
-const DIR = join(import.meta.dirname, "../src/examples/_themes");
+const DIR = join(import.meta.dirname, "../src/themes");
 const ROLES = ["base", "soft", "line", "contrast", "accent", "ring"] as const;
 const TOKENS = [
     "font",

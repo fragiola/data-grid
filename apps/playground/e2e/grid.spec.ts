@@ -6,7 +6,7 @@ import {
     dragBy,
     settle,
     touchDrag,
-} from "../../../examples/react/e2e/examples/helpers.ts";
+} from "../../../examples/shared/e2e/examples/helpers.ts";
 
 // One spec, two structures (D5): every test runs against the same unstyled grid rendered as real
 // table elements (fixtures/table-grid) and as divs (fixtures/div-grid), in Chromium, Firefox and

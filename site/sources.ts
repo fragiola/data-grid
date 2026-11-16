@@ -4,12 +4,21 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildManifest } from "../examples/react/scripts/manifest.ts";
-import { THEMES } from "../examples/react/src/examples/_themes/themes.ts";
+import {
+    type ExamplesApp,
+    examplesApp,
+} from "../examples/shared/scripts/examples-lib.ts";
+import { buildManifest } from "../examples/shared/scripts/manifest.ts";
+import {
+    FRAMEWORKS,
+    type Framework,
+    isFramework,
+} from "../examples/shared/src/framework.ts";
 import {
     CATEGORIES,
     CATEGORY_TITLES,
-} from "../examples/react/src/examples/meta-types.ts";
+} from "../examples/shared/src/meta-types.ts";
+import { THEMES } from "../examples/shared/src/themes/themes.ts";
 import {
     type DocsConfig,
     type ExamplesConfig,
@@ -21,7 +30,7 @@ import {
 
 export const SITE_DIR = import.meta.dirname;
 export const DOCS_DIR = join(SITE_DIR, "docs");
-const THEMES_DIR = join(SITE_DIR, "../examples/react/src/examples/_themes");
+const THEMES_DIR = join(SITE_DIR, "../examples/shared/src/themes");
 
 const readJson = <T>(file: string): T =>
     JSON.parse(readFileSync(file, "utf-8")) as T;
@@ -36,7 +45,7 @@ export function readConfig(): DocsConfig {
 
 /**
  * examples.json: the categories of meta-types.ts (the contract's `levels`) and the themes of
- * _themes/themes.ts, with their CSS.
+ * themes/themes.ts (both in examples/shared), with their CSS (still published as `_themes/<name>.css`).
  */
 export function buildExamplesConfig(): ExamplesConfig {
     return {
@@ -59,9 +68,61 @@ export function buildExamplesConfig(): ExamplesConfig {
     };
 }
 
-/** Each framework's manifest, by framework. */
-export async function buildManifests(): Promise<Map<string, Manifest>> {
-    return new Map([["react", await buildManifest()]]);
+/**
+ * The frameworks project.json ships, each one an app `examples/<framework>` (package
+ * `examples-<framework>`). A name that is not a known framework throws.
+ */
+export function frameworksOf(
+    project: Pick<ProjectInfo, "frameworks">,
+): Framework[] {
+    return project.frameworks.map((framework) => {
+        if (!isFramework(framework)) {
+            throw new Error(
+                `project.json: framework "${framework}" is none of ${FRAMEWORKS.join(", ")}`,
+            );
+        }
+        return framework;
+    });
+}
+
+/** What site:export builds for one framework: its app, under its own base and directory. */
+export interface EmbedBuild {
+    framework: Framework;
+    /** the workspace package of its app, whose `build` script builds the embed */
+    package: string;
+    /** `EMBED_BASE`: where the site serves it (`<base>/embed/<framework>/`) */
+    base: string;
+    /** `EMBED_OUT_DIR`: `<out>/embed/<framework>`, next to its manifest.json */
+    dir: string;
+}
+
+/** One embed per framework, under `<base>/embed/<framework>/` and `<out>/embed/<framework>`. */
+export function embedBuilds(
+    frameworks: readonly Framework[],
+    base: string,
+    out: string,
+): EmbedBuild[] {
+    return frameworks.map((framework) => ({
+        framework,
+        package: `examples-${framework}`,
+        base: `${base}/embed/${framework}/`,
+        dir: join(out, "embed", framework),
+    }));
+}
+
+/**
+ * Each framework's manifest, by framework: one per framework of project.json, built from that
+ * framework's app (`appOf`, `examples/<framework>` by default).
+ */
+export async function buildManifests(
+    frameworks: readonly Framework[] = frameworksOf(readProject()),
+    appOf: (framework: Framework) => ExamplesApp = examplesApp,
+): Promise<Map<string, Manifest>> {
+    const manifests = new Map<string, Manifest>();
+    for (const framework of frameworks) {
+        manifests.set(framework, await buildManifest(appOf(framework)));
+    }
+    return manifests;
 }
 
 /** The whole export, in memory. */
