@@ -17,20 +17,23 @@ and **row reordering**. It also takes rows by index (`rowCount` + `getRow`) and 
 past the browser's size limit. What it leaves out is `site/docs/beyond-v0.mdx`; next come the
 maintainer's API review, then features and examples inspired by Bryntum Grid, then publishing.
 
-Other adapters may follow React, so **every piece of logic that isn't rendering lives in the core**.
+Vue follows React (Epic #123), and other adapters may follow, so **every piece of logic that
+isn't rendering lives in the core**: a decision every adapter takes is a core helper
+(`packages/core/src/adapter/`, below).
 
 | package | name | contains | depends on |
 |---|---|---|---|
 | `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`) | DOM only |
 | `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `react`, `react-dom` (^19) |
+| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow>()`) and composables over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `vue` (^3.5) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react`, `examples/shared` |
 
 ## Non-negotiable rules
 
 Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 
-1. **Names (D1).** `@fragiola/data-grid` (core) and `@fragiola/data-grid-react`; the site's slug is
-   `/data-grid`.
+1. **Names (D1).** `@fragiola/data-grid` (core), `@fragiola/data-grid-react` and
+   `@fragiola/data-grid-vue`; the site's slug is `/data-grid`.
 2. **Own implementation, referenced sources (D2).** React Data Grid (`../react-data-grid`,
    7.0.0-beta.60, MIT) and TanStack Table (`../tanstack-table`, v9.2.4, MIT) are **study
    references, read-only: never modified, never copied wholesale**. A file whose algorithm or code
@@ -1016,8 +1019,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm check` | Biome lint + format + assist (non-mutating), then `check:layout` |
 | `pnpm check:layout` | the source layout over `git ls-files` (`scripts/check-layout.ts`, from Dockable): kebab-case names, only entries at a package's `src/` root |
 | `pnpm check:fix` | Biome check with auto-fix |
-| `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit) |
-| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `examples-shared`, `site` |
+| `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit; `examples/vue` runs `vue-tsc` on its own TypeScript 6) |
+| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `vue` (jsdom), `playground`, `examples-react`, `examples-vue`, `examples-shared`, `site` (`--project <name>` for one) |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip): a report, after `pnpm build` |
@@ -1037,6 +1040,9 @@ packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid
                                                use-data-grid-ref.ts); internal.ts: the primitives' own
                     src/utils/                 pure helpers (cells-of.ts, row-style.ts, use-render.ts, …)
                     src/local/, src/selection/ the opt-in entries; tests/ named after behaviour
+packages/vue/       @fragiola/data-grid-vue    the same layout: src/components/ (root.ts, …),
+                                               src/composables/ (use-cell.ts, …), src/utils/,
+                                               typed.ts (`typedDataGrid`), local/, selection/
 apps/playground/    src/main.tsx, app.tsx      the entries
                     src/shell/                 the shell: catalog, sidebar, toolbar, stage, source
                     src/fixture/               the fixtures' grids
@@ -1050,6 +1056,8 @@ examples/shared/    src/meta/<slug>.ts         every example's metadata, whateve
 examples/react/     src/examples/<slug>/       the site's React examples (the embed app, Vite)
                     src/components, lib, …     Fragiola UI, vendored (scripts/vendor-fragiola.ts)
                     playwright.config.ts       the shared specs against this embed
+examples/vue/       src/examples/<slug>/       the site's Vue examples (the embed app, Vite, SFCs);
+                    playwright.config.ts       the shared specs its examples have, against its embed
 site/               docs/                      the pages fragiola.com/data-grid serves
                     export.ts, contract.ts     `pnpm site:export` and its validation, every framework
                     dev.ts, dev-proxy.ts       `pnpm site:dev`: one port, one dev server per framework
@@ -1291,14 +1299,74 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   grid is, until a cell is active, then the active cell is (roving tabindex).
 - **The developer owns the recursion**: children functions over the windowed rows and cells.
 
+## The primitive contract in Vue (`@fragiola/data-grid-vue`)
+
+The same contract, with Vue's own means: the parts render the same elements, `data-*`, ARIA and
+structural style, the tests of `packages/vue` mirror React's. `site/docs/api/vue.mdx` maps each
+React prop.
+
+- **`as` and the `render` slot, never `asChild`.** `as` (a tag or a component) replaces the
+  element; the `render` scoped slot receives `{ props, state, children }` (`v-bind="props"` on
+  the app's element, `<component :is="children" />` inside it: one stable component, the content
+  never remounts).
+- **Children functions are scoped slots.** `Rows`, `HeaderRows`, `SummaryRows` give `{ row }`,
+  `Cells`, `HeaderCells`, `SummaryCells` `{ cell }`; `Cell`'s default slot `{ cell, state }`, the
+  other parts' `{ state }`.
+- **`class` and `style` are fallthrough attributes** (`inheritAttrs: false`, merged by the part),
+  under the structural style, the same keys dropped (`LAYER_KEYS`, `PINNED_KEYS`). No function
+  form: state looks go through `data-*` or the `render` slot's `state`. A number in the
+  structural style gets its `px` (Vue adds no unit).
+- **Listeners in Vue casing compose as in React**: internal first, then the consumer's, then the
+  engine's (`after`: `keydown`, `click`, `pointerdown`, `copy`, `paste` on `Root`), so a
+  `preventDefault` cancels the grid's. `Root`'s callbacks are props (`onActivePositionChange`, or
+  `@active-position-change`).
+- **Column renderers return vnodes**: columns are the core's `Column<TRow, VNodeChild>`.
+- **Composables return computed refs.** A part composable takes a value, a ref or a getter and
+  returns `{ state, props }` (`PartComposableResult`); `useRowWindow(gridRef?)` and
+  `useColumnWindow` a shallow ref; `useDataGrid()` plain `{ model, engine }` (a shallow ref with a
+  `gridRef`); `/local`'s `useLocalRows` and `/selection`'s `useSelectAll` objects of getters.
+- **`typedDataGrid<TRow>()` is Vue only**: a template cannot pass a type argument, so it returns
+  the same components typed by the row (the plain `DataGrid` erases it). React's
+  `DivPrimitiveProps`, `PrimitiveProps` (its own), `RenderedProps` and `RenderProp` are React
+  only; Vue's `PrimitiveProps` is `as`.
+- **A template ref on a part is its component instance** (its element `$el`); a handle on the
+  grid is a `gridRef`.
+- **Vue SSR is not supported yet**: the package renders in the browser.
+
+## The core's adapter helpers (`packages/core/src/adapter/`)
+
+**A decision every adapter takes is a core helper**: an adapter adds only its framework's own
+(refs, listeners, `render`/`as`, slots, the unit of a number in a style). Before writing logic in
+an adapter, look here; if two adapters would write it, it moves here.
+
+- `root.ts`: `bindGridRoot(options)` creates the model and the engine from a root's props, binds
+  the controlled pieces (`bindControlled`, `controlled.ts`), maps the props onto commands and
+  tells the engine's events; the adapter renders and calls `sync()` after each render.
+  `GRID_ROOT_PROPS` lists every root prop (`GridRootProps`), `withoutRootProps(props)` leaves
+  what goes on the element.
+- `props.ts`: each part's props and state, whatever the framework (`rootPropsOf`,
+  `gridPartOf`, `headerPropsOf`, `headerRowPartOf`, `headerCellPartOf`, `bodyPropsOf`,
+  `rowPartOf`, `cellPartOf`, `rowDetailPartOf`, `summaryPartOf`, `summaryRowPartOf`,
+  `summaryCellPartOf`, `columnResizerPartOf`, `rowDragHandlePartOf`, `groupTogglePartOf`,
+  `groupLabelPartOf`, `fillHandlePartOf`, the empty state's), the lists the collection parts
+  render (`rowsOf`, `rowCellsOf`, `summaryCellsOf`), and a part's default content:
+  `cellContent`, `headerCellContent`, `summaryCellContent`.
+- `grid-ref.ts`: `createGridHandle()` and `attachGridHandle(handle, grid, where)`, the `gridRef`
+  every adapter types and makes.
+- `edit.ts`: `editActions(engine)` and `editCellPropsOf`, an editor's props.
+- `@fragiola/data-grid/local`: `localRowsResult`, `plainRowKey`, `moveShownRowAt`, what each
+  `useLocalRows` returns and keeps; `@fragiola/data-grid/selection`: `selectAllState`,
+  `selectAllToggled`, what each `useSelectAll` shows and sets.
+
 ## Site
 
 The docs and examples are served by `fragiola.com/data-grid`, built by the `www` repo from this
 repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: the pages
 (`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
 and one examples app per framework of `site/project.json`'s `frameworks` (`examples/<framework>`,
-package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest; only
-`examples/react` today). What every framework's examples share (the metadata, the themes, the
+package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest:
+`examples/react`, and `examples/vue`, with `hello-grid` and `unstyled` for now, the rest in
+Epic #126). What every framework's examples share (the metadata, the themes, the
 embed's messages, the manifest builder, the loader generator and every Playwright spec) lives
 once in `examples/shared` (`examples-shared`, private, imports no framework); an example keeps
 its id in every framework, and a spec for an example a framework lacks is skipped there, unless
