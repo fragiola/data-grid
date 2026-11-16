@@ -22,6 +22,7 @@ it, the grid scrolls it into view and focuses it.
 | Ctrl+Shift+Home, Ctrl+Shift+End | take the range's focus to the first or the last cell (cell selection on) |
 | Ctrl+A, ⌘+A | selects every body cell (cell selection on) |
 | Escape | clears the selected range; a plain move clears it too |
+| Escape | with nothing else to end (no range, edit, drag or controls), focus leaves the grid: the active cell stays, and Tab comes back to it. In a grid nested in a cell, focus goes to that cell. The key is not prevented, so a dialog around the grid still closes |
 | Ctrl+C, Ctrl+V | copy the range (or the active cell) as tab-separated text, paste into it (cell selection on; ⌘ on a Mac) |
 | Enter, F2, a printable key | on an [editable](/docs/concepts/editing) cell, edit it (the printable key starts the editor; a character typed with AltGr or Option too) |
 | Enter, Shift+Enter, Tab, Shift+Tab | in an edit, commit it and move down, up, to the next or the previous column |

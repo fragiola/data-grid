@@ -136,6 +136,61 @@ function clipboardEvent(
     return { event, data };
 }
 
+describe("a range and the page's presses (Epic #113)", () => {
+    it("clears the range on a press outside the grid, never inside it; the active cell stays", () => {
+        const { engine, cellAt, selected, model, viewport } = setup({
+            activePosition: at(1, 1),
+        });
+        const cell = cellAt(1, 1);
+        keydown(engine, cell, "ArrowDown", { shiftKey: true });
+        expect(selected()).toEqual(range([1, 1], [2, 1]));
+        // inside: a cell, the viewport itself (its scrollbars)
+        for (const target of [cellAt(5, 2), viewport]) {
+            target.dispatchEvent(
+                new PointerEvent("pointerdown", { bubbles: true }),
+            );
+        }
+        expect(selected()).toEqual(range([1, 1], [2, 1]));
+        const outside = document.createElement("button");
+        document.body.append(outside);
+        outside.dispatchEvent(
+            new PointerEvent("pointerdown", { bubbles: true }),
+        );
+        expect(selected()).toBeNull();
+        expect(model.state.activePosition).toEqual(at(1, 1));
+        outside.remove();
+    });
+
+    it("leaves the clear to a middleware, and listens to nothing without a range or once detached", () => {
+        const { engine, cellAt, selected, model, detach } = setup({
+            activePosition: at(1, 1),
+        });
+        const outside = document.createElement("div");
+        document.body.append(outside);
+        const add = vi.spyOn(document, "addEventListener");
+        outside.dispatchEvent(
+            new PointerEvent("pointerdown", { bubbles: true }),
+        );
+        expect(add).not.toHaveBeenCalled();
+        keydown(engine, cellAt(1, 1), "ArrowDown", { shiftKey: true });
+        const refuse = model.use((ctx, next) =>
+            ctx.command === "selected-range.clear" ? veto() : next(),
+        );
+        outside.dispatchEvent(
+            new PointerEvent("pointerdown", { bubbles: true }),
+        );
+        expect(selected()).toEqual(range([1, 1], [2, 1]));
+        refuse();
+        detach();
+        outside.dispatchEvent(
+            new PointerEvent("pointerdown", { bubbles: true }),
+        );
+        expect(selected()).toEqual(range([1, 1], [2, 1]));
+        add.mockRestore();
+        outside.remove();
+    });
+});
+
 describe("cell ranges by the keys", () => {
     it("Shift with the navigation keys moves the focus from the active cell, which stays", () => {
         const { engine, model, cellAt, selected, commands } = setup({
@@ -196,8 +251,10 @@ describe("cell ranges by the keys", () => {
         const cleared = keydown(engine, cellAt(1, 1), "Escape");
         expect(cleared.handled).toBe(true);
         expect(selected()).toBeNull();
-        // without a range, Escape is not the grid's
-        expect(keydown(engine, cellAt(1, 1), "Escape").handled).toBe(false);
+        // without a range, Escape gives focus up (Epic #113), not prevented
+        const released = keydown(engine, cellAt(1, 1), "Escape");
+        expect(released.handled).toBe(true);
+        expect(released.event.defaultPrevented).toBe(false);
         keydown(engine, cellAt(1, 1), "ArrowDown", { shiftKey: true });
         expect(selected()).not.toBeNull();
         keydown(engine, cellAt(1, 1), "ArrowDown");

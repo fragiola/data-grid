@@ -86,6 +86,7 @@ import {
     windowFor,
 } from "../viewport/window";
 import {
+    CELL_SELECTOR,
     CLICK_SLOP,
     COLUMN_RESIZER_ATTRIBUTE,
     CTRL_KEYS,
@@ -2905,6 +2906,53 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         });
     }
 
+    /** the document whose presses a range listens to (`onRangePress`), while there is one */
+    let rangePressDoc: Document | null = null;
+
+    /**
+     * A range listens to the page's presses while there is one and the viewport is attached
+     * (Epic #113); without one nothing listens.
+     */
+    function followRange() {
+        const doc = state.selectedRange ? viewport?.ownerDocument : undefined;
+        if (doc === (rangePressDoc ?? undefined)) return;
+        rangePressDoc?.removeEventListener("pointerdown", onRangePress, true);
+        rangePressDoc = doc ?? null;
+        rangePressDoc?.addEventListener("pointerdown", onRangePress, true);
+    }
+
+    /**
+     * A press outside the grid (its viewport, nested grids and scrollbars included) clears the
+     * range, through the command: a middleware can refuse it. The active cell stays.
+     */
+    function onRangePress(event: PointerEvent) {
+        const { target } = event;
+        if (
+            !viewport ||
+            !state.selectedRange ||
+            !isElement(target) ||
+            viewport.contains(target)
+        ) {
+            return;
+        }
+        model.run("selected-range.clear", {});
+    }
+
+    /**
+     * Escape's last meaning (Epic #113): focus leaves the grid, the active position kept (Tab
+     * comes back to it). A nested grid hands it to the outer cell holding it; else it is blurred.
+     */
+    function releaseFocus(target: Element) {
+        pendingFocus = false;
+        const outer = host ? viewport?.parentElement : null;
+        const holder = outer?.closest(CELL_SELECTOR);
+        if (outer && holder && ownerViewport(holder) === ownerViewport(outer)) {
+            (holder as HTMLElement).focus({ preventScroll: true });
+        } else {
+            (target as HTMLElement).blur();
+        }
+    }
+
     /**
      * The range's keys (E4.1), cells selectable: Ctrl/⌘+A on any of the grid's cells selects
      * every body cell (once per press); on a body cell in navigation, Shift with an arrow, Home,
@@ -3714,6 +3762,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (rowMoveKey(event, target)) return true;
         if (rangeKey(event, target)) return true;
         if (selectionKey(event, target)) return true;
+        // Escape with nothing else to end (a drag, an edit, controls, a range) gives focus up
+        // (Epic #113): never prevented, so a dialog or a popover around the grid still closes
+        if (event.key === "Escape" && !ctrl && !event.shiftKey) {
+            releaseFocus(target);
+            return true;
+        }
         if (event.key === " " && !ctrl && rowsY.mapping.scaled) {
             // the browser would page the container natively, a far jump under scaling
             event.preventDefault();
@@ -3910,6 +3964,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (before.direction !== after.direction) directionPending = true;
         // an edit started or ended (Epic #88): its draft follows
         if (after.editingCell !== before.editingCell) followEdit();
+        // a range listens to the page's presses while there is one (Epic #113)
+        if (after.selectedRange !== before.selectedRange) followRange();
         // the app moved the rows a move told it of: the active cell follows its row (E2.3)
         followMovedRow(before, after);
         const changedDetails = detailsChanged(before, after);
@@ -4119,6 +4175,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             heights.observeRegistered();
             // an edit given to start with listens to the page's presses (Epic #88)
             listenEditPresses();
+            // a range given to start with listens to them too (Epic #113)
+            followRange();
             // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("focusin", onFocusIn);
@@ -4173,6 +4231,12 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                     true,
                 );
                 editPressDoc = null;
+                rangePressDoc?.removeEventListener(
+                    "pointerdown",
+                    onRangePress,
+                    true,
+                );
+                rangePressDoc = null;
                 if (noEditorTimer !== null) {
                     doc.defaultView?.clearTimeout(noEditorTimer);
                     noEditorTimer = null;
