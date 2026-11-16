@@ -1,4 +1,4 @@
-import { clamp } from "../utils";
+import { clamp } from "../utils/utils";
 
 /** Where to put an item when scrolling to it. */
 export type ScrollAlign = "nearest" | "start" | "center" | "end";

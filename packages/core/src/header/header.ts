@@ -7,7 +7,7 @@ import type {
     HeaderLayout,
     PinnedSide,
 } from "../model/types";
-import { isWidth, keySet, lowerBound, spanValue } from "../utils";
+import { isWidth, keySet, lowerBound, spanValue } from "../utils/utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,

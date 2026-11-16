@@ -1,4 +1,4 @@
-import { keySet, toggledKey } from "../utils";
+import { keySet, toggledKey } from "../utils/utils";
 import { fail, ok } from "./result";
 import {
     dataRowAt,

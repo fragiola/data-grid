@@ -1,4 +1,4 @@
-import { isIndex } from "../utils";
+import { isIndex } from "../utils/utils";
 import type {
     SummaryPosition,
     SummaryRowCounts,

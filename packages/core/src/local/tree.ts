@@ -1,5 +1,5 @@
 import type { Column, RowKey, RowKeyGetter, SortColumn } from "../model/types";
-import { keySet } from "../utils";
+import { keySet } from "../utils/utils";
 import { entryKeyOf, type RowEntry } from "./filter";
 import type { ShownRow } from "./group";
 import { sortedByEntry } from "./sort";

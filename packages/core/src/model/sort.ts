@@ -5,7 +5,7 @@
 // Copyright 2015 Comcast, under the MIT licence (see the root LICENSE).
 
 import { entryByKey, isColumnGroup } from "../header/header";
-import { sameList } from "../utils";
+import { sameList } from "../utils/utils";
 import { fail, ok } from "./result";
 import type {
     Column,

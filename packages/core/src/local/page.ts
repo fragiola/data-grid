@@ -1,4 +1,4 @@
-import { clamp } from "../utils";
+import { clamp } from "../utils/utils";
 
 /** How many pages `count` items make: one at least; one in all without a page size. */
 export function pageCount(count: number, pageSize: number | undefined): number {

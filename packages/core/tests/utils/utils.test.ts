@@ -9,7 +9,7 @@ import {
     memo,
     sameList,
     toggledKey,
-} from "../src/utils";
+} from "../../src/utils/utils";
 
 // The helpers the core's modules share (Epic #62).
 

@@ -1,7 +1,7 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
 export type { Axis, Size } from "./axis/axis";
-export { parseTsv, toTsv } from "./clipboard";
+export { parseTsv, toTsv } from "./clipboard/clipboard";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
     EDITOR_ATTRIBUTE,
@@ -201,7 +201,7 @@ export {
     type HeaderCellSpan,
     sameCell,
 } from "./navigation/navigation";
-export { sameKeys } from "./utils";
+export { sameKeys } from "./utils/utils";
 export { DEFAULT_MAX_SCROLL_SIZE } from "./viewport/scaling";
 export type { ScrollAlign } from "./viewport/scroll-target";
 export {

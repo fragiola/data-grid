@@ -25,7 +25,7 @@ import type {
     HeaderLayout,
 } from "../model/types";
 import { columnWidth, NO_WIDTHS } from "../model/widths";
-import { clamp, memo } from "../utils";
+import { clamp, memo } from "../utils/utils";
 import {
     type AxisWindow,
     overlaps,

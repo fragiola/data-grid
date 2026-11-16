@@ -8,7 +8,7 @@ import type {
     SortColumn,
     SortDirection,
 } from "../model/types";
-import { keySet } from "../utils";
+import { keySet } from "../utils/utils";
 import { entryKeyOf, type RowEntry } from "./filter";
 import { sortedByEntry } from "./sort";
 import { subtreeKeysOf, type TreeNode } from "./tree";

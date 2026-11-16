@@ -1,5 +1,5 @@
-import { toTsv } from "../clipboard";
-import { clamp, isIndex } from "../utils";
+import { toTsv } from "../clipboard/clipboard";
+import { clamp, isIndex } from "../utils/utils";
 import type { Range } from "../viewport/window";
 import { dataRowAt, rowCellValue, rowMetaAt } from "./source";
 import {

@@ -1,6 +1,6 @@
 import { type Axis, clampedIndex, cleanCount } from "../axis/axis";
 import type { RowKey } from "../model/types";
-import { lowerBound } from "../utils";
+import { lowerBound } from "../utils/utils";
 
 // Measured heights (Epic #86, E2.2): what an engine read of the rows and details it rendered, by
 // row index, each with the key of the row it was read for. A height stays while its key is at its

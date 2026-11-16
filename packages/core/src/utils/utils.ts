@@ -1,4 +1,4 @@
-import type { RowKey } from "./model/types";
+import type { RowKey } from "../model/types";
 
 // Small helpers the core's modules share. Outside `local/` and `selection/`: the grid's own entry
 // reaches this file, never the extras.
