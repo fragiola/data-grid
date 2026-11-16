@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { THEMES } from "../../../examples/react/src/examples/_themes/themes.ts";
-import { parseView, sameItem, toSearch, type View } from "../src/view.ts";
+import { parseView, sameItem, toSearch, type View } from "../src/shell/view.ts";
 
 const DEFAULTS: View = { item: null, theme: "light", code: false };
 

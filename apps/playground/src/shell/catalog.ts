@@ -46,10 +46,14 @@ export type Section = {
 
 export type Fixture = { name: string; title: string; href: string };
 
-// Glob keys are relative to this file, which is apps/playground/src.
+// Glob keys are relative to apps/playground/src (each glob's `base`).
 export function repositoryPath(key: string): string {
     return new URL(key, "file:///apps/playground/src/").pathname.slice(1);
 }
+
+// Every glob below has `base: "../"`: it is written, and keyed, relative to src/ (the playground's
+// source root), not to this file: `../fixtures/<name>/index.html`. Vite reads the options
+// statically, so each one repeats the literal.
 
 // ─── Examples ───────────────────────────────────────────────────────────────
 
@@ -57,10 +61,11 @@ const EXAMPLES = "../../../examples/react/src/examples";
 
 const exampleModules = import.meta.glob<{ default: ComponentType }>(
     "../../../examples/react/src/examples/*/index.tsx",
+    { base: "../" },
 );
 const exampleMetas = import.meta.glob<{ default: ExampleMeta }>(
     "../../../examples/react/src/examples/*/meta.ts",
-    { eager: true },
+    { eager: true, base: "../" },
 );
 const exampleSources = import.meta.glob<string>(
     [
@@ -68,7 +73,7 @@ const exampleSources = import.meta.glob<string>(
         "!../../../examples/react/src/examples/_*/**",
         "!../../../examples/react/src/examples/*/meta.ts",
     ],
-    { query: "?raw", import: "default" },
+    { query: "?raw", import: "default", base: "../" },
 );
 
 /** `…/examples/<slug>/<file>` → `<slug>`, or nothing for a `_` folder or a loose file. */
@@ -159,6 +164,7 @@ export function findEntry(ref: ItemRef | null): Entry | undefined {
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 const fixturePages = import.meta.glob<string>("../fixtures/*/index.html", {
+    base: "../",
     query: "?raw",
     import: "default",
     eager: true,
