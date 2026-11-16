@@ -23,7 +23,7 @@ Other adapters may follow React, so **every piece of logic that isn't rendering 
 |---|---|---|---|
 | `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`) | DOM only |
 | `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `react`, `react-dom` (^19) |
-| `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react` |
+| `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react`, `examples/shared` |
 
 ## Non-negotiable rules
 
@@ -989,7 +989,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     context menu, a macOS Ctrl+click's, stays the app's). A long press on a body cell, and
     `-webkit-touch-callout`, are the browser's and the app's CSS (`user-select` is not
     structural). The shared spec's `touch` block drives an emulated touch screen (`hasTouch`):
-    `touchDrag` (`examples/react/e2e/examples/helpers.ts`, the page's own touch pointer events,
+    `touchDrag` (`examples/shared/e2e/examples/helpers.ts`, the page's own touch pointer events,
     every engine), `page.touchscreen.tap`, and in Chromium a finger through CDP
     (`Input.dispatchTouchEvent`: touch-action and the native scroll). Docs: `guides/touch`.
     **WebKit (Epic #89):** fixes where it differs. Scrolling is whole pixels, as WebKit drops a
@@ -1017,14 +1017,14 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm check:layout` | the source layout over `git ls-files` (`scripts/check-layout.ts`, from Dockable): kebab-case names, only entries at a package's `src/` root |
 | `pnpm check:fix` | Biome check with auto-fix |
 | `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit) |
-| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `site` |
+| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `examples-shared`, `site` |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip): a report, after `pnpm build` |
-| `pnpm e2e` | Playwright: the playground and the examples app, each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
+| `pnpm e2e` | Playwright: the playground and every examples app (`./examples/*`, each running the shared specs against its embed), each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
 | `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
-| `pnpm site:dev --base /data-grid --port <n>` | the examples app with hot reload, under the base `www` proxies in dev |
+| `pnpm site:dev --base /data-grid --port <n>` | every framework's examples app with hot reload, under `<base>/embed/<framework>/` on one port (a Node proxy, `site/dev-proxy.ts`, in front of one dev server per framework), the base `www` proxies in dev |
 
 ## Repository layout
 
@@ -1042,11 +1042,18 @@ apps/playground/    src/main.tsx, app.tsx      the entries
                     src/fixture/               the fixtures' grids
                     fixtures/<name>/           unstyled pages Playwright drives
                     e2e/, tests/               Playwright specs, unit tests
-examples/react/     src/examples/<slug>/       the site's examples (the embed app, Vite)
+examples/shared/    src/meta/<slug>.ts         every example's metadata, whatever the framework
+                    src/themes/, src/embed/    the five themes, the embed's messages
+                    scripts/                   the manifest builder, the loader generator (by framework)
+                    e2e/                       the Playwright specs every framework's embed runs, also
+                                               inside an iframe; tests/: no framework import, metadata
+examples/react/     src/examples/<slug>/       the site's React examples (the embed app, Vite)
                     src/components, lib, …     Fragiola UI, vendored (scripts/vendor-fragiola.ts)
-                    e2e/                       Playwright specs, also inside an iframe
+                    playwright.config.ts       the shared specs against this embed
 site/               docs/                      the pages fragiola.com/data-grid serves
-                    export.ts, contract.ts     `pnpm site:export` and its validation
+                    export.ts, contract.ts     `pnpm site:export` and its validation, every framework
+                    dev.ts, dev-proxy.ts       `pnpm site:dev`: one port, one dev server per framework
+                    sources.ts                 the export's parts, by framework of project.json
 docs/                                          reports
 ```
 
@@ -1060,8 +1067,9 @@ themes) and the source beside the stage; the state is in the URL
 - **Examples** live in `examples/react/src/examples` and are public: the site embeds them, readers
   copy them. Each of React Data Grid's website examples has one (the parity table of
   `site/docs/guides/from-react-data-grid.mdx`); a menu, a filter or a checkbox in one is the app's
-  (Fragiola UI, vendored). The playground reads them in place (`import.meta.glob`, the `#/` alias and the
-  pre-paint theme from `examples/react/vite.shared.ts`); it never keeps a second list.
+  (Fragiola UI, vendored). The playground reads them in place, with their metadata from
+  `examples/shared/src/meta` (`import.meta.glob`, the `#/` alias and the pre-paint theme from
+  `examples/react/vite.shared.ts`); it never keeps a second list. It stays React-only.
 - **Fixtures** (`fixtures/<name>/`) are the unstyled pages Playwright drives; the sidebar links
   them. `stress-grid` (Epic #89, E5.3; `src/fixture/stress-fixture.tsx`, the grid fixture's parts)
   has every feature on at once: 1,000,000 rows through `getRow`, 1,000 columns, both axes scaled
@@ -1112,7 +1120,7 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
   a PR says when one grows noticeably, and why.
 - **Tests share their setup**, never a copy: `packages/core/tests/engine/harness.ts` (the engine
   on a fake viewport), `packages/react/tests/helpers.tsx` (`renderCounting`, `scrollRoot` for
-  D9) and `examples/react/e2e/helpers.ts`, `examples/react/e2e/examples/helpers.ts` (the
+  D9) and `examples/shared/e2e/helpers.ts`, `examples/shared/e2e/examples/helpers.ts` (the
   playground's spec imports it too).
 - **The engine's modules** (`packages/core/src/engine/`): `engine.ts` (the closure binding one
   grid to the DOM: scroll, windows, layers, focus, keys, drags, edits), `types`, `view` (pure: a
@@ -1288,7 +1296,14 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 The docs and examples are served by `fragiola.com/data-grid`, built by the `www` repo from this
 repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: the pages
 (`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
-and the examples app (`examples/react`, built for `<base>/embed/react/`). `www` owns the shell,
+and one examples app per framework of `site/project.json`'s `frameworks` (`examples/<framework>`,
+package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest; only
+`examples/react` today). What every framework's examples share (the metadata, the themes, the
+embed's messages, the manifest builder, the loader generator and every Playwright spec) lives
+once in `examples/shared` (`examples-shared`, private, imports no framework); an example keeps
+its id in every framework, and a spec for an example a framework lacks is skipped there, unless
+that framework ships them all (`COMPLETE_FRAMEWORKS` in `examples/shared/e2e/available.ts`). CI's
+examples e2e is a matrix over the `examples/*` apps with a `playwright.config.ts`. `www` owns the shell,
 the gallery chrome, the code panel and search. A page's `title` is at most 60 characters and
 never repeats "Data Grid"; its `description` is 50–160 characters, plain words, no `: ` (YAML);
 a page body has no `#` and never skips a heading level; `pnpm site:export` checks all of it. Examples import internal modules through `#/…`
