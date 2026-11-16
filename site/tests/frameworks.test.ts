@@ -50,7 +50,7 @@ const appOf = (vue: ExamplesApp) => (framework: Framework) =>
 
 describe("the frameworks of project.json", () => {
     it("are known frameworks; an unknown one throws", () => {
-        expect(frameworksOf(readProject())).toEqual(["react"]);
+        expect(frameworksOf(readProject())).toEqual(["react", "vue"]);
         expect(frameworksOf({ frameworks: ["react", "vue"] })).toEqual([
             "react",
             "vue",

@@ -1,0 +1,34 @@
+{
+    "name": "examples-vue",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "generate": "node ../shared/scripts/generate.ts vue",
+        "dev": "pnpm run generate && vite",
+        "build": "pnpm run generate && vite build",
+        "typecheck": "pnpm run generate && vue-tsc --noEmit",
+        "e2e": "playwright test",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@fragiola/data-grid": "workspace:*",
+        "@fragiola/data-grid-vue": "workspace:*",
+        "clsx": "2.1.1",
+        "tailwind-merge": "3.7.0",
+        "vue": "3.5.45"
+    },
+    "devDependencies": {
+        "@playwright/test": "1.63.0",
+        "@tailwindcss/vite": "4.3.3",
+        "@types/node": "24.13.6",
+        "@vitejs/plugin-vue": "6.0.10",
+        "examples-shared": "workspace:*",
+        "tailwindcss": "4.3.3",
+        "tw-animate-css": "1.4.0",
+        "typescript": "6.0.3",
+        "vite": "8.3.1",
+        "vitest": "5.0.2",
+        "vue-tsc": "3.3.14"
+    }
+}

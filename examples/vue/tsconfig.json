@@ -1,0 +1,21 @@
+{
+    // TypeScript 6.0.3, pinned in this app only: vue-tsc (the single-file component type checker)
+    // does not run on TypeScript 7 yet. The packages it imports (from their sources) compile with it.
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "jsx": "preserve",
+        "customConditions": ["@fragiola/source"],
+        "types": ["node", "vite/client"],
+        "allowImportingTsExtensions": true,
+        "paths": {
+            "#/*": ["./src/*"]
+        }
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.vue",
+        "tests",
+        "*.config.ts",
+        "vite.shared.ts"
+    ]
+}
