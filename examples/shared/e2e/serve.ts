@@ -1,9 +1,9 @@
-// Serves the e2e build of the embed app the way the site does: under its base, plus a host page
-// that embeds an example in an iframe, as fragiola.com does (same origin).
+// Serves the e2e build of a framework's embed app the way the site does: under its base, plus a
+// host page that embeds an example in an iframe, as fragiola.com does (same origin).
 //
-//   node e2e/serve.ts [port]
+//   node e2e/serve.ts <port> <dist> <base>     (config.ts runs it in the app's directory)
 //
-//   /data-grid/embed/react/…         .e2e/dist (built by playwright.config.ts)
+//   <base>…                         <dist> (the app's build, e.g. /data-grid/embed/react/)
 //   /host.html?id=<id>&theme=<t>    one iframe on ./?id=<id>&theme=<t>; it records the
 //                                   embed's messages in `window.messages` and stays transparent
 //                                   until `ready`, like the site
@@ -13,9 +13,14 @@ import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 
-export const BASE = "/data-grid/embed/react/";
-const DIST = resolve(import.meta.dirname, "../.e2e/dist");
-const PORT = Number(process.argv[2] ?? process.env.PORT ?? 4320);
+const [port, dist, base] = process.argv.slice(2);
+if (!port || !dist || !base) {
+    console.error("usage: node serve.ts <port> <dist> <base>");
+    process.exit(1);
+}
+const BASE = base;
+const DIST = resolve(dist);
+const PORT = Number(port);
 
 const TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",

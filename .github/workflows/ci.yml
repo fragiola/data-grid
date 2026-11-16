@@ -1,10 +1,12 @@
 # CI: the Fragiola project jobs, with the Playwright suites split out of Checks.
 #
 #   Checks   Biome, TypeScript, the unit tests and the build (with the .d.ts check).
-#   E2E      the Playwright suites, in parallel jobs: the playground and the examples app, each in
-#            Chromium, Firefox and WebKit (Epic #89). The playground's
-#            dev server serves the packages from source, so its job builds nothing; the examples
-#            suite builds the embed against the packages' dist, so its job builds the packages.
+#   E2E      the Playwright suites, in parallel jobs, each in Chromium, Firefox and WebKit (Epic
+#            #89): the playground, and one job per examples app (a matrix over the examples/*
+#            apps that exist, each running the shared specs of examples/shared/e2e). The
+#            playground's dev server serves the packages from source, so its job builds nothing;
+#            an examples suite builds the embed against the packages' dist, so its job builds the
+#            packages.
 #   Site export       fragiola.com builds /data-grid from `pnpm site:export` (contract v1.2,
 #                     fragiola/www CONTRACT.md), built and validated the way www's deploy runs
 #                     it: it fails on anything www would reject.
@@ -61,23 +63,9 @@ jobs:
       - run: pnpm size
 
   e2e:
-    name: E2E (${{ matrix.name }})
+    name: E2E (playground)
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: playground
-            id: playground
-            package: playground
-            dir: apps/playground
-            browsers: chromium firefox webkit
-          - name: examples
-            id: examples
-            package: examples-react
-            dir: examples/react
-            browsers: chromium firefox webkit
     steps:
       - uses: actions/checkout@v4
 
@@ -90,24 +78,76 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The examples suite builds the embed against the packages' dist (its playwright.config.ts).
-      - name: Build the packages
-        if: matrix.package == 'examples-react'
-        run: pnpm --filter "./packages/*" build
-
       - name: Install Playwright browsers
-        working-directory: ${{ matrix.dir }}
-        run: pnpm exec playwright install --with-deps ${{ matrix.browsers }}
+        working-directory: apps/playground
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Run Playwright
-        run: pnpm --filter ${{ matrix.package }} run e2e
+        run: pnpm --filter playground run e2e
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.id }}
-          path: ${{ matrix.dir }}/playwright-report/
+          name: playwright-report-playground
+          path: apps/playground/playwright-report/
+          retention-days: 14
+
+  # The frameworks that have an examples app: every examples/<framework> with a playwright.config.ts
+  # (examples/shared, the specs every framework runs, has none). Adding an app adds its job.
+  examples-apps:
+    name: Examples apps
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      frameworks: ${{ steps.list.outputs.frameworks }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: list
+        run: |
+          frameworks=$(ls examples/*/playwright.config.ts | cut -d/ -f2 | jq -Rnc '[inputs]')
+          echo "frameworks=$frameworks" >> "$GITHUB_OUTPUT"
+          echo "examples apps: $frameworks"
+
+  e2e-examples:
+    name: E2E (examples ${{ matrix.framework }})
+    needs: examples-apps
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJson(needs.examples-apps.outputs.frameworks) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The examples suite builds the embed against the packages' dist (examplesE2eConfig).
+      - name: Build the packages
+        run: pnpm --filter "./packages/*" build
+
+      - name: Install Playwright browsers
+        working-directory: examples/${{ matrix.framework }}
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Run Playwright
+        run: pnpm --filter examples-${{ matrix.framework }} run e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-examples-${{ matrix.framework }}
+          path: examples/${{ matrix.framework }}/playwright-report/
           retention-days: 14
 
   site-export:

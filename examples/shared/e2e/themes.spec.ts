@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { THEMES } from "./helpers";
 
-// The example themes (src/examples/_themes) belong to this app, so their checks run here, on
+// The example themes (src/themes) are every framework's, so their checks run in each embed, on
 // computed styles (verify by compiling, not by reading class names). Their shape on a grid is
 // checked by the examples' own specs.
 

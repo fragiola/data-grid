@@ -1,11 +1,7 @@
 // The messages between the embed and the site (contract v1, §5.2). Same origin: every message
 // is posted to, and only accepted from, `location.origin`.
 
-import {
-    isThemeName,
-    THEMES,
-    type ThemeName,
-} from "../examples/_themes/themes";
+import { isThemeName, THEMES, type ThemeName } from "../themes/themes";
 
 export const READY = "fragiola:example:ready";
 export const RESIZE = "fragiola:example:resize";

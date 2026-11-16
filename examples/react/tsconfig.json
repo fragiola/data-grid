@@ -1,19 +1,12 @@
 {
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "customConditions": ["development"],
+        "customConditions": ["@fragiola/source"],
         "types": ["node", "vite/client"],
         "allowImportingTsExtensions": true,
         "paths": {
             "#/*": ["./src/*"]
         }
     },
-    "include": [
-        "src",
-        "scripts",
-        "tests",
-        "e2e",
-        "*.config.ts",
-        "vite.shared.ts"
-    ]
+    "include": ["src", "scripts", "tests", "*.config.ts", "vite.shared.ts"]
 }

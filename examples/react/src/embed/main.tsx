@@ -1,4 +1,9 @@
 import {
+    followTheme,
+    postReady,
+    reportHeight,
+} from "examples-shared/embed/messages";
+import {
     Component,
     type ComponentType,
     type ErrorInfo,
@@ -11,7 +16,6 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { LOADERS } from "./loaders.generated";
-import { followTheme, postReady, reportHeight } from "./messages";
 import "./styles.css";
 
 // `?id=<id>` renders one example on the whole viewport, with no chrome: the site puts it in an

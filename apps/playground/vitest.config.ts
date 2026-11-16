@@ -1,8 +1,9 @@
 import { defineConfig } from "vitest/config";
-import { examplesResolve } from "../../examples/react/vite.shared.ts";
+import { examplesTestResolve } from "../../examples/react/vite.shared.ts";
 
 export default defineConfig({
-    resolve: examplesResolve("serve"),
+    // the packages from their sources, not their dist, in either environment
+    ...examplesTestResolve(),
     test: {
         name: "playground",
         environment: "node",

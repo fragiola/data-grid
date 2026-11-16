@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 // The shell around the examples of examples/react: sidebar, theme, stage, source panel. The
-// examples' own behaviour is covered by examples/react's e2e; the grid's by the fixtures' specs.
+// examples' own behaviour is covered by the examples' e2e (examples/shared/e2e); the grid's by
+// the fixtures' specs.
 
 test("renders the sidebar and switches the example theme, restoring it from the URL", async ({
     page,

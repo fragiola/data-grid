@@ -12,7 +12,7 @@
 @import "../styles/palettes/purple.css";
 @import "../styles/palettes/rose.css";
 
-@import "../examples/_themes/index.css";
+@import "examples-shared/themes/index.css";
 
 @source "../../index.html";
 @source "../examples";

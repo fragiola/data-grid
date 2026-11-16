@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { listExampleSlugs } from "../../examples/react/scripts/examples-lib.ts";
+import {
+    examplesApp,
+    listExampleSlugs,
+} from "../../examples/shared/scripts/examples-lib.ts";
 import {
     anchorsOf,
     noindexProblem,
@@ -47,7 +50,7 @@ describe("the site export", () => {
         );
         expect(site.pages.size).toBe(listed.length + 1);
         expect(site.manifests.get("react")?.examples).toHaveLength(
-            listExampleSlugs().length,
+            listExampleSlugs(examplesApp("react")).length,
         );
     });
 
