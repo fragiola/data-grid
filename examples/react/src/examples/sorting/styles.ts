@@ -27,7 +27,7 @@ export const headerCell = cn(
     // a sortable header cell sorts on a click: it reads as one, and its text is not selected
     "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const row = (state: RowState) =>
@@ -39,7 +39,7 @@ export const row = (state: RowState) =>
 /** the active cell's outline sits inside it, so neighbours never cover it */
 export const cell = cn(
     "flex items-center overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const headerLabel = "truncate";

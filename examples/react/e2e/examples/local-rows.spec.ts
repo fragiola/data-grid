@@ -72,3 +72,19 @@ test("sorts from the header, the hook ordering the rows", async ({ page }) => {
     const names = await values(page, 0);
     expect(names).toEqual([...names].sort((a, b) => b.localeCompare(a)));
 });
+
+test("lays its filters out in two rows, the text fields side by side (Epic #113)", async ({
+    page,
+}) => {
+    await openExample(page, "local-rows");
+    const top = async (label: string) =>
+        (await page.getByLabel(label, { exact: true }).boundingBox())?.y ?? -1;
+    const search = await top("Search every column");
+    expect(await top("Name contains")).toBeCloseTo(search, 0);
+    expect(await top("Salary")).toBeGreaterThan(search - 8);
+    const rowsOf = await page.getByTestId("count").evaluate((count) => {
+        const toolbar = count.parentElement?.parentElement;
+        return toolbar ? toolbar.children.length : 0;
+    });
+    expect(rowsOf).toBe(2);
+});

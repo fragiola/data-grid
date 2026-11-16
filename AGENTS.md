@@ -933,14 +933,21 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     (Ctrl/⌘+Shift+Home/End: the first and last cells) runs one `selected-range.extend { direction,
     pageSize }` (a refused one, `check`, does nothing), the active cell staying (the anchor), the
     asked focus scrolled into view; Ctrl/⌘+A on any of the grid's cells one
-    `selected-range.select-all`, once per press; Escape with a range one `selected-range.clear`;
+    `selected-range.select-all`, once per press; Escape with a range one `selected-range.clear`
+    (and, Epic #113, a press outside the viewport while there is a range: `onRangePress`, a
+    capture listener on the owner document only while a range exists, `followRange`; refusable
+    by middleware, the active cell kept);
     a plain move to another cell leaves no range (the model's anchor rule, rule 10; one command:
     `active-position.move`). The page size of PageUp/PageDown is one helper (`pageSize`). With
     an editable column (Epic #88, E4.3): Enter, F2 or a printable key on a body cell in
     navigation that can be edited edit it (before the interaction's Enter and F2, which stay a
     cell's without an edit); in an edit, Enter commits and moves down (Shift: up), Tab commits and
     moves to the next column (Shift: the previous one), Escape cancels, and every other key is the
-    editor's (rule 10). While cells are selectable, Shift+↑/↓ and
+    editor's (rule 10). Escape with nothing else to end (a drag, an edit, controls, a range;
+    Epic #113, `releaseFocus`, after every other key of the grid's) gives focus up, never
+    prevented (a dialog around the grid still closes): the active position stays (the roving tab
+    stop, Tab comes back to it); a nested grid hands focus to the outer cell holding it, else
+    the target is blurred. While cells are selectable, Shift+↑/↓ and
     Ctrl/⌘+A are the cells' and Shift+Space stays the row's; Ctrl/⌘+C and Ctrl/⌘+V are the
     page's own copy and paste (never prevented on keydown), which the grid takes (rule 10). A consumer can
     cancel or replace any key, and middleware can refuse or redirect a move. With row kinds (Epic
@@ -1244,8 +1251,9 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **`Empty` renders only while there are no rows (Epic #12, E3).** It is a cell (Epic #89, E5.2:
   `role="gridcell"`, `aria-colspan` every column; rendered as a `<td>`, `colSpan`, no role) in a
   row of its own (`data-grid-part="empty-row"`, `role="row"`; a `<tr>` for a `<td>`), in an area
-  of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as large as
-  the visible body; a `<tbody>` for a `<td>`): a table's structure in a table grid (`Grid`
+  of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as tall as
+  the visible body and as wide as the columns, at most the view, the view without columns: Epic
+  #113, so content centred in it sits under the header; a `<tbody>` for a `<td>`): a table's structure in a table grid (`Grid`
   rendered as a `<table>` element: `TableContext`; there `Empty`'s own tag is a `<td>`, and a
   component rendering one, `render={<Td />}`, is given `colSpan`) or when its rendered element is
   a `<td>`; else divs with roles. The app's class, style and children go on the cell (`height: 100%`; a `<td>` a block,

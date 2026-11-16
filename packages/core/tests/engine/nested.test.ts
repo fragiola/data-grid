@@ -89,6 +89,20 @@ describe("nested grids", () => {
         expect(outer.model.get("active-position")).toEqual(before);
     });
 
+    it("hand Escape's focus from the inner grid to the outer cell holding it (Epic #113)", () => {
+        const { inner, holder, innerCell } = nested();
+        innerCell.focus();
+        expect(inner.engine.adapter.keydown(keyFrom(innerCell, "Escape"))).toBe(
+            true,
+        );
+        expect(document.activeElement).toBe(holder);
+        // the inner grid keeps its active cell
+        expect(inner.model.get("active-position")).toEqual({
+            rowIndex: 0,
+            columnIndex: 0,
+        });
+    });
+
     it("focus the outer grid's own cell, never the inner one at the same indexes", () => {
         const { outer, holder, sameIndexes } = nested();
         holder.focus();

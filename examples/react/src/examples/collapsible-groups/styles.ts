@@ -38,7 +38,7 @@ export const headerRow = (state: HeaderRowState) =>
     );
 
 const active =
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]";
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]";
 
 /** the rep is opaque and above the columns that scroll under it (stacking is the app's) */
 const pinned = (state: { pinned: boolean; pinnedEdge: boolean }) =>

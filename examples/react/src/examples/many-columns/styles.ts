@@ -32,7 +32,7 @@ export const headerCell = cn(
     "flex items-center px-(--dg-cell-padding) outline-none",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
     "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const row = (state: RowState) =>
@@ -46,5 +46,5 @@ export const cell = cn(
     "flex items-center justify-end overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
     "font-(family-name:--dg-numeric-font) tabular-nums",
     "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );

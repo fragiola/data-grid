@@ -58,7 +58,7 @@ export function heatStep(score: number): 0 | 1 | 2 | 3 | 4 {
 }
 
 const ACTIVE_OUTLINE =
-    "outline-none data-active:outline-2 data-active:-outline-offset-2";
+    "outline-none data-active:focus-within:outline-2 data-active:focus-within:-outline-offset-2";
 
 // ── Spreadsheet: gridlines, compact, monospaced numbers ──────────────────────
 
@@ -104,7 +104,7 @@ const spreadsheet: Preset = {
         cn(
             "flex items-center overflow-hidden whitespace-nowrap border-e border-palette-line px-2",
             // a spreadsheet cursor: blue, with a tint
-            "data-active:outline-[oklch(0.58_0.2_255)] data-active:bg-[oklch(0.58_0.2_255/0.1)]",
+            "data-active:focus-within:outline-[oklch(0.58_0.2_255)] data-active:focus-within:bg-[oklch(0.58_0.2_255/0.1)]",
             ACTIVE_OUTLINE,
             spreadsheetColumn[column],
         ),
@@ -149,7 +149,7 @@ const cards: Preset = {
     header: "bg-palette-base",
     headerRow: "text-palette-accent/80",
     headerCell: () =>
-        "flex items-center px-4 text-xs font-medium tracking-wide outline-none data-active:underline",
+        "flex items-center px-4 text-xs font-medium tracking-wide outline-none data-active:focus-within:underline",
     // the card is a pseudo-element inset in the row: the cells paint above it, the gap shows
     row: (state, status) =>
         cn(
@@ -164,7 +164,7 @@ const cards: Preset = {
     cell: (_state, column) =>
         cn(
             "flex items-center overflow-hidden whitespace-nowrap px-4",
-            "data-active:outline-palette-ring data-active:rounded-[10px]",
+            "data-active:focus-within:outline-palette-ring data-active:focus-within:rounded-[10px]",
             ACTIVE_OUTLINE,
             column === "name" && "font-semibold",
             column === "id" && "text-palette-accent/70",
@@ -232,7 +232,7 @@ const neon: Preset = {
             column === "score"
                 ? "text-[oklch(0.85_0.2_350)]"
                 : "text-[oklch(0.85_0.17_200)]",
-            "data-active:text-[oklch(1_0_0)] data-active:[text-shadow:0_0_8px_oklch(0.85_0.17_200)]",
+            "data-active:focus-within:text-[oklch(1_0_0)] data-active:focus-within:[text-shadow:0_0_8px_oklch(0.85_0.17_200)]",
         ),
     row: (state, status) =>
         cn(
@@ -244,7 +244,7 @@ const neon: Preset = {
     cell: (_state, column) =>
         cn(
             "flex items-center overflow-hidden whitespace-nowrap px-3",
-            "data-active:outline-[oklch(0.85_0.2_140)] data-active:shadow-[0_0_14px_oklch(0.85_0.2_140/0.8)]",
+            "data-active:focus-within:outline-[oklch(0.85_0.2_140)] data-active:focus-within:shadow-[0_0_14px_oklch(0.85_0.2_140/0.8)]",
             ACTIVE_OUTLINE,
             column === "id" && "text-[oklch(0.8_0.18_140)]",
             column === "delta" && "justify-end",

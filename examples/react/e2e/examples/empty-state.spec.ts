@@ -98,3 +98,25 @@ test("emptied with a cell active, the active cell moves to its header: still a t
     await page.keyboard.press("Tab");
     await expect(addRows(page)).toBeFocused();
 });
+
+test("sits under the columns when they are narrower than the grid (Epic #113)", async ({
+    page,
+}) => {
+    await openExample(page, "empty-state");
+    await expect(empty(page)).toBeVisible();
+    const columns = await page
+        .locator('[data-grid-part="header-cell"]')
+        .evaluateAll((cells) => {
+            const boxes = cells.map((element) =>
+                element.getBoundingClientRect(),
+            );
+            return {
+                left: Math.min(...boxes.map((box) => box.left)),
+                right: Math.max(...boxes.map((box) => box.right)),
+            };
+        });
+    const content = await empty(page).boundingBox();
+    if (!content) throw new Error("no empty state");
+    expect(content.x).toBeCloseTo(columns.left, 0);
+    expect(content.x + content.width).toBeCloseTo(columns.right, 0);
+});

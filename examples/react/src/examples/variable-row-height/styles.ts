@@ -25,7 +25,7 @@ export const headerRow = cn(
 export const headerCell = cn(
     "flex items-center px-(--dg-cell-padding) outline-none",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const row = (state: RowState) =>
@@ -38,7 +38,7 @@ export const row = (state: RowState) =>
 /** cells of a tall row start at its top, one note per line */
 export const cell = cn(
     "flex flex-col items-start justify-start gap-0 overflow-hidden whitespace-nowrap px-(--dg-cell-padding) py-2 leading-5 outline-none",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const note = "block";

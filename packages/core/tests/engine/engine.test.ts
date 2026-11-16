@@ -721,6 +721,32 @@ describe("the viewport taking focus", () => {
     });
 });
 
+describe("Escape with nothing else to end (Epic #113)", () => {
+    it("gives focus up, the active cell kept for the grid's tab stop", () => {
+        const { engine, model, element, render } = setup();
+        model.run("active-position.set", { rowIndex: 2, columnIndex: 1 });
+        render();
+        const cell = element.querySelector<HTMLElement>(
+            '[data-row-index="2"][data-column-index="1"]',
+        );
+        cell?.focus();
+        expect(document.activeElement).toBe(cell);
+        const result = keydown(engine, cell as HTMLElement, "Escape");
+        expect(result.handled).toBe(true);
+        expect(result.event.defaultPrevented).toBe(false);
+        expect(document.activeElement).toBe(document.body);
+        expect(model.get("active-position")).toEqual({
+            rowIndex: 2,
+            columnIndex: 1,
+        });
+        // the grid taking focus again (a Tab) hands it to the same cell
+        render();
+        element.tabIndex = 0;
+        element.focus();
+        expect(document.activeElement).toBe(cell);
+    });
+});
+
 describe("focus that should not activate", () => {
     it("ignores a click on the viewport's empty space", () => {
         const { model, element, render } = setup();

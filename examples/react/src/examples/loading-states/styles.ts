@@ -39,7 +39,7 @@ export const headerRow = cn(
 export const headerCell = cn(
     "flex items-center px-(--dg-cell-padding) outline-none",
     "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 /** the rows dim while a refetch runs (the grid is `aria-busy`): they are about to change */
@@ -54,7 +54,7 @@ export const row = (state: RowState) =>
 
 export const cell = cn(
     "flex items-center overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 /** a row not loaded yet (`data-loading`): a bar where its value will be */

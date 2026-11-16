@@ -632,7 +632,7 @@ describe("the empty state", () => {
         });
     });
 
-    it("spans the visible width when the columns are narrower", () => {
+    it("spans the columns when they are narrower than the view, the view without columns", () => {
         const narrow: Column<Person>[] = [
             { key: "name", width: 100 },
             { key: "age", width: 50 },
@@ -646,9 +646,22 @@ describe("the empty state", () => {
                 </DataGrid.Grid>
             </DataGrid.Root>,
         );
-        // 150px of columns in a 400px viewport: the grid, and the empty state, are 400px wide
+        // 150px of columns in a 400px viewport: the grid is 400px wide, the empty state sits
+        // under the columns (Epic #113)
         expect(parts(container, "grid")[0]?.style.width).toBe("400px");
-        expect(parts(container, "empty-area")[0]?.style.width).toBe("400px");
+        expect(parts(container, "empty-area")[0]?.style.width).toBe("150px");
+        const none = render(
+            <DataGrid.Root columns={[]} rows={[]}>
+                <DataGrid.Grid>
+                    <DataGrid.Header />
+                    <DataGrid.Body />
+                    <DataGrid.Empty />
+                </DataGrid.Grid>
+            </DataGrid.Root>,
+        );
+        expect(parts(none.container, "empty-area")[0]?.style.width).toBe(
+            "400px",
+        );
     });
 
     it("finds a table's structure from a render function's `<td>` too", () => {

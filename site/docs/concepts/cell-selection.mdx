@@ -61,7 +61,9 @@ On a body cell, Shift with an arrow, Home, End, PageUp or PageDown moves the foc
 Ctrl+Shift+Home and Ctrl+Shift+End (⌘ on a Mac) take it to the first or the last cell. The active
 cell stays where it is: the focus moves and is scrolled into view, never into the header or the
 summary rows. Ctrl+A selects every body cell. Escape clears the range, and so does a plain move
-of the active cell to another cell (an arrow, Home, a page key).
+of the active cell to another cell (an arrow, Home, a page key). A press anywhere outside the grid
+clears it too (the active cell stays). It runs `selected-range.clear`, so a middleware can refuse
+it, for a menu of your own that acts on the range from outside the grid.
 
 With [row selection](/docs/concepts/row-selection) on too, Shift+↑, Shift+↓ and Ctrl+A select
 cells, and Shift+Space still selects the row. Each key runs one command after your own
