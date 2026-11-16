@@ -361,7 +361,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     height, `useCellElement`: roving tab stop, pinned, spans, interaction;
     `data-grid-part="summary-cell"`, `data-summary`); `Body` starts below the top ones and `Grid`
     holds them all. Hooks `useSummaryRows`, `useSummaryRow`, `useSummaryCells` (the body cells'
-    span-aware walk, `cellsOf` in `hooks.ts`, shared with `useCells`), `useSummaryCell`;
+    span-aware walk, `cellsOf` in `utils/cells-of.ts`, shared with `useCells`), `useSummaryCell`;
     `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Their layer is the
     grid's (a structural `z-index`, below the header's, Epic #89, E5.2); their background is the
     app's, as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
@@ -588,7 +588,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    and column (`pastedRange`); no text, nothing. `Root` asks `onBeforeRangePaste(paste)` (`false`
    refuses) and then tells `onRangePaste(paste)` (named apart from the DOM's `onPaste`, which stays
    the root element's handler). The grid writes no data and selects nothing new. `parseTsv` and
-   `toTsv` (`src/clipboard.ts`, pure, exported): a tab between values, a line feed between rows, a
+   `toTsv` (`src/clipboard/clipboard.ts`, pure, exported): a tab between values, a line feed between rows, a
    value holding a tab, a line break or a double quote quoted (its quotes doubled); parsing reads
    LF, CRLF and CR lines, quoted values (what follows one before the tab kept; one never closed
    is text, its quote included, the tabs and line breaks splitting), drops one line break at the
@@ -844,7 +844,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    fromIndex, toIndex)` and `moveShownRow(rows, rowIndexes, …)`/`shownRowMove` in
    `@fragiola/data-grid/local`, the shown rows by their places among the rows given
    (`LocalRowsView.rowIndexes`, built when first read: equal rows told apart), `indexAfterMove`
-   (`utils.ts`, the engine's too); `useLocalRows`'s `moveRow(move)` placing it beside the row it
+   (`utils/utils.ts`, the engine's too); `useLocalRows`'s `moveRow(move)` placing it beside the row it
    lands next to on screen, filtered or paged). Measured heights are kept by index with their key:
    after a move, the shifted rows off screen count at the estimate until they render again
    (documented; the store is not remapped). Refused (`rowsMove(reorderableRows, sortColumns)`, parts): while sorted (the handle
@@ -1013,7 +1013,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | command | does |
 |---|---|
 | `pnpm install` | install dependencies |
-| `pnpm check` | Biome lint + format + assist (non-mutating) |
+| `pnpm check` | Biome lint + format + assist (non-mutating), then `check:layout` |
+| `pnpm check:layout` | the source layout over `git ls-files` (`scripts/check-layout.ts`, from Dockable): kebab-case names, only entries at a package's `src/` root |
 | `pnpm check:fix` | Biome check with auto-fix |
 | `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit) |
 | `pnpm test` | Vitest: `core` (node), `react` (jsdom), `playground`, `examples-react`, `site` |
@@ -1028,9 +1029,17 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 ## Repository layout
 
 ```
-packages/core/      @fragiola/data-grid        src/, tests/
-packages/react/     @fragiola/data-grid-react  src/, tests/
-apps/playground/    src/                       the shell: catalog, sidebar, toolbar, stage, source
+packages/core/      @fragiola/data-grid        src/<domain>/ (axis, engine, model, …, clipboard,
+                                               utils), local/, selection/, fill/; tests/ mirrors src/
+packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid.*`), context.ts
+                    src/components/            one primitive per file (root.tsx, grid.tsx, cell.tsx, …)
+                    src/hooks/                 one public hook per file (use-cell.ts, …,
+                                               use-data-grid-ref.ts); internal.ts: the primitives' own
+                    src/utils/                 pure helpers (cells-of.ts, row-style.ts, use-render.ts, …)
+                    src/local/, src/selection/ the opt-in entries; tests/ named after behaviour
+apps/playground/    src/main.tsx, app.tsx      the entries
+                    src/shell/                 the shell: catalog, sidebar, toolbar, stage, source
+                    src/fixture/               the fixtures' grids
                     fixtures/<name>/           unstyled pages Playwright drives
                     e2e/, tests/               Playwright specs, unit tests
 examples/react/     src/examples/<slug>/       the site's examples (the embed app, Vite)
@@ -1071,6 +1080,9 @@ themes) and the source beside the stage; the state is in the URL
 - Commits are gitmoji-conventional: `✨ feat(core): …`, `🐛 fix(react): …`,
   `✅ test(core): …`, `🔧 chore: …`, `📝 docs: …`.
 - Branches: `<type>/epic-<n>-<short-description>`; one worktree per Epic under `.worktrees/`.
+- Files follow the Fragiola source layout (`../guidelines/repository.md#source-layout`): every name
+  kebab-case, folders by responsibility, only entries at a `src/` root. `pnpm check:layout`
+  enforces it.
 
 ## Type safety
 
@@ -1087,7 +1099,7 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
 - **Reuse first.** Look for the helper that already exists (`sameCell`, `holdsRowIn`,
   `windowFor`, the row-key rule, the failure helper, the shared utils) before writing one. Logic
   needed twice becomes one function; a helper several modules use goes in a small shared module
-  (`src/utils.ts` in the core, `src/utils/` in React), outside `local/` and `selection/` so the main
+  (`src/utils/utils.ts` in the core, `src/utils/` in React), outside `local/` and `selection/` so the main
   entry never reaches the extras.
 - **The core grows only for the grid's own job.** Headless first (Epic #57): what is not the
   grid's own (ARIA, `data-*`, keys, focus, layout, data contract) is an opt-in entry point or the
@@ -1109,7 +1121,7 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
   observing, reading, forgetting), `measure` (their store and axis), `drag` (the drags' state and
   pure geometry: edge steps, drop sides, a fill's target), `dom` (DOM predicates, attributes, the
   wheel's scrollers, the clipboard's held selection). A helper only the main entry uses stays out
-  of `utils.ts` when `/local` imports that module too: a shared chunk carries every export the
+  of `utils/utils.ts` when `/local` imports that module too: a shared chunk carries every export the
   main entry uses (`pnpm size` shows it).
 
 A review checks:

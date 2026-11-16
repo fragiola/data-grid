@@ -1,6 +1,6 @@
 import type { CellSpan } from "../model/spans";
 import type { CellPosition, SummaryRowCounts } from "../model/types";
-import { clamp } from "../utils";
+import { clamp } from "../utils/utils";
 import type { Range } from "../viewport/window";
 
 // Where the active cell goes for a key (D11, the APG grid pattern). Pure: the model commits what

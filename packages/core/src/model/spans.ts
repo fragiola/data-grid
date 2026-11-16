@@ -5,7 +5,7 @@ import {
     partStart,
     pinnedPartsOf,
 } from "../header/header";
-import { lowerBound } from "../utils";
+import { lowerBound } from "../utils/utils";
 import { dataRowAt, rowMetaAt } from "./source";
 import { summaryRowAt } from "./summary";
 import type { CellPosition, ColSpanArgs, Column, DataGridState } from "./types";

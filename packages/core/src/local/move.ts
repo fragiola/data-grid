@@ -1,4 +1,4 @@
-import { isIndex } from "../utils";
+import { isIndex } from "../utils/utils";
 
 // Moving a row in memory (Epic #86, E2.3): the grid tells a move (`row-move`, a root's
 // `onRowMove`) and never orders the rows itself; the app applies it to its own rows.

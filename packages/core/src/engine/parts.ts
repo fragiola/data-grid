@@ -30,7 +30,7 @@ import {
     spanWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
-import { keySet } from "../utils";
+import { keySet } from "../utils/utils";
 import {
     COLUMN_RESIZER_ATTRIBUTE,
     FILL_HANDLE_ATTRIBUTE,

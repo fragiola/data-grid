@@ -13,7 +13,7 @@ import type {
     SummaryRowView,
 } from "@fragiola/data-grid";
 import { createContext, type ReactNode, useContext } from "react";
-import { type DataGridRef, useGridRefCurrent } from "./gridRef";
+import { type DataGridRef, useGridRefCurrent } from "./hooks/use-data-grid-ref";
 
 /** A column of a React grid: its renderers return React nodes. One generic, the row type (D10). */
 export type Column<TRow> = CoreColumn<TRow, ReactNode>;

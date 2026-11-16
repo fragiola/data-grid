@@ -1,4 +1,4 @@
-import { isIndex } from "../utils";
+import { isIndex } from "../utils/utils";
 import { fail } from "./result";
 import { dataRowAt, rowMetaAt } from "./source";
 import type {

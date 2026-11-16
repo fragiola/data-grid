@@ -2,7 +2,7 @@
 // paged (Epic #47). An opt-in entry point: the grid itself never orders, filters or groups rows,
 // and an app that never imports this never ships it.
 
-export { indexAfterMove } from "../utils";
+export { indexAfterMove } from "../utils/utils";
 export type { LocalFilters } from "./filter";
 export {
     type GroupedRows,

@@ -9,7 +9,7 @@ import type {
     ReorderSide,
     RowKey,
 } from "../model/types";
-import { keptIfSame } from "../utils";
+import { keptIfSame } from "../utils/utils";
 
 // The engine's drags (Epics #70, #75, #86, #88): what each one keeps while the pointer moves, and
 // the pure geometry they share (the edge scroll's step, a drop's side, a fill's target). The

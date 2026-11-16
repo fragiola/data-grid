@@ -1,10 +1,16 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { entries, findEntry, fixtures, sections } from "./catalog";
-import { Sidebar } from "./sidebar";
-import { SourcePanel } from "./source-panel";
-import { Stage } from "./stage";
-import { Toolbar } from "./toolbar";
-import { applyTheme, parseView, sameItem, toSearch, type View } from "./view";
+import { entries, findEntry, fixtures, sections } from "./shell/catalog";
+import { Sidebar } from "./shell/sidebar";
+import { SourcePanel } from "./shell/source-panel";
+import { Stage } from "./shell/stage";
+import { Toolbar } from "./shell/toolbar";
+import {
+    applyTheme,
+    parseView,
+    sameItem,
+    toSearch,
+    type View,
+} from "./shell/view";
 
 // The shell: sidebar, toolbar, stage and source panel, built from the Fragiola UI vendored in
 // examples/react and painted through palette roles only. The stage shows the entry alone, as the

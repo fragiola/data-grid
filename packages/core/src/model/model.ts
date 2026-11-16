@@ -19,7 +19,7 @@ import {
     keySet,
     sameKeys,
     toggledKey,
-} from "../utils";
+} from "../utils/utils";
 import { overlaps } from "../viewport/window";
 import {
     collapsingKeys,

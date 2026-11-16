@@ -1,4 +1,4 @@
-import { isIndex, keySet } from "../utils";
+import { isIndex, keySet } from "../utils/utils";
 import type {
     CellKeys,
     CellPosition,

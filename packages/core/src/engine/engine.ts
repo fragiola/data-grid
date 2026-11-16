@@ -1,5 +1,5 @@
 import type { Axis } from "../axis/axis";
-import { parseTsv } from "../clipboard";
+import { parseTsv } from "../clipboard/clipboard";
 import {
     columnPart,
     headerRowCount,
@@ -67,7 +67,7 @@ import {
     withoutWidths,
 } from "../model/widths";
 import { type Direction, sameCell } from "../navigation/navigation";
-import { clamp, indexAfterMove, isIndex, lowerBound } from "../utils";
+import { clamp, indexAfterMove, isIndex, lowerBound } from "../utils/utils";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,

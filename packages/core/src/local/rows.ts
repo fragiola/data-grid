@@ -1,6 +1,6 @@
 import { leafColumns } from "../header/header";
 import type { ColumnOrGroup, RowKey, SortColumn } from "../model/types";
-import { memo, sameList } from "../utils";
+import { memo, sameList } from "../utils/utils";
 import {
     entriesOf,
     filterEntries,

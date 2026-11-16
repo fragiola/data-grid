@@ -6,7 +6,7 @@ import {
     pinnedPart,
     pinnedPartsOf,
 } from "../header/header";
-import { lowerBound, sameList } from "../utils";
+import { lowerBound, sameList } from "../utils/utils";
 import type {
     Column,
     HeaderCellLayout,

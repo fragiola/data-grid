@@ -1,4 +1,4 @@
-import { keySet, lowerBound, sameList } from "../utils";
+import { keySet, lowerBound, sameList } from "../utils/utils";
 import type { Range } from "../viewport/window";
 import { loadedRowKey, type RowsState } from "./source";
 import type { DataGridState, RowKey } from "./types";

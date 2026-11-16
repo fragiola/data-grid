@@ -1,5 +1,5 @@
 import type { Axis } from "../axis/axis";
-import { clamp, isWidth } from "../utils";
+import { clamp, isWidth } from "../utils/utils";
 import type { Column, ColumnWidths, HeaderCellLayout } from "./types";
 
 // Column widths (Epic #70, W1–W5; Epic #80, A1–A5): a resizable column's width is its resized
