@@ -1,3 +1,4 @@
+import { summaryCellsOf } from "@fragiola/data-grid";
 import { useContext } from "react";
 import {
     type SummaryCellInfo,
@@ -5,7 +6,6 @@ import {
     type SummaryRowInfo,
 } from "../context";
 
-import { cellsOf } from "../utils/cells-of";
 import { useGridView } from "./use-grid-view";
 
 /**
@@ -24,11 +24,5 @@ export function useSummaryCells<TRow = unknown>(
             "useSummaryCells() must be given a row, or be used inside <DataGrid.SummaryRow>",
         );
     }
-    return cellsOf(view, at.rowIndex, (columnIndex, column) => ({
-        rowIndex: at.rowIndex,
-        columnIndex,
-        column,
-        position: at.position,
-        summaryIndex: at.summaryIndex,
-    }));
+    return summaryCellsOf(view, at);
 }

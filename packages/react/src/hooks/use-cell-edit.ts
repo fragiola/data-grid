@@ -1,4 +1,8 @@
-import { type EditCellRenderProps, isHeldCell } from "@fragiola/data-grid";
+import {
+    type EditCellRenderProps,
+    editActions,
+    editCellPropsOf,
+} from "@fragiola/data-grid";
 import { type ReactNode, useMemo } from "react";
 import { type CellInfo, useRootGrid } from "../context";
 
@@ -19,33 +23,6 @@ export function useCellEdit<TRow>(
 ): EditCellRenderProps<TRow, ReactNode> | null {
     const { engine } = useRootGrid();
     const draft = useEngineValue(engine, "edit-draft", null);
-    const ways = useMemo(
-        () => ({
-            onChange: (value: unknown) => engine.run("change-edit", { value }),
-            onCommit: (...value: [] | [value: unknown]) =>
-                engine.run(
-                    "commit-edit",
-                    value.length > 0 ? { value: value[0] } : {},
-                ),
-            onCancel: () => engine.run("cancel-edit", {}),
-        }),
-        [engine],
-    );
-    // the edited cell is the view's: the draft has no position of its own
-    const editing = useGridView<TRow>().editingCell;
-    const { row, rowIndex, column, columnIndex } = cell;
-    if (!draft || row === undefined || !editing || !isHeldCell(editing, cell)) {
-        return null;
-    }
-    return {
-        row,
-        rowIndex,
-        column,
-        columnIndex,
-        value: draft.value,
-        initialValue: draft.initialValue,
-        startKey: editing.startKey,
-        editorProps: draft.editorProps,
-        ...ways,
-    };
+    const actions = useMemo(() => editActions(engine), [engine]);
+    return editCellPropsOf(useGridView<TRow>(), cell, draft, actions);
 }

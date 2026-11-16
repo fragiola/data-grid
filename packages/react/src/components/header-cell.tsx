@@ -1,9 +1,9 @@
 import type { HeaderCellState } from "@fragiola/data-grid";
+import { headerCellContent } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import type { HeaderCellInfo } from "../context";
 import { useCellElement } from "../hooks/internal";
 import { useHeaderCell } from "../hooks/use-header-cell";
-import { headerCellContent } from "../utils/header-cell-content";
 import type { DivPrimitiveProps } from "../utils/use-render";
 
 export type HeaderCellProps<TRow> = DivPrimitiveProps<HeaderCellState> & {

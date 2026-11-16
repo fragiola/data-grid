@@ -1,10 +1,9 @@
 import {
     type GroupToggleState,
-    groupTogglePart,
+    groupTogglePartOf,
     type RowMeta,
 } from "@fragiola/data-grid";
 
-import { controlPart, groupToggleData } from "../utils/control-part";
 import type { PartHookResult } from "./internal";
 import { useGridView } from "./use-grid-view";
 
@@ -21,11 +20,5 @@ export function useGroupToggle(row: {
     /** the row's kind as read (a row's or a cell's info carries it): not read again */
     readonly meta?: RowMeta | undefined;
 }): PartHookResult<GroupToggleState> {
-    const view = useGridView();
-    const { state, attributes } = groupTogglePart(
-        view,
-        row.rowIndex,
-        "meta" in row ? { meta: row.meta } : undefined,
-    );
-    return controlPart(state, attributes, groupToggleData);
+    return groupTogglePartOf(useGridView(), row);
 }

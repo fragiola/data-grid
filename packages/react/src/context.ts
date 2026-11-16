@@ -1,14 +1,14 @@
 import type {
-    CellEdit,
     Column as CoreColumn,
     ColumnGroup as CoreColumnGroup,
     DataGridEngine,
     DataGridModel,
+    GridCellInfo,
+    GridRowInfo,
+    GridSummaryCellInfo,
     GridView,
-    GroupRow,
     HeaderCellLayout,
     HeaderRowView,
-    RowMeta,
     SummaryPosition,
     SummaryRowView,
 } from "@fragiola/data-grid";
@@ -24,55 +24,17 @@ export type ColumnGroup<TRow> = CoreColumnGroup<TRow, ReactNode>;
 /** An entry of `columns`: a column, or a group of them. */
 export type ColumnOrGroup<TRow> = Column<TRow> | ColumnGroup<TRow>;
 
-/**
- * An edit committed (Epic #88, E4.3), as `onCellEdit` tells it: the cell, its column's key, the
- * value, and the row (loaded: a cell is edited only then), which the app writes it into.
- */
-export interface CellEditEvent<TRow> extends CellEdit {
-    readonly row: TRow;
-}
-
 /** What `useDataGrid()` returns: the grid's model and its engine. */
 export interface DataGridContextValue<TRow = unknown> {
     model: DataGridModel<TRow, ReactNode>;
     engine: DataGridEngine<TRow, ReactNode>;
 }
 
-/** A body row, as `DataGrid.Rows` hands it to its children. */
-export interface RowInfo<TRow = unknown> {
-    readonly rowIndex: number;
-    /** `undefined` while the row is not loaded, and for a group row (it has none) */
-    readonly row: TRow | undefined;
-    /** a data row loaded, or a group row (Epic #87: nothing to wait for) */
-    readonly loaded: boolean;
-    /** the row's key: `rowKey(row, index)`, or its index; a group row's group key */
-    readonly key: string | number;
-    /** a group row's group (Epic #87, `getRowMeta`); `undefined` for a data row */
-    readonly group: GroupRow | undefined;
-    /** its depth in the grid's tree (Epic #87): 0 at the top, and without row kinds */
-    readonly depth: number;
-    /** its kind as the grid read it (`getRowMeta`'s answer, Epic #87): its parts read no more */
-    readonly meta: RowMeta | undefined;
-}
+/** A body row, as `DataGrid.Rows` hands it to its children (the core's `GridRowInfo`). */
+export type RowInfo<TRow = unknown> = GridRowInfo<TRow>;
 
-/** A body cell, as `DataGrid.Cells` hands it to its children. */
-export interface CellInfo<TRow = unknown> {
-    readonly rowIndex: number;
-    readonly columnIndex: number;
-    readonly column: Column<TRow>;
-    /** `undefined` while the row is not loaded, and on a group row */
-    readonly row: TRow | undefined;
-    readonly loaded: boolean;
-    /**
-     * `column.getValue(row)`, or `row[column.key]`; `undefined` while the row is not loaded. On a
-     * group row (Epic #87), the group's value in the column it groups by, else its aggregate
-     */
-    readonly value: unknown;
-    /** its row's group, on a group row (Epic #87) */
-    readonly group: GroupRow | undefined;
-    /** its row's kind (Epic #87), as its row's info */
-    readonly meta: RowMeta | undefined;
-}
+/** A body cell, as `DataGrid.Cells` hands it to its children: its renderers return React nodes. */
+export type CellInfo<TRow = unknown> = GridCellInfo<TRow, ReactNode>;
 
 /**
  * A header cell, as `DataGrid.HeaderCells` hands it to its children: a group (`group`) or a
@@ -90,13 +52,10 @@ export type HeaderRowInfo<TRow = unknown> = HeaderRowView<TRow, ReactNode>;
 export type SummaryRowInfo = SummaryRowView;
 
 /** A summary row's cell, as `DataGrid.SummaryCells` hands it to its children. */
-export interface SummaryCellInfo<TRow = unknown> {
-    readonly rowIndex: number;
-    readonly columnIndex: number;
-    readonly column: Column<TRow>;
-    readonly position: SummaryPosition;
-    readonly summaryIndex: number;
-}
+export type SummaryCellInfo<TRow = unknown> = GridSummaryCellInfo<
+    TRow,
+    ReactNode
+>;
 
 export const DataGridContext = createContext<DataGridContextValue | null>(null);
 

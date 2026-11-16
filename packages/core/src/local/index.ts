@@ -9,8 +9,16 @@ export {
     groupKeyOf,
     type LocalGrouping,
 } from "./group";
-export { moveRow, moveShownRow, shownRowMove } from "./move";
+export { moveRow, moveShownRow, moveShownRowAt, shownRowMove } from "./move";
 export { pageCount } from "./page";
+export {
+    type LocalRowsInputs,
+    type LocalRowsProps,
+    type LocalRowsResult,
+    localRowsResult,
+    plainRowKey,
+    type UseLocalRowsOptions,
+} from "./result";
 export {
     createLocalRows,
     filterRows,

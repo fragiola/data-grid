@@ -1,9 +1,8 @@
 import {
     type RowDragHandleState,
-    rowDragHandlePart,
+    rowDragHandlePartOf,
 } from "@fragiola/data-grid";
 
-import { controlPart, dragHandleData } from "../utils/control-part";
 import type { PartHookResult } from "./internal";
 import { useGridView } from "./use-grid-view";
 
@@ -21,11 +20,5 @@ export function useRowDragHandle(row: {
     readonly rowIndex: number;
     readonly loaded: boolean;
 }): PartHookResult<RowDragHandleState> {
-    const view = useGridView();
-    const { state, attributes } = rowDragHandlePart(
-        view,
-        row.rowIndex,
-        row.loaded,
-    );
-    return controlPart(state, attributes, dragHandleData);
+    return rowDragHandlePartOf(useGridView(), row);
 }

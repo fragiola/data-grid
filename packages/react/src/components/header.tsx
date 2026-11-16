@@ -1,11 +1,7 @@
+import { headerPropsOf } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import { useGridView } from "../hooks/use-grid-view";
-import { HEADER_LAYER } from "../utils/sticky-layers";
-import {
-    type DivPrimitiveProps,
-    dataAttributes,
-    useRenderElement,
-} from "../utils/use-render";
+import { type DivPrimitiveProps, useRenderElement } from "../utils/use-render";
 import { HeaderRows } from "./header-rows";
 
 export type HeaderProps = DivPrimitiveProps<Record<string, never>> & {
@@ -25,20 +21,7 @@ export function Header(props: HeaderProps) {
     const element = useRenderElement("div", rest, {
         state: {},
         children,
-        props: {
-            role: "rowgroup",
-            ...dataAttributes({ "grid-part": "header" }),
-            style: {
-                position: "sticky",
-                top: 0,
-                // above the rows scrolling under it and the summary rows (Epic #89, E5.2); its
-                // background is the app's
-                zIndex: HEADER_LAYER,
-                display: "block",
-                height: view.headerHeight,
-                boxSizing: "border-box",
-            },
-        },
+        props: headerPropsOf(view),
     });
     return view.headerRowCount > 0 ? element : null;
 }

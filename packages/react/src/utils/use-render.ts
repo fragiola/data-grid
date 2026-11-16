@@ -46,22 +46,6 @@ type DivProps = Omit<
 /** The props of a primitive that renders a `div` by default. */
 export type DivPrimitiveProps<State> = PrimitiveProps<State> & DivProps;
 
-/** `data-*` attributes from a record: `true` → present (empty), `false`/`undefined` → absent. */
-export function dataAttributes(
-    record: Record<string, string | number | boolean | undefined>,
-) {
-    const attributes: Record<string, string> = {};
-    for (const key in record) {
-        const value = record[key];
-        if (value === true) {
-            attributes[`data-${key}`] = "";
-        } else if (value !== false && value !== undefined) {
-            attributes[`data-${key}`] = String(value);
-        }
-    }
-    return attributes;
-}
-
 type AnyProps = Record<string, unknown>;
 
 interface RenderOptions<State> {

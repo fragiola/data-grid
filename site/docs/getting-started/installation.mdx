@@ -1,26 +1,58 @@
 ---
 title: Installation
-description: Install the React package, check the peer dependencies, and give the grid a size to scroll in.
+description: Install the React or the Vue package, check the peer dependencies, and give the grid a size to scroll in.
 ---
 
 ## Install the package
+
+<Framework name="react">
+
+A React app installs one package, `@fragiola/data-grid-react`: the primitives, the hooks and the
+whole framework-agnostic core, re-exported.
 
 ```sh title="Terminal"
 pnpm add @fragiola/data-grid-react
 ```
 
+</Framework>
+
+<Framework name="vue">
+
+A Vue app installs one package, `@fragiola/data-grid-vue`: the primitives, the composables and
+the whole framework-agnostic core, re-exported.
+
+```sh title="Terminal"
+pnpm add @fragiola/data-grid-vue vue
+```
+
+</Framework>
+
 The core, `@fragiola/data-grid`, comes along: import its types and helpers from either package.
 
 ## Peer dependencies
 
+<Framework name="react">
+
 The React package needs React 19 (`react` and `react-dom`). It has no other runtime
 dependency, and the core has none at all.
+
+</Framework>
+
+<Framework name="vue">
+
+The Vue package needs Vue 3.5 (`vue` **^3.5**). It has no other runtime dependency, and the core
+has none at all. The Vue package renders in the browser only: server rendering is not supported
+yet.
+
+</Framework>
 
 ## No stylesheet
 
 There is nothing to import for styles: the primitives set only the inline style they need to
-place things (positions and sizes). Style the parts with your own classes, through `className`,
-`style` or `render`. See [Styling with Tailwind](/docs/guides/styling-tailwind) and
+place things (positions and sizes). Style the parts with your own classes: in React through
+`className`, `style` or `render`, in Vue through `class`, `style`, `as` or the `render` slot
+([Vue primitives](/docs/api/vue) maps each React prop the other pages show). See
+[Styling with Tailwind](/docs/guides/styling-tailwind) and
 [Styling with plain CSS](/docs/guides/styling-css).
 
 <Callout type="info" title="A size to scroll in">

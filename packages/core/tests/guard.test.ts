@@ -29,8 +29,9 @@ function codeOnly(source: string): string {
 const GLOBAL_DOM =
     /(?<![.\w$])(document|window|requestAnimationFrame|cancelAnimationFrame|getComputedStyle|navigator|localStorage|sessionStorage|ResizeObserver)\b(?!\s*:)/;
 
-const IMPORT_REACT =
-    /(?:from\s+|import\s+|import\s*\(\s*|require\s*\(\s*)["'](?:react|react-dom)(?:\/[^"']*)?["']/;
+// no framework: React, Vue or Angular (each adapter's own)
+const IMPORT_FRAMEWORK =
+    /(?:from\s+|import\s+|import\s*\(\s*|require\s*\(\s*)["'](?:react|react-dom|vue|@vue\/[^"']+|@angular\/[^"']+)(?:\/[^"']*)?["']/;
 
 /**
  * The files derived from a reference project (D2), each with the project it comes from. A file
@@ -90,9 +91,9 @@ describe("core package guard", () => {
         expect(pkg.peerDependencies ?? {}).toEqual({});
     });
 
-    it("never imports react or react-dom", () => {
+    it("never imports a framework (react, react-dom, vue, angular)", () => {
         const offenders = listFiles(src).filter((file) =>
-            IMPORT_REACT.test(readFileSync(file, "utf8")),
+            IMPORT_FRAMEWORK.test(readFileSync(file, "utf8")),
         );
         expect(offenders).toEqual([]);
     });
@@ -138,7 +139,7 @@ describe("core package guard", () => {
                 expect(rootLicence).toContain(line);
             }
         }
-        for (const pkg of ["core", "react"]) {
+        for (const pkg of ["core", "react", "vue"]) {
             expect(readFileSync(join(root, "..", pkg, "LICENSE"), "utf8")).toBe(
                 rootLicence,
             );
@@ -159,12 +160,17 @@ describe("core package guard", () => {
         expect(found("function f(window: Window) {}")).toBe(false);
     });
 
-    it("detects a react import and an exported any", () => {
-        expect(IMPORT_REACT.test('import type * as React from "react";')).toBe(
-            true,
+    it("detects a framework import and an exported any", () => {
+        expect(
+            IMPORT_FRAMEWORK.test('import type * as React from "react";'),
+        ).toBe(true);
+        expect(IMPORT_FRAMEWORK.test('import "react-dom/client";')).toBe(true);
+        expect(IMPORT_FRAMEWORK.test('import { x } from "./reactive";')).toBe(
+            false,
         );
-        expect(IMPORT_REACT.test('import "react-dom/client";')).toBe(true);
-        expect(IMPORT_REACT.test('import { x } from "./reactive";')).toBe(
+        expect(IMPORT_FRAMEWORK.test('import { h } from "vue";')).toBe(true);
+        expect(IMPORT_FRAMEWORK.test('import "@vue/test-utils";')).toBe(true);
+        expect(IMPORT_FRAMEWORK.test('import { x } from "./vue-ish";')).toBe(
             false,
         );
         expect(

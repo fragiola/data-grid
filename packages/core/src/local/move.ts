@@ -1,4 +1,4 @@
-import { isIndex } from "../utils/utils";
+import { indexAfterMove, isIndex } from "../utils/utils";
 
 // Moving a row in memory (Epic #86, E2.3): the grid tells a move (`row-move`, a root's
 // `onRowMove`) and never orders the rows itself; the app applies it to its own rows.
@@ -68,4 +68,33 @@ export function moveShownRow<TRow>(
 ): readonly TRow[] {
     const move = shownRowMove(rowIndexes, fromIndex, toIndex);
     return move ? moveRow(rows, move.fromIndex, move.toIndex) : rows;
+}
+
+/**
+ * A move of the rows a grid shows applied to `rows` (`shownRowMove`), and where the shown rows
+ * are among the rows returned: each one where the move put it, in their new order. What a
+ * `useLocalRows`'s `moveRow` keeps, so a next move before a render is one on screen after this
+ * one. `null` when nothing moves.
+ */
+export function moveShownRowAt<TRow>(
+    rows: readonly TRow[],
+    rowIndexes: readonly number[],
+    fromIndex: number,
+    toIndex: number,
+): {
+    readonly rows: readonly TRow[];
+    readonly rowIndexes: readonly number[];
+} | null {
+    const move = shownRowMove(rowIndexes, fromIndex, toIndex);
+    if (!move) return null;
+    return {
+        rows: moveRow(rows, move.fromIndex, move.toIndex),
+        rowIndexes: moveRow(
+            rowIndexes.map((index) =>
+                indexAfterMove(index, move.fromIndex, move.toIndex),
+            ),
+            fromIndex,
+            toIndex,
+        ),
+    };
 }

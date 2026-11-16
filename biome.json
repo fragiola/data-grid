@@ -15,7 +15,8 @@
             "**/*.jsonc",
             "**/*.css",
             "**/*.mdx",
-            "**/*.md"
+            "**/*.md",
+            "**/*.vue"
         ]
     },
     "formatter": {
@@ -62,5 +63,21 @@
             "lineEnding": "lf",
             "trailingNewline": true
         }
-    }
+    },
+    "overrides": [
+        {
+            "includes": ["**/*.vue"],
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noUnusedImports": "off",
+                        "noUnusedVariables": "off"
+                    },
+                    "style": {
+                        "useVueMultiWordComponentNames": "off"
+                    }
+                }
+            }
+        }
+    ]
 }

@@ -1,0 +1,11 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "jsx": "preserve",
+        "types": ["@testing-library/jest-dom/vitest"],
+        "customConditions": ["@fragiola/source"],
+        "allowImportingTsExtensions": true,
+        "stripInternal": true
+    },
+    "include": ["src", "tests", "*.config.ts"]
+}

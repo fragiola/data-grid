@@ -1,10 +1,9 @@
-import type { RowDetailState } from "@fragiola/data-grid";
+import { PINNED_KEYS, type RowDetailState } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import { useRowContext } from "../context";
 import { useLayer } from "../hooks/internal";
 import { useGridView } from "../hooks/use-grid-view";
 import { useRowDetail } from "../hooks/use-row-detail";
-import { PINNED_KEYS } from "../utils/drop-keys";
 import { type DivPrimitiveProps, useRenderElement } from "../utils/use-render";
 import { withTableSpans } from "../utils/with-table-spans";
 

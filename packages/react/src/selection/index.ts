@@ -4,9 +4,8 @@
 import type { RowKey } from "@fragiola/data-grid";
 import {
     type SelectionStatus,
-    selectionStatus,
-    withoutRowKeys,
-    withRowKeys,
+    selectAllState,
+    selectAllToggled,
 } from "@fragiola/data-grid/selection";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useDataGrid } from "../context";
@@ -38,8 +37,6 @@ export interface SelectAll {
     readonly canToggle: boolean;
 }
 
-const NONE = { status: "none", count: 0 } as const;
-
 /**
  * A "select all" control's state over the rows the app names (`rowKeys`: the rows on screen, a
  * page, every filtered row; leave out the rows that cannot be selected), and its toggle, through
@@ -64,28 +61,20 @@ export function useSelectAll<TRow>(
     const readMode = () => model?.state.rowSelection;
     const selected = useSyncExternalStore(subscribe, readKeys, readKeys);
     const mode = useSyncExternalStore(subscribe, readMode, readMode);
-    const { status, count } = useMemo(
-        () => (mode && selected ? selectionStatus(rowKeys, selected) : NONE),
+    const { status, count, canToggle } = useMemo(
+        () => selectAllState(mode, selected ?? [], rowKeys),
         [mode, selected, rowKeys],
     );
     const toggle = useCallback(() => {
-        if (!model || !mode) return;
-        const current = model.state.selectedRowKeys;
-        if (status === "all" || mode === "single") {
-            if (count > 0) {
-                model.run("selected-rows.set", {
-                    rowKeys: withoutRowKeys(current, rowKeys),
-                });
-            }
-            return;
+        if (!model) return;
+        const rowKeysSet = selectAllToggled(
+            mode,
+            model.state.selectedRowKeys,
+            rowKeys,
+        );
+        if (rowKeysSet) {
+            model.run("selected-rows.set", { rowKeys: rowKeysSet });
         }
-        model.run("selected-rows.set", {
-            rowKeys: withRowKeys(current, rowKeys),
-        });
-    }, [model, mode, status, count, rowKeys]);
-    const canToggle =
-        mode === "multiple"
-            ? rowKeys.length > 0
-            : mode === "single" && count > 0;
+    }, [model, mode, rowKeys]);
     return { status, count, toggle, canToggle };
 }

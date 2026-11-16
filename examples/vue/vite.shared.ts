@@ -1,0 +1,77 @@
+import { resolve } from "node:path";
+import { THEMES } from "examples-shared/themes";
+import {
+    defaultClientConditions,
+    defaultServerConditions,
+    type Plugin,
+    type UserConfig,
+} from "vite";
+import { withSourceCondition } from "../../scripts/source-condition.ts";
+
+// How this app renders the examples: shared by its Vite config and its Vitest config. The same
+// resolution and pre-paint theme as examples/react/vite.shared.ts, for Vue.
+
+/** What `#/` points at: the examples, and the styles and helpers copied next to them (§6). */
+export const EXAMPLES_SRC = resolve(import.meta.dirname, "src");
+
+/**
+ * For a Vitest project: the workspace packages from their sources in both environments, the
+ * client one (jsdom) and the server one (node), so that switching a test's environment never
+ * falls back to `dist` silently.
+ */
+export function examplesTestResolve(): Pick<UserConfig, "resolve" | "ssr"> {
+    return {
+        resolve: examplesResolve("serve"),
+        ssr: {
+            resolve: {
+                conditions: withSourceCondition(defaultServerConditions),
+            },
+        },
+    };
+}
+
+/**
+ * `#/` is src/. Dev resolves the workspace packages to their sources (the source condition) so the
+ * core and Vue sources hot-reload; the build uses `dist`. One Vue for the app and the adapter.
+ */
+export function examplesResolve(
+    command: "serve" | "build",
+): UserConfig["resolve"] {
+    return {
+        alias: [{ find: /^#\//, replacement: `${EXAMPLES_SRC}/` }],
+        dedupe: ["vue"],
+        ...(command === "serve"
+            ? { conditions: withSourceCondition(defaultClientConditions) }
+            : {}),
+    };
+}
+
+/**
+ * Applies `?theme=` before the first paint (§5.1): the scheme on `<html>` (`data-theme`, `.dark`)
+ * for the Fragiola palettes, and the example theme on `<body>` (`data-example-theme`), so
+ * everything in the document takes it: the example, and the menus and popups portalled into
+ * `<body>`.
+ * Missing or unknown → the first light theme. The same script as examples/react's: the theme list
+ * comes from examples/shared/src/themes/themes.ts, so the two cannot drift.
+ */
+export function prePaintTheme(): Plugin {
+    const schemes = Object.fromEntries(
+        THEMES.map((theme) => [theme.name, theme.scheme]),
+    );
+    const fallback = THEMES.find((theme) => theme.scheme === "light")?.name;
+    const script = `(() => {
+    const schemes = ${JSON.stringify(schemes)};
+    const asked = new URLSearchParams(location.search).get("theme");
+    const theme = asked && Object.hasOwn(schemes, asked) ? asked : ${JSON.stringify(fallback)};
+    const html = document.documentElement;
+    html.dataset.theme = schemes[theme];
+    html.classList.toggle("dark", schemes[theme] === "dark");
+    document.body.dataset.exampleTheme = theme;
+})();`;
+    return {
+        name: "pre-paint-theme",
+        transformIndexHtml: () => [
+            { tag: "script", children: script, injectTo: "body-prepend" },
+        ],
+    };
+}

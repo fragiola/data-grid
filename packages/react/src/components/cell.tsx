@@ -1,18 +1,9 @@
-import { type CellState, valueText } from "@fragiola/data-grid";
+import { type CellState, cellContent } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import type { CellInfo } from "../context";
 import { useCellElement, useCellPart } from "../hooks/internal";
 import { useCellEdit } from "../hooks/use-cell-edit";
 import type { DivPrimitiveProps } from "../utils/use-render";
-
-/**
- * A value rendered as text when the cell has no children and its column no `renderCell`: a string
- * as it is, a number, a big integer or a boolean written out (`valueText`, what a copy takes,
- * Epic #88); nothing for anything else.
- */
-function plain(value: unknown): ReactNode {
-    return typeof value === "string" ? value : valueText(value) || null;
-}
 
 export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
     cell: CellInfo<TRow>;
@@ -41,27 +32,9 @@ export function Cell<TRow>(props: CellProps<TRow>) {
     } else if (own.state.editing && cell.column.renderEditCell) {
         // the cell being edited (Epic #88): its column's editor, the draft its own
         content = <EditCell cell={cell} />;
-    } else if (cell.group) {
-        // a group row has no data row: its group's value and aggregates (Epic #87)
-        content = cell.column.renderGroupCell
-            ? cell.column.renderGroupCell({
-                  group: cell.group,
-                  rowIndex: cell.rowIndex,
-                  column: cell.column,
-                  columnIndex: cell.columnIndex,
-                  value: cell.value,
-              })
-            : plain(cell.value);
-    } else if (cell.loaded && cell.row !== undefined) {
-        content = cell.column.renderCell
-            ? cell.column.renderCell({
-                  row: cell.row,
-                  rowIndex: cell.rowIndex,
-                  column: cell.column,
-                  columnIndex: cell.columnIndex,
-                  value: cell.value,
-              })
-            : plain(cell.value);
+    } else {
+        // a group row's renderer or value, a loaded row's (the core's rule)
+        content = cellContent(cell);
     }
     return useCellElement(rest, own, content, own.columnSpan, own.measured);
 }
