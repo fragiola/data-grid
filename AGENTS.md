@@ -1251,8 +1251,9 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
 - **`Empty` renders only while there are no rows (Epic #12, E3).** It is a cell (Epic #89, E5.2:
   `role="gridcell"`, `aria-colspan` every column; rendered as a `<td>`, `colSpan`, no role) in a
   row of its own (`data-grid-part="empty-row"`, `role="row"`; a `<tr>` for a `<td>`), in an area
-  of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as large as
-  the visible body; a `<tbody>` for a `<td>`): a table's structure in a table grid (`Grid`
+  of its own (`empty-area`: in the flow after `Header`, sticky at the inline start, as tall as
+  the visible body and as wide as the columns, at most the view, the view without columns: Epic
+  #113, so content centred in it sits under the header; a `<tbody>` for a `<td>`): a table's structure in a table grid (`Grid`
   rendered as a `<table>` element: `TableContext`; there `Empty`'s own tag is a `<td>`, and a
   component rendering one, `render={<Td />}`, is given `colSpan`) or when its rendered element is
   a `<td>`; else divs with roles. The app's class, style and children go on the cell (`height: 100%`; a `<td>` a block,

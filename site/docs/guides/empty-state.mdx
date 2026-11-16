@@ -12,7 +12,8 @@ area while there are no rows, and nothing once there are.
 
 Place `Empty` inside `Grid`, after the `Header`. It is a cell of its own (`role="gridcell"`,
 spanning every column) in a row of its own (`role="row"`), in an area right below the header, as
-large as the visible body, that stays in view when the grid scrolls sideways (wide columns still
+tall as the visible body and as wide as the columns (at most the visible body, the whole of it
+without columns), so what you centre in it sits under the header, that stays in view when the grid scrolls sideways (wide columns still
 scroll their header). Your class, style and children go on the cell; it has no text or name of
 its own: what it says is yours.
 
@@ -33,7 +34,7 @@ its own: what it says is yours.
 
 The cell is as tall as the area (a structural `height` and `box-sizing`), and its display is
 yours: a flex column or a grid lays the content out, as above. The area (its part is
-`empty-area`: sticky, as wide and tall as the visible body) and the row (`empty-row`: a block as
+`empty-area`: sticky, as tall as the visible body, as wide as the columns in view) and the row (`empty-row`: a block as
 tall as the area) are the grid's own elements, with structural style only: paint the cell, or
 select them by their `data-grid-part` in CSS.
 

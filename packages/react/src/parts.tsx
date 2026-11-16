@@ -448,7 +448,12 @@ export function Empty(props: EmptyProps) {
                 position: "sticky",
                 [inlineSide(view.direction)]: 0,
                 display: "block",
-                width: view.viewportWidth,
+                // under the columns in view (Epic #113): as wide as they are, at most the view;
+                // no columns, the whole view
+                width:
+                    view.width > 0
+                        ? Math.min(view.width, view.viewportWidth)
+                        : view.viewportWidth,
                 height: view.viewportBodyHeight,
                 boxSizing: "border-box",
             },
