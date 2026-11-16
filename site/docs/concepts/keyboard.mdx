@@ -8,6 +8,10 @@ description: The active cell, the APG grid keys, a roving tab stop and ARIA, and
 One cell at a time is **active**: it has `data-active` and is the grid's tab stop. The keys move
 it, the grid scrolls it into view and focuses it.
 
+The active cell stays active when focus leaves the grid, so Tab comes back to it. To draw it only
+while it has focus, as the examples do, pair the two: `[data-active]:focus-within` (Tailwind:
+`data-active:focus-within:`).
+
 | key | moves to |
 | --- | --- |
 | Arrows | the next cell in that direction (header rows are -1 and above), through the [summary rows](/docs/concepts/summary-rows) as they show |

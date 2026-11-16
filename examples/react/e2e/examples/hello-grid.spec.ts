@@ -28,3 +28,25 @@ test("takes its shape from the theme", async ({ page }) => {
     await cell(page, 0, 0).click();
     await expect(cell(page, 0, 0)).toHaveCSS("outline-style", "dashed");
 });
+
+test("the active cell's outline goes with focus: a click outside or Escape, back with Tab", async ({
+    page,
+}) => {
+    await openExample(page, "hello-grid");
+    const active = cell(page, 1, 1);
+    await active.click();
+    await expect(active).not.toHaveCSS("outline-style", "none");
+    // a click outside the grid: the cell stays active, its outline goes
+    await page.mouse.click(2, 2);
+    await expect(active).toHaveAttribute("data-active", "");
+    await expect(active).toHaveCSS("outline-style", "none");
+    // Tab comes back to it
+    await page.keyboard.press("Tab");
+    await expect(active).toBeFocused();
+    await expect(active).not.toHaveCSS("outline-style", "none");
+    // Escape gives focus up, the cell still active
+    await page.keyboard.press("Escape");
+    await expect(active).not.toBeFocused();
+    await expect(active).toHaveAttribute("data-active", "");
+    await expect(active).toHaveCSS("outline-style", "none");
+});

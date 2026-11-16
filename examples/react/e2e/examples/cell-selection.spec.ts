@@ -65,6 +65,20 @@ test("a dragged range is drawn from its cells' attributes and summed by the app"
     await expect(corner).not.toHaveAttribute("data-range-edge");
 });
 
+test("a click outside the grid clears the range and the active cell's outline (Epic #113)", async ({
+    page,
+}) => {
+    await openExample(page, "cell-selection");
+    await dragCells(page, [0, 2], [1, 3]);
+    await expect(summary(page)).not.toHaveText("No range selected");
+    await page.mouse.click(2, 2);
+    await expect(summary(page)).toHaveText("No range selected");
+    await expect(cell(page, 0, 2)).not.toHaveAttribute("data-range-edge");
+    // still the active cell, drawn only while focused
+    await expect(cell(page, 0, 2)).toHaveAttribute("data-active", "");
+    await expect(cell(page, 0, 2)).toHaveCSS("outline-style", "none");
+});
+
 test("a copied range pastes into the app's rows, from the range's first cell", async ({
     page,
 }) => {

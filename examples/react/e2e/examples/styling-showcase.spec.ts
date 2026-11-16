@@ -73,7 +73,12 @@ async function signature(page: Page) {
         onTrack: await paint(page, await rowWith(page, "On track")),
         heatHigh: await paint(page, await heatCell(page, true)),
         heatLow: await paint(page, await heatCell(page, false)),
-        active: await paint(page, '[data-grid-part="cell"][data-active]'),
+        // the active cell shows only while focus is in it (the preset's button has it now)
+        active: await page
+            .locator('[data-grid-part="cell"][data-active]')
+            .first()
+            .focus()
+            .then(() => paint(page, '[data-grid-part="cell"][data-active]')),
     };
 }
 

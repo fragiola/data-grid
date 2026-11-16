@@ -42,7 +42,7 @@ export const headerCell = cn(
     // inside the target on the side it lands
     "data-reorderable:not-data-sortable:cursor-grab data-reorderable:select-none data-reorderable:touch-pan-y data-reorderable:data-dragging:cursor-grabbing data-dragging:opacity-50",
     "data-[drop-target=before]:shadow-[inset_3px_0_0_var(--dg-active-line)] data-[drop-target=after]:shadow-[inset_-3px_0_0_var(--dg-active-line)]",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 /**
@@ -75,7 +75,7 @@ export const row = (selected: boolean) =>
 export const cell = cn(
     "flex items-center overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
     "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
-    "data-active:outline-(length:--dg-active-width) data-active:outline-(--dg-active-line) data-active:[outline-style:var(--dg-active-style)] data-active:[outline-offset:calc(var(--dg-active-width)*-1)]",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
 );
 
 export const company = "flex min-w-0 items-center gap-2";
