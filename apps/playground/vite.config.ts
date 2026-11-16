@@ -28,7 +28,7 @@ function pages(dir: string): Record<string, string> {
 }
 
 // The shell (index.html) renders the examples of examples/react in place, with that app's
-// wiring: the `#/` alias, one React, the `development` condition in dev (the core and React
+// wiring: the `#/` alias, one React, the `@fragiola/source` condition in dev (the core and React
 // sources hot-reload; the build uses `dist`) and the pre-paint theme. It is never deployed;
 // `build` exists so CI catches a playground that no longer compiles.
 export default defineConfig(({ command }) => ({

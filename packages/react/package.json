@@ -18,19 +18,22 @@
     "sideEffects": false,
     "exports": {
         ".": {
-            "development": "./src/index.ts",
+            "@fragiola/source": "./src/index.ts",
             "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
         },
         "./local": {
-            "development": "./src/local/index.ts",
+            "@fragiola/source": "./src/local/index.ts",
             "types": "./dist/local.d.ts",
-            "import": "./dist/local.js"
+            "import": "./dist/local.js",
+            "default": "./dist/local.js"
         },
         "./selection": {
-            "development": "./src/selection/index.ts",
+            "@fragiola/source": "./src/selection/index.ts",
             "types": "./dist/selection.d.ts",
-            "import": "./dist/selection.js"
+            "import": "./dist/selection.js",
+            "default": "./dist/selection.js"
         },
         "./package.json": "./package.json"
     },
@@ -38,6 +41,26 @@
         "dist",
         "LICENSE"
     ],
+    "publishConfig": {
+        "exports": {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/index.js",
+                "default": "./dist/index.js"
+            },
+            "./local": {
+                "types": "./dist/local.d.ts",
+                "import": "./dist/local.js",
+                "default": "./dist/local.js"
+            },
+            "./selection": {
+                "types": "./dist/selection.d.ts",
+                "import": "./dist/selection.js",
+                "default": "./dist/selection.js"
+            },
+            "./package.json": "./package.json"
+        }
+    },
     "scripts": {
         "build": "tsdown",
         "typecheck": "tsc --noEmit",
@@ -61,6 +84,7 @@
         "react-dom": "19.3.0",
         "tsdown": "0.23.0",
         "typescript": "7.0.2",
+        "vite": "8.3.1",
         "vitest": "5.0.2"
     }
 }

@@ -1,7 +1,7 @@
 {
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "customConditions": ["development"],
+        "customConditions": ["@fragiola/source"],
         "types": ["node", "vite/client"],
         "allowImportingTsExtensions": true,
         "paths": {

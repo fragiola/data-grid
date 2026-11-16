@@ -1295,5 +1295,11 @@ a page body has no `#` and never skips a heading level; `pnpm site:export` check
 (never `@/…`). Every HTML file of the examples app carries
 `<meta name="robots" content="noindex">`.
 
-In dev the playground resolves both packages to their sources through the `development` export
-condition; production builds use `dist`.
+In dev every workspace package resolves to its sources through the `@fragiola/source` export
+condition (`SOURCE_CONDITION` in `scripts/source-condition.ts`, the first key of each `exports`
+entry): the tsconfigs' `customConditions`, the Vitest configs and the examples' Vite config in
+serve (`examples/react/vite.shared.ts`, which the playground shares), so `pnpm dev` hot-reloads
+the core and React sources and `pnpm typecheck` and `pnpm test` need no build. Production builds
+(the embed of `pnpm site:export`, the e2e builds) use `dist`. The published `exports`
+(`publishConfig.exports`) are dist-only, and only pnpm applies them: the packages are packed and
+published through pnpm, never npm (`site/tests/package-exports.test.ts` packs both and checks it).
