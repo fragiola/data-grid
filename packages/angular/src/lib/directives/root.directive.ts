@@ -1,10 +1,12 @@
 import {
+    ApplicationRef,
     afterNextRender,
     afterRenderEffect,
     computed,
     Directive,
     effect,
     forwardRef,
+    inject,
     input,
     output,
     type Signal,
@@ -331,18 +333,38 @@ export class DataGridRoot<TRow = unknown> {
         if (!this.bound) {
             const root = untracked(() => bindGridRoot(() => this.props()));
             this.bound = root;
-            const stopView = root.engine.adapter.subscribe(() =>
-                this.viewTick.update((n) => n + 1),
-            );
-            const stopDraft = root.engine.subscribe("edit-draft", () =>
-                this.draftTick.update((n) => n + 1),
-            );
+            const stopView = root.engine.adapter.subscribe(() => {
+                this.viewTick.update((n) => n + 1);
+                this.renderSoon();
+            });
+            const stopDraft = root.engine.subscribe("edit-draft", () => {
+                this.draftTick.update((n) => n + 1);
+                this.renderSoon();
+            });
             this.teardown.push(stopView, stopDraft);
         }
         return this.bound;
     }
 
     private readonly teardown: (() => void)[] = [];
+
+    private readonly appRef = inject(ApplicationRef);
+    private renderQueued = false;
+
+    /**
+     * Renders a new view or draft in a microtask, before the next event (React renders a discrete
+     * event's change at once, Vue on its next tick): zoneless Angular would wait for its next
+     * frame or timer, and a key typed meanwhile would reach an editor not rendered yet, or one
+     * reading the draft before it.
+     */
+    private renderSoon() {
+        if (this.renderQueued) return;
+        this.renderQueued = true;
+        queueMicrotask(() => {
+            this.renderQueued = false;
+            if (!this.appRef.destroyed) this.appRef.tick();
+        });
+    }
 
     /** The grid's model: its data, its rules and its commands. */
     get model(): DataGridModel<TRow, DataGridNode> {

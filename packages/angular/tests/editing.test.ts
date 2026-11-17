@@ -89,7 +89,7 @@ interface EditGridOptions {
     template: `
         <ng-template #nameEditor [dataGridTemplate]="editContext" let-edit>
             <input aria-label="Name" [attr.data-start]="edit.startKey ?? null"
-                [value]="text(edit.value)" (input)="onInput(edit, $event)" />
+                [attr.data-draft]="text(edit.value)" [value]="text(edit.value)" (input)="onInput(edit, $event)" />
         </ng-template>
         <ng-template #portalEditor [dataGridTemplate]="editContext" let-edit>
             <test-portal-editor [edit]="edit" />
@@ -280,6 +280,23 @@ describe("the edited cell", () => {
         expect(cell.querySelector("input")).toBeNull();
         expect(cell).toHaveFocus();
         expect(changes).toEqual([{ ...at(1, 1), startKey: "q" }, null]);
+    });
+
+    it("renders a key's edit and each draft before the next key, as React and Vue do (no key typed fast is lost)", async () => {
+        const { container } = await renderGrid({
+            defaultActivePosition: at(1, 1),
+        });
+        const cell = cellAt(container, 1, 1);
+        keyDown(cell, { key: "q" });
+        // the next key comes in a later task: by then, the editor is there and focused
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        const input = editorOf(cell);
+        expect(input).toHaveFocus();
+        expect(input).toHaveValue("item 1");
+        type(input, "qu");
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        // an editor reading the draft (to refuse Enter, say) reads this one
+        expect(input).toHaveAttribute("data-draft", "qu");
     });
 
     it("cancels an edit with no editor to focus: an editable column without one traps no key", async () => {
