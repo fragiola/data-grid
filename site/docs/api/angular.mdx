@@ -110,12 +110,18 @@ template's variables by its context.
 })
 export class PeopleGrid {
     readonly nameContext = contextOf<CellTemplateProps<Person>>();
-    readonly nameCell = viewChild.required<TemplateRef<TemplateContext<CellTemplateProps<Person>>>>("nameCell");
+    @ViewChild("nameCell", { static: true })
+    private readonly nameCell!: TemplateRef<TemplateContext<CellTemplateProps<Person>>>;
     readonly columns: Column<Person, DataGridNode>[] = [
-        { key: "name", name: "Name", width: 180, renderCell: (props) => templateContent(this.nameCell(), props) },
+        { key: "name", name: "Name", width: 180, renderCell: (props) => templateContent(this.nameCell, props) },
     ];
 }
 ```
+
+A renderer runs for every cell it renders, so read its template through a static query
+(`@ViewChild(…, { static: true })`, resolved once when the component is created): a signal query
+(`viewChild()`) is marked dirty by every view the grid creates and collected again on the next
+read, which makes a grid of many templated cells slow to render.
 
 The template renders with the props the renderer was given, as its `$implicit` too
 (`let-props`); a new context for the same template updates its view in place.
