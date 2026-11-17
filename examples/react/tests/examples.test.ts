@@ -28,7 +28,7 @@ const ALLOWED = [
     // which is what an app installs
     /^@fragiola\/data-grid\/local$/,
     // the features (Epic #141, #144): each one's React entry, the core's re-exported
-    /^@fragiola\/data-grid-react(\/(local|sorting|navigation|row-selection|range|clipboard|fill))?$/,
+    /^@fragiola\/data-grid-react(\/(local|sorting|navigation|row-selection|range|clipboard|fill|editing))?$/,
     /^lucide-react$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,

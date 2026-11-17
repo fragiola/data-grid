@@ -10,6 +10,7 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-react";
 import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { editing } from "@fragiola/data-grid-react/editing";
 import {
     fillHandle,
     repeatedFill,
@@ -37,13 +38,14 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), ranges of cells, the clipboard, the fill
-// handle
+// handle, cell editing
 const FEATURES = [
     sorting(),
     navigation(),
     cellRange(),
     clipboard(),
     fillHandle(),
+    editing(),
 ];
 
 // Everything a sheet does, together: cells edited in place, ranges selected, copied as TSV and

@@ -9,6 +9,7 @@ import {
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
+import { editing } from "@fragiola/data-grid-react/editing";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import {
@@ -22,8 +23,8 @@ import { TextEditor } from "../editing/editors";
 import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-const FEATURES = [sorting(), navigation(), rowSelection()];
+// navigation (the keys, the active cell, the tab stop), row selection, cell editing
+const FEATURES = [sorting(), navigation(), rowSelection(), editing()];
 
 // React Data Grid has a renderer for each piece (`renderCheckbox`, `renderSortStatus`,
 // `renderCell`, `renderRow`). Here there is nothing else: the checkbox, the sort indicator, a
