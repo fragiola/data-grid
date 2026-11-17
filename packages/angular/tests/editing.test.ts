@@ -11,9 +11,9 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
+import { type CellEditEvent, DataGridEditing } from "../src/editing";
 import { DataGridNavigation } from "../src/navigation";
 import {
-    type CellEditEvent,
     type CellPosition,
     type Column,
     contextOf,
@@ -86,7 +86,7 @@ interface EditGridOptions {
 
 @Component({
     selector: "test-edit-grid",
-    imports: [DATA_GRID, DataGridNavigation, PortalEditor],
+    imports: [DATA_GRID, DataGridNavigation, DataGridEditing, PortalEditor],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <ng-template #nameEditor [dataGridTemplate]="editContext" let-edit>
@@ -98,7 +98,7 @@ interface EditGridOptions {
         </ng-template>
         <div dataGridRoot [rows]="rows" [columns]="columns()" [rowHeight]="20"
             [features]="features" dataGridNavigation [defaultActivePosition]="options().defaultActivePosition"
-            [defaultEditingCell]="options().defaultEditingCell"
+            [dataGridEditing]="columns()" [defaultEditingCell]="options().defaultEditingCell"
             [editingCell]="editingCell()"
             (editingCellChange)="options().onEditingCellChange?.($event)"
             (cellEdit)="options().onCellEdit?.($event)">

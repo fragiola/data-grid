@@ -26,6 +26,7 @@ const ENTRIES = [
     "clipboard",
     "fill",
     "sorting",
+    "editing",
 ];
 
 const ALLOWED = new RegExp(

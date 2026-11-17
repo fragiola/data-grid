@@ -7,6 +7,7 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { DataGridCellEdit } from "../src/editing";
 import { DataGridFillHandle } from "../src/fill";
 import {
     DataGridLocalRows,
@@ -173,7 +174,7 @@ abstract class Counted {
 }
 
 @Component({
-    imports: [DATA_GRID, DataGridFillHandle, TestRootProps],
+    imports: [DATA_GRID, DataGridCellEdit, DataGridFillHandle, TestRootProps],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `<div dataGridRoot [columns]="props().columns" [testProps]="props()">${body}</div>`,
 })
@@ -185,7 +186,13 @@ const TEAM_KEYS: readonly RowKey[] = TEAMS.map((team) =>
 );
 
 @Component({
-    imports: [DATA_GRID, DataGridFillHandle, TestRootProps, DataGridLocalRows],
+    imports: [
+        DATA_GRID,
+        DataGridCellEdit,
+        DataGridFillHandle,
+        TestRootProps,
+        DataGridLocalRows,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `<div dataGridRoot [columns]="props().columns" [testProps]="props()" [dataGridLocalRows]="local">${body}</div>`,
 })
@@ -207,7 +214,13 @@ const PARENT_KEYS: readonly RowKey[] = parents.map(rowKey);
 const getSubRows = (row: Item) => row.children;
 
 @Component({
-    imports: [DATA_GRID, DataGridFillHandle, TestRootProps, DataGridLocalRows],
+    imports: [
+        DATA_GRID,
+        DataGridCellEdit,
+        DataGridFillHandle,
+        TestRootProps,
+        DataGridLocalRows,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `<div dataGridRoot [columns]="props().columns" [testProps]="props()" [dataGridLocalRows]="local">${body}</div>`,
 })

@@ -2,7 +2,6 @@ import { DataGridBind } from "./directives/bind.directive";
 import { DataGridBody } from "./directives/body.directive";
 import { DataGridCell } from "./directives/cell.directive";
 import { DataGridCellContent } from "./directives/cell-content.directive";
-import { DataGridCellEdit } from "./directives/cell-edit.directive";
 import { DataGridCells } from "./directives/cells.directive";
 import { DataGridColumnResizer } from "./directives/column-resizer.directive";
 import { DataGridEmpty } from "./directives/empty.directive";
@@ -55,7 +54,6 @@ export const DATA_GRID = [
     DataGridRowDragHandle,
     DataGridGroupToggle,
     DataGridGroupLabel,
-    DataGridCellEdit,
     DataGridTemplate,
     DataGridBind,
 ] as const;

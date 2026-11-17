@@ -9,8 +9,8 @@ import {
     type CellState,
     cellContent,
     cellPartOf,
-    editActions,
-    editCellPropsOf,
+    type DataGridEngine,
+    type EditCellRenderProps,
 } from "@fragiola/data-grid";
 import {
     type CellContext,
@@ -59,17 +59,21 @@ export class DataGridCell<TRow = unknown> implements CellContext {
         () => this.dataGridCell() as CellInfo,
     );
 
-    /** @internal the default content: edited, its column's editor, given the draft */
+    /**
+     * @internal the default content: edited (`editing()` installed, Epic #146), its column's
+     * editor, given the draft
+     */
     readonly content: Signal<DataGridNode> = computed(() => {
         const cell = this.dataGridCell() as CellInfo;
         const { column } = cell;
         if (this.part().state.editing && column.renderEditCell) {
-            const props = editCellPropsOf(
-                this.grid.view(),
+            const view = this.grid.view();
+            const props = view.features.editCell?.(
+                view,
                 cell,
                 this.grid.draft(),
-                editActions(this.grid.engine),
-            );
+                this.grid.engine as DataGridEngine<unknown, unknown>,
+            ) as EditCellRenderProps<unknown, DataGridNode> | null | undefined;
             return props ? column.renderEditCell(props) : null;
         }
         // a group row's renderer or value, a loaded row's (the core's rule)
