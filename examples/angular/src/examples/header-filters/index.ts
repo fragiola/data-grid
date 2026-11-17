@@ -8,6 +8,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { SWITCH } from "#/components/ui/switch";
@@ -122,8 +123,9 @@ export default class HeaderFilters {
     protected readonly ROWS = ROWS;
 
     readonly columns = columns;
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop)
+    readonly features = [sorting(), navigation()];
     readonly local = injectLocalRows(ROWS, columns);
     readonly shown = signal(true);
     readonly shownLabel = `header-filters-shown-${++ids}`;

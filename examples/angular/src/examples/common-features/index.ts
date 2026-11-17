@@ -22,6 +22,11 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideDownload } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
@@ -135,6 +140,7 @@ function download(text: string, name: string) {
         SelectAll,
         SelectRow,
         Summary,
+        DataGridRowSelection,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -153,6 +159,7 @@ function download(text: string, name: string) {
                 [columns]="columns"
                 [rowKey]="rowKey"
                 [rowHeight]="38"
+                dataGridRowSelection
                 rowSelection="multiple"
                 [isRowSelectable]="isSelectable"
                 (selectedRowKeysChange)="selected.set($event)"
@@ -359,8 +366,9 @@ export default class CommonFeatures {
         },
     ];
 
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop), row selection
+    readonly features = [sorting(), navigation(), rowSelection()];
     readonly local = injectLocalRows(this.jobs, this.columns);
     /**
      * The rows "select all" covers: the ones that can be selected, worked out again as the jobs

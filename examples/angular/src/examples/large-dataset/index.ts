@@ -7,6 +7,7 @@ import {
     injectColumnWindow,
     injectRowWindow,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatNumber, measurement } from "../_kit/data";
 import { Readout } from "./readout";
 import type { Row } from "./row";
@@ -53,6 +54,7 @@ const columns: Column<Row, DataGridNode>[] = [
             />
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rowCount]="ROWS"
                 [getRow]="getRow"
@@ -87,6 +89,8 @@ const columns: Column<Row, DataGridNode>[] = [
     `,
 })
 export default class LargeDataset {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly ROWS = ROWS;
     protected readonly COLUMNS = COLUMNS;

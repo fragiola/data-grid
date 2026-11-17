@@ -5,6 +5,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatMoney, measurement, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
@@ -96,6 +97,7 @@ const columns: ColumnOrGroup<Person, DataGridNode>[] = [
         <div [class]="styles.frame">
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
@@ -141,6 +143,8 @@ const columns: ColumnOrGroup<Person, DataGridNode>[] = [
     `,
 })
 export default class GroupedHeaders {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly rows = rows;

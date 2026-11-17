@@ -11,6 +11,7 @@ import {
     type GridDirection,
     type HeaderCellInfo,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { SWITCH } from "#/components/ui/switch";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
@@ -118,6 +119,7 @@ let ids = 0;
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
@@ -163,6 +165,8 @@ let ids = 0;
     `,
 })
 export default class Rtl {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly rows = rows;

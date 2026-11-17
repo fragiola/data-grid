@@ -4,7 +4,12 @@ import {
     computed,
     input,
 } from "@angular/core";
-import { injectDataGrid, injectGridView } from "@fragiola/data-grid-angular";
+import {
+    type DataGridFeature,
+    injectDataGrid,
+    injectGridView,
+} from "@fragiola/data-grid-angular";
+import type { RowSelectionTypes } from "@fragiola/data-grid-angular/row-selection";
 import type { Task } from "../_kit/tasks";
 import { Checkbox } from "./checkbox";
 
@@ -22,7 +27,12 @@ export class SelectRow {
     readonly rowIndex = input.required<number>();
     readonly name = input.required<string>();
 
-    private readonly grid = injectDataGrid<Task>();
+    // the grid's model, typed by the feature this part reads (row selection, installed by the grid)
+
+    private readonly grid = injectDataGrid<
+        Task,
+        [DataGridFeature<RowSelectionTypes>]
+    >();
     // the view moves with the selection: the box follows
     private readonly view = injectGridView();
     protected readonly checked = computed(() => {

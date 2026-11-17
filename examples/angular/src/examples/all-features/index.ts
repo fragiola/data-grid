@@ -5,7 +5,6 @@ import {
     type TemplateRef,
     ViewChild,
 } from "@angular/core";
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellEditEvent,
     type Column,
@@ -21,9 +20,24 @@ import {
     templateContent,
 } from "@fragiola/data-grid-angular";
 import {
+    clipboard,
+    DataGridClipboard,
+} from "@fragiola/data-grid-angular/clipboard";
+import {
+    DataGridFill,
+    DataGridFillHandle,
+    fillHandle,
+    repeatedFill,
+} from "@fragiola/data-grid-angular/fill";
+import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    cellRange,
+    DataGridCellRange,
+} from "@fragiola/data-grid-angular/range";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideArrowDown, LucideArrowUp } from "@lucide/angular";
 import { Input, Numeric } from "#/components/atoms/fields";
@@ -68,6 +82,10 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
         AmountEditor,
         StatusEditor,
         DateEditor,
+        DataGridCellRange,
+        DataGridClipboard,
+        DataGridFill,
+        DataGridFillHandle,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -92,10 +110,12 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
                 [columns]="columns"
                 [rowKey]="rowKey"
                 [rowHeight]="38"
+                dataGridCellRange
                 cellSelection="range"
                 (cellEdit)="edited($event)"
+                dataGridClipboard
                 (rangePaste)="pasted($event)"
-                fillable
+                dataGridFill
                 (fill)="filled($event)"
                 [class]="styles.root"
             >
@@ -242,8 +262,16 @@ export default class AllFeatures {
     );
     readonly announcement = signal("");
     // sorted in memory: the grid's indexes are the rows shown
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop), ranges of cells, the clipboard,
+    // the fill handle
+    readonly features = [
+        sorting(),
+        navigation(),
+        cellRange(),
+        clipboard(),
+        fillHandle(),
+    ];
     readonly local = injectLocalRows(this.tasks, this.columns);
     // the grid's model from outside its root: a fill repeats the values it reads
     readonly gridRef = createDataGridRef<BudgetedTask>();

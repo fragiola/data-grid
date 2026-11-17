@@ -17,6 +17,15 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import {
+    clipboard,
+    DataGridClipboard,
+} from "@fragiola/data-grid-angular/clipboard";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    cellRange,
+    DataGridCellRange,
+} from "@fragiola/data-grid-angular/range";
 import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
 
@@ -150,7 +159,7 @@ type LineCell = TemplateRef<TemplateContext<CellTemplateProps<Line>>>;
 
 @Component({
     selector: "example-cell-selection",
-    imports: [DATA_GRID],
+    imports: [DATA_GRID, DataGridCellRange, DataGridClipboard],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -168,12 +177,15 @@ type LineCell = TemplateRef<TemplateContext<CellTemplateProps<Line>>>;
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows()"
                 [rowKey]="rowKey"
                 [rowHeight]="36"
+                dataGridCellRange
                 cellSelection="range"
                 [(selectedRange)]="range"
+                dataGridClipboard
                 [beforeRangePaste]="beforePaste"
                 (rangePaste)="writePaste($event)"
                 [class]="styles.root"
@@ -211,6 +223,9 @@ type LineCell = TemplateRef<TemplateContext<CellTemplateProps<Line>>>;
     `,
 })
 export default class CellSelection {
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // ranges of cells, the clipboard
+    readonly features = [navigation(), cellRange(), clipboard()];
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Line>>();
     @ViewChild("ownerCell", { static: true })

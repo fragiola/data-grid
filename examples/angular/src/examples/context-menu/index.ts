@@ -12,6 +12,10 @@ import {
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
 import {
+    DataGridNavigation,
+    navigation,
+} from "@fragiola/data-grid-angular/navigation";
+import {
     LucideArrowDownToLine,
     LucideArrowUpToLine,
     LucideTrash2,
@@ -49,6 +53,7 @@ const columns: Column<Task, DataGridNode>[] = [
         LucideArrowUpToLine,
         LucideArrowDownToLine,
         LucideTrash2,
+        DataGridNavigation,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -73,6 +78,8 @@ const columns: Column<Task, DataGridNode>[] = [
             >
                 <div
                     dataGridRoot
+                    [features]="features"
+                    dataGridNavigation
                     [(activePosition)]="active"
                     [columns]="columns"
                     [rows]="rows()"
@@ -141,6 +148,8 @@ const columns: Column<Task, DataGridNode>[] = [
     `,
 })
 export default class ContextMenuExample {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly columns = columns;

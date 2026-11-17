@@ -11,6 +11,7 @@ import {
     type DataGridNode,
     type ScrollAlign,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { FIELDS } from "#/components/atoms/fields";
 import { formatNumber } from "../_kit/data";
@@ -60,6 +61,9 @@ function indexOf(text: string, count: number): number | undefined {
         ? Math.min(value, count - 1)
         : undefined;
 }
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 @Component({
     selector: "example-scroll-to-cell",
@@ -138,6 +142,7 @@ function indexOf(text: string, count: number): number | undefined {
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [gridRef]="gridRef"
                 [columns]="columns"
                 [rowCount]="ROWS"
@@ -172,6 +177,7 @@ function indexOf(text: string, count: number): number | undefined {
     `,
 })
 export default class ScrollToCell {
+    readonly features = FEATURES;
     protected readonly styles = styles;
     protected readonly ROWS = ROWS;
     protected readonly aligns = ALIGNS;
@@ -180,7 +186,7 @@ export default class ScrollToCell {
     readonly getRow = getRow;
 
     // the grid's model and engine from outside its root
-    readonly gridRef = createDataGridRef<Row>();
+    readonly gridRef = createDataGridRef<Row, typeof FEATURES>();
     protected readonly row = signal("5000");
     protected readonly column = signal("120");
     protected readonly align = signal<ScrollAlign>("center");

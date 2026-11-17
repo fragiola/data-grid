@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellRange,
     type Column,
@@ -7,6 +6,17 @@ import {
     type DataGridNode,
     type RangeFill,
 } from "@fragiola/data-grid-angular";
+import {
+    DataGridFill,
+    DataGridFillHandle,
+    fillHandle,
+    repeatedFill,
+} from "@fragiola/data-grid-angular/fill";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    cellRange,
+    DataGridCellRange,
+} from "@fragiola/data-grid-angular/range";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { hash } from "../_kit/data";
 import * as styles from "./styles";
@@ -122,7 +132,13 @@ function unitsFill({ source, target }: RangeFill): RangeFill | null {
 
 @Component({
     selector: "example-fill",
-    imports: [DATA_GRID, ClickableButton],
+    imports: [
+        DATA_GRID,
+        ClickableButton,
+        DataGridCellRange,
+        DataGridFill,
+        DataGridFillHandle,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -146,12 +162,14 @@ function unitsFill({ source, target }: RangeFill): RangeFill | null {
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="plans()"
                 [rowKey]="rowKey"
                 [rowHeight]="36"
+                dataGridCellRange
                 cellSelection="range"
-                fillable
+                dataGridFill
                 (fill)="fill($event)"
                 [class]="styles.root"
             >
@@ -187,6 +205,9 @@ function unitsFill({ source, target }: RangeFill): RangeFill | null {
     `,
 })
 export default class Fill {
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // ranges of cells, the fill handle
+    readonly features = [navigation(), cellRange(), fillHandle()];
     protected readonly styles = styles;
     protected readonly modes = MODES;
     readonly columns = columns;

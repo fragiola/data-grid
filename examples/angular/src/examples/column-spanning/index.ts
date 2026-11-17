@@ -12,6 +12,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import {
     bookingAt,
     FIRST_HOUR,
@@ -36,6 +37,7 @@ interface BookingContext {
         <div [class]="styles.frame">
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rooms"
                 [rowKey]="rowKey"
@@ -83,6 +85,8 @@ interface BookingContext {
     `,
 })
 export default class ColumnSpanning {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     protected readonly bookingContext = contextOf<BookingContext>();

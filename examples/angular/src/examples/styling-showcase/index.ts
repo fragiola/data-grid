@@ -15,6 +15,10 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import {
+    DataGridNavigation,
+    navigation,
+} from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { type Project, projects, STATUS_LABELS } from "../_kit/portfolio";
 import * as styles from "./styles";
@@ -29,7 +33,7 @@ type CellTemplate = TemplateRef<TemplateContext<CellTemplateProps<Project>>>;
 
 @Component({
     selector: "example-styling-showcase",
-    imports: [DATA_GRID, ClickableButton],
+    imports: [DATA_GRID, ClickableButton, DataGridNavigation],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -50,10 +54,12 @@ type CellTemplate = TemplateRef<TemplateContext<CellTemplateProps<Project>>>;
             </fieldset>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
                 [rowHeight]="preset().rowHeight"
+                dataGridNavigation
                 [defaultActivePosition]="{ rowIndex: 0, columnIndex: 1 }"
                 [class]="preset().root"
                 [attr.data-preset]="name()"
@@ -109,6 +115,8 @@ type CellTemplate = TemplateRef<TemplateContext<CellTemplateProps<Project>>>;
     `,
 })
 export default class StylingShowcase {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly STATUS_LABELS = STATUS_LABELS;
     protected readonly cellContext = contextOf<CellTemplateProps<Project>>();

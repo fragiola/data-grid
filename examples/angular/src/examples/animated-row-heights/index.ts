@@ -15,6 +15,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
@@ -58,6 +59,7 @@ const DURATION = 300;
             </fieldset>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="ROWS"
                 [rowKey]="rowKey"
@@ -97,6 +99,8 @@ const DURATION = 300;
     `,
 })
 export default class AnimatedRowHeights {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly HEIGHTS = HEIGHTS;
     protected readonly ROWS = ROWS;

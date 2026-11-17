@@ -21,6 +21,11 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { Input } from "#/components/atoms/fields";
 import { type Task, tasks } from "../_kit/tasks";
@@ -56,6 +61,7 @@ type EditProps = EditCellRenderProps<Task, DataGridNode>;
         SelectRow,
         SortStatus,
         TextEditor,
+        DataGridRowSelection,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -67,6 +73,7 @@ type EditProps = EditCellRenderProps<Task, DataGridNode>;
                 [columns]="columns"
                 [rowKey]="rowKey"
                 [rowHeight]="36"
+                dataGridRowSelection
                 rowSelection="multiple"
                 (cellEdit)="onCellEdit($event)"
                 [class]="styles.root"
@@ -151,8 +158,9 @@ export default class CustomRenderers {
     ];
 
     private readonly rows = signal<readonly Task[]>(ROWS);
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop), row selection
+    readonly features = [sorting(), navigation(), rowSelection()];
     readonly local = injectLocalRows(this.rows, this.columns);
 
     readonly rowKey = (row: Task) => row.id;

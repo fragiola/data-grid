@@ -6,6 +6,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { formatNumber, measurement, type Person, people } from "../_kit/data";
 import { GroupHeader } from "./group-header";
@@ -143,6 +144,7 @@ const ALL_GROUPS = YEARS.flatMap((value) => [
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
@@ -196,6 +198,8 @@ const ALL_GROUPS = YEARS.flatMap((value) => [
     `,
 })
 export default class CollapsibleGroups {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly ALL_GROUPS = ALL_GROUPS;
 

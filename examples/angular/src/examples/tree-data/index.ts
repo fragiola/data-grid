@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
 import { DATA_GRID, type RowKey } from "@fragiola/data-grid-angular";
 import { DataGridLocalRows } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
@@ -34,6 +39,7 @@ let ids = 0;
         FileGrid,
         MemoryTree,
         ServerTree,
+        DataGridRowSelection,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -56,6 +62,7 @@ let ids = 0;
                 <ng-container *exampleServerTree="let tree">
                     <div
                         dataGridRoot
+                        [features]="lazyFeatures"
                         [columns]="columns"
                         [rowCount]="tree().rowCount"
                         [getRow]="tree().getRow"
@@ -64,6 +71,7 @@ let ids = 0;
                         [expandedGroupKeys]="tree().expandedGroupKeys"
                         (expandedGroupKeysChange)="tree().onExpandedGroupKeysChange($event)"
                         [rowHeight]="34"
+                        dataGridRowSelection
                         rowSelection="multiple"
                         [class]="styles.root"
                     >
@@ -99,6 +107,7 @@ let ids = 0;
                         [dataGridLocalRows]="local"
                         [columns]="columns"
                         [rowHeight]="34"
+                        dataGridRowSelection
                         rowSelection="multiple"
                         [class]="styles.root"
                     >
@@ -119,8 +128,11 @@ export default class TreeData {
     protected readonly styles = styles;
     protected readonly columns = columns;
     protected readonly NONE = NONE;
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop), row selection
+    readonly features = [sorting(), navigation(), rowSelection()];
+    // the server's tree sorts nothing: navigation and row selection only
+    readonly lazyFeatures = [navigation(), rowSelection()];
 
     readonly lazy = signal(false);
     readonly lazyLabel = `tree-data-lazy-${++ids}`;
