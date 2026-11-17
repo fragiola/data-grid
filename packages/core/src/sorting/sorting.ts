@@ -22,6 +22,7 @@ import type {
     SortColumn,
     SortDirection,
     SortingProps,
+    SortingState,
     SortingTypes,
 } from "./types";
 
@@ -79,6 +80,18 @@ export function headerCellSort<TRow, TNode>(
         priority: sorted ? index + 1 : undefined,
         ariaSort: first === sorted ? sorted?.direction : undefined,
     };
+}
+
+/** No sort: what a view without sorting installed holds. */
+const UNSORTED: readonly SortColumn[] = [];
+
+/**
+ * The sort a view shows (sorting installed: its `sortColumns`, on the view by name), the first
+ * column first; none without sorting. For what an app renders from the whole sort (a count, a
+ * label), the view's own (a new view per sort).
+ */
+export function sortColumnsOf(view: object): readonly SortColumn[] {
+    return (view as Partial<SortingState>).sortColumns ?? UNSORTED;
 }
 
 /** A header cell's sort as its part's state and attributes. */

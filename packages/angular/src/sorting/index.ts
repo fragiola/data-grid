@@ -21,6 +21,7 @@ export {
     type SortingState,
     type SortingTypes,
     sameSortColumns,
+    sortColumnsOf,
     sorting,
     validSortColumns,
 } from "@fragiola/data-grid/sorting";

@@ -3,7 +3,12 @@
 // never ships it.
 
 export { sameSortColumns, validSortColumns } from "./sort";
-export { type HeaderCellSort, headerCellSort, sorting } from "./sorting";
+export {
+    type HeaderCellSort,
+    headerCellSort,
+    sortColumnsOf,
+    sorting,
+} from "./sorting";
 export type {
     SortColumn,
     SortDirection,
