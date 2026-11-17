@@ -1058,8 +1058,9 @@ examples/react/     src/examples/<slug>/       the site's React examples (the em
                     playwright.config.ts       the shared specs against this embed
 examples/vue/       src/examples/<slug>/       the site's Vue examples, every React one under the same
                                                id (the embed app, Vite, SFCs; its README)
-                    src/components, lib        the Vue kit: Fragiola UI's pieces over Reka UI, the
-                                               families, `cn` and the theme copied from examples/react
+                    src/components, hooks      the Vue kit: Fragiola UI's pieces over Reka UI (its
+                                               families copied from examples/react)
+                    src/lib, styles            `cn` and the theme, copied from examples/react
                     playwright.config.ts       the shared specs against this embed
 site/               docs/                      the pages fragiola.com/data-grid serves
                     export.ts, contract.ts     `pnpm site:export` and its validation, every framework

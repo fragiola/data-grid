@@ -14,8 +14,10 @@ examples/vue/src/examples/
   <slug>/*.vue, *.ts   optional siblings, kebab-case: components, composables (`use-<name>.ts`),
                        framework-free modules; shown in the code panel
   _kit/                the demo content and app policy, copied whole from examples/react
-examples/vue/src/components/
-  atoms/, families/, ui/   the Vue kit: Fragiola UI's pieces over Reka UI
+examples/vue/src/
+  components/          the Vue kit: Fragiola UI's pieces over Reka UI (atoms/, families/, ui/)
+  hooks/               what the kit's popups share (the document they open in)
+  lib/cn.ts, styles/   `cn` and the theme, copied from examples/react
 ```
 
 ## Adding an example
