@@ -1,6 +1,7 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import {
     bookingAt,
@@ -12,8 +13,9 @@ import {
 } from "./bookings";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const FEATURES = [navigation(), columnPinning()];
 
 /**
  * An hour of the day: a booking starting at it spans the hours it takes (the grid renders no

@@ -6,10 +6,14 @@ import {
     DataGrid,
     type HeaderCellInfo,
     headerCellContent,
-    useColumnResizer,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
 import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
+import {
+    columnResize,
+    useColumnResizer,
+} from "@fragiola/data-grid-react/column-resize";
 import { editing } from "@fragiola/data-grid-react/editing";
 import {
     fillHandle,
@@ -38,7 +42,8 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), ranges of cells, the clipboard, the fill
-// handle, cell editing
+// handle, cell editing, column resizing (its handles, keys and fits), pinned columns (without it,
+// every column scrolls)
 const FEATURES = [
     sorting(),
     navigation(),
@@ -46,6 +51,8 @@ const FEATURES = [
     clipboard(),
     fillHandle(),
     editing(),
+    columnResize(),
+    columnPinning(),
 ];
 
 // Everything a sheet does, together: cells edited in place, ranges selected, copied as TSV and

@@ -7,6 +7,7 @@ import {
     type RangePaste,
 } from "@fragiola/data-grid-react";
 import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { cellRange } from "@fragiola/data-grid-react/range";
 import { useState } from "react";
@@ -14,8 +15,8 @@ import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
 
 // the features the grid installs: cell navigation (the keys, the active cell, the tab stop), ranges
-// of cells, the clipboard
-const FEATURES = [navigation(), cellRange(), clipboard()];
+// of cells, the clipboard, pinned columns (without it, every column scrolls)
+const FEATURES = [navigation(), cellRange(), clipboard(), columnPinning()];
 
 // A year's budget, a line per row: the grid selects ranges of cells, copies them as TSV and tells
 // each paste; the app sums what is selected and writes what is pasted into its own rows.

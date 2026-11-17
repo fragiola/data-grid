@@ -6,6 +6,7 @@ import {
     type ScrollAlign,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -13,8 +14,9 @@ import { Input } from "#/components/atoms/fields";
 import { formatNumber } from "../_kit/data";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const FEATURES = [navigation(), columnPinning()];
 
 const ROWS = 10_000;
 const COLUMNS = 200;

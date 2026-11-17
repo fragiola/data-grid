@@ -5,6 +5,7 @@ import {
     DataGrid,
     type SummaryPosition,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
@@ -15,8 +16,9 @@ import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop)
-const FEATURES = [sorting(), navigation()];
+// navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
+// scrolls)
+const FEATURES = [sorting(), navigation(), columnPinning()];
 
 const all = people(500);
 

@@ -7,6 +7,7 @@ import {
     DataGrid,
     type RangeFill,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import {
     fillHandle,
     repeatedFill,
@@ -20,8 +21,8 @@ import { hash } from "../_kit/data";
 import * as styles from "./styles";
 
 // the features the grid installs: cell navigation (the keys, the active cell, the tab stop), ranges
-// of cells, the fill handle
-const FEATURES = [navigation(), cellRange(), fillHandle()];
+// of cells, the fill handle, pinned columns (without it, every column scrolls)
+const FEATURES = [navigation(), cellRange(), fillHandle(), columnPinning()];
 
 // A shipping plan: units per product and week. A range's corner holds a handle; dragging it down
 // or across fills the cells it reaches. The grid tells the fill; the app makes the values: the

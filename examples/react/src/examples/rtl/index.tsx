@@ -6,16 +6,28 @@ import {
     type GridDirection,
     type HeaderCellInfo,
     headerCellContent,
-    useColumnResizer,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
+import { columnReorder } from "@fragiola/data-grid-react/column-reorder";
+import {
+    columnResize,
+    useColumnResizer,
+} from "@fragiola/data-grid-react/column-resize";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useId, useState } from "react";
 import { Switch } from "#/components/ui/switch";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), column
+// resizing (its handles, keys and fits), column reordering (a header cell's drag and keys), pinned
+// columns (without it, every column scrolls)
+const FEATURES = [
+    navigation(),
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+];
 
 const rows = people(1_000);
 
