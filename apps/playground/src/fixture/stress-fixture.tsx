@@ -1,4 +1,3 @@
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import { moveRow } from "@fragiola/data-grid/local";
 import {
     type CellInfo,
@@ -9,7 +8,12 @@ import {
     type GridDirection,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { fillHandle, repeatedFill } from "@fragiola/data-grid-react/fill";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellRange } from "@fragiola/data-grid-react/range";
+import { rowSelection } from "@fragiola/data-grid-react/row-selection";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { Profiler, StrictMode, useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -19,6 +23,7 @@ import {
     Expose,
     FILL_CSS,
     FillHandle,
+    type FixtureFeatures,
     type FixtureRow,
     HeaderRow,
     PickEditor,
@@ -32,8 +37,18 @@ import {
     tags,
 } from "./grid-fixture.tsx";
 
-/** the features the fixture installs: sorting (Epic #141) */
-const FEATURES = [sorting()];
+/**
+ * the features the fixture installs: every migrated one, sorting (Epic #141), cell navigation,
+ * row selection, cell ranges, the clipboard and the fill handle (Epic #144)
+ */
+const FEATURES: FixtureFeatures = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+];
 
 // The combined stress fixture (Epic #89, E5.3): every feature on at once, over 1,000,000 rows and
 // 1,000 columns, both axes scaled, as a table (`?kind=table`) or as divs (the default). Its parts
@@ -226,7 +241,7 @@ function StressFixture({
 }) {
     const tag = tags(kind === "table");
     const table = kind === "table";
-    const gridRef = useDataGridRef<FixtureRow>();
+    const gridRef = useDataGridRef<FixtureRow, FixtureFeatures>();
     const columns = useMemo(() => stressColumns(grouped), [grouped]);
     const [direction, setDirection] = useState<GridDirection>("ltr");
     // the rows' order, by id: the app's, moved on each move
@@ -294,7 +309,7 @@ function StressFixture({
                     window.commits += 1;
                 }}
             >
-                <DataGrid.Root<FixtureRow, typeof FEATURES>
+                <DataGrid.Root<FixtureRow, FixtureFeatures>
                     features={FEATURES}
                     columns={columns}
                     {...(grouped

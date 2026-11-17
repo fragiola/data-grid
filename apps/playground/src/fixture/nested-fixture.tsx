@@ -1,4 +1,5 @@
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -7,6 +8,9 @@ import { createRoot } from "react-dom/client";
 // can tell an outer cell from an inner one at the same indexes. An inner grid is in the tab order
 // only while the outer cell holding it is active (Epic #89, E5.2); `?ownTabStop=1` gives each one
 // a tab stop of its own.
+
+/** both grids are navigated by keys: the feature that gives them their tab stops (Epic #144) */
+const FEATURES = [navigation()];
 
 const ownTabStop =
     new URLSearchParams(location.search).get("ownTabStop") === "1";
@@ -39,6 +43,7 @@ const itemColumns: Column<Item>[] = [
 function Items({ order }: { order: Order }) {
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={itemColumns}
             rows={order.items}
             rowHeight={24}
@@ -93,6 +98,7 @@ function Fixture() {
                 before
             </button>
             <DataGrid.Root
+                features={FEATURES}
                 columns={orderColumns}
                 rows={orders}
                 rowHeight={120}
