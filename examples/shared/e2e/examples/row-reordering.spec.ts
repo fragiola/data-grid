@@ -82,7 +82,8 @@ test("a row dragged by its handle moves on release, the drop target drawn meanwh
     // its place in the backlog follows it
     await expect(cell(page, 3, 0)).toHaveText("4");
     await page.getByRole("button", { name: "Reset order" }).click();
-    expect(await names(page)).toEqual(FIRST);
+    // the app renders its click's change in its own time (Angular on its next frame or timer)
+    await expect.poll(() => names(page)).toEqual(FIRST);
 });
 
 test("Escape cancels a drag", async ({ page }) => {
