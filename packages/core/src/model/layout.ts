@@ -1,52 +1,15 @@
-import { entryByKey, isColumnGroup } from "../header/header";
-import { cellKeyAt } from "./order";
+import { isHeaderRow } from "../header/header";
 import type {
     CellPosition,
     Column,
-    ColumnGroup,
-    ColumnOrGroup,
     HeaderCellLayout,
     HeaderLayout,
 } from "./types";
 
-// Collapsible column groups (Epic #85, E1.3): the model keeps the collapsed groups' keys, and the
-// layout shows a collapsible group's children by its state (`layoutColumns`). What a collapse
-// hid is no column: what pointed at it (the active cell, the view's first column) falls back on
-// the nearest group above it still shown. Pure: the model and the engine share it.
-
-/** Whether a group is collapsed: a collapsible group of the entries, its key collapsed. */
-export function isGroupCollapsed<TRow, TNode>(
-    state: {
-        readonly columnEntries: readonly ColumnOrGroup<TRow, TNode>[];
-        readonly collapsedGroupKeys: readonly string[];
-    },
-    groupKey: string,
-): boolean {
-    return (
-        state.collapsedGroupKeys.includes(groupKey) &&
-        groupByKey(state.columnEntries, groupKey)?.collapsible === true
-    );
-}
-
-/**
- * The keys that collapse a group: the ones of the entries' collapsible groups (the others are
- * kept, and collapse nothing).
- */
-export function collapsingKeys<TRow, TNode>(
-    entries: readonly ColumnOrGroup<TRow, TNode>[],
-    keys: readonly string[],
-): readonly string[] {
-    return keys.filter((key) => groupByKey(entries, key)?.collapsible === true);
-}
-
-/** The group with this key among the entries (`entryByKey`), or `undefined` for a column or none. */
-export function groupByKey<TRow, TNode>(
-    entries: readonly ColumnOrGroup<TRow, TNode>[],
-    key: string,
-): ColumnGroup<TRow, TNode> | undefined {
-    const entry = entryByKey(entries, key);
-    return entry && isColumnGroup(entry) ? entry : undefined;
-}
+// Following a cell across a new layout of the columns (Epics #75, #85; the core's since Epic
+// #148, whatever laid them out: a column order, a collapse): what pointed at a column (the active
+// cell, the view's first column) follows it by key, and one a collapse hid falls back on the
+// nearest group above it still shown. Pure: the model and the engine share it.
 
 /**
  * The nearest group above column `columnIndex` of the `before` layout that `after` still shows
@@ -120,4 +83,20 @@ export function followedColumn<TRow, TNode>(
         after.cellByKey(key)?.columnIndex ??
         shownColumnOf(before, after, position.columnIndex, key)
     );
+}
+
+/**
+ * The key of a cell's column or group: a header cell's own, a body (or summary row) cell's
+ * column's. What an order change keeps the active cell on.
+ */
+export function cellKeyAt<TRow, TNode>(
+    state: {
+        readonly header: HeaderLayout<TRow, TNode>;
+        readonly columns: readonly Column<TRow, TNode>[];
+    },
+    position: { readonly rowIndex: number; readonly columnIndex: number },
+): string | undefined {
+    return isHeaderRow(position.rowIndex, state.header)
+        ? state.header.cellAt(position.rowIndex, position.columnIndex)?.key
+        : state.columns[position.columnIndex]?.key;
 }

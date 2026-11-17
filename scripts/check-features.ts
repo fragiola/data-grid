@@ -23,6 +23,10 @@ export const FEATURES = [
     { subpath: "clipboard", factory: "clipboard" },
     { subpath: "fill", factory: "fillHandle" },
     { subpath: "editing", factory: "editing" },
+    { subpath: "column-resize", factory: "columnResize" },
+    { subpath: "column-reorder", factory: "columnReorder" },
+    { subpath: "column-pinning", factory: "columnPinning" },
+    { subpath: "column-group-collapse", factory: "columnGroupCollapse" },
 ] as const;
 
 /** A feature as the guard reads it: its subpath and the markers its code holds. */

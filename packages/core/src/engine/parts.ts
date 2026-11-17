@@ -1,5 +1,4 @@
 import type { PartAttributes } from "../feature/feature";
-import { isReorderable } from "../model/order";
 import {
     dataRowAt,
     depthOf,
@@ -20,16 +19,9 @@ import type {
     SummaryPosition,
     SummaryRowView,
 } from "../model/types";
-import {
-    resizeMaximum,
-    type SpanWidths,
-    spanResizable,
-    spanWidths,
-} from "../model/widths";
 import { sameCell } from "../navigation/navigation";
-import { keySet } from "../utils/utils";
 import {
-    COLUMN_RESIZER_ATTRIBUTE,
+    type COLUMN_RESIZER_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
 } from "./dom";
@@ -37,8 +29,6 @@ import {
     cellSpan,
     columnLeft,
     columnPinning,
-    columnSide,
-    resizeEdge,
     rowCellsHeight,
     rowDetailBox,
     rowExpanded,
@@ -181,21 +171,33 @@ export interface HeaderCellState {
     readonly pinnedSide: PinnedSide | undefined;
     /** its controls have the keys (Enter or F2 on it, a click on one; Escape gives them back) */
     readonly interacting: boolean;
-    /** its column is resizable, or for a group one of its columns (a resizer can resize it) */
-    readonly resizable: boolean;
-    /** a drag is resizing it (its resizer's) */
-    readonly resizing: boolean;
-    /** its column or group can be moved among its siblings (its drag, Ctrl/⌘+Shift+←/→) */
-    readonly reorderable: boolean;
-    /** a drag is moving it */
-    readonly dragging: boolean;
-    /** a drag would drop beside it, on this side (the app draws the indicator); else `null` */
-    readonly dropTarget: ReorderSide | null;
+    /**
+     * its column is resizable, or for a group one of its columns (a resizer can resize it).
+     * Resizing's (`@fragiola/data-grid/column-resize`, Epic #148): `undefined` without it, as
+     * `resizing`
+     */
+    readonly resizable?: boolean | undefined;
+    /** a drag is resizing it (its resizer's; resizing's) */
+    readonly resizing?: boolean | undefined;
+    /**
+     * its column or group can be moved among its siblings (its drag, Ctrl/⌘+Shift+←/→).
+     * Reordering's (`@fragiola/data-grid/column-reorder`, Epic #148): `undefined` without it, as
+     * `dragging` and `dropTarget`
+     */
+    readonly reorderable?: boolean | undefined;
+    /** a drag is moving it (reordering's) */
+    readonly dragging?: boolean | undefined;
+    /**
+     * a drag would drop beside it, on this side (the app draws the indicator); else `null`
+     * (reordering's)
+     */
+    readonly dropTarget?: ReorderSide | null | undefined;
     /**
      * a collapsible group's (Epic #85, E1.3): whether it is collapsed (`column-groups.toggle`
-     * opens and closes it); `undefined` for a header cell that does not collapse
+     * opens and closes it); `undefined` for a header cell that does not collapse, and without
+     * collapsing (`@fragiola/data-grid/column-group-collapse`, Epic #148)
      */
-    readonly collapsed: boolean | undefined;
+    readonly collapsed?: boolean | undefined;
 }
 
 /** The state of a column resizer: the handle the app renders in a resizable header cell. */
@@ -675,17 +677,7 @@ export function headerCellPart<TRow, TNode>(
     );
     const active =
         view.active !== null && sameCell(view.active, cell, view.header.cellAt);
-    const reorder = view.columnReorder;
     const state: HeaderCellState = {
-        collapsed:
-            cell.group?.collapsible === true
-                ? keySet(view.collapsedGroupKeys).has(cell.key)
-                : undefined,
-        resizable: spanResizable(view.columnDefs, cell),
-        resizing: view.columnResize?.columnKey === cell.key,
-        reorderable: isReorderable(cell),
-        dragging: reorder?.columnKey === cell.key,
-        dropTarget: reorder?.targetKey === cell.key ? reorder.side : null,
         rowIndex: cell.rowIndex,
         columnIndex: cell.columnIndex,
         columnSpan: cell.columnSpan,
@@ -710,49 +702,6 @@ export function headerCellPart<TRow, TNode>(
               attributes: share.attributes,
           }
         : { state, tabIndex, attributes: undefined };
-}
-
-/**
- * The state and attributes of the resizer in a header cell (W3): its column's, or for a group's
- * cell its columns' together (W5).
- */
-export function columnResizerPart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-): ColumnResizerPart {
-    const resizable = spanResizable(view.columnDefs, cell);
-    const axis = view.columnAxis;
-    // a cell whose columns do not resize is its width, with nothing to move within
-    let span: SpanWidths;
-    if (resizable) span = spanWidths(view.columnDefs, axis, cell);
-    else {
-        const fixed =
-            axis.offsetOf(cell.columnIndex + cell.columnSpan) -
-            axis.offsetOf(cell.columnIndex);
-        span = { width: fixed, minWidth: fixed, maxWidth: fixed };
-    }
-    const { width, minWidth, maxWidth } = span;
-    const pinnedSide = columnSide(view, cell.columnIndex);
-    return {
-        state: {
-            columnKey: cell.key,
-            resizable,
-            resizing: view.columnResize?.columnKey === cell.key,
-            width,
-            minWidth,
-            maxWidth,
-            edge: resizeEdge(pinnedSide),
-        },
-        tabIndex: 0,
-        attributes: {
-            role: "separator",
-            "aria-orientation": "vertical",
-            "aria-valuenow": width,
-            "aria-valuemin": minWidth,
-            "aria-valuemax": resizeMaximum(span, view.viewportWidth),
-            [COLUMN_RESIZER_ATTRIBUTE]: cell.key,
-        },
-    };
 }
 
 /**

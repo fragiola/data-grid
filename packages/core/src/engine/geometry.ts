@@ -127,15 +127,6 @@ export function endPartFrom<TRow, TNode>(view: GridView<TRow, TNode>): number {
 }
 
 /**
- * The edge of a header cell a resize moves (E1.1), by its column's part (`columnPart`): a column
- * pinned at the end grows from its start edge (toward the start), every other one from its end.
- * What the engine's drag and keys and a resizer's state both read.
- */
-export function resizeEdge(part: PinnedSide | undefined): "start" | "end" {
-    return part === "end" ? "start" : "end";
-}
-
-/**
  * A pinned cell's sticky inline start inset: its column's offset less the layers' horizontal
  * offset `layerX` (what they are translated by), plus `endShift` for a column pinned at the end
  * (`pinnedEndShift`). The browser resolves sticky in layout, before the transform, against the

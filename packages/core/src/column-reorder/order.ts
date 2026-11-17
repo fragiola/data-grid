@@ -1,25 +1,24 @@
 import {
     columnPart,
-    isHeaderRow,
     partEnd,
     partStart,
     pinnedPart,
     pinnedPartsOf,
 } from "../header/header";
-import { lowerBound, sameList } from "../utils/utils";
 import type {
     Column,
     HeaderCellLayout,
     HeaderLayout,
     PinnedSide,
-    ReorderSide,
-} from "./types";
+} from "../model/types";
+import { lowerBound } from "../utils/utils";
 
-// The column order (Epic #75, O1, O2, O5): the model keeps the keys of columns and groups in the
-// order siblings take; the entries of `columns` are laid out in it, each sibling list on its own
-// (a group's children, or the top level), so an entry moves only among its siblings and a group
-// moves whole. Pure: the model lays the columns out with it, the engine drags and moves by it.
-
+// The column order (Epic #75, O1, O2, O5; a feature since Epic #148): the feature keeps the keys
+// of columns and groups in the order siblings take; the entries of `columns` are laid out in it,
+// each sibling list on its own (a group's children, or the top level), so an entry moves only
+// among its siblings and a group moves whole, and the columns a `pinned` puts in a part (as
+// declared: the core's column model) move within it. Pure: the feature lays the columns out with
+// it, and drags and moves by it.
 /** What orders an entry among its siblings: its key (`pinnedPart` tells its part). */
 interface Entry {
     readonly key: string;
@@ -66,21 +65,6 @@ export function siblingOrder(
         }
         return ordered;
     };
-}
-
-/** The order kept of a value: its strings, each once (an option's, lenient as the others). */
-export function keptOrder(columnOrder: unknown): readonly string[] {
-    if (!Array.isArray(columnOrder)) return [];
-    return [
-        ...new Set(
-            columnOrder.filter((key): key is string => typeof key === "string"),
-        ),
-    ];
-}
-
-/** Whether two orders list the same keys in the same order. */
-export function sameOrder(a: readonly string[], b: readonly string[]): boolean {
-    return sameList(a, b, Object.is);
 }
 
 /** Whether a header cell's column or group can be moved (`reorderable`). */
@@ -175,35 +159,6 @@ export function siblingsOf<TRow, TNode>(
         end: firstFrom(partEnd(at, startCount, endFrom, columns.length)),
         pinned: columnPart(at, startCount, endFrom),
     };
-}
-
-/**
- * The key of a cell's column or group: a header cell's own, a body (or summary row) cell's
- * column's. What an order change keeps the active cell on.
- */
-export function cellKeyAt<TRow, TNode>(
-    state: {
-        readonly header: HeaderLayout<TRow, TNode>;
-        readonly columns: readonly Column<TRow, TNode>[];
-    },
-    position: { readonly rowIndex: number; readonly columnIndex: number },
-): string | undefined {
-    return isHeaderRow(position.rowIndex, state.header)
-        ? state.header.cellAt(position.rowIndex, position.columnIndex)?.key
-        : state.columns[position.columnIndex]?.key;
-}
-
-/**
- * Where an entry at `index` among its siblings lands, dropped on `side` of the one at
- * `targetIndex` (itself included): its index once moved.
- */
-export function landingIndex(
-    index: number,
-    targetIndex: number,
-    side: ReorderSide,
-): number {
-    const to = side === "before" ? targetIndex : targetIndex + 1;
-    return to > index ? to - 1 : to;
 }
 
 /**

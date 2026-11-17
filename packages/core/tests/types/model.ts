@@ -7,6 +7,10 @@ import {
     createDataGridEngine,
     createDataGridModel,
 } from "../../src";
+import { columnGroupCollapse } from "../../src/column-group-collapse";
+import { columnPinning } from "../../src/column-pinning";
+import { columnReorder } from "../../src/column-reorder";
+import { columnResize } from "../../src/column-resize";
 import { navigation } from "../../src/navigation";
 
 interface Person {
@@ -29,6 +33,30 @@ const columns: Column<Person>[] = [
 ];
 
 const grid = createDataGridModel<Person>({ columns, rows: [] });
+// the column features (Epic #148): their keys type with them installed only
+const columnGrid = createDataGridModel({
+    columns,
+    rows: [] as Person[],
+    features: [
+        columnResize(),
+        columnReorder(),
+        columnPinning(),
+        columnGroupCollapse(),
+    ],
+});
+// @ts-expect-error
+grid.run("column-order.reset");
+// @ts-expect-error
+grid.run("column-widths.reset", {});
+// @ts-expect-error
+grid.get("collapsed-group-keys");
+// @ts-expect-error
+grid.is("group-collapsed", { groupKey: "g" });
+// @ts-expect-error
+grid.get("pinned-column-keys");
+const pinnedKeys: { readonly start: readonly string[] } =
+    columnGrid.get("pinned-column-keys");
+void pinnedKeys;
 // the active position's commands are navigation's (Epic #144)
 const navigated = createDataGridModel({
     columns,
@@ -216,23 +244,23 @@ const expandedKeys: readonly (string | number)[] =
 void expandedKeys;
 
 // a column or a group moves before or after a sibling; the order is keys; a reset takes none
-grid.run("column-order.move", {
+columnGrid.run("column-order.move", {
     columnKey: "name",
     targetKey: "id",
     side: "before",
 });
 // @ts-expect-error
-grid.run("column-order.move", { columnKey: "name", targetKey: "id" });
-grid.run("column-order.move", {
+columnGrid.run("column-order.move", { columnKey: "name", targetKey: "id" });
+columnGrid.run("column-order.move", {
     columnKey: "name",
     targetKey: "id",
     // @ts-expect-error
     side: "beside",
 });
 // @ts-expect-error
-grid.run("column-order.set", { columnOrder: [1] });
-grid.run("column-order.reset");
-const columnOrder: readonly string[] = grid.get("column-order");
+columnGrid.run("column-order.set", { columnOrder: [1] });
+columnGrid.run("column-order.reset");
+const columnOrder: readonly string[] = columnGrid.get("column-order");
 void columnOrder;
 const reorderableGroup: ColumnOrGroup<Person> = {
     key: "g",
@@ -256,7 +284,7 @@ const flexGroup: ColumnOrGroup<Person> = {
     children: [{ key: "name", width: 80 }],
 };
 void flexGroup;
-grid.run("column-widths.resize", {
+columnGrid.run("column-widths.resize", {
     columnKey: "name",
     width: 120,
     autoWidths: { name: 100 },
@@ -316,15 +344,17 @@ void collapsingColumn;
 // @ts-expect-error
 const wrongShow: Column<Person> = { key: "a", width: 1, groupShow: "open" };
 void wrongShow;
-const collapsed: readonly string[] = grid.get("collapsed-group-keys");
+const collapsed: readonly string[] = columnGrid.get("collapsed-group-keys");
 void collapsed;
-grid.run("column-groups.toggle", { groupKey: "g" });
-grid.run("column-groups.set", { groupKeys: ["g"] });
+columnGrid.run("column-groups.toggle", { groupKey: "g" });
+columnGrid.run("column-groups.set", { groupKeys: ["g"] });
 // @ts-expect-error
-grid.run("column-groups.toggle", { columnKey: "g" });
+columnGrid.run("column-groups.toggle", { columnKey: "g" });
 // @ts-expect-error
-grid.run("column-groups.set", { groupKeys: [1] });
-const isCollapsed: boolean = grid.is("group-collapsed", { groupKey: "g" });
+columnGrid.run("column-groups.set", { groupKeys: [1] });
+const isCollapsed: boolean = columnGrid.is("group-collapsed", {
+    groupKey: "g",
+});
 void isCollapsed;
 
 void groupWithCells;

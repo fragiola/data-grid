@@ -15,6 +15,10 @@ import {
     type Middleware,
 } from "../../src";
 import { clipboard } from "../../src/clipboard";
+import { columnGroupCollapse } from "../../src/column-group-collapse";
+import { columnPinning } from "../../src/column-pinning";
+import { columnReorder } from "../../src/column-reorder";
+import { columnResize } from "../../src/column-resize";
 import { type CellEditEvent, editing } from "../../src/editing";
 import { fillHandle } from "../../src/fill";
 import { navigation } from "../../src/navigation";
@@ -43,7 +47,7 @@ bare.get("sort-columns");
 bare.is("column-sortable", { columnKey: "age" });
 // @ts-expect-error: its options neither
 createDataGridModel({ columns, rows, sortColumns: [] });
-bare.run("column-order.reset");
+bare.run("summary-rows.changed");
 
 // with it, they do, typed
 const sorted = createDataGridModel({
@@ -63,7 +67,7 @@ sorted.run("sort-columns.set", {
 // @ts-expect-error: a payload of the wrong shape
 sorted.run("sort-columns.toggle", { column: "age" });
 // the core's keys are still there, the row type still flows
-sorted.run("column-order.reset");
+sorted.run("summary-rows.changed");
 const person: Person | undefined = sorted.get("row-by", { index: 0 });
 
 // a middleware narrows a feature's commands too, and one written for any grid fits it
@@ -92,15 +96,15 @@ const anyFeatures: DataGridModel<Person> = sorted;
 anyFeatures.run("active-positon.clear");
 // @ts-expect-error
 anyFeatures.get("nope");
-anyFeatures.run("column-order.reset");
+anyFeatures.run("summary-rows.changed");
 const noFeatures: DataGridModel<Person> = bare;
 // a middleware written for a grid without features fits one with them
 declare const coreOnly: Middleware<Person, unknown, []>;
 sorted.use(coreOnly);
 bare.use((ctx, next) => {
-    if (ctx.command === "column-widths.resize") {
-        const width: number = ctx.payload.width;
-        void width;
+    if (ctx.command === "rows.changed") {
+        const start: number | undefined = ctx.payload.start;
+        void start;
     }
     return next();
 });
@@ -341,3 +345,69 @@ void [
     range,
     featuredRoot,
 ];
+
+// Epic #148: column resizing, reordering, pinning and collapsible groups are features. Without
+// them, their keys, options and root props do not compile
+// @ts-expect-error
+bare.run("column-widths.set", { columnWidths: {} });
+// @ts-expect-error
+bare.get("column-widths");
+// @ts-expect-error
+bare.run("column-order.move", {
+    columnKey: "a",
+    targetKey: "b",
+    side: "before",
+});
+// @ts-expect-error
+bare.run("column-groups.toggle", { groupKey: "g" });
+// @ts-expect-error
+createDataGridModel({ columns, rows, columnWidths: {} });
+// @ts-expect-error
+createDataGridModel({ columns, rows, columnOrder: [] });
+// @ts-expect-error
+createDataGridModel({ columns, rows, collapsedGroupKeys: [] });
+const withoutColumns: GridRootProps<Person, unknown, []> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    columnWidths: {},
+};
+void withoutColumns;
+const columnFeatures = [
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+    columnGroupCollapse(),
+] as const;
+const withColumns: GridRootProps<Person, unknown, typeof columnFeatures> = {
+    columns,
+    rows,
+    features: columnFeatures,
+    columnWidths: { age: 80 },
+    onColumnWidthsChange: (widths) => widths.age,
+    defaultColumnOrder: ["age"],
+    onColumnOrderChange: (order) => order.length,
+    collapsedGroupKeys: [],
+    onCollapsedGroupKeysChange: (keys) => keys.length,
+};
+void withColumns;
+const columned = createDataGridModel({
+    columns,
+    rows,
+    features: columnFeatures,
+    columnWidths: { age: 80 },
+    columnOrder: ["age"],
+    collapsedGroupKeys: ["g"],
+});
+const widths: Readonly<Record<string, number>> = columned.get("column-widths");
+const order: readonly string[] = columned.state.columnOrder;
+void widths;
+void order;
+columned.run("column-widths.resize", { columnKey: "age", width: 90 });
+columned.use((ctx, next) => {
+    if (ctx.command === "column-widths.resize") {
+        const width: number = ctx.payload.width;
+        void width;
+    }
+    return next();
+});

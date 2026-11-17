@@ -3,6 +3,7 @@ import type {
     DataGridFeatures,
     EngineKit,
     FeatureState,
+    PinnedColumns,
 } from "../feature/feature";
 import { featureEngine, featuresOf } from "../feature/registry";
 import {
@@ -10,19 +11,10 @@ import {
     headerRowCount,
     isHeaderRow,
     pinnedEndFrom,
-    pinnedPartsOf,
 } from "../header/header";
-import { shownColumnOf } from "../model/collapse";
 import { detailsChanged } from "../model/expansion";
+import { cellKeyAt, shownColumnOf } from "../model/layout";
 import type { DataGridModel } from "../model/model";
-import {
-    cellKeyAt,
-    hasReorderable,
-    isReorderable,
-    landingIndex,
-    type Siblings,
-    siblingsOf,
-} from "../model/order";
 import {
     cellKeysAt,
     groupExpanded,
@@ -50,21 +42,12 @@ import {
     autoWidthsOf,
     columnTraits,
     hasEngineSized,
-    hasResizable,
-    isFlex,
-    isResizable,
     NO_WIDTHS,
-    resizeMaximum,
-    type SpanWidths,
     sameWidths,
-    spanResizable,
-    spanWidths,
-    unresizedWidth,
     withinLimits,
-    withoutWidths,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
-import { clamp, indexAfterMove, isIndex, lowerBound } from "../utils/utils";
+import { clamp, indexAfterMove, isIndex } from "../utils/utils";
 import {
     createScrollMapping,
     DEFAULT_MAX_SCROLL_SIZE,
@@ -85,7 +68,6 @@ import {
 import {
     CELL_SELECTOR,
     CLICK_SLOP,
-    COLUMN_RESIZER_ATTRIBUTE,
     cellSelector,
     FILL_HANDLE_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
@@ -122,11 +104,7 @@ import {
     dropTargetOf,
     edgeStep,
     type FeatureDrag,
-    RESIZE_KEYS,
-    RESIZE_SHIFT_STEP,
-    RESIZE_STEP,
-    type ReorderDrag,
-    type ResizeDrag,
+    landingIndex,
     type RowDrag,
 } from "./drag";
 import {
@@ -141,15 +119,12 @@ import {
     inlineStart,
     pinnedEndShift,
     pinnedInset,
-    resizeEdge,
     summaryHeight,
 } from "./geometry";
 import { createHeights, measuring } from "./heights";
 import { createInteraction } from "./interaction";
 import { rowsMove } from "./parts";
 import type {
-    ColumnReorder,
-    ColumnResize,
     DataGridEngine,
     DataGridEngineOptions,
     EngineActionKey,
@@ -214,6 +189,14 @@ type ScrollMoves = { top?: number | undefined; left?: number | undefined };
 /** No overscan option: the defaults (one object, not one per update). */
 const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
 
+/** No column pinned in effect: a grid without pinning (Epic #148), or none that fits. */
+const NO_PINNED: PinnedColumns = Object.freeze({
+    startCount: 0,
+    startWidth: 0,
+    endCount: 0,
+    endWidth: 0,
+});
+
 /** Creates the engine of one grid on screen. */
 export function createDataGridEngine<
     TRow,
@@ -276,7 +259,9 @@ export function createDataGridEngine<
     /** the engine's widths in effect: automatic widths and flex shares (`column-auto-widths`) */
     let autoWidths: ColumnWidths = NO_WIDTHS;
     updateAutoWidths();
-    let columnAxis = columnAxisOf(state, autoWidths);
+    let columnAxis = columnAxisOf(state, overridesOf(state), autoWidths);
+    /** the columns pinned in effect (pinning's, Epic #148: none without it) */
+    let pinning = NO_PINNED;
     /** the pinned columns in effect, at the start and at the end, and their widths */
     let pinnedCount = 0;
     let pinnedWidth = 0;
@@ -320,14 +305,9 @@ export function createDataGridEngine<
      * interaction): the next update builds a view, which it skips otherwise (D9)
      */
     let viewStale = false;
-    /**
-     * the column a drag is resizing (Epic #70), the one a drag is moving (Epic #75), the row a
-     * drag is moving (Epic #86, E2.3), the drag
-     */
-    let columnResize: ColumnResize | null = null;
-    let columnReorder: ColumnReorder | null = null;
+    /** the row a drag is moving (Epic #86, E2.3), the drag (a feature's: Epic #144) */
     let rowReorder: RowReorder | null = null;
-    let drag: Drag<TRow, TNode> | null = null;
+    let drag: Drag | null = null;
     /**
      * whether the grid's tab stop is in the page's tab order (`view.tabbable`, Epic #89, E5.2):
      * nested in another grid, only while the outer grid's active cell holds it or focus is in it
@@ -350,7 +330,7 @@ export function createDataGridEngine<
         },
     };
     /** the last press the grid took (its drag, over or not): once it dragged, its click is its */
-    let lastPress: Drag<TRow, TNode> | null = null;
+    let lastPress: Drag | null = null;
     /**
      * what the engine lends its features' handlers (Epic #144): each read when it is called, the
      * engine's state as it is then
@@ -398,6 +378,21 @@ export function createDataGridEngine<
         cellDragStep,
         cellUnder: (current, known) =>
             cellAtView(viewXOf(current.x), viewYOf(current.y), known),
+        columnAxis: () => columnAxis,
+        viewportWidth: () => width,
+        pinned: () => pinning,
+        scrollLeft: () => columnsX.virtual,
+        viewX: viewXOf,
+        columnOffsetAt: partOffsetAt,
+        columnEdgeStep: columnEdgeStepAt,
+        edgeScroll: edgeScrollBy,
+        committed: () => committed as GridView<unknown, unknown> | null,
+        measureColumns: (shown, columnIndexes) =>
+            measureColumns(shown as GridView<TRow, TNode>, columnIndexes),
+        autoWidths: (overrides) =>
+            overrides === undefined
+                ? autoWidths
+                : autoWidthsOf(state.columns, overrides, automatic, width),
     };
     /** the features' keys, presses and clicks, made once with what the engine hands them */
     const featureHandlers = featureEngine(
@@ -471,6 +466,14 @@ export function createDataGridEngine<
         return featureHandlers.activate?.(position) === true;
     }
 
+    /**
+     * The widths a feature gives columns over their declared sizing (a resize's, Epic #148), none
+     * without one.
+     */
+    function overridesOf(of: DataGridState<TRow, TNode>): ColumnWidths {
+        return features.columnWidths?.(of as FeatureState) ?? NO_WIDTHS;
+    }
+
     function makeView(): GridView<TRow, TNode> {
         return buildView({
             state,
@@ -491,8 +494,6 @@ export function createDataGridEngine<
             interaction: interaction.cell,
             tabbable,
             emptyShown: layers.empty.size > 0,
-            columnResize,
-            columnReorder,
             reorderableRows: options.reorderableRows === true,
             rowReorder,
             direction,
@@ -852,29 +853,27 @@ export function createDataGridEngine<
         updatePinning();
     }
 
-    /**
-     * The pinned columns in effect: the leading ones pinned at the start and the trailing ones
-     * pinned at the end, while together they leave part of the view to scroll. As wide as the view
-     * or wider (a narrow screen), they would hide every other column: they scroll with the rest
-     * until the view is wider again.
-     */
     /** The first column pinned at the end in effect (`pinnedEndFrom`): the count without one. */
     function endFrom(): number {
         return pinnedEndFrom(columnAxis.count, pinnedEndCount);
     }
 
+    /**
+     * The pinned columns in effect (pinning's, Epic #148: none without it, every column
+     * scrolling), for the columns and the view's width: what the layers, the windows and the
+     * insets are laid out by, zeros without pinning.
+     */
     function updatePinning() {
-        const { startCount, endFrom: declaredEndFrom } = pinnedPartsOf(
-            state.columns,
-        );
-        const pinned = columnAxis.offsetOf(startCount);
-        const pinnedEnd =
-            columnAxis.totalSize - columnAxis.offsetOf(declaredEndFrom);
-        const fits = width === 0 || pinned + pinnedEnd < width;
-        pinnedCount = fits ? startCount : 0;
-        pinnedWidth = fits ? pinned : 0;
-        pinnedEndCount = fits ? columnAxis.count - declaredEndFrom : 0;
-        pinnedEndWidth = fits ? pinnedEnd : 0;
+        pinning =
+            features.pinnedColumns?.(
+                state.columns as readonly Column<unknown, unknown>[],
+                columnAxis,
+                width,
+            ) ?? NO_PINNED;
+        pinnedCount = pinning.startCount;
+        pinnedWidth = pinning.startWidth;
+        pinnedEndCount = pinning.endCount;
+        pinnedEndWidth = pinning.endWidth;
     }
 
     /**
@@ -883,7 +882,7 @@ export function createDataGridEngine<
      */
     function updateAutoWidths(): boolean {
         const next = hasEngineSized(state.columns)
-            ? autoWidthsOf(state.columns, state.columnWidths, automatic, width)
+            ? autoWidthsOf(state.columns, overridesOf(state), automatic, width)
             : NO_WIDTHS;
         if (sameWidths(next, autoWidths)) return false;
         autoWidths = next;
@@ -943,7 +942,7 @@ export function createDataGridEngine<
     function relayoutColumns(): boolean {
         if (!updateAutoWidths()) return false;
         const anchor = columnAnchor();
-        columnAxis = columnAxisOf(state, autoWidths);
+        columnAxis = columnAxisOf(state, overridesOf(state), autoWidths);
         updatePinning();
         if (anchor) keepColumnAnchor(anchor);
         relayout(true);
@@ -989,7 +988,9 @@ export function createDataGridEngine<
      * scroll): its target is worked out again from the pointer's last place, in the next frame.
      */
     function retargetAfterScroll() {
-        if (drag && drag.kind !== "resize" && drag.dragged) askFrame(drag);
+        if (drag?.dragged && !(drag.kind === "feature" && drag.fixed)) {
+            askFrame(drag);
+        }
     }
 
     /**
@@ -1389,11 +1390,11 @@ export function createDataGridEngine<
         lastPress = null;
     }
 
-    // ── drags: a resizer's, a header cell's, a row's; resizing's keys (Epics #70, #75, #86) ─
+    // ── drags: a row's, a feature's (Epics #86, #144) ──────────────────────────
 
     /**
      * This grid's element marked with `attribute` an event happened in, and the mark's value (a
-     * nested grid's is that grid's): a column resizer, a row's drag handle.
+     * nested grid's is that grid's): a row's drag handle, a feature's (a column resizer).
      */
     function markedOf(
         target: EventTarget | null,
@@ -1407,144 +1408,61 @@ export function createDataGridEngine<
             : null;
     }
 
-    /** This grid's column resizer an event happened in. */
-    function resizerOf(
-        target: EventTarget | null,
-    ): { element: HTMLElement; columnKey: string } | null {
-        const marked = markedOf(target, COLUMN_RESIZER_ATTRIBUTE);
-        return marked && { element: marked.element, columnKey: marked.value };
-    }
-
-    /** A column's or a group's width and limits, or `null` when none of its columns resizes. */
-    function resizeSpan(columnKey: string): SpanWidths | null {
-        const cell = state.header.cellByKey(columnKey);
-        return cell && spanResizable(state.columns, cell)
-            ? spanWidths(state.columns, columnAxis, cell)
-            : null;
-    }
-
-    /** A drag's state changed: a new view, and its event. */
-    function publish<
-        K extends "column-resize" | "column-reorder" | "row-reorder",
-    >(event: K, value: EngineEventMap[K]) {
-        viewStale = true;
-        update();
-        emit(event, value);
-    }
-
-    function setColumnResize(next: ColumnResize | null) {
-        columnResize = next;
-        publish("column-resize", next);
-    }
-
-    function setColumnReorder(next: ColumnReorder | null) {
-        columnReorder = next;
-        publish("column-reorder", next);
-    }
-
+    /** A row's drag's state changed: a new view, and its event. */
     function setRowReorder(next: RowReorder | null) {
         rowReorder = next;
-        publish("row-reorder", next);
+        viewStale = true;
+        update();
+        emit("row-reorder", next);
     }
 
     /**
-     * A press in the grid, after the consumer's own handlers (`preventDefault` cancels it): a
-     * primary press on a resizer starts a drag (W4), one on a reorderable header cell or on a
-     * row's drag handle may become one (O3, E2.3). With no resizable or reorderable column, and
-     * rows that do not move, there is none.
+     * A press in the grid, after the consumer's own handlers (`preventDefault` cancels it): the
+     * features' first (Epic #144: a fill handle's, a body cell's range; Epic #148: a resizer's, a
+     * reorderable header cell's), then a primary press on a row's drag handle may become a drag
+     * (E2.3). With rows that do not move and no feature's, there is none.
      */
     function pointerdown(event: PointerEvent): boolean {
         if (event.defaultPrevented || event.button !== 0 || drag || !viewport) {
             return false;
         }
-        const doc = viewport.ownerDocument;
-        if (hasResizable(state.columns)) {
-            const resizer = resizerOf(event.target);
-            const span = resizer && resizeSpan(resizer.columnKey);
-            if (resizer && span) {
-                const { columnKey, element } = resizer;
-                // a press on a resizer is a drag: no focus (which would activate its header cell
-                // and scroll it into view, away from the pointer), no text selection
-                event.preventDefault();
-                press(event, {
-                    kind: "resize",
-                    columnKey,
-                    dragged: true,
-                    pointerId: event.pointerId,
-                    startX: event.clientX,
-                    startY: event.clientY,
-                    startWidth: span.width,
-                    sign: resizeSign(columnKey),
-                    autoWidths: resizeFrom(columnKey),
-                    element,
-                    doc,
-                    x: event.clientX,
-                    y: event.clientY,
-                    appliedX: event.clientX,
-                    frame: null,
-                });
-                setColumnResize({ columnKey, width: span.width });
-                return true;
-            }
-        }
-        // a header cell's or a handle's press is not prevented: under the slop it is a click
-        // (focus, a sort)
-        const pressed = {
-            dragged: false,
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            doc,
-            x: event.clientX,
-            y: event.clientY,
-            frame: null,
-        };
-        // the features' presses (Epic #144): a fill handle's (before a row's handle around it, as
-        // ever), a body cell's range (which leaves a row's handle and the header cells alone)
+        // the features' presses: a resizer's, a fill handle's (before a row's handle around it,
+        // as ever), a body cell's range (which leaves a row's handle and the header cells alone),
+        // a header cell's move
         for (const featurePress of featureHandlers.pointerdown) {
             if (featurePress(event)) return true;
         }
         const handle = options.reorderableRows
             ? markedOf(event.target, ROW_DRAG_HANDLE_ATTRIBUTE)
             : null;
-        if (handle) {
-            // a row that cannot move (sorted, not loaded): a plain press
-            const rowIndex = Number(handle.value);
-            const rowKey = loadedRowKey(state, rowIndex);
-            if (rowKey === undefined || !rowsOrderedMove()) {
-                return false;
-            }
-            return press(event, {
-                ...pressed,
-                kind: "row",
-                rowIndex,
-                rowKey,
-                element: handle.element,
-                viewY: 0,
-            });
-        }
-        const header =
-            hasReorderable(state.columnEntries) && inViewport(event.target)
-                ? headerCellOf(event.target)
-                : null;
-        if (header && isReorderable(header.cell)) {
-            return press(event, {
-                ...pressed,
-                kind: "reorder",
-                columnKey: header.cell.key,
-                element: header.element,
-                header: null,
-                siblings: null,
-            });
-        }
-        return false;
+        if (!handle) return false;
+        // a row that cannot move (sorted, not loaded): a plain press
+        const rowIndex = Number(handle.value);
+        const rowKey = loadedRowKey(state, rowIndex);
+        if (rowKey === undefined || !rowsOrderedMove()) return false;
+        // a handle's press is not prevented: under the slop it is a click
+        return press(event, {
+            kind: "row",
+            dragged: false,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            doc: viewport.ownerDocument,
+            x: event.clientX,
+            y: event.clientY,
+            frame: null,
+            rowIndex,
+            rowKey,
+            element: handle.element,
+            viewY: 0,
+        });
     }
 
     /**
      * A press the grid takes: its drag (or a press that may become one) followed wherever the
      * pointer goes, and held by its element at once when it drags from the start.
      */
-    function press(event: PointerEvent, next: Drag<TRow, TNode>): true {
+    function press(event: PointerEvent, next: Drag): true {
         drag = next;
         lastPress = next;
         listen(next, event.pointerType === "touch");
@@ -1589,7 +1507,7 @@ export function createDataGridEngine<
      * (Epic #89: the menu it would open; a mouse's context menu, a Ctrl+click on macOS too, stays
      * the app's).
      */
-    function listen(current: Drag<TRow, TNode>, touch: boolean) {
+    function listen(current: Drag, touch: boolean) {
         const { doc } = current;
         doc.addEventListener("pointermove", onDragMove, true);
         // a press the grid never heard released: the next one ends it
@@ -1604,7 +1522,7 @@ export function createDataGridEngine<
     }
 
     /** The moves come to the drag's element wherever the pointer goes. */
-    function capture(current: Drag<TRow, TNode>) {
+    function capture(current: Drag) {
         current.element.addEventListener("lostpointercapture", onLostCapture);
         try {
             current.element.setPointerCapture(current.pointerId);
@@ -1614,7 +1532,7 @@ export function createDataGridEngine<
         }
     }
 
-    /** Whether a drag is on: a resize, or a header cell's past the slop (Escape is its). */
+    /** Whether a drag is on: one past the slop, or dragging from its press (Escape is its). */
     function dragging(): boolean {
         return drag?.dragged === true;
     }
@@ -1628,7 +1546,7 @@ export function createDataGridEngine<
             return;
         }
         if (!drag.dragged) {
-            // past a click's slop, the press drags its header cell or its row
+            // past a click's slop, the press drags its row, or a feature's (a header cell's)
             if (
                 Math.hypot(
                     event.clientX - drag.startX,
@@ -1638,18 +1556,18 @@ export function createDataGridEngine<
                 drag.x = event.clientX;
                 drag.y = event.clientY;
                 if (drag.kind === "row") startRowDrag(drag);
-                else if (drag.kind === "reorder") startReorder(drag);
-                else if (drag.kind === "feature") drag.start?.();
+                else drag.start?.();
             }
             return;
         }
-        // a column's drags follow the pointer's x, a row's its y, a feature's both
+        // a row's drag follows the pointer's y, a feature's its axis (a column's: x) or both
+        const axis = drag.kind === "row" ? "y" : drag.axis;
         if (
-            drag.kind === "row"
-                ? event.clientY === drag.y
-                : drag.kind === "feature"
-                  ? event.clientX === drag.x && event.clientY === drag.y
-                  : event.clientX === drag.x
+            axis === "x"
+                ? event.clientX === drag.x
+                : axis === "y"
+                  ? event.clientY === drag.y
+                  : event.clientX === drag.x && event.clientY === drag.y
         ) {
             return;
         }
@@ -1674,7 +1592,7 @@ export function createDataGridEngine<
     }
 
     /** Asks for the drag's next frame, once; `false` in a DOM without animation frames. */
-    function askFrame(current: Drag<TRow, TNode>): boolean {
+    function askFrame(current: Drag): boolean {
         if (current.frame !== null) return true;
         const win = current.doc.defaultView;
         if (!win || !("requestAnimationFrame" in win)) return false;
@@ -1689,13 +1607,12 @@ export function createDataGridEngine<
     }
 
     /**
-     * A drag's step to its pointer: a resize, a reorder's target (a column's, a row's), or a
-     * feature's own (a range's focus, a fill's target).
+     * A drag's step to its pointer: a row's target, or a feature's own (a range's focus, a fill's
+     * target, a column's width or target).
      */
-    function dragTo(current: Drag<TRow, TNode>) {
-        if (current.kind === "resize") resizeTo(current);
-        else if (current.kind === "feature") current.step();
-        else reorderStep(current);
+    function dragTo(current: Drag) {
+        if (current.kind === "feature") current.step();
+        else rowDragStep(current);
     }
 
     /** The drag's element lost the pointer (removed, or taken by the page). */
@@ -1725,35 +1642,8 @@ export function createDataGridEngine<
         event.preventDefault();
     }
 
-    /**
-     * Which way a column (or a group) grows on screen, 1 to the right, -1 to the left: toward the
-     * end, from its end edge, or for one pinned at the end toward the start, from its start edge
-     * (the boundary with the columns that scroll: `columnResizerPart`'s `edge`); mirrored right to
-     * left.
-     */
-    function resizeSign(columnKey: string): number {
-        const cell = state.header.cellByKey(columnKey);
-        const edge = resizeEdge(
-            cell && columnPart(cell.columnIndex, pinnedCount, endFrom()),
-        );
-        return edge === "start"
-            ? -inlineSign(direction)
-            : inlineSign(direction);
-    }
-
-    /** Resizes a drag's column to its pointer, growing the way `resizeSign` says. */
-    function resizeTo(resize: ResizeDrag) {
-        resize.appliedX = resize.x;
-        // from the engine's widths when it started: dragged back, a column needs no width (A2)
-        model.run("column-widths.resize", {
-            columnKey: resize.columnKey,
-            width: resize.startWidth + resize.sign * (resize.x - resize.startX),
-            autoWidths: resize.autoWidths,
-        });
-    }
-
     /** Stops listening to the drag, its frame cancelled; returns it. */
-    function stopDrag(): Drag<TRow, TNode> | null {
+    function stopDrag(): Drag | null {
         const ended = drag;
         if (!ended) return null;
         const { doc } = ended;
@@ -1773,33 +1663,13 @@ export function createDataGridEngine<
     }
 
     /**
-     * Ends the drag. A resize ends at the pointer's last place (a move not resized yet resizes
-     * now), or on a cancel back to the width it started from: a resize like the drag's own, only
-     * its columns change (the others' widths stay as they are now), and what lets the drag
-     * resize lets it restore. A header cell's drag moves its column or group on a release only,
-     * once, and not when it would land where it is; a row's tells the move the same way. A
-     * feature's (a range's, a fill's: Epic #144) is told how it ended.
+     * Ends the drag. A row's tells its move on a release only, once, and not when it would land
+     * where it is. A feature's (a range's, a fill's: Epic #144; a column's resize or move: Epic
+     * #148) is told how it ended.
      */
     function endDrag(how: DragEnd) {
         const ended = stopDrag();
-        if (ended?.kind === "resize") {
-            if (how === "cancel") ended.x = ended.startX;
-            if (ended.x !== ended.appliedX) resizeTo(ended);
-            setColumnResize(null);
-        } else if (ended?.kind === "reorder" && ended.dragged) {
-            const target =
-                how === "release"
-                    ? reorderTarget(ended, viewXOf(ended.x))
-                    : null;
-            setColumnReorder(null);
-            if (target && target.targetKey !== null) {
-                model.run("column-order.move", {
-                    columnKey: ended.columnKey,
-                    targetKey: target.targetKey,
-                    side: target.side,
-                });
-            }
-        } else if (ended?.kind === "feature") {
+        if (ended?.kind === "feature") {
             ended.end(how);
         } else if (ended?.kind === "row" && ended.dragged) {
             const target =
@@ -1821,82 +1691,7 @@ export function createDataGridEngine<
         }
     }
 
-    /**
-     * After the widths or the columns changed during a drag: it follows its column or group (a
-     * resize reports the width on screen, a header cell's drag its target), and ends when that
-     * is gone or can no longer be resized or moved (a row's: `followRowDrag`). The state is set,
-     * not published: the model's change publishes it.
-     */
-    function followDrag(current: ResizeDrag | ReorderDrag<TRow, TNode>) {
-        if (current.kind === "resize") {
-            const span = resizeSpan(current.columnKey);
-            if (span) {
-                if (columnResize?.width !== span.width) {
-                    columnResize = {
-                        columnKey: current.columnKey,
-                        width: span.width,
-                    };
-                }
-                return;
-            }
-        } else {
-            const siblings = siblingsFor(current);
-            if (siblings && isReorderable(siblings.cell)) {
-                columnReorder = reorderTarget(current, viewXOf(current.x));
-                return;
-            }
-        }
-        stopDrag();
-        columnResize = null;
-        columnReorder = null;
-    }
-
-    /**
-     * A key on a focused resizer (W6): its arrows (Shift: farther), Home and End resize its
-     * column, through the column's limits; Enter fits it to its content (A4), once per press; the
-     * other page keys and Space are no use to it (the container would page itself). Returns
-     * whether the key was the resizer's.
-     */
-    function resizerKey(event: KeyboardEvent, target: Element): boolean {
-        const key = event.key;
-        const enter =
-            key === "Enter" &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            !event.shiftKey;
-        if (!enter && !PAGE_KEYS.has(key) && key !== " ") return false;
-        const resizer = resizerOf(target);
-        if (!resizer) return false;
-        event.preventDefault();
-        if (enter) {
-            if (!event.repeat) fitColumns([resizer.columnKey]);
-            return true;
-        }
-        const span =
-            RESIZE_KEYS.has(key) && !event.ctrlKey && !event.metaKey
-                ? resizeSpan(resizer.columnKey)
-                : null;
-        if (!span) return true;
-        const step = event.shiftKey ? RESIZE_SHIFT_STEP : RESIZE_STEP;
-        // End: the maximum it reports (`aria-valuemax`), the view's width without one
-        const viewWidth = width;
-        // an arrow moves the handle its way: wider where the column grows that way (`resizeSign`)
-        const to =
-            key === "ArrowLeft" || key === "ArrowRight"
-                ? span.width +
-                  (key === "ArrowRight" ? step : -step) *
-                      resizeSign(resizer.columnKey)
-                : key === "Home"
-                  ? span.minWidth
-                  : resizeMaximum(span, viewWidth);
-        model.run("column-widths.resize", {
-            columnKey: resizer.columnKey,
-            width: to,
-        });
-        return true;
-    }
-
-    // ── fitting columns to their content (Epic #80) ──────────────────────────
+    // ── measuring columns' content (Epic #80): the automatic widths, a resize's fit ─
 
     /**
      * The columns' content widths (A3), measured in one layout: for each column index (in
@@ -1961,108 +1756,6 @@ export function createDataGridEngine<
     }
 
     /**
-     * The engine's widths a resize or a fit of `columns` starts from (A2): the ones in effect,
-     * and for each of them with an override the engine would size otherwise (a flex share, an
-     * automatic width), the width it has without that override: back to it, it needs none, by a
-     * drag, a key or a fit alike.
-     */
-    function unresizedWidthsOf(
-        columns: readonly Column<TRow, TNode>[],
-    ): ColumnWidths {
-        if (!hasEngineSized(state.columns)) return NO_WIDTHS;
-        let record: Record<string, number> | null = null;
-        for (const column of columns) {
-            const { key } = column;
-            if (
-                !isResizable(column) ||
-                !Object.hasOwn(state.columnWidths, key) ||
-                !(isFlex(column) || column.autoSize === true)
-            ) {
-                continue;
-            }
-            const own = autoWidthsOf(
-                state.columns,
-                withoutWidths(state.columnWidths, [key]),
-                automatic,
-                width,
-            )[key];
-            if (own !== undefined) {
-                record ??= { ...autoWidths };
-                record[key] = own;
-            }
-        }
-        return record ?? autoWidths;
-    }
-
-    /** What a resize of a column or a group starts from (`unresizedWidthsOf` its columns). */
-    function resizeFrom(columnKey: string): ColumnWidths {
-        const cell = state.header.cellByKey(columnKey);
-        return cell
-            ? unresizedWidthsOf(
-                  state.columns.slice(
-                      cell.columnIndex,
-                      cell.columnIndex + cell.columnSpan,
-                  ),
-              )
-            : autoWidths;
-    }
-
-    /**
-     * Fits columns to their content (A3, A4): each resizable column of each key (a column, or a
-     * group's), or every rendered one without keys, measured on the view on screen in one
-     * layout. One `column-widths.set` with the other widths as they are, none when no width
-     * changes. A column fitted to the width it has without an override (`unresizedWidth`: its
-     * flex share or automatic width as they are without it, else its own) needs none.
-     */
-    function fitColumns(columnKeys?: readonly string[]) {
-        const shown = committed;
-        if (!viewport || !shown) return;
-        const { columnDefs, header } = shown;
-        const indexes = new Set<number>();
-        const add = (columnIndex: number) => {
-            const column = columnDefs[columnIndex];
-            if (column && isResizable(column)) indexes.add(columnIndex);
-        };
-        if (columnKeys === undefined) {
-            for (const columnIndex of shown.columns) add(columnIndex);
-        } else {
-            for (const key of columnKeys) {
-                const cell = header.cellByKey(key);
-                if (!cell) continue;
-                const end = cell.columnIndex + cell.columnSpan;
-                for (let index = cell.columnIndex; index < end; index++) {
-                    add(index);
-                }
-            }
-        }
-        const fitted: [string, number][] = [];
-        const keys: string[] = [];
-        const measuredColumns = measureColumns(shown, indexes);
-        const from = unresizedWidthsOf(
-            [...measuredColumns.keys()].flatMap((columnIndex) => {
-                const column = columnDefs[columnIndex];
-                return column ? [column] : [];
-            }),
-        );
-        for (const [columnIndex, measured] of measuredColumns) {
-            const column = columnDefs[columnIndex];
-            if (!column) continue;
-            const width = fittedWidth(column, measured);
-            keys.push(column.key);
-            if (width !== unresizedWidth(column, from)) {
-                fitted.push([column.key, width]);
-            }
-        }
-        const columnWidths = {
-            ...withoutWidths(state.columnWidths, keys),
-            ...Object.fromEntries(fitted),
-        };
-        if (!sameWidths(columnWidths, state.columnWidths)) {
-            model.run("column-widths.set", { columnWidths });
-        }
-    }
-
-    /**
      * Fits the `autoSize` columns a committed view renders with loaded rows (A5), each once per
      * attach, in one layout: their widths are the engine's (`automatic`), never the model's. Not
      * while the grid is not laid out (no size: a hidden tab, a closed dialog): the first commit
@@ -2108,32 +1801,7 @@ export function createDataGridEngine<
         }
     }
 
-    // ── column reordering: the drag, the edge scroll, the keys (Epic #75) ────
-
-    /** A press moved past the slop: its header cell drags, holding the pointer. */
-    function startReorder(current: ReorderDrag<TRow, TNode>) {
-        current.dragged = true;
-        capture(current);
-        const target = reorderTarget(current, viewXOf(current.x));
-        // the cell gone since the press (new columns): nothing to drag
-        if (target) setColumnReorder(target);
-        else stopDrag();
-    }
-
-    /** The drag's siblings, found again when the header changed. */
-    function siblingsFor(
-        current: ReorderDrag<TRow, TNode>,
-    ): Siblings<TRow, TNode> | null {
-        if (current.header !== state.header) {
-            current.header = state.header;
-            current.siblings = siblingsOf(
-                state.columns,
-                state.header,
-                current.columnKey,
-            );
-        }
-        return current.siblings;
-    }
+    // ── the pointer over the view: its place, the edge scroll (Epics #75, #88) ─
 
     /**
      * Where a pointer's x is in the view: from its inline start, inside its border and a
@@ -2148,13 +1816,6 @@ export function createDataGridEngine<
                 ? left
                 : left + viewport.clientWidth;
         return inlineSign(direction) * (clientX - start);
-    }
-
-    /** Whether a drag's cell is pinned with the pinned columns in effect: always in view. */
-    function inPinnedStrip(siblings: Siblings<TRow, TNode>): boolean {
-        return siblings.pinned === "start"
-            ? pinnedCount > 0
-            : siblings.pinned === "end" && pinnedEndCount > 0;
     }
 
     /**
@@ -2175,79 +1836,16 @@ export function createDataGridEngine<
     }
 
     /**
-     * The virtual offset under a pointer at `x` in the view, kept over the part its siblings show
-     * in (`partOffsetAt`).
+     * A frame of a row's drag: the pointer's place in the view read once (before the scroll
+     * writes; kept as `viewY`), the edge scroll, then the target; the pointer held near an edge
+     * keeps scrolling, a frame at a time.
      */
-    function offsetAt(siblings: Siblings<TRow, TNode>, x: number): number {
-        return partOffsetAt(
-            inPinnedStrip(siblings) ? siblings.pinned : undefined,
-            x,
-        );
-    }
-
-    /**
-     * Where a drop would move a drag's column or group (O3), its pointer at `x` in the view: beside
-     * the sibling under it, on the side of its middle, among the ones it may move among. The
-     * pointer is kept over the part of the view they show in (the pinned strip, or the columns
-     * that scroll), so the target is the nearest one in view: the edge scroll reaches further.
-     * From the column axis, not the DOM: a sibling scrolled out of the rendered columns counts,
-     * scaled or not. No target when it would land where it is; the current state while the same.
-     */
-    function reorderTarget(
-        current: ReorderDrag<TRow, TNode>,
-        x: number,
-    ): ColumnReorder | null {
-        const siblings = siblingsFor(current);
-        if (!siblings) return null;
-        const { cells, index, start, end } = siblings;
-        const offset = offsetAt(siblings, x);
-        const endOf = (cell: HeaderCellLayout<TRow, TNode>) =>
-            columnAxis.offsetOf(cell.columnIndex + cell.columnSpan);
-        // the first one ending past the pointer, else the last
-        const at = Math.min(
-            start +
-                lowerBound(end - start, (i) => {
-                    const cell = cells[start + i];
-                    return cell !== undefined && endOf(cell) <= offset;
-                }),
-            end - 1,
-        );
-        const target = cells[at];
-        if (!target) return null;
-        const { columnKey } = current;
-        return dropTargetOf<ColumnReorder>(
-            columnReorder,
-            offset,
-            index,
-            at,
-            columnAxis.offsetOf(target.columnIndex),
-            endOf(target),
-            true,
-            (side) =>
-                side
-                    ? { columnKey, targetKey: target.key, side }
-                    : { columnKey, targetKey: null, side: null },
-        );
-    }
-
-    /**
-     * A frame of a header cell's or a row's drag, on its axis: the pointer's place in the view
-     * read once (before the scroll writes; a row's kept as `viewY`), the edge scroll, then the
-     * target; the pointer held near an edge keeps scrolling, a frame at a time.
-     */
-    function reorderStep(current: ReorderDrag<TRow, TNode> | RowDrag) {
-        const row = current.kind === "row";
-        const at = row ? viewYOf(current.y) : viewXOf(current.x);
-        if (row) current.viewY = at;
-        const step = row ? rowEdgeStepAt(at) : columnEdgeStep(current, at);
-        const scrolled = edgeScrollBy(row ? step : 0, row ? 0 : step);
-        if (row) {
-            const target = rowReorderTarget(current, at);
-            if (target !== rowReorder) setRowReorder(target);
-        } else {
-            const target = reorderTarget(current, at);
-            if (target && target !== columnReorder) setColumnReorder(target);
-        }
+    function rowDragStep(current: RowDrag) {
+        const at = viewYOf(current.y);
+        current.viewY = at;
+        const scrolled = edgeScrollBy(rowEdgeStepAt(at), 0);
+        const target = rowReorderTarget(current, at);
+        if (target !== rowReorder) setRowReorder(target);
         if (scrolled) askFrame(current);
     }
 
@@ -2265,76 +1863,6 @@ export function createDataGridEngine<
             left: left === 0 ? undefined : x + left,
         });
         return rowsY.virtual !== y || columnsX.virtual !== x;
-    }
-
-    /**
-     * A header cell's drag's edge step (`edgeStep`) near the start or end edge of the columns
-     * that scroll (or past it): far siblings come into reach. 0 for a pinned cell in effect
-     * (always in view) and toward an edge its siblings already end inside.
-     */
-    function columnEdgeStep(
-        current: ReorderDrag<TRow, TNode>,
-        x: number,
-    ): number {
-        const siblings = siblingsFor(current);
-        if (!siblings || inPinnedStrip(siblings)) return 0;
-        const step = columnEdgeStepAt(x);
-        if (step === 0) return 0;
-        // nothing more comes into reach that way: the siblings end inside the view on that side
-        const { cells, start, end } = siblings;
-        const edge = step > 0 ? cells[end - 1] : cells[start];
-        if (
-            !edge ||
-            (step > 0
-                ? columnAxis.offsetOf(edge.columnIndex + edge.columnSpan) <=
-                  columnsX.virtual + width - pinnedEndWidth
-                : columnAxis.offsetOf(edge.columnIndex) >=
-                  columnsX.virtual + pinnedWidth)
-        ) {
-            return 0;
-        }
-        return step;
-    }
-
-    /**
-     * Ctrl/⌘+Shift+←/→ on a reorderable header cell in navigation (O6): one move among its
-     * siblings, before the previous one or after the next, the active cell following its column.
-     * Handled even when nothing moves (at an end, past the pinned ones, refused): the page never
-     * gets them.
-     */
-    function reorderKey(event: KeyboardEvent, target: Element): boolean {
-        const key = inlineKey(event.key, direction);
-        const left = key === "ArrowLeft";
-        if (
-            (!left && key !== "ArrowRight") ||
-            !event.shiftKey ||
-            !(event.ctrlKey || event.metaKey) ||
-            !isCellElement(target)
-        ) {
-            return false;
-        }
-        const cell = headerCellOf(target)?.cell;
-        const siblings =
-            cell && isReorderable(cell)
-                ? siblingsOf(state.columns, state.header, cell.key)
-                : null;
-        if (!siblings) return false;
-        event.preventDefault();
-        const neighbour = siblings.cells[siblings.index + (left ? -1 : 1)];
-        // focus follows once the cells render in their new order (the commit); the cell moved
-        // by the keys is kept in view
-        if (
-            neighbour &&
-            model.run("column-order.move", {
-                columnKey: siblings.cell.key,
-                targetKey: neighbour.key,
-                side: left ? "before" : "after",
-            }).ok &&
-            state.activePosition
-        ) {
-            scrollToCell(scrollPayloadFor(state.activePosition));
-        }
-        return true;
     }
 
     // ── a cell drag's frame: the edge scroll, the cell under the pointer (Epic #88) ─
@@ -2636,14 +2164,12 @@ export function createDataGridEngine<
         // no press (`detail` 0: a screen reader, `element.click()`) has nothing to compare
         const press = pressedAt;
         pressedAt = null;
-        // the click ending a drag is the drag's, never a sort: a resizer's (a double click fits
-        // its column to its content, A4) or a header cell's (O3)
+        // the click ending a drag is the drag's, never a sort: a feature's tells it (a resizer's
+        // double click fits its column to its content, A4; a header cell's move, O3)
         const last = lastPress;
         lastPress = null;
         if (last?.dragged && event.detail > 0) {
-            if (last.kind === "resize" && event.detail === 2) {
-                fitColumns([last.columnKey]);
-            }
+            if (last.kind === "feature") last.click?.(event);
             return true;
         }
         if (
@@ -2938,8 +2464,11 @@ export function createDataGridEngine<
                     interaction.cycleControls(cell, target, event.shiftKey);
                     return true;
                 }
-                // a column resizer's keys resize its column (W6)
-                if (resizerKey(event, target)) return true;
+                // the features' keys on the cell's controls (Epic #148: a column resizer's keys
+                // resize its column, W6)
+                for (const featureKey of featureHandlers.interactionKeydown) {
+                    if (featureKey(event, target)) return true;
+                }
                 // a button or a link has no use for the page keys: the container would page
                 // itself, a far jump under scaling. A field keeps them (its caret)
                 // a radio, a menu item or a tab keeps its arrows (its group's own moves)
@@ -2961,7 +2490,7 @@ export function createDataGridEngine<
         // nothing else of the grid's
         if (event.altKey) return startKey(event, target);
         // the installed features' keys (Epic #141), before the grid's own: Enter or Space on a
-        // sortable column's header cell
+        // sortable column's header cell, Ctrl/⌘+Shift+←/→ on a reorderable one (Epic #148)
         for (const featureKey of featureHandlers.keydown) {
             if (featureKey(event, target)) return true;
         }
@@ -2991,7 +2520,6 @@ export function createDataGridEngine<
                 return true;
             }
         }
-        if (reorderKey(event, target)) return true;
         if (rowMoveKey(event, target)) return true;
         // the features' later keys (Epic #144): a range's, the rows' selection's
         for (const featureKey of featureHandlers.laterKeydown) {
@@ -3129,24 +2657,6 @@ export function createDataGridEngine<
             : null;
     }
 
-    /**
-     * A resize, the app's own too, starts from the widths on screen (A2): while the engine sizes
-     * columns itself, it fills a resize's `autoWidths` when it names none (`resizeFrom`).
-     */
-    const unuseModel = model.use((ctx, next) => {
-        if (
-            ctx.command === "column-widths.resize" &&
-            ctx.payload.autoWidths === undefined &&
-            hasEngineSized(state.columns)
-        ) {
-            ctx.payload = {
-                ...ctx.payload,
-                autoWidths: resizeFrom(ctx.payload.columnKey),
-            };
-        }
-        return next();
-    });
-
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
         // the features' own first (Epic #144: a range's presses and drag, a fill's source), so
@@ -3233,21 +2743,26 @@ export function createDataGridEngine<
                 anchored = true;
             }
         }
-        // a resize changes the columns' widths: the same path as new columns (W1)
-        const columnsChanged =
-            after.columns !== before.columns ||
-            after.columnWidths !== before.columnWidths;
-        const resizing = columnResize;
+        // a resize changes the columns' widths (a feature's, Epic #148): the same path as new
+        // columns (W1)
+        const resized = overridesOf(after) !== overridesOf(before);
+        const columnsChanged = after.columns !== before.columns || resized;
         const engineWidths = autoWidths;
         // a width changing left of the view keeps the view on the column it shows first, right
         // of the pinned ones, as far into it as it was (as a row expanding above it, M2); a
-        // collapse too, by its key (E1.3)
+        // collapse too, by its key (E1.3: a feature's say, `columnAnchored`)
         const anchor =
             after.columns === before.columns
-                ? after.columnWidths !== before.columnWidths
+                ? resized
                     ? columnAnchor()
                     : null
-                : after.collapsedGroupKeys !== before.collapsedGroupKeys
+                : after.columnEntries === before.columnEntries &&
+                    featureHandlers.columnAnchored.some((anchored) =>
+                        anchored(
+                            before as DataGridState<unknown, unknown>,
+                            after as DataGridState<unknown, unknown>,
+                        ),
+                    )
                   ? collapseAnchor(before, after)
                   : null;
         // the toggles' column is found again in the new columns (Epic #87)
@@ -3255,18 +2770,19 @@ export function createDataGridEngine<
         if (columnsChanged) {
             // the flex shares follow the columns, their order and the overrides (A1)
             updateAutoWidths();
-            columnAxis = columnAxisOf(after, autoWidths);
+            columnAxis = columnAxisOf(after, overridesOf(after), autoWidths);
             updatePinning();
             if (anchor) keepColumnAnchor(anchor);
         }
-        const reordering = columnReorder;
-        // a drag follows its column or group (W4, O3)
-        if (
-            drag?.dragged &&
-            (drag.kind === "resize" || drag.kind === "reorder") &&
-            (columnsChanged || after.header !== before.header)
-        ) {
-            followDrag(drag);
+        // the features follow the new layout before the view is built for it (Epic #148: a
+        // column's drag follows its column or group, W4, O3)
+        if (columnsChanged || after.header !== before.header) {
+            for (const columnsFollowed of featureHandlers.columnsFollowed) {
+                columnsFollowed(
+                    before as DataGridState<unknown, unknown>,
+                    after as DataGridState<unknown, unknown>,
+                );
+            }
         }
         // the active cell's column moved (an order): the same cell at a new index, which is no
         // other cell made active: its interaction goes with it, nothing scrolls
@@ -3282,12 +2798,8 @@ export function createDataGridEngine<
                 after.summaryRows !== before.summaryRows ||
                 after.summaryRowHeight !== before.summaryRowHeight,
         );
-        if (columnResize !== resizing) emit("column-resize", columnResize);
         if (autoWidths !== engineWidths) {
             emit("column-auto-widths", autoWidths);
-        }
-        if (columnReorder !== reordering) {
-            emit("column-reorder", columnReorder);
         }
         // a row's drag follows its row (E2.3), on the rows as laid out now
         if (drag?.kind === "row" && drag.dragged) followRowDrag(drag);
@@ -3625,8 +3137,6 @@ export function createDataGridEngine<
             columns: columnsX.mapping.scaled,
         }),
         interaction: () => interaction.cell,
-        "column-resize": () => columnResize,
-        "column-reorder": () => columnReorder,
         "row-reorder": () => rowReorder,
         "column-auto-widths": () => autoWidths,
     };
@@ -3648,7 +3158,6 @@ export function createDataGridEngine<
             interaction.cancelPending();
             interaction.leaveCell(true);
         },
-        "fit-columns": ({ columnKeys }) => fitColumns(columnKeys),
     };
 
     return {
@@ -3679,7 +3188,7 @@ export function createDataGridEngine<
         },
         destroy() {
             unsubscribeModel();
-            unuseModel();
+            for (const destroy of featureHandlers.destroy) destroy();
             detachViewport?.();
         },
         adapter,

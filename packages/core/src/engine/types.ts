@@ -192,8 +192,6 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
     readonly rowKey: RowKeyGetter<TRow> | undefined;
-    /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
-    readonly collapsedGroupKeys: readonly string[];
     /**
      * the expanded row groups' keys (Epic #87): a group row, or a row that expands, shows its
      * rows while its key is here (`source.getRowMeta` says which rows expand)
@@ -216,10 +214,6 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * its row counts in ARIA while the grid has no rows (Epic #89, E5.3)
      */
     readonly emptyShown: boolean;
-    /** the column a drag is resizing (W4), or `null` */
-    readonly columnResize: ColumnResize | null;
-    /** the column or group a drag is moving, and where it would land (O4), or `null` */
-    readonly columnReorder: ColumnReorder | null;
     /** the rows move by their drag handles and the keys (`reorderableRows`, E2.3) */
     readonly reorderableRows: boolean;
     /** the row a drag is moving, and where it would land (E2.3), or `null` */
@@ -345,10 +339,16 @@ export interface EngineQueryMap {
     "scroll-scaled": { readonly rows: boolean; readonly columns: boolean };
     /** the cell whose controls have the keys, or `null` (see `GridView.interaction`) */
     interaction: CellPosition | null;
-    /** the column a drag is resizing, or `null` (see `GridView.columnResize`) */
-    "column-resize": ColumnResize | null;
-    /** the column or group a drag is moving, or `null` (see `GridView.columnReorder`) */
-    "column-reorder": ColumnReorder | null;
+    /**
+     * the column a drag is resizing, or `null` (`columnResize()`'s, Epic #148: `undefined`
+     * without it; its view's `columnResize`)
+     */
+    "column-resize": ColumnResize | null | undefined;
+    /**
+     * the column or group a drag is moving, or `null` (`columnReorder()`'s, Epic #148:
+     * `undefined` without it; its view's `columnReorder`)
+     */
+    "column-reorder": ColumnReorder | null | undefined;
     /** the row a drag is moving, or `null` (see `GridView.rowReorder`) */
     "row-reorder": RowReorder | null;
     /**
@@ -372,7 +372,11 @@ export interface EngineQueryMap {
 export type EngineQueryKey = keyof EngineQueryMap;
 
 /** The `engine.get` keys a feature answers (`FeatureEngine.queries`), not the engine itself. */
-export type FeatureQueryKey = "fill" | "edit-draft";
+export type FeatureQueryKey =
+    | "fill"
+    | "edit-draft"
+    | "column-resize"
+    | "column-reorder";
 
 /** What `engine.run` does: screen actions (no dot: they are not model commands). */
 export interface EngineActionMap {
@@ -398,7 +402,7 @@ export interface EngineActionMap {
      * fits columns to their content (A3, A4): each resizable column of each key (a column, or a
      * group's columns), or without keys every resizable column, gets the widest of its rendered
      * header cell and loaded body cells, within its limits, in one `column-widths.set`. A column
-     * not rendered is not measured
+     * not rendered is not measured. `columnResize()`'s (Epic #148): nothing without it
      */
     "fit-columns": { readonly columnKeys?: readonly string[] | undefined };
     /**
@@ -425,7 +429,8 @@ export type FeatureActionKey =
     | "edit-cell"
     | "change-edit"
     | "commit-edit"
-    | "cancel-edit";
+    | "cancel-edit"
+    | "fit-columns";
 
 /** What `engine.subscribe` listens to. */
 export interface EngineEventMap {

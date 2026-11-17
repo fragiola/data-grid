@@ -1,5 +1,6 @@
 import type { ControlledProp } from "../adapter/controlled";
 import type { GridCellInfo } from "../adapter/props";
+import type { Axis } from "../axis/axis";
 import type { DragEnd, FeatureDrag } from "../engine/drag";
 import type { CellShare, HeaderCellState, RowShare } from "../engine/parts";
 import type {
@@ -8,15 +9,19 @@ import type {
     EditDraft,
     GridView,
 } from "../engine/types";
+import type { ColumnArrangement as ColumnArrangementOf } from "../header/header";
 import type { DataGridModel } from "../model/model";
 import type {
     CellKeys,
     CellPosition,
+    Column,
+    ColumnWidths,
     CommandResult,
     DataGridState,
     EditCellRenderProps,
     GridDirection,
     HeaderCellLayout,
+    PinnedSide,
     RowMeta,
 } from "../model/types";
 import type { Direction } from "../navigation/navigation";
@@ -196,7 +201,66 @@ export interface EngineKit {
         drag: FeatureDrag,
         known: CellPosition | null,
     ) => CellPosition | null;
+    /** the columns' axis on screen (Epic #148): each one's width and offset */
+    readonly columnAxis: () => Axis;
+    /** the view's width, in pixels (0 before the viewport is measured) */
+    readonly viewportWidth: () => number;
+    /** the columns pinned in effect, at the start and at the end, and their widths */
+    readonly pinned: () => PinnedColumns;
+    /** the virtual offset of the columns the view shows, right of the ones pinned at the start */
+    readonly scrollLeft: () => number;
+    /** where a pointer's x is in the view, from its inline start (a layout read; mirrored RTL) */
+    readonly viewX: (clientX: number) => number;
+    /**
+     * the virtual column offset under a pointer at `x` in the view, kept over a part of it: a
+     * pinned strip (`"start"`, `"end"`), or the columns that scroll (`undefined`)
+     */
+    readonly columnOffsetAt: (
+        part: PinnedSide | undefined,
+        x: number,
+    ) => number;
+    /** the edge scroll's step for a pointer at `x` over the columns that scroll (0 for none) */
+    readonly columnEdgeStep: (x: number) => number;
+    /**
+     * scrolls the rows by `top` and the columns by `left` (0 for none), through the engine's own
+     * scroll (scaled or not): whether they moved
+     */
+    readonly edgeScroll: (top: number, left: number) => boolean;
+    /** the view on screen (the adapter's last commit), or `null` before one */
+    readonly committed: () => GridView<unknown, unknown> | null;
+    /**
+     * the content widths of columns (by index in `view`, the view on screen), measured in one
+     * layout: the widest of each one's rendered header cell, loaded body cells and summary cells
+     */
+    readonly measureColumns: (
+        view: GridView<unknown, unknown>,
+        columnIndexes: Iterable<number>,
+    ) => ReadonlyMap<number, number>;
+    /**
+     * the engine's widths (automatic widths, flex shares) in effect, or (`overrides`) the ones
+     * it would give the columns over those overrides
+     */
+    readonly autoWidths: (overrides?: ColumnWidths) => ColumnWidths;
 }
+
+/**
+ * The columns pinned in effect (Epic #148, `columnPinning()`'s): how many lead at the start and
+ * trail at the end, and how wide each strip is. None without pinning (every column scrolls).
+ */
+export interface PinnedColumns {
+    readonly startCount: number;
+    readonly startWidth: number;
+    readonly endCount: number;
+    readonly endWidth: number;
+}
+
+/**
+ * How a feature lays the columns out (Epic #148): each sibling list in its order (`arrange`, the
+ * same list when it changes nothing; `group`: the list's group, `undefined` at the top), and the
+ * collapsible groups it collapses (`collapsed`: without one, every group shows its expanded
+ * children).
+ */
+export type ColumnArrangement = ColumnArrangementOf<unknown, unknown>;
 
 /**
  * A feature's handlers in an engine: each walked, in the features' order, at its place in the
@@ -210,6 +274,13 @@ export interface FeatureEngine {
      */
     readonly guardKeydown?:
         | ((event: KeyboardEvent, target: Element) => boolean | undefined)
+        | undefined;
+    /**
+     * a key on a control of the cell in interaction, after the grid's Escape and Tab there
+     * (Epic #148: a column resizer's arrows, Home, End and Enter)
+     */
+    readonly interactionKeydown?:
+        | ((event: KeyboardEvent, target: Element) => boolean)
         | undefined;
     /**
      * a key on one of the grid's cells after the row groups' keys and before the interaction's
@@ -305,6 +376,29 @@ export interface FeatureEngine {
               after: DataGridState<unknown, unknown>,
           ) => void)
         | undefined;
+    /**
+     * after a committed change of the model laid the columns out again (new columns, widths, an
+     * order, a collapse: a new column axis or header), before the engine builds the view for it
+     * (Epic #148: a column's drag follows its column, its view fields set, not refreshed)
+     */
+    readonly columnsFollowed?:
+        | ((
+              before: DataGridState<unknown, unknown>,
+              after: DataGridState<unknown, unknown>,
+          ) => void)
+        | undefined;
+    /**
+     * whether a new layout of the same columns (`after.columns` new, `columnEntries` the same)
+     * keeps the view on the column it showed first, by key (Epic #148: a collapse's)
+     */
+    readonly columnAnchored?:
+        | ((
+              before: DataGridState<unknown, unknown>,
+              after: DataGridState<unknown, unknown>,
+          ) => boolean)
+        | undefined;
+    /** the engine is destroyed: what its creation set up goes (a middleware) */
+    readonly destroy?: (() => void) | undefined;
     /** the viewport attached: what it listens to from now on; returns what detaching undoes */
     readonly attach?: ((viewport: HTMLElement) => () => void) | undefined;
     /** the engine's options changed (`setOptions`) */
@@ -456,6 +550,40 @@ export interface FeatureSpec<TTypes extends FeatureTypes> {
      */
     readonly rowsOrdered?:
         | ((state: FeatureState<TTypes>) => boolean)
+        | undefined;
+    /**
+     * its say in the columns' layout (Epic #148: an order, a collapse): `arrangement` lays them
+     * out by its state, and `changed` tells a state that lays them out otherwise (the columns are
+     * laid out again then, the active cell following its column)
+     */
+    readonly columnLayout?:
+        | {
+              readonly changed: (
+                  after: FeatureState<TTypes>,
+                  before: FeatureState<TTypes>,
+              ) => boolean;
+              readonly arrangement: (
+                  state: FeatureState<TTypes>,
+              ) => ColumnArrangement;
+          }
+        | undefined;
+    /**
+     * the widths it gives columns over their declared sizing (Epic #148: a resize's), by column
+     * key; the first feature having it gives them
+     */
+    readonly columnWidths?:
+        | ((state: FeatureState<TTypes>) => ColumnWidths)
+        | undefined;
+    /**
+     * the columns pinned in effect for the view's width (Epic #148: pinning's), from the columns
+     * and their axis on screen; without it, none: every column scrolls
+     */
+    readonly pinnedColumns?:
+        | ((
+              columns: readonly Column<unknown, unknown>[],
+              columnAxis: Axis,
+              viewportWidth: number,
+          ) => PinnedColumns)
         | undefined;
     /**
      * after every command (its handler, then `sourceChanged`): its state kept to the core's rules

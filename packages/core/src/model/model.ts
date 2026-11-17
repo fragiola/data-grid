@@ -9,6 +9,7 @@ import {
     registerFeatures,
 } from "../feature/registry";
 import {
+    type ColumnArrangement,
     columnsError,
     headerRowCount,
     isHeaderRow,
@@ -26,12 +27,6 @@ import {
 import { overlaps } from "../viewport/window";
 import { boundsOf, cellPosition } from "./bounds";
 import {
-    collapsingKeys,
-    followedColumn,
-    groupByKey,
-    isGroupCollapsed,
-} from "./collapse";
-import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
     holdsRow,
@@ -43,15 +38,7 @@ import {
     withExpandedRows,
     withRow,
 } from "./expansion";
-import {
-    isReorderable,
-    keptOrder,
-    landingIndex,
-    movedOrder,
-    sameOrder,
-    siblingOrder,
-    siblingsOf,
-} from "./order";
+import { followedColumn } from "./layout";
 import { done, fail, invalid, noRow, notOneOf, ok, veto } from "./result";
 import {
     dataRowAt,
@@ -75,9 +62,7 @@ import {
 } from "./summary";
 import type {
     Column,
-    ColumnOrder,
     ColumnOrGroup,
-    ColumnWidths,
     CommandContext,
     CommandListener,
     CommandMap,
@@ -100,23 +85,13 @@ import type {
     QueryMap,
     QuestionKey,
     QuestionMap,
-    ReorderSide,
     ResultIn,
     ResultOf,
     RowKey,
     RowKeyGetter,
     RowSource,
 } from "./types";
-import {
-    type ColumnSpan,
-    columnWidth,
-    keptWidths,
-    keptWidthsOf,
-    resizedWidths,
-    sameWidths,
-    spanResizable,
-    withoutWidths,
-} from "./widths";
+import { columnWidth, NO_WIDTHS } from "./widths";
 
 // The model (D3): the grid's data and rules, the single source of truth. Every change is a
 // command through the middleware chain; reads are `get`/`is` keys. It loads and runs in plain
@@ -203,16 +178,6 @@ const TOGGLE_BY =
 /** The refusal of a row group's toggle given neither a row's index nor a key. */
 const TOGGLE_GROUP_BY =
     "toggle a rowIndex, or a groupKey (a string or a finite number)";
-
-/** The sides a column lands on, beside a sibling. */
-const REORDER_SIDES: readonly ReorderSide[] = ["before", "after"];
-
-/** A column's part, as a refused move names it. */
-const PART_NAMES = {
-    start: "pinned at the start",
-    end: "pinned at the end",
-    none: "unpinned",
-} as const;
 
 /** The grid's directions. */
 const GRID_DIRECTIONS: readonly GridDirection[] = ["ltr", "rtl"];
@@ -330,7 +295,7 @@ export function validRowKeys(
  */
 function columnsOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
-    span: ColumnSpan,
+    span: { readonly columnIndex: number; readonly columnSpan: number },
 ): readonly Column<TRow, TNode>[] {
     return state.columns.slice(
         span.columnIndex,
@@ -338,73 +303,36 @@ function columnsOf<TRow, TNode>(
     );
 }
 
-/** The state with the columns' widths (the same object when they did not change), and them. */
-function withWidths<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    columnWidths: ColumnWidths,
-): Applied<TRow, TNode, ColumnWidths> {
-    const next =
-        columnWidths === state.columnWidths
-            ? state
-            : { ...state, columnWidths };
-    return done(next, next.columnWidths);
-}
-
 /**
- * The columns and the header of the entries, each sibling list in the column order, the
- * collapsible groups' children shown by their state (E1.3).
+ * The columns and the header of the entries, each sibling list as the features lay it out
+ * (`columnLayout`, Epic #148: an order, a collapsible group's children by its state) for `state`;
+ * as declared without any.
  */
 function layoutOf<TRow, TNode>(
+    features: GridFeatures,
+    state: DataGridState<TRow, TNode>,
     entries: readonly ColumnOrGroup<TRow, TNode>[],
-    columnOrder: ColumnOrder,
-    collapsedGroupKeys: readonly string[],
 ) {
+    // the features' arrangement is of any row: it reads keys and flags only
     return layoutColumns(
         entries,
-        siblingOrder(columnOrder),
-        collapsedGroupKeys,
+        features.columnLayout?.arrangement(state as FeatureState) as
+            | ColumnArrangement<TRow, TNode>
+            | undefined,
     );
 }
 
 /**
- * The state in a new column order (O1) or with new collapsed groups (E1.3), the same object when
- * neither changed: the columns and the header laid out again, and the active cell on its column,
- * wherever it went (a header cell's at its cell's new first column, on the same row), or, hidden
- * by a collapse, on the nearest column its group still shows (`followedColumn`).
+ * The state laid out again for its features' new say in the layout (an order, a collapse: Epic
+ * #148), its active cell on its column wherever it went (a header cell's at its cell's new first
+ * column, on the same row), or, hidden by a collapse, on the nearest column its group still shows
+ * (`followedColumn`).
  */
-function withLayout<TRow, TNode>(
+function relaidOut<TRow, TNode>(
+    features: GridFeatures,
     state: DataGridState<TRow, TNode>,
-    next: {
-        readonly columnOrder?: ColumnOrder;
-        readonly collapsedGroupKeys?: readonly string[];
-    },
 ): DataGridState<TRow, TNode> {
-    const columnOrder = next.columnOrder ?? state.columnOrder;
-    // the collapsed groups are a set: the same keys in another order change nothing
-    const collapsedGroupKeys =
-        next.collapsedGroupKeys &&
-        !sameKeys(next.collapsedGroupKeys, state.collapsedGroupKeys)
-            ? next.collapsedGroupKeys
-            : state.collapsedGroupKeys;
-    const sameColumnOrder = sameOrder(columnOrder, state.columnOrder);
-    if (sameColumnOrder && collapsedGroupKeys === state.collapsedGroupKeys) {
-        return state;
-    }
-    // keys of no collapsible group (kept: it may come back) collapse nothing: no new layout
-    if (
-        sameColumnOrder &&
-        sameKeys(
-            collapsingKeys(state.columnEntries, collapsedGroupKeys),
-            collapsingKeys(state.columnEntries, state.collapsedGroupKeys),
-        )
-    ) {
-        return { ...state, collapsedGroupKeys };
-    }
-    const { columns, header } = layoutOf(
-        state.columnEntries,
-        columnOrder,
-        collapsedGroupKeys,
-    );
+    const { columns, header } = layoutOf(features, state, state.columnEntries);
     const active = state.activePosition;
     const columnIndex = active
         ? followedColumn(state, header, active)
@@ -416,35 +344,7 @@ function withLayout<TRow, TNode>(
             ? { rowIndex: active.rowIndex, columnIndex }
             : active;
     // in its new place, a span may cover it (E1.2)
-    return reconcile(
-        {
-            ...state,
-            columnOrder,
-            collapsedGroupKeys,
-            columns,
-            header,
-            activePosition,
-        },
-        state,
-    );
-}
-
-/** The state in a new column order (`withLayout`), and the order. */
-function withOrder<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    columnOrder: ColumnOrder,
-): Applied<TRow, TNode, ColumnOrder> {
-    const next = withLayout(state, { columnOrder });
-    return done(next, next.columnOrder);
-}
-
-/** The state with new collapsed groups (`withLayout`), and their keys. */
-function withCollapsed<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    collapsedGroupKeys: readonly string[],
-): Applied<TRow, TNode, readonly string[]> {
-    const next = withLayout(state, { collapsedGroupKeys });
-    return done(next, next.collapsedGroupKeys);
+    return reconcile({ ...state, columns, header, activePosition }, state);
 }
 
 /**
@@ -493,16 +393,13 @@ function withGroupKeys<TRow, TNode>(
  */
 function createHandlers<TRow, TNode>(
     hints: RowKeyHints,
+    features: GridFeatures,
 ): Handlers<TRow, TNode> {
     return {
         "columns.set": (state, { columns: entries }) => {
             const error = columnsError(entries);
             if (error) return invalid(error);
-            const { columns, header } = layoutOf(
-                entries,
-                state.columnOrder,
-                state.collapsedGroupKeys,
-            );
+            const { columns, header } = layoutOf(features, state, entries);
             const next = reconcile(
                 {
                     ...state,
@@ -663,157 +560,6 @@ function createHandlers<TRow, TNode>(
                 toggledKey(state.expandedGroupKeys, key),
             );
         },
-        "column-widths.set": (state, { columnWidths }) => {
-            const kept = keptWidths(columnWidths);
-            if (
-                typeof columnWidths !== "object" ||
-                columnWidths === null ||
-                Array.isArray(columnWidths) ||
-                Object.keys(kept).length !== Object.keys(columnWidths).length
-            ) {
-                return invalid(
-                    "columnWidths must map column keys to widths (finite, not negative)",
-                );
-            }
-            return withWidths(
-                state,
-                sameWidths(kept, state.columnWidths)
-                    ? state.columnWidths
-                    : kept,
-            );
-        },
-        "column-widths.resize": (state, { columnKey, width, autoWidths }) => {
-            if (!Number.isFinite(width)) {
-                return invalid("width must be a finite number");
-            }
-            const span = state.header.cellByKey(columnKey);
-            if (!span) {
-                return fail("not_found", `no column or group "${columnKey}"`);
-            }
-            if (!spanResizable(state.columns, span)) {
-                return fail("refused", `"${columnKey}" is not resizable`);
-            }
-            return withWidths(
-                state,
-                resizedWidths(
-                    columnsOf(state, span),
-                    state.columnWidths,
-                    width,
-                    autoWidths && keptWidthsOf(autoWidths),
-                ),
-            );
-        },
-        "column-widths.reset": (state, { columnKey }) => {
-            if (columnKey === undefined) {
-                return withWidths(
-                    state,
-                    Object.keys(state.columnWidths).length > 0
-                        ? {}
-                        : state.columnWidths,
-                );
-            }
-            // a key that is no column (kept by a `set`) drops too
-            const span = state.header.cellByKey(columnKey);
-            const keys =
-                span && columnsOf(state, span).map((column) => column.key);
-            if (!keys && !Object.hasOwn(state.columnWidths, columnKey)) {
-                return fail("not_found", `no column or group "${columnKey}"`);
-            }
-            return withWidths(
-                state,
-                withoutWidths(state.columnWidths, keys ?? [columnKey]),
-            );
-        },
-        "column-order.set": (state, { columnOrder }) => {
-            if (
-                !Array.isArray(columnOrder) ||
-                columnOrder.some((key) => typeof key !== "string")
-            ) {
-                return invalid("columnOrder must be an array of keys");
-            }
-            if (new Set(columnOrder).size !== columnOrder.length) {
-                return invalid("columnOrder lists a key twice");
-            }
-            return withOrder(state, [...columnOrder]);
-        },
-        "column-order.move": (state, { columnKey, targetKey, side }) => {
-            if (!REORDER_SIDES.includes(side)) {
-                return notOneOf("side", REORDER_SIDES);
-            }
-            const siblings = siblingsOf(state.columns, state.header, columnKey);
-            const missing = !siblings
-                ? columnKey
-                : state.header.cellByKey(targetKey)
-                  ? null
-                  : targetKey;
-            if (!siblings || missing !== null) {
-                return fail("not_found", `no column or group "${missing}"`);
-            }
-            const { cells, index, start, end } = siblings;
-            if (!isReorderable(siblings.cell)) {
-                return fail("refused", `"${columnKey}" is not reorderable`);
-            }
-            // a column a header span covers (E1.2) has no cell among its siblings
-            if (index < 0) {
-                return fail(
-                    "refused",
-                    `"${columnKey}" is covered by a header span`,
-                );
-            }
-            const target = cells.findIndex((cell) => cell.key === targetKey);
-            if (target < 0) {
-                return fail(
-                    "refused",
-                    `"${targetKey}" is not a sibling of "${columnKey}"`,
-                );
-            }
-            // pinned columns lead and trail (P1): each part's land among their own
-            // (beside the first one past the edge, on its near side, is still their own part)
-            const to = landingIndex(index, target, side);
-            if (to < start || to >= end) {
-                return fail(
-                    "refused",
-                    `"${columnKey}" moves among the ${PART_NAMES[siblings.pinned ?? "none"]} ones only`,
-                );
-            }
-            if (to === index) return done(state, state.columnOrder);
-            // a column whose header spans its siblings (E1.2) moves with the ones it covers
-            const units = cells.map((cell) =>
-                cell.group || cell.columnSpan === 1
-                    ? [cell.key]
-                    : columnsOf(state, cell).map((column) => column.key),
-            );
-            const [moved = [columnKey]] = units.splice(index, 1);
-            units.splice(to, 0, moved);
-            return withOrder(
-                state,
-                movedOrder(state.columnOrder, units.flat()),
-            );
-        },
-        "column-order.reset": (state) => withOrder(state, []),
-        "column-groups.set": (state, { groupKeys }) => {
-            if (
-                !Array.isArray(groupKeys) ||
-                groupKeys.some((key) => typeof key !== "string")
-            ) {
-                return invalid("groupKeys must be an array of keys");
-            }
-            return withCollapsed(state, [...new Set(groupKeys)]);
-        },
-        "column-groups.toggle": (state, { groupKey }) => {
-            const group =
-                typeof groupKey === "string"
-                    ? groupByKey(state.columnEntries, groupKey)
-                    : undefined;
-            if (!group) return fail("not_found", `no group "${groupKey}"`);
-            if (group.collapsible !== true) {
-                return fail("refused", `group "${groupKey}" does not collapse`);
-            }
-            return withCollapsed(
-                state,
-                toggledKey(state.collapsedGroupKeys, groupKey),
-            );
-        },
         "direction.set": (state, { direction }) => {
             if (direction !== null && !GRID_DIRECTIONS.includes(direction)) {
                 return notOneOf("direction", GRID_DIRECTIONS);
@@ -946,7 +692,10 @@ export function createDataGridModel<
 ): DataGridModel<TRow, TNode, TFeatures> {
     const features = composeFeatures(options.features ?? []);
     const hints: RowKeyHints = new Map();
-    const handlers: Handlers<TRow, TNode> = createHandlers<TRow, TNode>(hints);
+    const handlers: Handlers<TRow, TNode> = createHandlers<TRow, TNode>(
+        hints,
+        features,
+    );
     for (const [name, handler] of features.commands) {
         if (Object.hasOwn(handlers, name)) {
             throw new TypeError(
@@ -959,13 +708,8 @@ export function createDataGridModel<
     // the same rules as `columns.set`: a grid never starts with columns it would refuse
     const error = columnsError(entries);
     if (error) throw new TypeError(`invalid columns: ${error}`);
-    const columnOrder = keptOrder(options.columnOrder);
-    const collapsedGroupKeys = keptOrder(options.collapsedGroupKeys);
-    const { columns, header } = layoutOf(
-        entries,
-        columnOrder,
-        collapsedGroupKeys,
-    );
+    // as declared: the features' say in the layout (an order, a collapse) is theirs to start with
+    const { columns, header } = layoutColumns(entries);
     const blank: DataGridState<TRow, TNode> = {
         columns,
         columnEntries: entries,
@@ -995,19 +739,20 @@ export function createDataGridModel<
         estimatedDetailHeight: validEstimate(options.estimatedDetailHeight)
             ? options.estimatedDetailHeight
             : DEFAULT_DETAIL_HEIGHT,
-        columnWidths: keptWidths(options.columnWidths),
-        columnOrder,
-        collapsedGroupKeys,
         direction:
             options.direction && GRID_DIRECTIONS.includes(options.direction)
                 ? options.direction
                 : undefined,
     };
-    // each feature's slice, from its options (the columns laid out)
-    const initial = features.initial(
+    // each feature's slice, from its options (the columns laid out as declared), then the columns
+    // as the features lay them out (Epic #148: an order, collapsed groups to start with)
+    const sliced = features.initial(
         blank as DataGridState<unknown, unknown>,
         options as Readonly<Record<string, unknown>>,
     ) as DataGridState<TRow, TNode>;
+    const initial = features.columnLayout
+        ? { ...sliced, ...layoutOf(features, sliced, entries) }
+        : sliced;
     let state = withSource(
         initial,
         sourceOf(
@@ -1203,19 +948,18 @@ export function createDataGridModel<
                 dataRowAt(state.source, rowIndex, meta),
             );
         },
-        "column-widths": () => state.columnWidths,
         "column-width-by": ({ columnKey }) => {
             const span = state.header.cellByKey(columnKey);
+            // a resize's widths over the declared ones (Epic #148: `columnResize()`'s)
+            const overrides =
+                features.columnWidths?.(state as FeatureState) ?? NO_WIDTHS;
             return span
                 ? columnsOf(state, span).reduce(
-                      (sum, column) =>
-                          sum + columnWidth(column, state.columnWidths),
+                      (sum, column) => sum + columnWidth(column, overrides),
                       0,
                   )
                 : undefined;
         },
-        "column-order": () => state.columnOrder,
-        "collapsed-group-keys": () => state.collapsedGroupKeys,
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
         "summary-rows": () => state.summaryRows,
@@ -1234,7 +978,6 @@ export function createDataGridModel<
     } = {
         // a group row (Epic #87) has nothing to wait for
         "row-loaded": ({ rowIndex }) => rowLoaded(state.source, rowIndex),
-        "group-collapsed": ({ groupKey }) => isGroupCollapsed(state, groupKey),
         "row-expanded": ({ rowIndex }) =>
             holdsRow(state.expandedRows, rowIndex),
         "row-group-expanded": ({ rowIndex }) =>
@@ -1313,15 +1056,23 @@ export function createDataGridModel<
 }
 
 /**
- * The state after a command, each feature's kept to a new source, new columns or rows changed
- * (`sourceChanged`: only after a command that changed one of them), then to its rules
+ * The state after a command: the columns laid out again when a feature's say in the layout
+ * changed (`columnLayout`), each feature's state kept to a new source, new columns or rows
+ * changed (`sourceChanged`: only after a command that changed one of them), then to its rules
  * (`stateChanged`: after every command).
  */
 function withFeatureState<TRow, TNode>(
     features: GridFeatures,
     before: DataGridState<TRow, TNode>,
-    after: DataGridState<TRow, TNode>,
+    handled: DataGridState<TRow, TNode>,
 ): DataGridState<TRow, TNode> {
+    // a feature's new say in the layout (an order, a collapse: Epic #148) lays the columns out
+    const layout = features.columnLayout;
+    const after =
+        layout?.changed(handled as FeatureState, before as FeatureState) ===
+        true
+            ? relaidOut(features, handled)
+            : handled;
     const keep = features.sourceChanged;
     const kept =
         !keep ||
@@ -1351,14 +1102,6 @@ export const COMMANDS = [
     "expanded-rows.toggle",
     "row-groups.set",
     "row-groups.toggle",
-    "column-widths.set",
-    "column-widths.resize",
-    "column-widths.reset",
-    "column-order.set",
-    "column-order.move",
-    "column-order.reset",
-    "column-groups.set",
-    "column-groups.toggle",
     "direction.set",
     "summary-rows.set",
     "summary-rows.changed",

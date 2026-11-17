@@ -13,7 +13,6 @@ export {
     cellEditOf,
     cellPartOf,
     cellProps,
-    columnResizerPartOf,
     DETAIL_AREA,
     dataAttributes,
     EMPTY_FILL,
@@ -112,7 +111,6 @@ export {
     type ColumnResizerState,
     cellBox,
     cellPart,
-    columnResizerPart,
     type GroupTogglePart,
     type GroupToggleState,
     groupTogglePart,
@@ -163,6 +161,7 @@ export type {
     RowSpans,
 } from "./engine/types";
 export {
+    type ColumnArrangement,
     type DataGridFeature,
     type DataGridFeatures,
     defineControlled,
@@ -178,6 +177,7 @@ export {
     type FeatureState,
     type FeatureTypes,
     type PartAttributes,
+    type PinnedColumns,
 } from "./feature/feature";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
@@ -187,7 +187,6 @@ export {
     DEFAULT_ROW_HEIGHT,
     type ModelOptions,
 } from "./model/model";
-export { keptOrder, sameOrder } from "./model/order";
 export { done, fail, ok, veto } from "./model/result";
 export {
     cellValue,
@@ -281,7 +280,7 @@ export type {
     SummaryRowCounts,
     SummaryRowView,
 } from "./model/types";
-export { DEFAULT_MIN_WIDTH, keptWidths, sameWidths } from "./model/widths";
+export { DEFAULT_MIN_WIDTH, NO_WIDTHS, sameWidths } from "./model/widths";
 export {
     type Direction,
     type HeaderCellSpan,

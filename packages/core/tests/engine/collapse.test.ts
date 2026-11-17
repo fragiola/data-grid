@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import type { GridView } from "../../src";
 import {
     type Column,
     type ColumnOrGroup,
@@ -9,6 +10,7 @@ import {
     headerCellPart,
     rowLeft,
 } from "../../src";
+import type { ColumnGroupCollapseState } from "../../src/column-group-collapse";
 import { columnsError } from "../../src/header/header";
 import { sorting } from "../../src/sorting";
 import { FEATURES, gridModel } from "../features";
@@ -461,7 +463,10 @@ describe("the engine", () => {
         expect(stateOf("g0")).toBeUndefined();
         m.run("column-groups.toggle", { groupKey: "g" });
         expect(stateOf("g")).toBe(true);
-        expect(view().collapsedGroupKeys).toEqual(["g"]);
+        expect(
+            (view() as GridView<Row> & ColumnGroupCollapseState)
+                .collapsedGroupKeys,
+        ).toEqual(["g"]);
     });
 
     it("keeps the view on the column it shows first, or a hidden one's group at its start", () => {

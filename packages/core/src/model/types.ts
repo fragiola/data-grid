@@ -102,12 +102,14 @@ export interface Column<TRow, TNode = unknown> {
     /**
      * `"start"`: the column stays at the view's start while the others scroll sideways; `"end"`:
      * at its end. Columns pinned at the start come first, the ones pinned at the end last, and a
-     * group's columns are all in one part (pinned at the start, at the end, or not)
+     * group's columns are all in one part (pinned at the start, at the end, or not). Pinning's
+     * (`columnPinning()`, Epic #148): without it, every column scrolls
      */
     readonly pinned?: PinnedSide | undefined;
     /**
      * whether a person can resize it (a handle the app renders in its header cell, dragged or
-     * moved with the arrows). The grid keeps the widths; without it, the column is its `width`
+     * moved with the arrows). The grid keeps the widths; without it, the column is its `width`.
+     * Resizing's (`columnResize()`, Epic #148): without it, nothing resizes
      */
     readonly resizable?: boolean | undefined;
     /** a resizable column's narrowest width in pixels (default 40, or `maxWidth` when smaller) */
@@ -131,7 +133,7 @@ export interface Column<TRow, TNode = unknown> {
     /**
      * whether a person can move it among its siblings (its header cell dragged, or Ctrl/⌘+Shift
      * with the arrows), within its part (pinned at the start, at the end, or not). The grid keeps
-     * the order
+     * the order. Reordering's (`columnReorder()`, Epic #148): without it, nothing moves
      */
     readonly reorderable?: boolean | undefined;
     /**
@@ -212,7 +214,8 @@ export interface ColumnGroup<TRow, TNode = unknown> {
     /**
      * whether it collapses (Epic #85, E1.3): collapsed (`collapsedGroupKeys`), it shows only its
      * children whose `groupShow` is `"collapsed"` or unset, expanded only those whose `groupShow`
-     * is `"expanded"` or unset; at least one in each state
+     * is `"expanded"` or unset; at least one in each state. Collapsing's
+     * (`columnGroupCollapse()`, Epic #148): without it, a group shows its expanded children
      */
     readonly collapsible?: boolean | undefined;
     /** under a collapsible group: the state it shows in (see {@link Column.groupShow}) */
@@ -560,15 +563,6 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedGroupKeys: readonly RowKey[];
     /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
     readonly estimatedDetailHeight: number;
-    /** the resized columns' widths, over their `width` (a resizable column's only count) */
-    readonly columnWidths: ColumnWidths;
-    /** the order columns and groups take among their siblings (empty: as declared) */
-    readonly columnOrder: ColumnOrder;
-    /**
-     * the keys of the collapsed groups, in the order they were collapsed (E1.3). A key that is no
-     * collapsible group is kept: it may come back
-     */
-    readonly collapsedGroupKeys: readonly string[];
     /**
      * the grid's direction: in `"rtl"`, its start is the right edge; `undefined`, the page's (an
      * engine reads its viewport's)
@@ -610,12 +604,6 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     detailHeight?: DetailHeight<TRow>;
     /** a measured detail's height until it is measured, in pixels (default 300) */
     estimatedDetailHeight?: number;
-    /** the resized columns' widths to start with (an entry that is not a size is dropped) */
-    columnWidths?: ColumnWidths;
-    /** the column order to start with (an entry that is not a string is dropped) */
-    columnOrder?: ColumnOrder;
-    /** the keys of the groups collapsed to start with (an entry that is not a string is dropped) */
-    collapsedGroupKeys?: readonly string[];
     /** the grid's direction (default: the page's, as an engine reads it from its viewport) */
     direction?: GridDirection | undefined;
 }
@@ -695,84 +683,6 @@ export interface CommandMap<TRow, TNode = unknown> {
             | { readonly rowIndex: number; readonly groupKey?: undefined }
             | { readonly groupKey: RowKey; readonly rowIndex?: undefined };
         result: readonly RowKey[];
-    };
-    /**
-     * replaces the resized columns' widths (each a size in pixels). A key that is not a column is
-     * kept: the column may come back. Returns them
-     */
-    "column-widths.set": {
-        payload: { readonly columnWidths: ColumnWidths };
-        result: ColumnWidths;
-    };
-    /**
-     * resizes a resizable column to `width`, within its limits; or a group, whose resizable
-     * columns share the change in proportion to their widths, each within its limits, the rest
-     * going to the next ones. Widths are whole pixels. Returns the columns' widths
-     */
-    "column-widths.resize": {
-        payload: {
-            readonly columnKey: string;
-            readonly width: number;
-            /**
-             * the widths an engine gives columns without an override (its `column-auto-widths`:
-             * automatic widths, flex shares): the resize starts from them, and a column back to
-             * its one needs no width. Filled by the engine on screen: an app or an adapter
-             * needn't pass it
-             */
-            readonly autoWidths?: ColumnWidths | undefined;
-        };
-        result: ColumnWidths;
-    };
-    /**
-     * gives a column its own `width` back, a group its columns, or, without a key, every column.
-     * Returns the columns' widths
-     */
-    "column-widths.reset": {
-        payload: { readonly columnKey?: string | undefined };
-        result: ColumnWidths;
-    };
-    /**
-     * replaces the column order (keys of columns and groups, each once). A key that is no column
-     * or group is kept: it may come back. Returns it
-     */
-    "column-order.set": {
-        payload: { readonly columnOrder: ColumnOrder };
-        result: ColumnOrder;
-    };
-    /**
-     * moves a reorderable column or group before or after one of its siblings (its parent
-     * group's entries, or the top level; that one may be fixed) within its part: one pinned at
-     * the start beside another, one pinned at the end beside another, the others among theirs. One landing where it is commits nothing. Returns the column
-     * order
-     */
-    "column-order.move": {
-        payload: {
-            readonly columnKey: string;
-            readonly targetKey: string;
-            readonly side: ReorderSide;
-        };
-        result: ColumnOrder;
-    };
-    /** gives the columns and groups their declared order back. Returns the column order */
-    "column-order.reset": {
-        payload: NoPayload;
-        result: ColumnOrder;
-    };
-    /**
-     * replaces the collapsed groups' keys (each once). A key that is no collapsible group is
-     * kept: it may come back. Returns them
-     */
-    "column-groups.set": {
-        payload: { readonly groupKeys: readonly string[] };
-        result: readonly string[];
-    };
-    /**
-     * collapses a collapsible group, or expands it when it is collapsed (a group a collapsed one
-     * hides included). Returns the collapsed groups' keys
-     */
-    "column-groups.toggle": {
-        payload: { readonly groupKey: string };
-        result: readonly string[];
     };
     /**
      * changes the grid's direction: in `"rtl"`, its start is the right edge; `null`, the page's
@@ -1034,10 +944,9 @@ export interface QueryMap<TRow, TNode = unknown> {
         payload: CellPosition;
         result: unknown;
     };
-    /** the resized columns' widths, by column key */
-    "column-widths": { payload: undefined; result: ColumnWidths };
     /**
-     * a column's width (its resized width, else its `width`, within its limits), or a group's
+     * a column's width (its resized width with `columnResize()`, else its `width`, within its
+     * limits), or a group's
      * (its columns'); `undefined` for a key that is neither. On screen, an engine's automatic
      * widths and flex shares take the place of `width` (its view's column axis)
      */
@@ -1045,10 +954,6 @@ export interface QueryMap<TRow, TNode = unknown> {
         payload: { readonly columnKey: string };
         result: number | undefined;
     };
-    /** the order columns and groups take among their siblings */
-    "column-order": { payload: undefined; result: ColumnOrder };
-    /** the collapsed groups' keys, in the order they were collapsed */
-    "collapsed-group-keys": { payload: undefined; result: readonly string[] };
     "row-height": { payload: undefined; result: RowHeight };
     "header-row-height": { payload: undefined; result: number };
     /** how many summary rows the grid has, at the top and at the bottom */
@@ -1082,8 +987,6 @@ export type QueryKey = keyof QueryMap<unknown>;
 export interface QuestionMap {
     /** whether the row is loaded (its getter answered a row), or a group row (Epic #87) */
     "row-loaded": { readonly rowIndex: number };
-    /** whether a group is collapsed: a collapsible group, its key collapsed */
-    "group-collapsed": { readonly groupKey: string };
     /** whether the row shows its detail: loaded, and its key expanded */
     "row-expanded": { readonly rowIndex: number };
     /**
