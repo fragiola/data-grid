@@ -317,7 +317,11 @@ export class DataGridRoot<TRow = unknown> {
         columnOrder: (value: ColumnOrder) => this.columnOrderChange.emit(value),
         collapsedGroupKeys: (value: readonly string[]) =>
             this.collapsedGroupKeysChange.emit(value),
-        rowMove: (value: RowMove) => this.rowMove.emit(value),
+        // the app moves its rows: rendered before the next key, which moves the row again
+        rowMove: (value: RowMove) => {
+            this.rowMove.emit(value);
+            this.renderSoon();
+        },
         rowWindow: (value: AxisWindow) => this.rowWindowChange.emit(value),
         columnWindow: (value: AxisWindow) =>
             this.columnWindowChange.emit(value),
@@ -352,10 +356,10 @@ export class DataGridRoot<TRow = unknown> {
     private renderQueued = false;
 
     /**
-     * Renders a new view or draft in a microtask, before the next event (React renders a discrete
-     * event's change at once, Vue on its next tick): zoneless Angular would wait for its next
-     * frame or timer, and a key typed meanwhile would reach an editor not rendered yet, or one
-     * reading the draft before it.
+     * Renders a new view, a draft or the app's moved rows in a microtask, before the next event
+     * (React renders a discrete event's change at once, Vue on its next tick): zoneless Angular
+     * would wait for its next frame or timer, and a key typed meanwhile would reach an editor not
+     * rendered yet, one reading the draft before it, or rows not moved yet.
      */
     private renderSoon() {
         if (this.renderQueued) return;
