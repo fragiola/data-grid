@@ -309,12 +309,20 @@ interface KeyEntry {
     readonly result: unknown;
 }
 
+/** A feature's own types, as its factory declares them. */
+type OwnTypes<F> = F extends { readonly "~types"?: infer T }
+    ? Exclude<T, undefined>
+    : never;
+
 /**
- * A key map, open to any key when the features are not known (`DataGridFeatures`, a grid of any
- * features: what a model with features is assignable to); as merged otherwise.
+ * A key map, open to any key when the features are not known (a list of `DataGridFeature`, as
+ * `DataGridFeatures`: a grid of any features, what a model with features is assignable to); as
+ * merged otherwise (a list of known features, a tuple or an array alike).
  */
-type Open<
-    TFeatures extends DataGridFeatures,
-    M,
-    E,
-> = number extends TFeatures["length"] ? Readonly<Record<string, E>> : M;
+type Open<TFeatures extends DataGridFeatures, M, E> = [
+    TFeatures[number],
+] extends [never]
+    ? M
+    : FeatureTypes extends OwnTypes<TFeatures[number]>
+      ? Readonly<Record<string, E>>
+      : M;
