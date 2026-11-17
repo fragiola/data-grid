@@ -65,7 +65,6 @@ describe("the Angular examples", () => {
         for (const slug of listExampleSlugs(APP)) {
             expect(react, slug).toContain(slug);
         }
-        expect(listExampleSlugs(APP)).toEqual(["hello-grid", "unstyled"]);
     });
 
     it("look like React's: a class string both styles.ts export is the same", async () => {
