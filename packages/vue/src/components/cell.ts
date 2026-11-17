@@ -1,7 +1,13 @@
-import { type CellState, cellContent, cellPartOf } from "@fragiola/data-grid";
-import { defineComponent, h } from "vue";
-import { layerRef } from "../composables/internal";
-import { useCellEdit } from "../composables/use-cell-edit";
+import {
+    type CellState,
+    cellContent,
+    cellPartOf,
+    type DataGridEngine,
+    type EditCellRenderProps,
+    type GridView,
+} from "@fragiola/data-grid";
+import { computed, defineComponent, h, type VNodeChild } from "vue";
+import { layerRef, useEngineValue } from "../composables/internal";
 import { type CellInfo, useGridView, useRootGrid } from "../context";
 import { renderCellElement } from "../utils/cell-element";
 import {
@@ -27,14 +33,29 @@ export interface CellSlots<TRow = unknown> extends RenderSlot<CellState> {
 }
 
 /**
- * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft. The one
- * cell following the draft, so a keystroke renders it alone.
+ * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft (the editor
+ * props editing gives, `GridFeatures.editCell`: none without it). The one cell following the
+ * draft, so a keystroke renders it alone.
  */
 const EditCell = defineComponent({
     name: "DataGridEditCell",
     props: { cell: { type: Object, required: true } },
     setup(props) {
-        const edit = useCellEdit(() => props.cell as CellInfo);
+        const { engine } = useRootGrid();
+        const view = useGridView();
+        const draft = useEngineValue(() => engine, "edit-draft", null);
+        const edit = computed(
+            () =>
+                view.value.features.editCell?.(
+                    view.value as GridView<unknown, unknown>,
+                    props.cell as CellInfo,
+                    draft.value,
+                    engine as DataGridEngine<unknown, unknown>,
+                ) as
+                    | EditCellRenderProps<unknown, VNodeChild>
+                    | null
+                    | undefined,
+        );
         return () => {
             const editor = edit.value;
             return editor
@@ -70,7 +91,8 @@ export const Cell: DataGridComponent<CellProps, CellSlots> = definePrimitive<
                 if (slots.default) {
                     return slots.default({ cell, state: own.state });
                 }
-                // the cell being edited (Epic #88): its column's editor, the draft its own
+                // the cell being edited (`editing()` installed, Epic #146): its column's editor,
+                // the draft its own
                 if (own.state.editing && cell.column.renderEditCell) {
                     return h(EditCell, { cell });
                 }

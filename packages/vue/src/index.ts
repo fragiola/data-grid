@@ -45,7 +45,6 @@ export type {
 } from "./components/summary-rows";
 export type { PartComposableResult } from "./composables/internal";
 export { useCell } from "./composables/use-cell";
-export { useCellEdit } from "./composables/use-cell-edit";
 export { useCells } from "./composables/use-cells";
 export { useColumnResizer } from "./composables/use-column-resizer";
 export { useColumnWindow } from "./composables/use-column-window";

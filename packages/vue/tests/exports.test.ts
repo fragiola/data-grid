@@ -122,6 +122,7 @@ describe("@fragiola/data-grid-vue", () => {
                         "@fragiola/data-grid/range",
                         "@fragiola/data-grid/clipboard",
                         "@fragiola/data-grid/fill",
+                        "@fragiola/data-grid/editing",
                     ],
                     file,
                 ).toContain(specifier);
@@ -139,6 +140,7 @@ const FEATURE_ENTRIES = {
     range: [],
     clipboard: [],
     fill: ["useFillHandle"],
+    editing: ["useCellEdit"],
 } as const;
 
 describe("the features' entries", () => {
