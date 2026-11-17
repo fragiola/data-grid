@@ -231,16 +231,27 @@ const FILL_HANDLE = defineFeature<FillHandleTypes>({
                 ) {
                     fillFrom = fillSource();
                 }
+                // an edit started: the drag ends, filling nothing
+                if (
+                    fillDrag &&
+                    engine.drag() === fillDrag &&
+                    after.editingCell &&
+                    after.editingCell !== before.editingCell
+                ) {
+                    engine.endDrag("lost");
+                }
+            },
+            // the engine laid out for the change: other rows or columns at its source's corners,
+            // or a selection changing (a key, the app), end the drag, filling nothing
+            followed: (before, after) => {
                 const current = fillDrag;
                 if (!current || engine.drag() !== current) return;
-                // an edit started, other rows or columns at its source's corners, or a selection
-                // changing (a key, the app): no longer the one it fills from, it fills nothing
+                const was = before as State;
+                const now = after as State;
                 const shaped =
                     after.source !== before.source ||
                     after.columns !== before.columns;
                 if (
-                    (after.editingCell &&
-                        after.editingKeys !== before.editingKeys) ||
                     (shaped &&
                         (!engine.keptAt(
                             current.source.anchor,

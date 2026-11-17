@@ -226,16 +226,30 @@ export interface FeatureEngine {
         | ((event: KeyboardEvent, target: Element) => boolean)
         | undefined;
     /**
-     * a primary press in the grid none of the engine's own took (a resizer, a header cell's or
-     * a row's drag), after the consumer's handlers: `true` takes it (`EngineKit.press` for a drag)
+     * a primary press in the grid a resizer did not take, after the consumer's handlers and
+     * before a row's handle and a header cell's drags: `true` takes it (`EngineKit.press` for a
+     * drag). A body cell's press leaves a row's handle to it
      */
     readonly pointerdown?: ((event: PointerEvent) => boolean) | undefined;
     /** the root element's `copy` event, after the consumer's handlers: `true` takes it */
     readonly copy?: ((event: ClipboardEvent) => boolean) | undefined;
     /** the root element's `paste` event, after the consumer's handlers: `true` takes it */
     readonly paste?: ((event: ClipboardEvent) => boolean) | undefined;
-    /** after a committed change of the model, the engine laid out for it */
+    /**
+     * after a committed change of the model, before the engine follows it: what the feature's
+     * view fields show (`view`), so the view built for the change has them
+     */
     readonly changed?:
+        | ((
+              before: DataGridState<unknown, unknown>,
+              after: DataGridState<unknown, unknown>,
+          ) => void)
+        | undefined;
+    /**
+     * after a committed change of the model, the engine laid out for it: what ends with it (a
+     * drag whose cells are gone)
+     */
+    readonly followed?:
         | ((
               before: DataGridState<unknown, unknown>,
               after: DataGridState<unknown, unknown>,

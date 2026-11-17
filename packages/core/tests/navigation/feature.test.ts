@@ -183,3 +183,34 @@ describe("a grid with navigation", () => {
         });
     });
 });
+
+describe("a range given at creation", () => {
+    it("stays when the active cell given is kept inside the rows (no move of the active cell)", () => {
+        const model = createDataGridModel<
+            Row,
+            unknown,
+            readonly [
+                ReturnType<typeof navigation>,
+                ReturnType<typeof cellRange>,
+            ]
+        >({
+            features: [navigation(), cellRange()],
+            columns,
+            rows: [{ id: 0 }, { id: 1 }],
+            cellSelection: "range",
+            activePosition: { rowIndex: 9, columnIndex: 0 },
+            selectedRange: {
+                anchor: { rowIndex: 0, columnIndex: 0 },
+                focus: { rowIndex: 1, columnIndex: 1 },
+            },
+        });
+        expect(model.state.activePosition).toEqual({
+            rowIndex: 1,
+            columnIndex: 0,
+        });
+        expect(model.get("selected-range")).toEqual({
+            anchor: { rowIndex: 0, columnIndex: 0 },
+            focus: { rowIndex: 1, columnIndex: 1 },
+        });
+    });
+});

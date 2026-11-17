@@ -549,17 +549,21 @@ export function tags(table: boolean): Partial<typeof TABLE> {
     return table ? TABLE : {};
 }
 
+/** What the inner grid installs: its cells navigated by keys (Epic #144). */
+const INNER_FEATURES = [navigation()] as const;
+
 /** A grid of its own inside a detail (E4): its keys and its active cell are its own. */
 function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
     const tag = tags(table);
     return (
-        <DataGrid.Root<FixtureRow>
+        <DataGrid.Root<FixtureRow, typeof INNER_FEATURES>
             columns={INNER_COLUMNS}
             rowCount={30}
             getRow={getRow}
             rowHeight={24}
             headerRowHeight={24}
             data-testid={`inner-${rowIndex}`}
+            features={INNER_FEATURES}
             style={{ width: 500, height: 150 }}
         >
             <DataGrid.Grid aria-label="Items" render={tag.grid}>

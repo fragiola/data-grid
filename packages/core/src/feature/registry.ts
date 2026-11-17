@@ -114,6 +114,7 @@ export interface GridFeatureEngine {
     readonly copy: Hooks<"copy">;
     readonly paste: Hooks<"paste">;
     readonly changed: Hooks<"changed">;
+    readonly followed: Hooks<"followed">;
     readonly attach: Hooks<"attach">;
     readonly optionsChanged: Hooks<"optionsChanged">;
     readonly view: Hooks<"view">;
@@ -207,19 +208,21 @@ export function composeFeatures(
         },
         sourceChanged:
             keepers.length > 0
-                ? (after, before) =>
-                      keepers.reduce(
-                          (state, keep) => keep(state, before),
-                          after,
-                      )
+                ? (after, before) => {
+                      let state = after;
+                      for (const keep of keepers) state = keep(state, before);
+                      return state;
+                  }
                 : undefined,
         stateChanged:
             settlers.length > 0
-                ? (after, before) =>
-                      settlers.reduce(
-                          (state, settle) => settle(state, before),
-                          after,
-                      )
+                ? (after, before) => {
+                      let state = after;
+                      for (const settle of settlers) {
+                          state = settle(state, before);
+                      }
+                      return state;
+                  }
                 : undefined,
         navigable: features.some((feature) => feature.navigable === true),
         viewKeys: features.flatMap((feature) => feature.view ?? []),
@@ -336,13 +339,11 @@ export function featureEngine(
         copy: hooks("copy"),
         paste: hooks("paste"),
         changed: hooks("changed"),
+        followed: hooks("followed"),
         attach: hooks("attach"),
         optionsChanged: hooks("optionsChanged"),
         view: hooks("view"),
-        queries: Object.assign(
-            {},
-            ...engines.map((engine) => engine.queries ?? {}),
-        ),
+        queries: engineQueries(features, engines),
         activate: hooks("activate")[0],
         move: hooks("move")[0],
     };
@@ -424,4 +425,23 @@ export function bindFeatureEvents(
             props as () => never,
         );
     }
+}
+
+/** The features' engine `get` keys, merged: a key two features add throws, as their other keys. */
+function engineQueries(
+    features: GridFeatures,
+    engines: readonly FeatureEngine[],
+): Readonly<Record<string, () => unknown>> {
+    const queries: Record<string, () => unknown> = {};
+    engines.forEach((engine, index) => {
+        for (const [key, query] of Object.entries(engine.queries ?? {})) {
+            if (Object.hasOwn(queries, key)) {
+                throw new TypeError(
+                    `feature "${features.list[index]?.name}" adds the engine key "${key}", which another feature adds`,
+                );
+            }
+            queries[key] = query;
+        }
+    });
+    return queries;
 }

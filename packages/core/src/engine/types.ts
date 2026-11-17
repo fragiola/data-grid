@@ -365,7 +365,7 @@ export interface EngineQueryMap {
      * the fill a handle's drag is making (Epic #88, E4.4), or `null`: the fill handle's
      * (`fillHandle()`), `undefined` without it
      */
-    fill: FillDrag | null;
+    fill: FillDrag | null | undefined;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;

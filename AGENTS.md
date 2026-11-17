@@ -925,8 +925,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     (an edit, interaction, a nested grid's holder). **A grid without it is the APG table**:
     `role="table"`, `row`, `columnheader`, `cell`, no `tabIndex` on the grid nor on its cells
     (the props omit the key), no cell ever active, controls in cells keep their own tab order
-    (the interactive cells' management below runs only with navigation), arrows do nothing
-    (`apps/playground/e2e/bare.spec.ts`). Tab leaves the grid. Right to left
+    (the interactive cells' management below runs only with navigation), arrows do nothing, and
+    the selections' `aria-selected`/`aria-multiselectable` (a grid's, not a table's) are left out
+    (their `data-*` stay) (`apps/playground/e2e/bare.spec.ts`). Tab leaves the grid. Right to left
     (Epic #85), the arrows mirror (ArrowLeft moves to the next column, `inlineKey`); Home/End stay
     logical. With
     `rowSelection()` (its `laterKeydown`), on a body cell in navigation: Shift+Space toggles its row, Shift+Up/Down
@@ -1083,9 +1084,12 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   keys → an edit's start → the interaction's Enter/F2 → the column and row moves' keys →
   `laterKeydown` (the range's, the row selection's: it defers Shift+↑/↓ and Ctrl/⌘+A to the
   range while `get("cell-selection")` is set) → Escape's release → the scaled Space →
-  `lastKeydown` (navigation's arrows). Also `click`, `pointerdown` (after the core's presses),
-  `copy`, `paste`, `changed(before, after)` (run before the engine's own follow, so the view built
-  for the change shows the feature's fields), `attach(viewport) => detach`, `optionsChanged`,
+  `lastKeydown` (navigation's arrows). Also `click`, `pointerdown` (after a resizer's, before a
+  row handle's and a header cell's: a fill handle inside a row's handle is the fill's; a body
+  cell's range leaves a row's handle to it), `copy`, `paste`, `changed(before, after)` (run before
+  the engine's own follow, so the view built for the change shows the feature's fields),
+  `followed(before, after)` (after it, the engine laid out: a drag whose cells are gone ends),
+  `attach(viewport) => detach`, `optionsChanged`,
   `view()` (its engine-held view fields), `queries` (`engine.get` keys: `fill`), and navigation's
   `activate(position)` and `move(direction)` (without them no cell is ever active and an edit's
   Enter/Tab move nothing). A feature's drag is a `FeatureDrag` (`kind: "feature"`, `start?`,

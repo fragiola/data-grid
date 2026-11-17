@@ -1,4 +1,9 @@
-import { inlineKey, isElement, KEYS } from "../engine/dom";
+import {
+    inlineKey,
+    isElement,
+    KEYS,
+    ROW_DRAG_HANDLE_ATTRIBUTE,
+} from "../engine/dom";
 import type { FeatureDrag } from "../engine/drag";
 import { CTRL_KEYS, isSelectAll } from "../engine/shortcuts";
 import {
@@ -371,6 +376,13 @@ const CELL_RANGE = defineFeature<CellRangeTypes>({
             ) {
                 return false;
             }
+            // a press on a row's drag handle (the row's, when the rows move) is the row's
+            if (
+                engine.options().reorderableRows &&
+                engine.markedOf(event.target, ROW_DRAG_HANDLE_ATTRIBUTE)
+            ) {
+                return false;
+            }
             const cell = engine.pressedBodyCellOf(event.target);
             if (!cell) return false;
             let anchor = cell;
@@ -475,16 +487,20 @@ const CELL_RANGE = defineFeature<CellRangeTypes>({
                 if (state.selectedRange !== (before as State).selectedRange) {
                     followRange();
                 }
-                const current = rangeDrag;
-                if (!current || engine.drag() !== current) return;
                 // an edit started: the drag ends, telling nothing
                 if (
+                    rangeDrag &&
+                    engine.drag() === rangeDrag &&
                     after.editingCell &&
-                    after.editingKeys !== before.editingKeys
+                    after.editingCell !== before.editingCell
                 ) {
                     engine.endDrag("lost");
-                    return;
                 }
+            },
+            followed: (before, after) => {
+                const state = after as State;
+                const current = rangeDrag;
+                if (!current || engine.drag() !== current) return;
                 // cells no longer selectable, or other rows or columns at its anchor, end it: its
                 // indexes would point elsewhere. New rows or columns that keep the same keys
                 // there (rows growing at the end, a new `columns` array, a new getter) keep it

@@ -1131,9 +1131,14 @@ export function createDataGridModel<
     state = withKeptEditing(state);
     const settle = features.stateChanged;
     if (settle) {
+        // against the state as given, its active cell as the rows keep it (a position clamped or
+        // snapped at creation is no move)
         state = settle(
             state as FeatureState,
-            initial as FeatureState,
+            {
+                ...initial,
+                activePosition: state.activePosition,
+            } as FeatureState,
         ) as DataGridState<TRow, TNode>;
     }
     const middlewares: Middleware<TRow, TNode, []>[] = [];

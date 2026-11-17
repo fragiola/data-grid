@@ -1501,6 +1501,11 @@ export function createDataGridEngine<
             y: event.clientY,
             frame: null,
         };
+        // the features' presses (Epic #144): a fill handle's (before a row's handle around it, as
+        // ever), a body cell's range (which leaves a row's handle and the header cells alone)
+        for (const featurePress of featureHandlers.pointerdown) {
+            if (featurePress(event)) return true;
+        }
         const handle = options.reorderableRows
             ? markedOf(event.target, ROW_DRAG_HANDLE_ATTRIBUTE)
             : null;
@@ -1533,10 +1538,6 @@ export function createDataGridEngine<
                 header: null,
                 siblings: null,
             });
-        }
-        // the features' presses (Epic #144): a fill handle's, a body cell's range
-        for (const featurePress of featureHandlers.pointerdown) {
-            if (featurePress(event)) return true;
         }
         return false;
     }
@@ -3529,6 +3530,13 @@ export function createDataGridEngine<
             );
         }
         followModel(before, after);
+        // and what ends with the change, the engine laid out (a feature's drag)
+        for (const followed of featureHandlers.followed) {
+            followed(
+                before as DataGridState<unknown, unknown>,
+                after as DataGridState<unknown, unknown>,
+            );
+        }
     });
 
     /** After a committed change of the model: the engine follows it (the features' before). */

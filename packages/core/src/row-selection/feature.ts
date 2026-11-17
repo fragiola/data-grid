@@ -312,13 +312,18 @@ const ROW_SELECTION = defineFeature<RowSelectionTypes>({
         const row = dataRowAt(view.source, rowIndex, meta);
         const selected = rowSelectedWith(view, rowIndex, meta, row);
         share.selected = selected;
+        // `aria-selected` is a grid's (a table's rows take none: Epic #144)
         share.ariaSelected =
-            selected || rowSelectableWith(view, rowIndex, meta, row)
+            view.features.navigable &&
+            (selected || rowSelectableWith(view, rowIndex, meta, row))
                 ? selected
                 : undefined;
     },
+    // a grid's (a table takes no `aria-multiselectable`: Epic #144)
     grid: (view) =>
-        view.rowSelection === "multiple" ? MULTISELECTABLE : undefined,
+        view.rowSelection === "multiple" && view.features.navigable
+            ? MULTISELECTABLE
+            : undefined,
     engine: ({ model, engine }) => {
         // the active cell's commands are the navigation's, the cells' selection the range's:
         // asked through their keys
