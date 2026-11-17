@@ -1,6 +1,5 @@
 import { moveRow } from "@fragiola/data-grid/local";
 import {
-    type CellEditEvent,
     type CellInfo,
     type CellRange,
     type ColSpanArgs,
@@ -28,6 +27,7 @@ import {
     useRowDragHandle,
 } from "@fragiola/data-grid-react";
 import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { type CellEditEvent, editing } from "@fragiola/data-grid-react/editing";
 import {
     fillHandle,
     repeatedFill,
@@ -53,7 +53,7 @@ import { createRoot } from "react-dom/client";
 
 /**
  * the features the fixture installs: sorting (Epic #141), cell navigation, row selection, cell
- * ranges, the clipboard and the fill handle (Epic #144)
+ * ranges, the clipboard and the fill handle (Epic #144), cell editing (Epic #146)
  */
 export const FEATURES = [
     sorting(),
@@ -62,6 +62,7 @@ export const FEATURES = [
     cellRange(),
     clipboard(),
     fillHandle(),
+    editing(),
 ];
 
 /** Their types: the model's keys and the root's props (`window.grid`'s too). */
