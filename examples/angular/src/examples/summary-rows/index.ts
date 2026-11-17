@@ -4,6 +4,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -126,11 +127,11 @@ export default class SummaryRows {
         { key: "joined", name: "Joined", width: 130, sortable: true },
     ];
 
-    // the rows in memory, searched and sorted by one injection function; the totals follow what
-    // it leaves
-    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop)
-    readonly features = [sorting(), navigation()];
+    // the rows in memory, searched and sorted by one injection function; the totals follow what it
+    // leaves the features the grid installs: sorting (the local rows' sort needs it, or no column
+    // sorts), cell navigation (the keys, the active cell, the tab stop), pinned columns (without
+    // it, every column scrolls)
+    readonly features = [sorting(), navigation(), columnPinning()];
     readonly local = injectLocalRows(all, this.columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

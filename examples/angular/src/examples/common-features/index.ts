@@ -17,6 +17,8 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
+import { columnResize } from "@fragiola/data-grid-angular/column-resize";
 import {
     type CellEditEvent,
     DataGridEditing,
@@ -373,8 +375,17 @@ export default class CommonFeatures {
     ];
 
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection, cell editing
-    readonly features = [sorting(), navigation(), rowSelection(), editing()];
+    // cell navigation (the keys, the active cell, the tab stop), row selection, cell editing,
+    // column resizing (its handles, keys and fits), pinned columns (without it, every column
+    // scrolls)
+    readonly features = [
+        sorting(),
+        navigation(),
+        rowSelection(),
+        editing(),
+        columnResize(),
+        columnPinning(),
+    ];
     readonly local = injectLocalRows(this.jobs, this.columns);
     /**
      * The rows "select all" covers: the ones that can be selected, worked out again as the jobs

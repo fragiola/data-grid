@@ -6,6 +6,7 @@ import {
     type DataGridNode,
     type RangeFill,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import {
     DataGridFill,
     DataGridFillHandle,
@@ -206,8 +207,13 @@ function unitsFill({ source, target }: RangeFill): RangeFill | null {
 })
 export default class Fill {
     // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
-    // ranges of cells, the fill handle
-    readonly features = [navigation(), cellRange(), fillHandle()];
+    // ranges of cells, the fill handle, pinned columns (without it, every column scrolls)
+    readonly features = [
+        navigation(),
+        cellRange(),
+        fillHandle(),
+        columnPinning(),
+    ];
     protected readonly styles = styles;
     protected readonly modes = MODES;
     readonly columns = columns;

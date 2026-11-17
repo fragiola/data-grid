@@ -10,6 +10,7 @@ import {
     type DataGridNode,
     type RowMove,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -184,8 +185,9 @@ export default class RowReordering {
     readonly announcement = signal("");
     // searched and sorted in memory; a move lands beside the row it was dropped on, searched too
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop)
-    readonly features = [sorting(), navigation()];
+    // cell navigation (the keys, the active cell, the tab stop), pinned columns (without it, every
+    // column scrolls)
+    readonly features = [sorting(), navigation(), columnPinning()];
     readonly local = injectLocalRows(this.rows, columns);
     protected readonly sorted = computed(
         () => this.local.sort.columns.length > 0,

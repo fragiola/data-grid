@@ -5,6 +5,7 @@ import {
     inject,
 } from "@angular/core";
 import { DATA_GRID, DataGridHeaderCell } from "@fragiola/data-grid-angular";
+import { DataGridColumnResizer } from "@fragiola/data-grid-angular/column-resize";
 import {
     LucideArrowDown,
     LucideArrowUp,
@@ -21,7 +22,13 @@ import * as styles from "./styles";
 
 @Component({
     selector: "[exampleReorderHeader]",
-    imports: [DATA_GRID, LucideGripVertical, LucideArrowUp, LucideArrowDown],
+    imports: [
+        DATA_GRID,
+        DataGridColumnResizer,
+        LucideGripVertical,
+        LucideArrowUp,
+        LucideArrowDown,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         @if (state()?.reorderable) {

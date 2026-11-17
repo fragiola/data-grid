@@ -17,6 +17,11 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { columnReorder } from "@fragiola/data-grid-angular/column-reorder";
+import {
+    columnResize,
+    DataGridColumnResizer,
+} from "@fragiola/data-grid-angular/column-resize";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -85,6 +90,7 @@ type CompanyHeader = TemplateRef<
     selector: "example-companies",
     imports: [
         DATA_GRID,
+        DataGridColumnResizer,
         DataGridLocalRows,
         ClickableButton,
         AVATAR,
@@ -444,11 +450,18 @@ export default class Companies {
     private readonly all = signal(companies(500));
     // the grid selects (checkboxes, Shift+Space, Ctrl+A); the app keeps the keys to act on them
     readonly selected = signal<readonly RowKey[]>([]);
-    // the rows in memory sorted by one injection function: the header and the toolbar's select
-    // both set its sort (the first column first, the next ones breaking ties)
-    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection
-    readonly features = [sorting(), navigation(), rowSelection()];
+    // the rows in memory sorted by one injection function: the header and the toolbar's select both
+    // set its sort (the first column first, the next ones breaking ties) the features the grid
+    // installs: sorting (the local rows' sort needs it, or no column sorts), cell navigation (the
+    // keys, the active cell, the tab stop), row selection, column resizing (its handles, keys and
+    // fits), column reordering (a header cell's drag and keys)
+    readonly features = [
+        sorting(),
+        navigation(),
+        rowSelection(),
+        columnResize(),
+        columnReorder(),
+    ];
     readonly local = injectLocalRows(this.all, this.columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

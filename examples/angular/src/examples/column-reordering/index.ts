@@ -6,6 +6,12 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
+import {
+    columnReorder,
+    DataGridColumnReorder,
+} from "@fragiola/data-grid-angular/column-reorder";
+import { columnResize } from "@fragiola/data-grid-angular/column-resize";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -105,6 +111,7 @@ const columns: ColumnOrGroup<Person, DataGridNode>[] = [
     selector: "example-column-reordering",
     imports: [
         DATA_GRID,
+        DataGridColumnReorder,
         DataGridLocalRows,
         ClickableButton,
         LucideRotateCcw,
@@ -138,6 +145,7 @@ const columns: ColumnOrGroup<Person, DataGridNode>[] = [
             </div>
             <div
                 dataGridRoot
+                dataGridColumnReorder
                 [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
@@ -194,10 +202,18 @@ export default class ColumnReordering {
     readonly gridRef = createDataGridRef<Person>();
     // a move the person asked for: told once the grid shows it
     private readonly moving = { current: false };
-    // a click on a sortable header still sorts: the rows in memory, ordered by the app
-    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop)
-    readonly features = [sorting(), navigation()];
+    // a click on a sortable header still sorts: the rows in memory, ordered by the app the features
+    // the grid installs: sorting (the local rows' sort needs it, or no column sorts), cell
+    // navigation (the keys, the active cell, the tab stop), column resizing (its handles, keys and
+    // fits), column reordering (a header cell's drag and keys), pinned columns (without it, every
+    // column scrolls)
+    readonly features = [
+        sorting(),
+        navigation(),
+        columnResize(),
+        columnReorder(),
+        columnPinning(),
+    ];
     readonly local = injectLocalRows(all, columns);
 
     constructor() {

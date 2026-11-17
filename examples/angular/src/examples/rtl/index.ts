@@ -11,6 +11,12 @@ import {
     type GridDirection,
     type HeaderCellInfo,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
+import { columnReorder } from "@fragiola/data-grid-angular/column-reorder";
+import {
+    columnResize,
+    DataGridColumnResizer,
+} from "@fragiola/data-grid-angular/column-resize";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { SWITCH } from "#/components/ui/switch";
 import { formatMoney, type Person, people } from "../_kit/data";
@@ -89,7 +95,7 @@ let ids = 0;
 
 @Component({
     selector: "example-rtl",
-    imports: [DATA_GRID, SWITCH],
+    imports: [DATA_GRID, DataGridColumnResizer, SWITCH],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -165,8 +171,15 @@ let ids = 0;
     `,
 })
 export default class Rtl {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // column resizing (its handles, keys and fits), column reordering (a header cell's drag and
+    // keys), pinned columns (without it, every column scrolls)
+    readonly features = [
+        navigation(),
+        columnResize(),
+        columnReorder(),
+        columnPinning(),
+    ];
     protected readonly styles = styles;
 
     readonly rows = rows;

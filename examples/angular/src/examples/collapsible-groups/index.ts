@@ -6,6 +6,11 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import {
+    columnGroupCollapse,
+    DataGridColumnGroupCollapse,
+} from "@fragiola/data-grid-angular/column-group-collapse";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { formatNumber, measurement, type Person, people } from "../_kit/data";
@@ -116,9 +121,19 @@ const ALL_GROUPS = YEARS.flatMap((value) => [
     ...[1, 2, 3, 4].map((index) => `${value}-q${index}`),
 ]);
 
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls), collapsible groups (without it, a group stays
+// expanded)
+const FEATURES = [navigation(), columnPinning(), columnGroupCollapse()];
+
 @Component({
     selector: "example-collapsible-groups",
-    imports: [DATA_GRID, ClickableButton, GroupHeader],
+    imports: [
+        DATA_GRID,
+        DataGridColumnGroupCollapse,
+        ClickableButton,
+        GroupHeader,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -144,6 +159,7 @@ const ALL_GROUPS = YEARS.flatMap((value) => [
             </div>
             <div
                 dataGridRoot
+                dataGridColumnGroupCollapse
                 [features]="features"
                 [columns]="columns"
                 [rows]="rows"
@@ -198,8 +214,7 @@ const ALL_GROUPS = YEARS.flatMap((value) => [
     `,
 })
 export default class CollapsibleGroups {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    readonly features = FEATURES;
     protected readonly styles = styles;
     protected readonly ALL_GROUPS = ALL_GROUPS;
 
@@ -210,7 +225,7 @@ export default class CollapsibleGroups {
     // 2025 starts closed, its total showing; 2026 open, its first quarter closed
     readonly COLLAPSED = ["2025", "2026-q1"];
 
-    readonly gridRef = createDataGridRef<Person>();
+    readonly gridRef = createDataGridRef<Person, typeof FEATURES>();
 
     protected setCollapsed(groupKeys: readonly string[]) {
         this.gridRef.current?.model.run("column-groups.set", { groupKeys });

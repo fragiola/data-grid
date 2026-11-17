@@ -21,6 +21,7 @@ import {
     clipboard,
     DataGridClipboard,
 } from "@fragiola/data-grid-angular/clipboard";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import {
     cellRange,
@@ -224,8 +225,13 @@ type LineCell = TemplateRef<TemplateContext<CellTemplateProps<Line>>>;
 })
 export default class CellSelection {
     // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
-    // ranges of cells, the clipboard
-    readonly features = [navigation(), cellRange(), clipboard()];
+    // ranges of cells, the clipboard, pinned columns (without it, every column scrolls)
+    readonly features = [
+        navigation(),
+        cellRange(),
+        clipboard(),
+        columnPinning(),
+    ];
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Line>>();
     @ViewChild("ownerCell", { static: true })

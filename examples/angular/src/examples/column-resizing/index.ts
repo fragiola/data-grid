@@ -7,6 +7,12 @@ import {
     type DataGridNode,
     type HeaderCellInfo,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
+import {
+    columnResize,
+    DataGridColumnResize,
+    DataGridColumnResizer,
+} from "@fragiola/data-grid-angular/column-resize";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucideRotateCcw } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
@@ -101,7 +107,14 @@ const NAMES = namesOf(columns);
 
 @Component({
     selector: "example-column-resizing",
-    imports: [DATA_GRID, ClickableButton, LucideRotateCcw, WidthsReadout],
+    imports: [
+        DATA_GRID,
+        DataGridColumnResizer,
+        DataGridColumnResize,
+        ClickableButton,
+        LucideRotateCcw,
+        WidthsReadout,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -137,6 +150,7 @@ const NAMES = namesOf(columns);
             </div>
             <div
                 dataGridRoot
+                dataGridColumnResize
                 [features]="features"
                 [columns]="columns"
                 [rows]="rows"
@@ -185,8 +199,10 @@ const NAMES = namesOf(columns);
     `,
 })
 export default class ColumnResizing {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // column resizing (its handles, keys and fits), pinned columns (without it, every column
+    // scrolls)
+    readonly features = [navigation(), columnResize(), columnPinning()];
     protected readonly styles = styles;
 
     readonly rows = rows;

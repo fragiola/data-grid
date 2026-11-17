@@ -11,6 +11,7 @@ import {
     type DataGridNode,
     type ScrollAlign,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { FIELDS } from "#/components/atoms/fields";
@@ -62,8 +63,9 @@ function indexOf(text: string, count: number): number | undefined {
         : undefined;
 }
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const FEATURES = [navigation(), columnPinning()];
 
 @Component({
     selector: "example-scroll-to-cell",
