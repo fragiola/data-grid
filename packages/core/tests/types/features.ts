@@ -15,6 +15,7 @@ import {
     type Middleware,
 } from "../../src";
 import { clipboard } from "../../src/clipboard";
+import { type CellEditEvent, editing } from "../../src/editing";
 import { fillHandle } from "../../src/fill";
 import { navigation } from "../../src/navigation";
 import { cellRange } from "../../src/range";
@@ -167,6 +168,51 @@ const bareRange: GridRootProps<Person, unknown, []> = {
     // @ts-expect-error
     cellSelection: "range",
 };
+// without editing (Epic #146), its keys and props do not compile
+// @ts-expect-error
+bare.run("editing-cell.set", origin);
+// @ts-expect-error
+bare.get("editing-cell");
+// @ts-expect-error
+bare.is("cell-editable", origin);
+// @ts-expect-error
+createDataGridModel({ columns, rows, editingCell: origin });
+const bareEdit: GridRootProps<Person, unknown, []> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    editingCell: origin,
+};
+const bareCellEdit: GridRootProps<Person, unknown, []> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    onCellEdit: () => {},
+};
+// with it, they do, the event typed by the grid's row
+const edited = [navigation(), editing()] as const;
+const editModel = createDataGridModel({
+    columns,
+    rows,
+    features: edited,
+    editingCell: origin,
+});
+editModel.run("editing-cell.set", { ...origin, startKey: "a" });
+editModel.run("editing-cell.clear", {});
+const editingCell: CellPosition | null = editModel.get("editing-cell");
+editModel.is("cell-editable", origin);
+// @ts-expect-error: a payload of the wrong shape
+editModel.run("editing-cell.set", { rowIndex: 0 });
+const editRoot: GridRootProps<Person, unknown, typeof edited> = {
+    columns,
+    rows,
+    features: edited,
+    editingCell: null,
+    defaultEditingCell: null,
+    onEditingCellChange: (cell) => cell?.startKey,
+    onCellEdit: (edit: CellEditEvent<Person>) => edit.row.name,
+};
+
 // cell ranges without the clipboard or the fill handle: their props neither
 const ranged = [navigation(), cellRange()] as const;
 const noPaste: GridRootProps<Person, unknown, typeof ranged> = {
@@ -286,6 +332,10 @@ void [
     bareRange,
     noPaste,
     noFill,
+    bareEdit,
+    bareCellEdit,
+    editingCell,
+    editRoot,
     active,
     selectedKeys,
     range,

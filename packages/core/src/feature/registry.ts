@@ -96,6 +96,8 @@ export interface GridFeatures {
         | undefined;
     /** the root props the features add */
     readonly rootProps: readonly string[];
+    /** a cell's editor props while it is edited (the first feature having them: editing's) */
+    readonly editCell: DataGridFeature["editCell"];
 }
 
 /** The handlers of one kind of every feature in an engine. */
@@ -105,12 +107,18 @@ type Hooks<K extends keyof FeatureEngine> = readonly NonNullable<
 
 /** Every feature's own handlers in one engine: each list walked in the features' order. */
 export interface GridFeatureEngine {
+    readonly guardKeydown: Hooks<"guardKeydown">;
+    readonly startKeydown: Hooks<"startKeydown">;
     readonly keydown: Hooks<"keydown">;
     readonly click: Hooks<"click">;
     readonly beforeKeydown: Hooks<"beforeKeydown">;
     readonly laterKeydown: Hooks<"laterKeydown">;
     readonly lastKeydown: Hooks<"lastKeydown">;
     readonly pointerdown: Hooks<"pointerdown">;
+    readonly pointerEnd: Hooks<"pointerEnd">;
+    readonly focusout: Hooks<"focusout">;
+    readonly focusin: Hooks<"focusin">;
+    readonly rendered: Hooks<"rendered">;
     readonly copy: Hooks<"copy">;
     readonly paste: Hooks<"paste">;
     readonly changed: Hooks<"changed">;
@@ -119,6 +127,7 @@ export interface GridFeatureEngine {
     readonly optionsChanged: Hooks<"optionsChanged">;
     readonly view: Hooks<"view">;
     readonly queries: Readonly<Record<string, () => unknown>>;
+    readonly actions: Readonly<Record<string, (payload: never) => void>>;
     /** the navigation's (the first feature having one): `undefined` without it */
     readonly activate: FeatureEngine["activate"];
     readonly move: FeatureEngine["move"];
@@ -262,6 +271,7 @@ export function composeFeatures(
                   ? headerCells[0]
                   : (view, cell) => mergedParts(headerCells, view, cell),
         rootProps: features.flatMap((feature) => feature.root?.props ?? []),
+        editCell: features.find((feature) => feature.editCell)?.editCell,
     };
 }
 
@@ -324,18 +334,28 @@ export function featureEngine(
     const engines = features.list.flatMap((feature) =>
         feature.engine ? [feature.engine(context)] : [],
     );
+    /** each engine's feature's name, for a key two features add */
+    const names = features.list.flatMap((feature) =>
+        feature.engine ? [feature.name] : [],
+    );
     const hooks = <K extends keyof FeatureEngine>(key: K): Hooks<K> =>
         engines.flatMap((engine) => {
             const hook = engine[key];
             return hook ? [hook as NonNullable<FeatureEngine[K]>] : [];
         });
     return {
+        guardKeydown: hooks("guardKeydown"),
+        startKeydown: hooks("startKeydown"),
         keydown: hooks("keydown"),
         click: hooks("click"),
         beforeKeydown: hooks("beforeKeydown"),
         laterKeydown: hooks("laterKeydown"),
         lastKeydown: hooks("lastKeydown"),
         pointerdown: hooks("pointerdown"),
+        pointerEnd: hooks("pointerEnd"),
+        focusout: hooks("focusout"),
+        focusin: hooks("focusin"),
+        rendered: hooks("rendered"),
         copy: hooks("copy"),
         paste: hooks("paste"),
         changed: hooks("changed"),
@@ -343,7 +363,8 @@ export function featureEngine(
         attach: hooks("attach"),
         optionsChanged: hooks("optionsChanged"),
         view: hooks("view"),
-        queries: engineQueries(features, engines),
+        queries: engineKeys(names, engines, "queries", "engine key"),
+        actions: engineKeys(names, engines, "actions", "engine action"),
         activate: hooks("activate")[0],
         move: hooks("move")[0],
     };
@@ -418,30 +439,37 @@ export function bindFeatureEvents(
     features: GridFeatures,
     engine: DataGridEngine<unknown, unknown>,
     props: () => object,
+    model: DataGridModel<unknown, unknown>,
 ): void {
     for (const feature of features.list) {
         (feature.root as FeatureRoot<never> | undefined)?.events?.(
             engine,
             props as () => never,
+            model as unknown as FeatureEngineContext<never>["model"],
         );
     }
 }
 
-/** The features' engine `get` keys, merged: a key two features add throws, as their other keys. */
-function engineQueries(
-    features: GridFeatures,
+/**
+ * The features' engine `get` keys or `run` actions, merged: a key two features add throws, as
+ * their other keys.
+ */
+function engineKeys<K extends "queries" | "actions">(
+    names: readonly string[],
     engines: readonly FeatureEngine[],
-): Readonly<Record<string, () => unknown>> {
-    const queries: Record<string, () => unknown> = {};
+    kind: K,
+    name: string,
+): NonNullable<FeatureEngine[K]> {
+    const merged: Record<string, unknown> = {};
     engines.forEach((engine, index) => {
-        for (const [key, query] of Object.entries(engine.queries ?? {})) {
-            if (Object.hasOwn(queries, key)) {
+        for (const [key, value] of Object.entries(engine[kind] ?? {})) {
+            if (Object.hasOwn(merged, key)) {
                 throw new TypeError(
-                    `feature "${features.list[index]?.name}" adds the engine key "${key}", which another feature adds`,
+                    `feature "${names[index]}" adds the ${name} "${key}", which another feature adds`,
                 );
             }
-            queries[key] = query;
+            merged[key] = value;
         }
     });
-    return queries;
+    return merged as NonNullable<FeatureEngine[K]>;
 }

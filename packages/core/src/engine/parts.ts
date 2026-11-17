@@ -117,8 +117,11 @@ export interface CellState {
      * for a cell inside the range or outside it, and while cells are not selectable
      */
     readonly rangeEdges: string | undefined;
-    /** it is the cell being edited (Epic #88, E4.3): it shows its editor */
-    readonly editing: boolean;
+    /**
+     * it is the cell being edited (Epic #88, E4.3): it shows its editor; `undefined` without
+     * editing (`@fragiola/data-grid/editing`)
+     */
+    readonly editing: boolean | undefined;
     /**
      * a fill's drag would fill it (Epic #88, E4.4: in its target); `undefined` while cells do not
      * fill (the fill handle's, `@fragiola/data-grid/fill`)
@@ -280,6 +283,7 @@ export interface RowShare {
 export interface CellShare {
     selected: boolean | undefined;
     rangeEdges: string | undefined;
+    editing: boolean | undefined;
     fillTarget: boolean | undefined;
     ariaSelected: boolean | undefined;
 }
@@ -290,6 +294,7 @@ const ROW_SHARE: RowShare = { selected: false, ariaSelected: undefined };
 const CELL_SHARE: CellShare = {
     selected: undefined,
     rangeEdges: undefined,
+    editing: undefined,
     fillTarget: undefined,
     ariaSelected: undefined,
 };
@@ -415,7 +420,7 @@ export interface RowDetailPart {
 
 /**
  * Whether a cell (at its element's position) is the one a view's state holds, if any: the one
- * whose controls have the keys (`interaction`), the one being edited (`editingCell`, Epic #88).
+ * whose controls have the keys (`interaction`), the one being edited (editing's `editingCell`).
  */
 export function isHeldCell(
     held: CellPosition | null,
@@ -539,7 +544,7 @@ function tabStop<TRow, TNode>(
 
 /**
  * A body cell's state, its `tabIndex` and its `aria-colspan`: a cell spanning columns (E1.2) is
- * active on any of them. The features fill the rest (a range's, a fill's: `CellShare`).
+ * active on any of them. The features fill the rest (a range's, an edit's, a fill's: `CellShare`).
  */
 export function cellPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
@@ -561,6 +566,7 @@ export function cellPart<TRow, TNode>(
     const share = CELL_SHARE;
     share.selected = undefined;
     share.rangeEdges = undefined;
+    share.editing = undefined;
     share.fillTarget = undefined;
     share.ariaSelected = undefined;
     view.features.cell?.(view as GridView<unknown, unknown>, cell, span, share);
@@ -576,7 +582,7 @@ export function cellPart<TRow, TNode>(
             interacting: isHeldCell(view.interaction, cell),
             selected: share.selected,
             rangeEdges: share.rangeEdges,
-            editing: isHeldCell(view.editingCell, cell),
+            editing: share.editing,
             fillTarget: share.fillTarget,
         },
         tabIndex: tabStop(view, active),

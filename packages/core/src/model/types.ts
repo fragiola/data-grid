@@ -560,13 +560,6 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedGroupKeys: readonly RowKey[];
     /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
     readonly estimatedDetailHeight: number;
-    /**
-     * the cell being edited (Epic #88, E4.3), the active one; `null` for none. The draft is an
-     * engine's (`edit-draft`)
-     */
-    readonly editingCell: EditingCell | null;
-    /** the keys the edit started on (`null` without one): its row and column, kept by them */
-    readonly editingKeys: CellKeys | null;
     /** the resized columns' widths, over their `width` (a resizable column's only count) */
     readonly columnWidths: ColumnWidths;
     /** the order columns and groups take among their siblings (empty: as declared) */
@@ -617,8 +610,6 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     detailHeight?: DetailHeight<TRow>;
     /** a measured detail's height until it is measured, in pixels (default 300) */
     estimatedDetailHeight?: number;
-    /** the cell being edited to start with: the active one, an editable cell (default none) */
-    editingCell?: EditingCell | null | undefined;
     /** the resized columns' widths to start with (an entry that is not a size is dropped) */
     columnWidths?: ColumnWidths;
     /** the column order to start with (an entry that is not a string is dropped) */
@@ -704,21 +695,6 @@ export interface CommandMap<TRow, TNode = unknown> {
             | { readonly rowIndex: number; readonly groupKey?: undefined }
             | { readonly groupKey: RowKey; readonly rowIndex?: undefined };
         result: readonly RowKey[];
-    };
-    /**
-     * edits a cell (Epic #88, E4.3): the active one, a loaded data row's cell whose column is
-     * editable for it (`refused` otherwise, `not_loaded` for a row not loaded yet; a header, a
-     * summary row's or a group row's cell never is), with the printable key that started it.
-     * A position inside a cell's span edits that cell. Returns the edited cell
-     */
-    "editing-cell.set": {
-        payload: EditingCell;
-        result: EditingCell;
-    };
-    /** ends the edit, if any (its draft is an engine's: `commit-edit` tells it first) */
-    "editing-cell.clear": {
-        payload: NoPayload;
-        result: undefined;
     };
     /**
      * replaces the resized columns' widths (each a size in pixels). A key that is not a column is
@@ -1098,8 +1074,6 @@ export interface QueryMap<TRow, TNode = unknown> {
     "expanded-rows": { payload: undefined; result: readonly number[] };
     /** an expanded row's detail height: a number, or a function of the row */
     "detail-height": { payload: undefined; result: DetailHeight<TRow> };
-    /** the cell being edited (Epic #88), or `null` */
-    "editing-cell": { payload: undefined; result: EditingCell | null };
 }
 
 export type QueryKey = keyof QueryMap<unknown>;
@@ -1117,11 +1091,6 @@ export interface QuestionMap {
      * its key among the expanded group keys
      */
     "row-group-expanded": { readonly rowIndex: number };
-    /**
-     * whether a cell can be edited (Epic #88): a loaded data row's body cell whose column is
-     * editable for it (the active one or not)
-     */
-    "cell-editable": CellPosition;
 }
 
 export type QuestionKey = keyof QuestionMap;

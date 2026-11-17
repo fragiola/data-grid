@@ -2,11 +2,6 @@
 
 export type { ControlledProp } from "./adapter/controlled";
 export {
-    type EditActions,
-    editActions,
-    editCellPropsOf,
-} from "./adapter/edit";
-export {
     attachGridHandle,
     createGridHandle,
     type GridHandle,
@@ -62,7 +57,6 @@ export {
 } from "./adapter/props";
 export {
     bindGridRoot,
-    type CellEditEvent,
     GRID_ROOT_PROPS,
     type GridRoot,
     type GridRootOptions,
@@ -75,7 +69,6 @@ export {
 export type { Axis, Size } from "./axis/axis";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
-    EDITOR_ATTRIBUTE,
     FILL_HANDLE_ATTRIBUTE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
@@ -158,6 +151,8 @@ export type {
     EngineLayer,
     EngineQueryKey,
     EngineQueryMap,
+    FeatureActionKey,
+    FeatureQueryKey,
     FillDrag,
     GridView,
     HeaderRowView,
@@ -183,7 +178,6 @@ export {
     type FeatureTypes,
     type PartAttributes,
 } from "./feature/feature";
-export { sameEditingCell } from "./model/editing";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
     createDataGridModel,

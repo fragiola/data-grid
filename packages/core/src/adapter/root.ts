@@ -5,7 +5,6 @@
 
 import { createDataGridEngine } from "../engine/engine";
 import type {
-    CellEdit,
     DataGridEngine,
     DataGridEngineOptions,
     RowMove,
@@ -20,7 +19,6 @@ import {
     featuresOf,
     type GridFeatures,
 } from "../feature/registry";
-import { sameEditingCell } from "../model/editing";
 import { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "../model/expansion";
 import {
     createDataGridModel,
@@ -35,7 +33,6 @@ import type {
     ColumnWidths,
     DataGridState,
     DetailHeight,
-    EditingCell,
     GridDirection,
     RowHeight,
     RowKey,
@@ -52,14 +49,6 @@ import {
     type ControlledProp,
     controlledProp,
 } from "./controlled";
-
-/**
- * An edit committed (Epic #88, E4.3), as `onCellEdit` tells it: the cell, its column's key, the
- * value, and the row (loaded: a cell is edited only then), which the app writes it into.
- */
-export interface CellEditEvent<TRow> extends CellEdit {
-    readonly row: TRow;
-}
 
 /** Where the rows come from: all of them, or a count and a getter (D6). */
 export type GridRowsProps<TRow> =
@@ -154,25 +143,6 @@ export interface GridRootOptions<TRow, TNode> {
     detailHeight?: DetailHeight<TRow> | undefined;
     /** a measured detail's height until it is measured, in pixels (default 300) */
     estimatedDetailHeight?: number | undefined;
-    /**
-     * the cell being edited (Epic #88): the active one, of a column `editable` for its row;
-     * controlled (`null` for none), paired with `onEditingCellChange`
-     */
-    editingCell?: EditingCell | null | undefined;
-    /** the cell being edited to start with, uncontrolled */
-    defaultEditingCell?: EditingCell | null | undefined;
-    /**
-     * an edit started or ended (or, controlled, asks to): Enter, F2, typing or a double click
-     * on an editable cell; a commit (Enter, Tab, a click outside) or a cancel (Escape)
-     */
-    onEditingCellChange?:
-        | ((editingCell: EditingCell | null) => void)
-        | undefined;
-    /**
-     * an edit was committed with a new value (Epic #88): the cell, its column's key, the value
-     * and the row. Write it into your rows: the grid writes no data
-     */
-    onCellEdit?: ((edit: CellEditEvent<TRow>) => void) | undefined;
     /**
      * the resized columns' widths in pixels, by column key, controlled; pair it with
      * `onColumnWidthsChange`. On screen a column is the first of: its width here (when it is
@@ -286,10 +256,6 @@ export const GRID_ROOT_PROPS = [
     "onExpandedGroupKeysChange",
     "detailHeight",
     "estimatedDetailHeight",
-    "editingCell",
-    "defaultEditingCell",
-    "onEditingCellChange",
-    "onCellEdit",
     "columnWidths",
     "defaultColumnWidths",
     "onColumnWidthsChange",
@@ -429,10 +395,6 @@ export function bindGridRoot<
             initial.expandedGroupKeys ?? initial.defaultExpandedGroupKeys,
         detailHeight: initial.detailHeight,
         estimatedDetailHeight: initial.estimatedDetailHeight,
-        editingCell:
-            initial.editingCell !== undefined
-                ? initial.editingCell
-                : initial.defaultEditingCell,
         columnWidths: initial.columnWidths ?? initial.defaultColumnWidths,
         columnOrder: initial.columnOrder ?? initial.defaultColumnOrder,
         collapsedGroupKeys:
@@ -468,21 +430,6 @@ export function bindGridRoot<
         same: sameKeys,
         apply: (groupKeys) => {
             model.run("row-groups.set", { groupKeys });
-        },
-    });
-    const editing = bind<EditingCell | null>({
-        prefix: "editing-cell.",
-        prop: (props) => props.editingCell,
-        onChange: (props) => props.onEditingCellChange,
-        start: (props) => props.defaultEditingCell,
-        read: (state) => state.editingCell,
-        same: sameEditingCell,
-        fromCommand: (command, value) =>
-            command === "editing-cell.clear" ? null : (value as EditingCell),
-        // an edit the grid cannot take (not the active cell, not editable) settles told
-        apply: (value) => {
-            if (value === null) model.run("editing-cell.clear", {});
-            else model.run("editing-cell.set", value);
         },
     });
     const widths = bind<ColumnWidths>({
@@ -549,16 +496,13 @@ export function bindGridRoot<
         props().onRowsEndReached?.(info),
     );
     engine.subscribe("row-move", (move) => props().onRowMove?.(move));
-    // an edit committed (Epic #88): told with its row, loaded while it is edited
-    engine.subscribe("cell-edit", (edit) => {
-        const row = model.get("row-by", { index: edit.rowIndex });
-        if (row !== undefined) props().onCellEdit?.({ ...edit, row });
-    });
-    // the features' events (Epic #144: a fill, a paste), told to their props
+    // the features' events (Epic #144: a fill, a paste; Epic #146: an edit), told to their
+    // props
     bindFeatureEvents(
         installedFeatures,
         engine as unknown as DataGridEngine<unknown, unknown>,
         props,
+        model as unknown as DataGridModel<unknown, unknown>,
     );
     // the features' controlled props (Epic #141), bound after the core's, in their order; the
     // ones followed first (the active position, Epic #144) with the layout inputs
@@ -589,7 +533,6 @@ export function bindGridRoot<
     // collapse moved settles in the same pass; the features' last (the selections, the sort)
     const controlled: readonly Controlled[] = [
         ...layout,
-        editing,
         expanded,
         groups,
         ...featurePieces.filter((piece) => !firstPieces.includes(piece)),

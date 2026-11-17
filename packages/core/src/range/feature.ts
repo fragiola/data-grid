@@ -1,3 +1,4 @@
+import type { EditingState } from "../editing/types";
 import {
     inlineKey,
     isElement,
@@ -487,12 +488,13 @@ const CELL_RANGE = defineFeature<CellRangeTypes>({
                 if (state.selectedRange !== (before as State).selectedRange) {
                     followRange();
                 }
-                // an edit started: the drag ends, telling nothing
+                // an edit started (editing's, Epic #146): the drag ends, telling nothing
+                const editing = (after as Partial<EditingState>).editingCell;
                 if (
                     rangeDrag &&
                     engine.drag() === rangeDrag &&
-                    after.editingCell &&
-                    after.editingCell !== before.editingCell
+                    editing &&
+                    editing !== (before as Partial<EditingState>).editingCell
                 ) {
                     engine.endDrag("lost");
                 }

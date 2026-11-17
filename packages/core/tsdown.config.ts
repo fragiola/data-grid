@@ -3,7 +3,7 @@ import { defineConfig } from "tsdown";
 export default defineConfig({
     // the grid, and its opt-in extras, each its own file: the local pipeline
     // (`@fragiola/data-grid/local`) and the features (Epic #141, #144: `/sorting`,
-    // `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`)
+    // `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`; Epic #146: `/editing`)
     entry: {
         index: "src/index.ts",
         local: "src/local/index.ts",
@@ -13,6 +13,7 @@ export default defineConfig({
         range: "src/range/index.ts",
         clipboard: "src/clipboard/index.ts",
         fill: "src/fill/index.ts",
+        editing: "src/editing/index.ts",
     },
     format: "esm",
     platform: "browser",
