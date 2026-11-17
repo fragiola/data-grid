@@ -120,3 +120,43 @@ same elements, attributes and structural style ([Vue primitives](/docs/api/vue))
   `v-bind="props.value"`.
 - **A template ref on a part is its component instance**: its element is `$el`; a handle on the
   grid is a `gridRef` (`useDataGridRef()`).
+
+## In Angular
+
+`@fragiola/data-grid-angular` follows the same contract with Angular's own means; the parts put
+the same attributes and structural style on your elements ([Angular directives](/docs/api/angular)).
+
+- **Your element, never `asChild`.** A part is an attribute directive on the element you write
+  (`<table dataGridGrid>`, `<td [dataGridCell]="cell">`), the Angular form of `render`. A part
+  that renders only sometimes is a structural directive on its element (`*dataGridHeader`,
+  `*dataGridEmpty`, `*dataGridRowDetail`, `*dataGridSummary="'top'"`).
+
+```html title="people-grid.ts"
+<table dataGridGrid aria-label="People">
+    <tbody dataGridBody>
+        <ng-template [dataGridRows]="columns" let-row>
+            <tr [dataGridRow]="row">
+                <ng-template [dataGridCells]="columns" let-cell>
+                    <td [dataGridCell]="cell" #own="dataGridCell" [title]="own.state()?.active ? 'active' : ''">
+                        <ng-container *dataGridCellContent />
+                    </td>
+                </ng-template>
+            </tr>
+        </ng-template>
+    </tbody>
+</table>
+```
+
+- **`class` and `style` are your element's**, under the structural style, as in React: the
+  structural keys win, and the layers and the pinned cells drop the keys the engine writes from
+  your static style (never bind those keys yourself). Style the state with the `data-*`
+  attributes, or with the part's `state()` (`#own="dataGridCell"`).
+- **Listeners compose in the same order**: yours (`(keydown)`, `(click)`, `(pointerdown)`,
+  `(copy)`, `(paste)`) run before the grid's on the root, so `preventDefault` in yours cancels a
+  key, a sort, a drag or the grid's use of the clipboard.
+- **The recursion is templates**: `<ng-template dataGridRows let-row>`,
+  `<ng-template dataGridCells let-cell>`; a column's renderers return text or a template with its
+  context (`Column<TRow, DataGridNode>`, `templateContent`), which `*dataGridCellContent` renders.
+- **Signals all the way**: inputs, outputs (`xChange` for `onXChange`), `state()` and the
+  injection functions' `{ state, props }` are signals; nothing changes while the grid scrolls
+  within its rendered window.
