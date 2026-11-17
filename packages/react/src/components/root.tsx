@@ -1,5 +1,6 @@
 import {
     bindGridRoot,
+    type DataGridFeatures,
     type GridRootProps,
     type GridView,
     rootPropsOf,
@@ -31,10 +32,14 @@ export type RootState = Record<string, never>;
 
 /**
  * The root's props: the core's root props (the data, the sizes, every piece of state controlled
- * or not, what it tells, the engine's options; `GridRootProps`), the element's, and a `gridRef`.
+ * or not, what it tells, the engine's options, the `features` it installs and their props:
+ * `GridRootProps`), the element's, and a `gridRef`.
  */
-export type RootProps<TRow> = DivPrimitiveProps<RootState> &
-    GridRootProps<TRow, ReactNode> & {
+export type RootProps<
+    TRow,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = DivPrimitiveProps<RootState> &
+    GridRootProps<TRow, ReactNode, TFeatures> & {
         /**
          * a handle on this grid from outside the root (`useDataGridRef()`): its model and engine,
          * and the hooks that take it. `ref` stays the root's element.
@@ -45,21 +50,29 @@ export type RootProps<TRow> = DivPrimitiveProps<RootState> &
 
 /**
  * The grid's root: the scroll container (a `div`, overflow auto; give it a size). It holds the
- * model and the engine, maps its props onto the model's commands (controlled or not: the core's
- * `bindGridRoot`), and runs the grid's keys, clicks and presses after the consumer's own handlers,
- * so `preventDefault` cancels one.
+ * model and the engine, installs its `features` (fixed when it mounts: a later list is told in
+ * the console, never taken), maps its props onto the model's commands (controlled or not: the
+ * core's `bindGridRoot`), and runs the grid's keys, clicks and presses after the consumer's own
+ * handlers, so `preventDefault` cancels one. A feature's props compile only with it installed.
  */
-export function Root<TRow>(props: RootProps<TRow>) {
+export function Root<TRow, const TFeatures extends DataGridFeatures = []>(
+    props: RootProps<TRow, TFeatures>,
+) {
     const { gridRef, children, ...elementProps } = props;
-    // the element's props: the root's own (the core's) left out
-    const rest = withoutRootProps(elementProps);
+    // the element's props: the root's own (the core's, and its features') left out
+    const rest = withoutRootProps(elementProps, props.features);
     const latest = useRef(props);
     latest.current = props;
 
     const [grid] = useState(() => {
-        const root = bindGridRoot<TRow, ReactNode>(() => latest.current);
+        const root = bindGridRoot<TRow, ReactNode, TFeatures>(
+            () => latest.current,
+        );
         const { model, engine } = root;
-        const context: DataGridContextValue<TRow> = { model, engine };
+        const context: DataGridContextValue<TRow, TFeatures> = {
+            model,
+            engine,
+        };
         // the grid's keys, header clicks (sorting) and presses on a resizer (a drag) run after the
         // consumer's onKeyDown, onClick and onPointerDown, on the root or on its render element,
         // so preventDefault cancels them

@@ -1,9 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { type Column, DataGrid, type SortColumn } from "../src";
+import { type Column, DataGrid } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { type SortColumn, sorting } from "../src/sorting";
 import { headerAt, stubViewportSize, tags } from "./helpers";
+
+const FEATURES = [sorting()] as const;
 
 // One hook for rows in memory (Epic #47, L1): its props spread onto Root make the header sort the
 // rows, and its controls filter, search and page what the grid shows.
@@ -46,7 +49,12 @@ function People({
     latest = local;
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={columns} rowHeight={20} {...local.props}>
+        <DataGrid.Root
+            columns={columns}
+            rowHeight={20}
+            features={FEATURES}
+            {...local.props}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRow render={tag.headerRow}>
@@ -174,7 +182,11 @@ describe("useLocalRows across renders", () => {
                     <button type="button" onClick={() => setRows(people)}>
                         restore
                     </button>
-                    <DataGrid.Root columns={columns} {...local.props}>
+                    <DataGrid.Root
+                        columns={columns}
+                        features={FEATURES}
+                        {...local.props}
+                    >
                         <DataGrid.Grid>
                             <DataGrid.Body />
                         </DataGrid.Grid>
@@ -211,7 +223,11 @@ describe("useLocalRows across renders", () => {
             const local = useLocalRows(people, columns);
             seen.add(local.props.onSortColumnsChange);
             return (
-                <DataGrid.Root columns={columns} {...local.props}>
+                <DataGrid.Root
+                    columns={columns}
+                    features={FEATURES}
+                    {...local.props}
+                >
                     <DataGrid.Grid>
                         <DataGrid.Header />
                     </DataGrid.Grid>
