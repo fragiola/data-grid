@@ -3,7 +3,7 @@
     "slug": "data-grid",
     "title": "Data Grid",
     "description": "A headless data grid for millions of cells: virtualized on both axes, keyboard-ready, as a table or as divs, styled by you.",
-    "frameworks": ["react", "vue"],
+    "frameworks": ["react", "vue", "angular"],
     "defaultFramework": "react",
     "repository": "https://github.com/fragiola/data-grid",
     "keywords": [
