@@ -7,6 +7,7 @@ import {
     createDataGridModel,
     TAB_STOP_ATTRIBUTE,
 } from "../../src";
+import { sorting } from "../../src/sorting";
 import {
     cellElement,
     keydown,
@@ -40,7 +41,7 @@ function setup() {
     const field = cell(1, 1, '<input id="name" />');
     const plain = cell(2, 1);
     const { model, engine, viewport } = mountEngine(
-        { columns: COLUMNS, rowCount: 100 },
+        { columns: COLUMNS, rowCount: 100, features: [sorting()] },
         { grid },
     );
     const key = (target: Element, name: string, init: KeyboardEventInit = {}) =>
@@ -237,7 +238,7 @@ describe("header cells", () => {
         const sortable = cell(-1, 0, '<button id="menu-a">Menu</button>');
         const plainHeader = cell(-1, 1, '<button id="menu-b">Menu</button>');
         key(sortable, "Enter");
-        expect(model.state.sortColumns).toEqual([
+        expect(model.get("sort-columns")).toEqual([
             { columnKey: "a", direction: "ascending" },
         ]);
         expect(engine.get("interaction")).toBeNull();

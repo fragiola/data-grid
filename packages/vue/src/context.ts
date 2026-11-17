@@ -1,5 +1,6 @@
 import type {
     DataGridEngine,
+    DataGridFeatures,
     DataGridModel,
     GridCellInfo,
     GridHandle,
@@ -20,9 +21,16 @@ import {
     type VNodeChild,
 } from "vue";
 
-/** What `useDataGrid()` returns: the grid's model and its engine (column renderers return vnodes). */
-export interface DataGridContextValue<TRow = unknown> {
-    model: DataGridModel<TRow, VNodeChild>;
+/**
+ * What `useDataGrid()` returns: the grid's model and its engine (column renderers return vnodes).
+ * The model's keys are the core's and the installed features' (`TFeatures`; left out, a grid of
+ * any features).
+ */
+export interface DataGridContextValue<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> {
+    model: DataGridModel<TRow, VNodeChild, TFeatures>;
     engine: DataGridEngine<TRow, VNodeChild>;
 }
 
@@ -30,11 +38,13 @@ export interface DataGridContextValue<TRow = unknown> {
  * A handle on a grid from outside its `DataGrid.Root`: `current` is the grid's model and engine
  * while a `Root` holds it (`<DataGrid.Root :grid-ref="gridRef">`), `null` otherwise. Unlike a
  * template ref it tells when that changes, so composables take it (`useRowWindow(gridRef)`,
- * `useDataGrid(gridRef)`) and follow the grid from anywhere.
+ * `useDataGrid(gridRef)`) and follow the grid from anywhere. Its model's keys are the core's and
+ * the features' it is typed with (left out, a grid of any features: any ref fits).
  */
-export type DataGridRef<TRow = unknown> = GridHandle<
-    DataGridContextValue<TRow>
->;
+export type DataGridRef<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = GridHandle<DataGridContextValue<TRow, TFeatures>>;
 
 /** A body row, as `DataGrid.Rows` hands it to its slot. */
 export type RowInfo<TRow = unknown> = GridRowInfo<TRow>;
@@ -160,16 +170,24 @@ export function useGrid<TRow>(
 }
 
 /**
- * The grid's model and engine, typed by the row type the app passes (an injection cannot carry a
- * generic: the `Root` that provides it was given that row type). Call it in `setup`.
+ * The grid's model and engine, typed by the row type and the features the app passes
+ * (`useDataGrid<Person, typeof features>()`: a feature's keys compile only when it is listed). An
+ * injection cannot carry a generic: the `Root` that provides it was given them, so the
+ * composable states them. Call it in `setup`.
  *
  * With a `gridRef`, it works outside the `Root` too: a ref of the grid that ref's `Root` holds,
- * or `null` until one does.
+ * or `null` until one does; typed as the ref is.
  */
-export function useDataGrid<TRow = unknown>(): DataGridContextValue<TRow>;
-export function useDataGrid<TRow>(
-    gridRef: DataGridRef<TRow>,
-): Readonly<ShallowRef<DataGridContextValue<TRow> | null>>;
+export function useDataGrid<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = [],
+>(): DataGridContextValue<TRow, TFeatures>;
+export function useDataGrid<
+    TRow,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+>(
+    gridRef: DataGridRef<TRow, TFeatures>,
+): Readonly<ShallowRef<DataGridContextValue<TRow, TFeatures> | null>>;
 export function useDataGrid<TRow>(
     gridRef?: DataGridRef<TRow>,
 ):

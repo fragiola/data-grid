@@ -41,6 +41,20 @@ pnpm add @fragiola/data-grid-angular
 The core, `@fragiola/data-grid`, comes along: import its types and helpers from any of the
 packages.
 
+## Features and entry points
+
+The main entry is a small core: it renders, scrolls, virtualizes and answers the keys. The rest
+comes from entry points of the same package, imported only when used:
+
+| entry | holds |
+| --- | --- |
+| `/sorting` | `sorting()`, a [feature](/docs/concepts/features) the grid installs for its columns to sort |
+| `/local` | rows in memory, sorted, filtered, grouped and paged ([Rows in memory](/docs/concepts/rows-in-memory)) |
+| `/selection` | a "select all" control ([Row selection](/docs/concepts/row-selection)) |
+
+So `@fragiola/data-grid-react/sorting` (or `-vue/sorting`, `-angular/sorting`) needs no other
+package. What an app never imports is not in its bundle.
+
 ## Peer dependencies
 
 <Framework name="react">

@@ -1,3 +1,4 @@
+import type { PartAttributes } from "../feature/feature";
 import { isReorderable } from "../model/order";
 import { inRange, rangeEdgesOf } from "../model/range";
 import { rowSelectableWith, rowSelectedWith } from "../model/selection";
@@ -18,8 +19,6 @@ import type {
     ReorderSide,
     RowKey,
     RowMeta,
-    SortColumn,
-    SortDirection,
     SummaryPosition,
     SummaryRowView,
 } from "../model/types";
@@ -42,7 +41,6 @@ import {
     columnLeft,
     columnPinning,
     columnSide,
-    headerCellSort,
     resizeEdge,
     rowCellsHeight,
     rowDetailBox,
@@ -178,12 +176,15 @@ export interface HeaderCellState {
     readonly group: boolean;
     /** it is the active cell */
     readonly active: boolean;
-    /** its column sorts the grid: a click, Enter or Space toggles it (never a group) */
-    readonly sortable: boolean;
-    /** the direction its column is sorted in, when it is */
-    readonly sortDirection: SortDirection | undefined;
-    /** its column's place among the sorted columns, 1-based, when it is sorted */
-    readonly sortPriority: number | undefined;
+    /**
+     * its column sorts the grid: a click, Enter or Space toggles it (never a group). Sorting's
+     * (`@fragiola/data-grid/sorting`): `undefined` without it, as the two below
+     */
+    readonly sortable?: boolean | undefined;
+    /** the direction its column is sorted in, when it is (sorting's) */
+    readonly sortDirection?: "ascending" | "descending" | undefined;
+    /** its column's place among the sorted columns, 1-based, when it is sorted (sorting's) */
+    readonly sortPriority?: number | undefined;
     /** its columns are pinned, at the start or at the end: sticky, it stays in view sideways */
     readonly pinned: boolean;
     /**
@@ -338,13 +339,16 @@ export interface SummaryCellPart extends Omit<CellPart, "state"> {
     readonly state: SummaryCellState;
 }
 
-/** A header cell's state, its `tabIndex` and its `aria-sort`. */
+/** A header cell's state, its `tabIndex` and the attributes its features add. */
 export interface HeaderCellPart {
     readonly state: HeaderCellState;
     /** the roving tab stop, as a body cell's */
     readonly tabIndex: 0 | -1;
-    /** on the first sorted column with a header cell of its own (ARIA 1.2: one header at a time) */
-    readonly ariaSort: SortDirection | undefined;
+    /**
+     * what the installed features add to its element (sorting's `aria-sort`, `data-sort`, …);
+     * `undefined` without them
+     */
+    readonly attributes: PartAttributes | undefined;
 }
 
 /**
@@ -625,14 +629,13 @@ export function summaryCellPart<TRow, TNode>(
 }
 
 /**
- * A header cell's state, its `tabIndex` and its `aria-sort`: a column spanning header rows is
- * active on any of them.
+ * A header cell's state, its `tabIndex` and what its features add (Epic #141): a column spanning
+ * header rows is active on any of them.
  */
 export function headerCellPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
     cell: HeaderCellLayout<TRow, TNode>,
 ): HeaderCellPart {
-    const sort = headerCellSort(view, cell);
     const { pinned, pinnedEdge, pinnedSide } = columnPinning(
         view,
         cell.columnIndex,
@@ -641,35 +644,40 @@ export function headerCellPart<TRow, TNode>(
     const active =
         view.active !== null && sameCell(view.active, cell, view.header.cellAt);
     const reorder = view.columnReorder;
-    return {
-        state: {
-            collapsed:
-                cell.group?.collapsible === true
-                    ? keySet(view.collapsedGroupKeys).has(cell.key)
-                    : undefined,
-            resizable: spanResizable(view.columnDefs, cell),
-            resizing: view.columnResize?.columnKey === cell.key,
-            reorderable: isReorderable(cell),
-            dragging: reorder?.columnKey === cell.key,
-            dropTarget: reorder?.targetKey === cell.key ? reorder.side : null,
-            rowIndex: cell.rowIndex,
-            columnIndex: cell.columnIndex,
-            columnSpan: cell.columnSpan,
-            rowSpan: cell.rowSpan,
-            group: cell.group !== undefined,
-            active,
-            sortable: sort.sortable,
-            sortDirection: sort.direction,
-            sortPriority: sort.priority,
-            pinned,
-            pinnedEdge,
-            pinnedSide,
-            interacting: isHeldCell(view.interaction, cell),
-        },
-        // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
-        tabIndex: active && view.tabbable ? 0 : -1,
-        ariaSort: sort.ariaSort,
+    const state: HeaderCellState = {
+        collapsed:
+            cell.group?.collapsible === true
+                ? keySet(view.collapsedGroupKeys).has(cell.key)
+                : undefined,
+        resizable: spanResizable(view.columnDefs, cell),
+        resizing: view.columnResize?.columnKey === cell.key,
+        reorderable: isReorderable(cell),
+        dragging: reorder?.columnKey === cell.key,
+        dropTarget: reorder?.targetKey === cell.key ? reorder.side : null,
+        rowIndex: cell.rowIndex,
+        columnIndex: cell.columnIndex,
+        columnSpan: cell.columnSpan,
+        rowSpan: cell.rowSpan,
+        group: cell.group !== undefined,
+        active,
+        pinned,
+        pinnedEdge,
+        pinnedSide,
+        interacting: isHeldCell(view.interaction, cell),
     };
+    // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
+    const tabIndex = active && view.tabbable ? 0 : -1;
+    const share = view.features.headerCell?.(
+        view as GridView<unknown, unknown>,
+        cell as HeaderCellLayout<unknown, unknown>,
+    );
+    return share
+        ? {
+              state: { ...state, ...share.state },
+              tabIndex,
+              attributes: share.attributes,
+          }
+        : { state, tabIndex, attributes: undefined };
 }
 
 /**
@@ -754,22 +762,20 @@ const HIDDEN_FILLING: FillHandlePart = {
 };
 
 /**
- * Whether a grid's rows move now (E2.3): they move (`reorderableRows`), the grid is not sorted
- * (sorted, the app orders them its own way: a move would not stay where it was dropped) and its
- * rows have no kinds (Epic #87: grouped, a row's place is its group's; moving rows between groups
- * is the app's).
+ * Whether a grid's rows move now (E2.3): they move (`reorderableRows`), no feature keeps them in
+ * an order of the app's (`rowsOrdered`: sorted, a move would not stay where it was dropped) and
+ * its rows have no kinds (Epic #87: grouped, a row's place is its group's; moving rows between
+ * groups is the app's).
  */
 export function rowsMove(
     reorderableRows: boolean | undefined,
-    grid: {
-        readonly sortColumns: readonly SortColumn[];
-        readonly source: DataGridState<unknown>["source"];
-    },
+    rowsOrdered: boolean,
+    source: DataGridState<unknown>["source"],
 ): boolean {
     return (
         reorderableRows === true &&
-        grid.sortColumns.length === 0 &&
-        grid.source.getRowMeta === undefined
+        !rowsOrdered &&
+        source.getRowMeta === undefined
     );
 }
 
@@ -785,7 +791,9 @@ export function rowDragHandlePart<TRow, TNode>(
     return {
         state: {
             rowIndex,
-            reorderable: loaded && rowsMove(view.reorderableRows, view),
+            reorderable:
+                loaded &&
+                rowsMove(view.reorderableRows, view.rowsOrdered, view.source),
             dragging: view.rowReorder?.rowIndex === rowIndex,
         },
         attributes: {

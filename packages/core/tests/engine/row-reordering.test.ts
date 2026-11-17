@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    type DataGridModelOptions,
+    type ModelOptions,
     ROW_DRAG_HANDLE_ATTRIBUTE,
     type RowMove,
     type RowReorder,
@@ -9,6 +9,7 @@ import {
     rowPart,
     veto,
 } from "../../src";
+import { sorting } from "../../src/sorting";
 import {
     cellElement,
     keydown,
@@ -19,6 +20,8 @@ import {
     stubAnimationFrames,
 } from "./harness";
 import { stateOf, viewOf } from "./views";
+
+type Sorting = ReturnType<typeof sorting>;
 
 // Row reordering on screen (Epic #86, E2.3): a press on a row's drag handle drags past a click's
 // slop, its target worked out from the row axis (off screen, variable heights and details alike),
@@ -47,7 +50,7 @@ const middleOf = (rowIndex: number, top = 0) =>
     TOP + rowIndex * ROW + ROW / 2 - top;
 
 function setup(
-    modelOptions: Partial<DataGridModelOptions<Row>> = {},
+    modelOptions: Partial<ModelOptions<Row, unknown, [Sorting]>> = {},
     options: MountOptions = {},
 ) {
     const grid = document.createElement("div");
@@ -59,6 +62,7 @@ function setup(
             ],
             rowCount: 1_000,
             rowKey: (row) => `r${row.id}`,
+            features: [sorting()],
             ...modelOptions,
         },
         { grid, reorderableRows: true, ...options },
@@ -816,6 +820,7 @@ describe("the parts", () => {
         const sorted = viewOf(
             stateOf({
                 columns: [{ key: "a", width: 100, sortable: true }],
+                features: [sorting()],
                 sortColumns: [{ columnKey: "a", direction: "ascending" }],
             }),
             { reorderableRows: true },

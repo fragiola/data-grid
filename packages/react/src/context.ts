@@ -2,6 +2,7 @@ import type {
     Column as CoreColumn,
     ColumnGroup as CoreColumnGroup,
     DataGridEngine,
+    DataGridFeatures,
     DataGridModel,
     GridCellInfo,
     GridRowInfo,
@@ -24,9 +25,15 @@ export type ColumnGroup<TRow> = CoreColumnGroup<TRow, ReactNode>;
 /** An entry of `columns`: a column, or a group of them. */
 export type ColumnOrGroup<TRow> = Column<TRow> | ColumnGroup<TRow>;
 
-/** What `useDataGrid()` returns: the grid's model and its engine. */
-export interface DataGridContextValue<TRow = unknown> {
-    model: DataGridModel<TRow, ReactNode>;
+/**
+ * What `useDataGrid()` returns: the grid's model and its engine. The model's keys are the core's
+ * and the installed features' (`TFeatures`; left out, a grid of any features).
+ */
+export interface DataGridContextValue<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> {
+    model: DataGridModel<TRow, ReactNode, TFeatures>;
     engine: DataGridEngine<TRow, ReactNode>;
 }
 
@@ -104,16 +111,24 @@ export function useGrid<TRow>(
 }
 
 /**
- * The grid's model and engine, typed by the row type the app passes. A context cannot carry a
- * generic: the `Root` that provides it was given that row type, so the hook states it.
+ * The grid's model and engine, typed by the row type and the features the app passes
+ * (`useDataGrid<Person, typeof features>()`: a feature's keys compile only when it is listed). A
+ * context cannot carry a generic: the `Root` that provides it was given them, so the hook states
+ * them.
  *
  * With a `gridRef`, it works outside the `Root` too: the grid that ref's `Root` holds, or `null`
- * until one does.
+ * until one does; typed as the ref is.
  */
-export function useDataGrid<TRow = unknown>(): DataGridContextValue<TRow>;
-export function useDataGrid<TRow>(
-    gridRef: DataGridRef<TRow> | undefined,
-): DataGridContextValue<TRow> | null;
+export function useDataGrid<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = [],
+>(): DataGridContextValue<TRow, TFeatures>;
+export function useDataGrid<
+    TRow,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+>(
+    gridRef: DataGridRef<TRow, TFeatures> | undefined,
+): DataGridContextValue<TRow, TFeatures> | null;
 export function useDataGrid<TRow>(
     gridRef?: DataGridRef<TRow>,
 ): DataGridContextValue<TRow> | null {

@@ -6,14 +6,15 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
+import { DataGridLocalRows, injectLocalRows } from "../src/local";
 import {
     type Column,
     createDataGridRef,
     DATA_GRID,
     type DataGridNode,
     type DataGridRef,
-    type SortColumn,
 } from "../src/public-api";
+import { DataGridSorting, type SortColumn, sorting } from "../src/sorting";
 import { type TestProps, TestRootProps } from "./grid";
 import {
     click,
@@ -26,7 +27,8 @@ import {
 
 // Sorting (Epic #27): `sortable` columns, the sort controlled or not like the active position
 // (S5), toggled by a click, Enter or Space on a header cell after the consumer's handlers (S4),
-// shown through aria-sort and data-* (S6). The grid never orders the rows (S7).
+// shown through aria-sort and data-* (S6). The grid never orders the rows (S7). A feature since
+// Epic #141: the root installs it (`[features]`), its inputs on `[dataGridSorting]`.
 
 interface Person {
     id: number;
@@ -49,6 +51,8 @@ const columns: Column<Person, DataGridNode>[] = [
 ];
 
 stubViewportSize(400, 235);
+
+const FEATURES = [sorting()] as const;
 
 /** Where a consumer's click listener cancels the grid's. */
 type Prevent = "root" | "header-cell" | null;
@@ -119,7 +123,7 @@ class SortGrid {
     }
 }
 
-type GridProps = Partial<TestProps<Person>> & {
+type GridProps = Partial<TestProps<Person, typeof FEATURES>> & {
     table?: boolean;
     menu?: readonly string[];
     gridRef?: DataGridRef;
@@ -136,7 +140,13 @@ function setInputs(fixture: ComponentFixture<SortGrid>, props: GridProps) {
         ...rest
     } = props;
     const inputs = {
-        props: { columns, rows: people, rowHeight: 20, ...rest },
+        props: {
+            columns,
+            rows: people,
+            rowHeight: 20,
+            features: FEATURES,
+            ...rest,
+        },
         table,
         menu,
         gridRef,
@@ -282,10 +292,11 @@ describe("controlled", () => {
     it("works with a parent that follows", async () => {
         // a parent: the sort in its state, bound both ways
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridSorting],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [(sortColumns)]="sortColumns">
+                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [features]="features"
+                    dataGridSorting [(sortColumns)]="sortColumns">
                     <div dataGridGrid>
                         <div *dataGridHeader>
                             <ng-template dataGridHeaderRows let-row>
@@ -302,6 +313,7 @@ describe("controlled", () => {
             `,
         })
         class Following {
+            readonly features = FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly sortColumns = signal<readonly SortColumn[]>([]);
@@ -363,7 +375,7 @@ describe("controlled", () => {
 describe("the model", () => {
     it("drives the same state: sort-columns.set through a gridRef asks or tells", async () => {
         const onSortColumnsChange = vi.fn();
-        const gridRef = createDataGridRef();
+        const gridRef = createDataGridRef<unknown, typeof FEATURES>();
         const set = async () => {
             gridRef.current?.model.run("sort-columns.set", {
                 sortColumns: [{ columnKey: "age", direction: "descending" }],
@@ -427,5 +439,137 @@ describe("structure", () => {
             ),
         ];
         expect(sortAttributes).toHaveLength(0);
+    });
+});
+
+/** A header row only: the parts sorting reads. */
+const HEADER = `
+    <div dataGridGrid>
+        <div *dataGridHeader>
+            <ng-template dataGridHeaderRows let-row>
+                <div [dataGridHeaderRow]="row">
+                    <ng-template dataGridHeaderCells let-cell>
+                        <div [dataGridHeaderCell]="cell"><ng-container *dataGridCellContent /></div>
+                    </ng-template>
+                </div>
+            </ng-template>
+        </div>
+        <div dataGridBody></div>
+    </div>
+`;
+
+describe("[features] and [dataGridSorting]", () => {
+    it("starts from defaultSortColumns and tells the change through sortColumnsChange", async () => {
+        const changes: (readonly SortColumn[])[] = [];
+        @Component({
+            imports: [DATA_GRID, DataGridSorting],
+            changeDetection: ChangeDetectionStrategy.OnPush,
+            template: `
+                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [features]="features"
+                    dataGridSorting [defaultSortColumns]="start" (sortColumnsChange)="changed($event)">${HEADER}</div>
+            `,
+        })
+        class Uncontrolled {
+            readonly features = FEATURES;
+            readonly rows = people;
+            readonly columns = columns;
+            readonly start: readonly SortColumn[] = [
+                { columnKey: "age", direction: "descending" },
+            ];
+            changed(sort: readonly SortColumn[]) {
+                changes.push(sort);
+            }
+        }
+        const { container } = await render(Uncontrolled);
+        expect(shown(container)[1]?.[1]).toBe("descending");
+        click(headerAt(container, 1));
+        await settled();
+        expect(changes).toEqual([[]]);
+        expect(shown(container)[1]?.[1]).toBeNull();
+    });
+
+    it("sorts nothing without sorting() installed: its inputs are not read", async () => {
+        const changed = vi.fn();
+        @Component({
+            imports: [DATA_GRID, DataGridSorting],
+            changeDetection: ChangeDetectionStrategy.OnPush,
+            template: `
+                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20"
+                    dataGridSorting [defaultSortColumns]="start" (sortColumnsChange)="changed($event)">${HEADER}</div>
+            `,
+        })
+        class Bare {
+            readonly rows = people;
+            readonly columns = columns;
+            readonly start: readonly SortColumn[] = [
+                { columnKey: "age", direction: "descending" },
+            ];
+            readonly changed = changed;
+        }
+        const { container } = await render(Bare);
+        click(headerAt(container, 0));
+        await settled();
+        expect(changed).not.toHaveBeenCalled();
+        expect(
+            container.querySelectorAll(
+                "[aria-sort], [data-sortable], [data-sort]",
+            ),
+        ).toHaveLength(0);
+    });
+
+    it("keeps the features it was created with, and tells a later list once", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        @Component({
+            imports: [DATA_GRID],
+            changeDetection: ChangeDetectionStrategy.OnPush,
+            template: `
+                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [features]="features()">${HEADER}</div>
+            `,
+        })
+        class Changing {
+            readonly features =
+                signal<readonly ReturnType<typeof sorting>[]>(FEATURES);
+            readonly rows = people;
+            readonly columns = columns;
+        }
+        const { container, fixture } = await render(Changing);
+        fixture.componentInstance.features.set([]);
+        await settled(fixture);
+        fixture.componentInstance.features.set([]);
+        await settled(fixture);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining("`features` changed"),
+        );
+        click(headerAt(container, 0));
+        await settled();
+        expect(shown(container)[0]?.[1]).toBe("ascending");
+        warn.mockRestore();
+    });
+
+    it("gives way to [dataGridLocalRows], whose sort wins over the root's inputs", async () => {
+        @Component({
+            imports: [DATA_GRID, DataGridSorting, DataGridLocalRows],
+            changeDetection: ChangeDetectionStrategy.OnPush,
+            template: `
+                <div dataGridRoot [columns]="columns" [rowHeight]="20" [features]="features"
+                    dataGridSorting [sortColumns]="ignored" [dataGridLocalRows]="local">${HEADER}</div>
+            `,
+        })
+        class Local {
+            readonly features = FEATURES;
+            readonly columns = columns;
+            readonly ignored: readonly SortColumn[] = [
+                { columnKey: "age", direction: "descending" },
+            ];
+            readonly local = injectLocalRows(people, columns, {
+                defaultSortColumns: [
+                    { columnKey: "name", direction: "ascending" },
+                ],
+            });
+        }
+        const { container } = await render(Local);
+        expect(shown(container)[0]?.[1]).toBe("ascending");
+        expect(shown(container)[1]?.[1]).toBeNull();
     });
 });

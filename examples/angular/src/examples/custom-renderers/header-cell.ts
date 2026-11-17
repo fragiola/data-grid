@@ -9,6 +9,7 @@ import {
     DataGridHeaderCell,
     injectGridView,
 } from "@fragiola/data-grid-angular";
+import { sortColumnsOf } from "@fragiola/data-grid-angular/sorting";
 import * as styles from "./styles";
 
 // A header cell with the app's own sort status: a triangle, and the column's place in the sort.
@@ -33,6 +34,6 @@ export class SortStatus {
     private readonly view = injectGridView();
     protected readonly state = computed(() => this.cell.state());
     protected readonly sortedColumns = computed(
-        () => this.view().sortColumns.length,
+        () => sortColumnsOf(this.view()).length,
     );
 }

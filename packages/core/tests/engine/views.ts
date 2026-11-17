@@ -1,8 +1,9 @@
 import {
     type Column,
     createDataGridModel,
-    type DataGridModelOptions,
+    type DataGridFeatures,
     type GridView,
+    type ModelOptions,
 } from "../../src";
 import {
     buildView,
@@ -12,6 +13,11 @@ import {
     type ViewInputs,
     withDetails,
 } from "../../src/engine/view";
+import {
+    composeFeatures,
+    featuresOf,
+    type GridFeatures,
+} from "../../src/feature/registry";
 import type { AxisWindow } from "../../src/viewport/window";
 
 // A view's inputs and the view itself, for the tests of the pure functions over it: 100 rows of
@@ -36,14 +42,26 @@ export const windowOf = (start: number, end: number): AxisWindow => ({
     rendered: { start, end },
 });
 
-export function stateOf(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
+/** The features of the states `stateOf` made (a view of one is built with them). */
+const FEATURES = new WeakMap<object, GridFeatures>();
+
+export function stateOf<const TFeatures extends DataGridFeatures = []>(
+    options: ModelOptions<Row, unknown, TFeatures> = {},
+) {
+    const model = createDataGridModel<Row, unknown, TFeatures>({
         columns: COLUMNS,
         rows: Array.from({ length: 100 }, (_, id) => ({ id })),
         rowHeight: 20,
         headerRowHeight: 30,
         ...options,
-    }).state;
+    } as ModelOptions<Row, unknown, TFeatures>);
+    FEATURES.set(model.state, featuresOf(model));
+    return model.state;
+}
+
+/** The features a state was made with (`stateOf`), or none. */
+export function featuresFor(state: object): GridFeatures {
+    return FEATURES.get(state) ?? composeFeatures([]);
 }
 
 /** The inputs of a view of `state`, the rows 10–20 and the columns 2–5 rendered. */
@@ -79,6 +97,7 @@ export function inputsOf(
         fillSource: null,
         direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),
+        features: featuresFor(state),
         ...overrides,
     };
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { ref, useId, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { Switch } from "#/components/ui/switch";
@@ -9,8 +10,12 @@ import Filter from "./filter.vue";
 import HeaderCell from "./header-cell.vue";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Task` as a type argument.
-const DataGrid = typedDataGrid<Task>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 const ROWS = tasks(1_000);
 
@@ -76,6 +81,7 @@ const setShown = (value: boolean) => {
         </div>
         <!-- the header row's height: room for the filter under the name -->
         <DataGrid.Root
+            :features="features"
             v-bind="local.props"
             :columns="columns"
             :row-key="rowKey"

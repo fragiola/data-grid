@@ -1,3 +1,4 @@
+import type { DataGridFeatures } from "@fragiola/data-grid";
 import type { BodyProps, BodySlots } from "./components/body";
 import type { CellProps, CellSlots } from "./components/cell";
 import type { CellsProps, CellsSlots } from "./components/cells";
@@ -41,9 +42,12 @@ import type {
 import * as parts from "./parts";
 import type { DataGridComponent } from "./utils/primitive";
 
-/** The `DataGrid` primitives typed by the row type: rows, columns and cells in props and slots. */
-export interface TypedDataGrid<TRow> {
-    Root: DataGridComponent<RootProps<TRow>, RootSlots>;
+/**
+ * The `DataGrid` primitives typed by the row type (rows, columns and cells in props and slots)
+ * and by the features `Root` installs (their props on `Root`; none by default).
+ */
+export interface TypedDataGrid<TRow, TFeatures extends DataGridFeatures = []> {
+    Root: DataGridComponent<RootProps<TRow, TFeatures>, RootSlots>;
     Grid: DataGridComponent<GridProps, GridSlots>;
     Header: DataGridComponent<HeaderProps, HeaderSlots>;
     HeaderRows: DataGridComponent<HeaderRowsProps, HeaderRowsSlots<TRow>>;
@@ -65,16 +69,23 @@ export interface TypedDataGrid<TRow> {
 }
 
 /**
- * The `DataGrid` primitives typed by your row type: what React writes as a type argument
- * (`<DataGrid.Root<Person>>`, inferred), which a Vue template cannot pass. The same components,
- * typed:
+ * The `DataGrid` primitives typed by your row type, and by the features `Root` installs: what
+ * React writes as type arguments (`<DataGrid.Root<Person>>`, inferred), which a Vue template
+ * cannot pass. The same components, typed:
  *
  * ```ts
  * const DataGrid = typedDataGrid<Person>();
  * // <DataGrid.Rows v-slot="{ row }">: row.row is a Person
+ *
+ * const features = [sorting()] as const;
+ * const SortedGrid = typedDataGrid<Person, typeof features>();
+ * // <SortedGrid.Root :features="features" :sort-columns="sort">: sorting's props, typed
  * ```
  */
-export function typedDataGrid<TRow>(): TypedDataGrid<TRow> {
-    // the same components: their types erase the row type, which this restores
-    return parts as unknown as TypedDataGrid<TRow>;
+export function typedDataGrid<
+    TRow,
+    TFeatures extends DataGridFeatures = [],
+>(): TypedDataGrid<TRow, TFeatures> {
+    // the same components: their types erase the row type and the features, which this restores
+    return parts as unknown as TypedDataGrid<TRow, TFeatures>;
 }

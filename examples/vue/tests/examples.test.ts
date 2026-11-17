@@ -25,7 +25,7 @@ const ALLOWED = [
     /^vue$/,
     // the core's extras only: its main entry's types and helpers come through the Vue package
     /^@fragiola\/data-grid\/(local|selection|fill)$/,
-    /^@fragiola\/data-grid-vue(\/(local|selection))?$/,
+    /^@fragiola\/data-grid-vue(\/(local|selection|sorting))?$/,
     /^@lucide\/vue$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,

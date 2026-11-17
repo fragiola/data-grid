@@ -7,6 +7,7 @@ import {
     headerCellContent,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -22,6 +23,9 @@ import {
     tasks,
 } from "../_kit/tasks";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const ROWS = tasks(1_000);
 
@@ -117,6 +121,7 @@ export default function HeaderFilters() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowKey={(row) => row.id}

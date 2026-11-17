@@ -348,11 +348,11 @@ export function cellProps<TRow, TNode>(
     measured = false,
 ): PartProps {
     const { state } = part;
-    // a header cell's state is the one with a `group` (its sort comes with it), a summary row
-    // cell's the one with a `position`
+    // a header cell's state is the one with a `group`, a summary row cell's the one with a
+    // `position`; a header cell's features add their attributes (Epic #141)
     const header = "group" in state ? state : undefined;
     const summary = "position" in state ? state.position : undefined;
-    const ariaSort = "ariaSort" in part ? part.ariaSort : undefined;
+    const added = "attributes" in part ? part.attributes : undefined;
     const ariaColSpan = "ariaColSpan" in part ? part.ariaColSpan : undefined;
     // a body or summary row cell's (Epic #88): in the range, its edges, edited
     const ariaSelected = "ariaSelected" in part ? part.ariaSelected : undefined;
@@ -364,7 +364,7 @@ export function cellProps<TRow, TNode>(
         "aria-colindex": state.columnIndex + 1,
         ...(header ? ariaHeaderCellSpans(header) : undefined),
         ...(ariaColSpan ? { "aria-colspan": ariaColSpan } : undefined),
-        ...(ariaSort ? { "aria-sort": ariaSort } : undefined),
+        ...added,
         ...(ariaSelected === undefined
             ? undefined
             : { "aria-selected": ariaSelected }),
@@ -381,9 +381,6 @@ export function cellProps<TRow, TNode>(
             loading: "loaded" in state && !state.loaded,
             active: state.active,
             group: header?.group,
-            sortable: header?.sortable,
-            sort: header?.sortDirection,
-            "sort-priority": header?.sortPriority,
             pinned: state.pinnedSide,
             "pinned-edge": state.pinnedEdge,
             interacting: state.interacting,

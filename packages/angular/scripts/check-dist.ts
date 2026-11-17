@@ -18,7 +18,7 @@ export function importsOf(source: string): string[] {
 }
 
 const ALLOWED =
-    /^(@angular\/core|@fragiola\/data-grid(\/(local|selection))?|@fragiola\/data-grid-angular)$/;
+    /^(@angular\/core|@fragiola\/data-grid(\/(local|selection|sorting))?|@fragiola\/data-grid-angular)$/;
 
 function main() {
     for (const file of [
@@ -26,10 +26,11 @@ function main() {
         ".npmignore",
         "local/package.json",
         "selection/package.json",
+        "sorting/package.json",
     ]) {
         rmSync(join(dist, file), { force: true });
     }
-    for (const folder of ["local", "selection"]) {
+    for (const folder of ["local", "selection", "sorting"]) {
         rmSync(join(dist, folder), { recursive: true, force: true });
     }
     const folder = join(dist, "fesm2022");

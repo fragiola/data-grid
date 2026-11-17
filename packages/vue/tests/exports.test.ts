@@ -117,6 +117,7 @@ describe("@fragiola/data-grid-vue", () => {
                         "@fragiola/data-grid",
                         "@fragiola/data-grid/local",
                         "@fragiola/data-grid/selection",
+                        "@fragiola/data-grid/sorting",
                     ],
                     file,
                 ).toContain(specifier);

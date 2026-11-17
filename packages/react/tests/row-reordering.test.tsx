@@ -17,11 +17,11 @@ import {
     type DataGridRef,
     type RowMove,
     type RowState,
-    type SortColumn,
     useDataGridRef,
     useRowDragHandle,
 } from "../src";
 import { useLocalRows } from "../src/local";
+import { type SortColumn, sorting } from "../src/sorting";
 import { cellAt, root, rowAt, stubViewportSize, tags } from "./helpers";
 
 // Row reordering (Epic #86, E2.3): `onRowMove` on `Root` makes the rows move, the app moving them
@@ -60,6 +60,8 @@ function Handle({ cell }: { cell: CellInfo<Task> }) {
     );
 }
 
+const FEATURES = [sorting()] as const;
+
 interface GridProps {
     onRowMove?: ((move: RowMove) => void) | undefined;
     activePosition?: CellPosition | null;
@@ -79,6 +81,7 @@ function Grid({ rows = tasks, table = false, ...props }: GridProps) {
             rowKey={(row) => row.id}
             rowHeight={20}
             headerRowHeight={20}
+            features={FEATURES}
             {...props}
         >
             <DataGrid.Grid render={tag.grid}>

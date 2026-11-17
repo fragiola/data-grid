@@ -1,3 +1,13 @@
+import type {
+    DataGridFeatures,
+    FeatureKeys,
+    FeatureState,
+} from "../feature/feature";
+import {
+    composeFeatures,
+    type GridFeatures,
+    registerFeatures,
+} from "../feature/registry";
 import {
     columnsError,
     headerRowCount,
@@ -67,13 +77,6 @@ import {
     validAnchor,
 } from "./selection";
 import {
-    SORT_DIRECTIONS,
-    sameSortColumns,
-    sortableColumn,
-    toggledSort,
-    validSortColumns,
-} from "./sort";
-import {
     cellKeysAt,
     dataRowAt,
     groupAt,
@@ -106,7 +109,6 @@ import type {
     ColumnOrder,
     ColumnOrGroup,
     ColumnWidths,
-    CommandArgs,
     CommandContext,
     CommandFailure,
     CommandListener,
@@ -116,23 +118,30 @@ import type {
     DataGridModelOptions,
     DataGridState,
     EditingCell,
+    GridCommandName,
+    GridCommands,
     GridDirection,
+    GridQueries,
+    GridQuestions,
     GroupRow,
+    KeyArgs,
     Middleware,
+    ModelState,
     PayloadArgs,
+    PayloadIn,
     PayloadOf,
     QueryKey,
     QueryMap,
     QuestionKey,
     QuestionMap,
     ReorderSide,
+    ResultIn,
     ResultOf,
     RowKey,
     RowKeyGetter,
     RowMeta,
     RowSource,
     SelectionAnchor,
-    SortColumn,
 } from "./types";
 import {
     type ColumnSpan,
@@ -154,35 +163,58 @@ export const DEFAULT_ROW_HEIGHT = 35;
 /** The header row's height when none is given. */
 export const DEFAULT_HEADER_ROW_HEIGHT = 35;
 
-/** The grid's model. */
-export interface DataGridModel<TRow, TNode = unknown> {
+/**
+ * The grid's model. Its keys are the core's and its installed features' (`TFeatures`, Epic #141):
+ * a command, a `get` or an `is` key of a feature not installed does not compile.
+ */
+export interface DataGridModel<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> {
     /** the committed state: immutable, a new object after every committed command */
-    readonly state: DataGridState<TRow, TNode>;
+    readonly state: ModelState<TRow, TNode, TFeatures>;
     /** runs a command through the middleware chain and commits it */
-    run<C extends CommandName>(
+    run<C extends GridCommandName<TRow, TNode, TFeatures>>(
         command: C,
-        ...payload: CommandArgs<C, TRow, TNode>
-    ): CommandResult<ResultOf<C, TRow, TNode>>;
+        ...payload: KeyArgs<GridCommands<TRow, TNode, TFeatures>, C>
+    ): CommandResult<ResultIn<GridCommands<TRow, TNode, TFeatures>[C]>>;
     /** whether the command would apply now (a dry run: nothing is committed) */
-    can<C extends CommandName>(
+    can<C extends GridCommandName<TRow, TNode, TFeatures>>(
         command: C,
-        ...payload: CommandArgs<C, TRow, TNode>
+        ...payload: KeyArgs<GridCommands<TRow, TNode, TFeatures>, C>
     ): boolean;
     /** what the command would return now (a dry run: nothing is committed) */
-    check<C extends CommandName>(
+    check<C extends GridCommandName<TRow, TNode, TFeatures>>(
         command: C,
-        ...payload: CommandArgs<C, TRow, TNode>
-    ): CommandResult<ResultOf<C, TRow, TNode>>;
+        ...payload: KeyArgs<GridCommands<TRow, TNode, TFeatures>, C>
+    ): CommandResult<ResultIn<GridCommands<TRow, TNode, TFeatures>[C]>>;
     /** reads a value */
-    get<K extends QueryKey>(
+    get<K extends keyof GridQueries<TRow, TNode, TFeatures> & string>(
         key: K,
-        ...payload: PayloadArgs<QueryMap<TRow, TNode>[K]["payload"]>
-    ): QueryMap<TRow, TNode>[K]["result"];
+        ...payload: PayloadArgs<
+            PayloadIn<GridQueries<TRow, TNode, TFeatures>[K]>
+        >
+    ): ResultIn<GridQueries<TRow, TNode, TFeatures>[K]>;
     /** answers a yes/no question */
-    is<K extends QuestionKey>(key: K, payload: QuestionMap[K]): boolean;
-    /** adds a middleware around every command; returns its removal */
-    use(middleware: Middleware<TRow, TNode>): () => void;
-    /** listens to every committed command; returns the unsubscription */
+    is<K extends keyof GridQuestions<TRow, TNode, TFeatures> & string>(
+        key: K,
+        payload: GridQuestions<TRow, TNode, TFeatures>[K],
+    ): boolean;
+    /**
+     * adds a middleware around every command (`Middleware`); returns its removal. (Its type is
+     * spelled out, not `Middleware`'s name: a model with features is then a model, Epic #141.)
+     */
+    use(
+        middleware: {
+            // a method's parameters compare both ways
+            middleware(
+                ctx: CommandContext<TRow, TNode, TFeatures>,
+                next: () => CommandResult<unknown>,
+            ): CommandResult<unknown> | undefined;
+        }["middleware"],
+    ): () => void;
+    /** listens to every committed command (`CommandListener`); returns the unsubscription */
     subscribe(listener: CommandListener<TRow, TNode>): () => void;
 }
 
@@ -525,14 +557,6 @@ function keptActive<TRow, TNode>(
         : { ...state, activePosition: position };
 }
 
-/** The model's own copy of a sort: the caller's array changing later changes nothing. */
-function copied(sortColumns: readonly SortColumn[]): readonly SortColumn[] {
-    return sortColumns.map(({ columnKey, direction }) => ({
-        columnKey,
-        direction,
-    }));
-}
-
 /**
  * The state with its rows from `source` (`data.set`, and a new model): the active cell kept
  * inside them (following its row from `state`'s, unless `follow` is false: a new model's position
@@ -650,23 +674,6 @@ function columnsOf<TRow, TNode>(
         span.columnIndex,
         span.columnIndex + span.columnSpan,
     );
-}
-
-/**
- * The state with the sort (the same object when it is the same, else it as `kept` keeps it), and
- * it.
- */
-function withSort<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    sortColumns: readonly SortColumn[],
-    kept: (sortColumns: readonly SortColumn[]) => readonly SortColumn[] = (
-        given,
-    ) => given,
-): Applied<TRow, TNode, readonly SortColumn[]> {
-    const next = sameSortColumns(sortColumns, state.sortColumns)
-        ? state
-        : { ...state, sortColumns: kept(sortColumns) };
-    return done(next, next.sortColumns);
 }
 
 /** The state with the columns' widths (the same object when they did not change), and them. */
@@ -874,9 +881,6 @@ function createHandlers<TRow, TNode>(
                     columns,
                     columnEntries: entries,
                     header,
-                    // a sorted column gone, or no longer sortable, leaves the sort (one a
-                    // collapsed group hides keeps it)
-                    sortColumns: validSortColumns(entries, state.sortColumns),
                 },
                 state,
             );
@@ -947,39 +951,6 @@ function createHandlers<TRow, TNode>(
                     : next,
                 range,
             );
-        },
-        "sort-columns.set": (state, { sortColumns }) => {
-            if (!Array.isArray(sortColumns)) {
-                return invalid("sortColumns must be an array");
-            }
-            const seen = new Set<string>();
-            for (const entry of sortColumns) {
-                if (!SORT_DIRECTIONS.includes(entry?.direction)) {
-                    return notOneOf("direction", SORT_DIRECTIONS);
-                }
-                const found = sortableColumn(
-                    state.columnEntries,
-                    entry.columnKey,
-                );
-                if (!found.ok) return found;
-                if (seen.has(entry.columnKey)) {
-                    return invalid(
-                        `column "${entry.columnKey}" is sorted twice`,
-                    );
-                }
-                seen.add(entry.columnKey);
-            }
-            return withSort(state, sortColumns, copied);
-        },
-        "sort-columns.toggle": (state, { columnKey, multi }) => {
-            const found = sortableColumn(state.columnEntries, columnKey);
-            if (!found.ok) return found;
-            const sortColumns = toggledSort(
-                state.sortColumns,
-                columnKey,
-                multi === true,
-            );
-            return withSort(state, sortColumns);
         },
         "expanded-rows.set": (state, { rowKeys }) => {
             const keys = validRowKeys(rowKeys);
@@ -1629,12 +1600,46 @@ interface Queued {
     payload: unknown;
 }
 
-/** Creates a grid's model. It throws when the columns are invalid (see `columns.set`). */
-export function createDataGridModel<TRow, TNode = unknown>(
-    options: DataGridModelOptions<TRow, TNode> = {},
-): DataGridModel<TRow, TNode> {
+/**
+ * What `createDataGridModel` takes: the core's options (`DataGridModelOptions`), the features
+ * installed (fixed for the model's life) and their options.
+ */
+export type ModelOptions<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = DataGridModelOptions<TRow, TNode> &
+    Partial<FeatureKeys<TFeatures, TRow, TNode>["options"]> & {
+        /**
+         * the features installed on the grid (Epic #141), fixed for its life: their keys join the
+         * core's, their state the model's
+         */
+        readonly features?: TFeatures | undefined;
+    };
+
+/**
+ * Creates a grid's model, with the features it installs. It throws when the columns are invalid
+ * (see `columns.set`), a feature is installed twice, one misses a feature it requires, or two
+ * add the same key.
+ */
+export function createDataGridModel<
+    TRow,
+    TNode = unknown,
+    const TFeatures extends DataGridFeatures = [],
+>(
+    options: ModelOptions<TRow, TNode, TFeatures> = {},
+): DataGridModel<TRow, TNode, TFeatures> {
+    const features = composeFeatures(options.features ?? []);
     const hints: RowKeyHints = new Map();
-    const handlers = createHandlers<TRow, TNode>(hints);
+    const handlers: Handlers<TRow, TNode> = createHandlers<TRow, TNode>(hints);
+    for (const [name, handler] of features.commands) {
+        if (Object.hasOwn(handlers, name)) {
+            throw new TypeError(
+                `a feature adds the command "${name}", which the grid has`,
+            );
+        }
+        (handlers as Record<string, unknown>)[name] = handler;
+    }
     const entries = options.columns ?? [];
     // the same rules as `columns.set`: a grid never starts with columns it would refuse
     const error = columnsError(entries);
@@ -1674,9 +1679,6 @@ export function createDataGridModel<TRow, TNode = unknown>(
         summaryRowHeight: options.summaryRowHeight ?? DEFAULT_ROW_HEIGHT,
         summaryRevision: 0,
         activePosition: options.activePosition ?? null,
-        sortColumns: copied(
-            validSortColumns(entries, options.sortColumns ?? []),
-        ),
         rowsChanged: { revision: 0, start: 0, end: 0 },
         expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
         expandedGroupKeys: uniqueRowKeys(options.expandedGroupKeys ?? []) ?? [],
@@ -1708,7 +1710,11 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 : undefined,
     };
     let state = withSource(
-        blank,
+        // each feature's slice, from its options (the columns laid out)
+        features.initial(
+            blank as DataGridState<unknown, unknown>,
+            options as Readonly<Record<string, unknown>>,
+        ) as DataGridState<TRow, TNode>,
         sourceOf(
             options.rows !== undefined || options.getRow === undefined
                 ? { rows: options.rows ?? [], getRowMeta: options.getRowMeta }
@@ -1725,7 +1731,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
     );
     // a range and an edit given to start with take the keys they find
     state = withKeptEditing(withRangeKeys(state, null));
-    const middlewares: Middleware<TRow, TNode>[] = [];
+    const middlewares: Middleware<TRow, TNode, []>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
     const queue: Queued[] = [];
     let running = false;
@@ -1737,7 +1743,11 @@ export function createDataGridModel<TRow, TNode = unknown>(
         dryRun: boolean,
     ): Applied<TRow, TNode, unknown> {
         if (!Object.hasOwn(handlers, command)) {
-            return fail("unknown_command", `no command "${String(command)}"`);
+            // a feature's command while that feature is not installed (Epic #141), or no command
+            return fail(
+                "not_found",
+                `no command "${String(command)}": not the grid's, nor an installed feature's`,
+            );
         }
         // the union of payloads is checked by the handler that reads it
         const ctx = {
@@ -1745,7 +1755,7 @@ export function createDataGridModel<TRow, TNode = unknown>(
             payload: payload ?? {},
             dryRun,
             state,
-        } as CommandContext<TRow, TNode>;
+        } as CommandContext<TRow, TNode, []>;
         let applied: Applied<TRow, TNode, unknown> | undefined;
         const step = (index: number): CommandResult<unknown> => {
             const middleware = middlewares[index];
@@ -1756,11 +1766,13 @@ export function createDataGridModel<TRow, TNode = unknown>(
                 ) => Applied<TRow, TNode, unknown>;
                 try {
                     applied = handler(state, ctx.payload);
-                    // the range follows the active cell's rule, whatever moved it (Epic #88)
+                    // the range follows the active cell's rule, whatever moved it (Epic #88), and
+                    // the features keep their state to a new source, new columns or rows changed
                     if (applied.ok) {
-                        const kept = withActiveRules(
+                        const kept = withFeatureState(
+                            features,
                             state,
-                            applied.value.state,
+                            withActiveRules(state, applied.value.state),
                         );
                         if (kept !== applied.value.state) {
                             applied = done(kept, applied.value.value);
@@ -1884,9 +1896,6 @@ export function createDataGridModel<TRow, TNode = unknown>(
             );
         },
         "active-position": () => state.activePosition,
-        "sort-columns": () => state.sortColumns,
-        "sort-column-by": ({ columnKey }) =>
-            state.sortColumns.find((entry) => entry.columnKey === columnKey),
         "column-widths": () => state.columnWidths,
         "column-width-by": ({ columnKey }) => {
             const span = state.header.cellByKey(columnKey);
@@ -1942,8 +1951,6 @@ export function createDataGridModel<TRow, TNode = unknown>(
             state.activePosition?.rowIndex === rowIndex,
         // a group row (Epic #87) has nothing to wait for
         "row-loaded": ({ rowIndex }) => rowLoaded(state.source, rowIndex),
-        "column-sortable": ({ columnKey }) =>
-            sortableColumn(state.columnEntries, columnKey).ok,
         "group-collapsed": ({ groupKey }) => isGroupCollapsed(state, groupKey),
         "row-expanded": ({ rowIndex }) =>
             holdsRow(state.expandedRows, rowIndex),
@@ -1955,32 +1962,57 @@ export function createDataGridModel<TRow, TNode = unknown>(
         "cell-editable": (position) => isCellEditable(state, position),
     };
 
-    const model: DataGridModel<TRow, TNode> = {
+    for (const [kind, own, added] of [
+        ["get", queries, features.queries],
+        ["is", questions, features.questions],
+    ] as const) {
+        for (const key of added.keys()) {
+            if (Object.hasOwn(own, key)) {
+                throw new TypeError(
+                    `a feature adds the ${kind} key "${key}", which the grid has`,
+                );
+            }
+        }
+    }
+
+    const model: DataGridModel<TRow, TNode, []> = {
         get state() {
             return state;
         },
+        // each value is the one its command's type names (`ResultIn`)
         run(command, ...[payload]) {
-            return commit(command, payload) as CommandResult<
-                ResultOf<typeof command, TRow, TNode>
-            >;
+            return commit(command, payload) as never;
         },
         can(command, ...[payload]) {
             return dryRun(command, payload).ok;
         },
         check(command, ...[payload]) {
-            return dryRun(command, payload) as CommandResult<
-                ResultOf<typeof command, TRow, TNode>
-            >;
+            return dryRun(command, payload) as never;
         },
         get(key, ...[payload]) {
-            const query = queries[key] as (
-                payload: unknown,
-            ) => QueryMap<TRow, TNode>[typeof key]["result"];
-            return query(payload);
+            if (Object.hasOwn(queries, key)) {
+                const query = queries[key as QueryKey] as (
+                    payload: unknown,
+                ) => never;
+                return query(payload);
+            }
+            // a feature's key; one no installed feature has reads nothing
+            return features.queries.get(key)?.(
+                state as FeatureState,
+                payload,
+            ) as never;
         },
         is(key, payload) {
-            const question = questions[key] as (payload: unknown) => boolean;
-            return question(payload);
+            if (Object.hasOwn(questions, key)) {
+                const question = questions[key as QuestionKey] as (
+                    payload: unknown,
+                ) => boolean;
+                return question(payload);
+            }
+            return (
+                features.questions.get(key)?.(state as FeatureState, payload) ??
+                false
+            );
         },
         use(middleware) {
             middlewares.push(middleware);
@@ -1996,7 +2028,33 @@ export function createDataGridModel<TRow, TNode = unknown>(
             };
         },
     };
-    return model;
+    // its engines and root read its features from it; its surface stays its verbs
+    registerFeatures(model, features);
+    return model as unknown as DataGridModel<TRow, TNode, TFeatures>;
+}
+
+/**
+ * The state after a command, each feature's kept to a new source, new columns or rows changed
+ * (`sourceChanged`): only after a command that changed one of them.
+ */
+function withFeatureState<TRow, TNode>(
+    features: GridFeatures,
+    before: DataGridState<TRow, TNode>,
+    after: DataGridState<TRow, TNode>,
+): DataGridState<TRow, TNode> {
+    const keep = features.sourceChanged;
+    if (
+        !keep ||
+        (after.source === before.source &&
+            after.columnEntries === before.columnEntries &&
+            after.rowsChanged === before.rowsChanged)
+    ) {
+        return after;
+    }
+    return keep(after as FeatureState, before as FeatureState) as DataGridState<
+        TRow,
+        TNode
+    >;
 }
 
 /** The commands' names, for tools and guards (the naming test checks it lists every one). */
@@ -2004,8 +2062,6 @@ export const COMMANDS = [
     "columns.set",
     "data.set",
     "rows.changed",
-    "sort-columns.set",
-    "sort-columns.toggle",
     "expanded-rows.set",
     "expanded-rows.toggle",
     "row-groups.set",

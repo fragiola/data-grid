@@ -35,6 +35,12 @@
             "import": "./dist/selection.js",
             "default": "./dist/selection.js"
         },
+        "./sorting": {
+            "@fragiola/source": "./src/sorting/index.ts",
+            "types": "./dist/sorting.d.ts",
+            "import": "./dist/sorting.js",
+            "default": "./dist/sorting.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -58,6 +64,11 @@
                 "types": "./dist/selection.d.ts",
                 "import": "./dist/selection.js",
                 "default": "./dist/selection.js"
+            },
+            "./sorting": {
+                "types": "./dist/sorting.d.ts",
+                "import": "./dist/sorting.js",
+                "default": "./dist/sorting.js"
             },
             "./package.json": "./package.json"
         }

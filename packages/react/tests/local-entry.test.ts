@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 // `useLocalRows` is opt-in (Epic #47, L2): nothing the primitives' entry imports, however deep,
 // reaches `src/local` or the core's `/local`, so an app that never imports `/local` never ships it.
+// The features are opt-in the same way (Epic #141): `/sorting`.
 
 const src = join(import.meta.dirname, "../src");
 
@@ -39,11 +40,11 @@ function reachable(entry: string): {
 }
 
 describe("the primitives' entry", () => {
-    it("never reaches the opt-in extras: rows in memory, the selection's", () => {
+    it("never reaches the opt-in extras: rows in memory, the selection's, the features", () => {
         const { files, packages } = reachable(join(src, "index.ts"));
         const names = [...files].map((file) => relative(src, file));
         expect(names.length).toBeGreaterThan(5);
-        for (const extra of ["local", "selection"]) {
+        for (const extra of ["local", "selection", "sorting"]) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(
                 [...packages].filter((name) => name.endsWith(`/${extra}`)),

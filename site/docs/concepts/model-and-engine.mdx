@@ -27,7 +27,11 @@ Everything has the same verbs, each taking a key and a payload:
 Commands are named by the state they change, a dot, then the change: `columns.set`,
 `sort-columns.toggle`, `selected-rows.toggle`, `column-widths.resize`, `active-position.move`
 and the rest of the `CommandMap` type, which lists every one with its payload and result. A command never
-throws on bad input: it returns `{ ok: false, error }`.
+throws on bad input: it returns `{ ok: false, error }`. A command the grid does not know (one of
+a feature that is not installed, say) returns the error `not_found`.
+
+The keys are the core's and the installed [features'](/docs/concepts/features): `sort-columns.toggle`
+is sorting's, and is typed only on a grid that installs `sorting()`.
 
 ```ts title="middleware.ts"
 import { veto } from "@fragiola/data-grid-react";
@@ -51,8 +55,10 @@ the verbs: `engine.get("row-window")`, `engine.run("scroll-to-cell", { rowIndex:
 
 `DataGrid.Root` creates both and maps its props onto commands: `columns` becomes `columns.set`,
 `rows` (or `rowCount` and `getRow`) becomes `data.set`, `activePosition` becomes
-`active-position.set`. `useDataGrid()` returns `{ model, engine }` to any part inside it, so an
-app can read and drive the same grid from code.
+`active-position.set`, and an installed feature maps its own (`sortColumns` becomes
+`sort-columns.set`). `useDataGrid()` returns `{ model, engine }` to any part inside it, so an
+app can read and drive the same grid from code. Its keys are typed by the core's alone, unless
+it is given the features: `useDataGrid<Person, typeof features>()`.
 
 ## From outside the root
 
@@ -104,6 +110,8 @@ one follow the grid from anywhere: `useDataGrid(gridRef)` (`{ model, engine }`, 
 a root holds it), `useRowWindow(gridRef)` and `useColumnWindow(gridRef)` (the empty window
 until then). Only the component calling them re-renders. A `gridRef` belongs to one mounted root
 at a time; outside a component (a module, a store, a test), make one with `createDataGridRef()`.
+Both take the features after the row (`useDataGridRef<Person, typeof features>()`) to type the
+features' keys.
 The [`large-dataset`](/examples/large-dataset) example shows its windows this way.
 
 ## Controlled or not
@@ -111,4 +119,5 @@ The [`large-dataset`](/examples/large-dataset) example shows its windows this wa
 `defaultActivePosition` starts the active cell and lets the grid move it.
 `activePosition` controls it: a key press asks, through `onActivePositionChange`, and only the
 prop moves it. See the [`keyboard-navigation`](/examples/keyboard-navigation) example. The sort
-(`sortColumns`) and the expanded rows (`expandedRowKeys`) work the same way.
+(`sortColumns`, with [sorting](/docs/concepts/sorting) installed) and the expanded rows
+(`expandedRowKeys`) work the same way.

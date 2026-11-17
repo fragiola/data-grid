@@ -68,7 +68,7 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 
 | React Data Grid | here | notes |
 | --- | --- | --- |
-| `sortColumns`, `onSortColumnsChange` | the same, plus `defaultSortColumns` | `direction` is `"ascending"` or `"descending"` (not `"ASC"`/`"DESC"`). The grid never orders the rows: `useLocalRows` from `@fragiola/data-grid-react/local` does in memory, a server otherwise. See [Sorting](/docs/concepts/sorting) |
+| `sortColumns`, `onSortColumnsChange` | the same, plus `defaultSortColumns`, with `features={[sorting()]}` | sorting is a [feature](/docs/concepts/features), from `@fragiola/data-grid-react/sorting`: install it, or no column sorts. `direction` is `"ascending"` or `"descending"` (not `"ASC"`/`"DESC"`). The grid never orders the rows: `useLocalRows` from `@fragiola/data-grid-react/local` does in memory, a server otherwise. See [Sorting](/docs/concepts/sorting) |
 | `selectedRows` (a `Set`), `onSelectedRowsChange` | `selectedRowKeys` (an array), `onSelectedRowKeysChange`, `defaultSelectedRowKeys` | turned on by `rowSelection="single"` or `"multiple"`. See [Row selection](/docs/concepts/row-selection) |
 | `isRowSelectionDisabled(row)` | `isRowSelectable(row, rowIndex)` | the opposite question |
 | `onActivePositionChange` | `activePosition`, `defaultActivePosition`, `onActivePositionChange` | the position is `{ rowIndex, columnIndex }` (header rows are -1 and above), or `null` |
@@ -143,7 +143,7 @@ Inside the root, `useDataGrid()` returns the same `{ model, engine }`. See
 | `minWidth` (default 50), `maxWidth` | `minWidth` (default 40), `maxWidth` | they limit a resizable column |
 | `frozen` (`true`, `"start"`, `"end"`) | `pinned` (`"start"` or `"end"`) | see [Pinned columns](/docs/concepts/pinned-columns) |
 | `resizable` | `resizable` | the handle is your element, with `useColumnResizer(cell)`'s props |
-| `sortable` | `sortable` | the same |
+| `sortable` | `sortable` | the same, with `sorting()` installed |
 | `sortDescendingFirst` | — | no direct equivalent: a column sorts ascending first. A middleware gives a column the other cycle ([Descending first](#descending-first)) |
 | `draggable` | `reorderable` | on columns and on groups; the indicator is yours (`data-drop-target`) |
 | `renderCell(props)` | `renderCell({ row, rowIndex, column, columnIndex, value })` | no `onRowChange`: update your rows. A cell's children replace it entirely |
@@ -164,10 +164,12 @@ Inside the root, `useDataGrid()` returns the same `{ model, engine }`. See
 A click, Enter or Space on a sortable header cell runs `sort-columns.toggle`, which cycles
 ascending, descending, none. For the columns that should start descending, a middleware refuses
 the toggle and sets the sort it would give instead: the `set` runs right after the refused
-toggle, so a controlled `Root` is asked as for any sort.
+toggle, so a controlled `Root` is asked as for any sort. The model is typed by the features
+(`useDataGridRef<Row, typeof features>()`), and reads the sort with `model.get("sort-columns")`.
 
 ```ts title="descending-first.ts"
-import { type SortColumn, veto } from "@fragiola/data-grid-react";
+import { veto } from "@fragiola/data-grid-react";
+import type { SortColumn } from "@fragiola/data-grid-react/sorting";
 
 const DESCENDING_FIRST = new Set(["budget", "updatedAt"]);
 
@@ -180,7 +182,7 @@ model.use((ctx, next) => {
         return next();
     }
     const { columnKey, multi = false } = ctx.payload;
-    const sorts = ctx.state.sortColumns;
+    const sorts = model.get("sort-columns");
     const current = sorts.find((entry) => entry.columnKey === columnKey);
     const direction = !current
         ? "descending"

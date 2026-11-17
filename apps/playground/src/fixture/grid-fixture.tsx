@@ -19,7 +19,6 @@ import {
     type RangePaste,
     type RowKey,
     type RowMove,
-    type SortColumn,
     useColumnResizer,
     useDataGrid,
     useDataGridRef,
@@ -31,6 +30,7 @@ import {
     useRowDragHandle,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
 import {
     Profiler,
     type ReactElement,
@@ -43,6 +43,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
+
+/** the features the fixture installs: sorting (Epic #141) */
+const FEATURES = [sorting()];
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
 // divs (`div`), configured by the query string, so one spec runs against both.
@@ -1119,7 +1122,8 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     window.commits += 1;
                 }}
             >
-                <DataGrid.Root<FixtureRow>
+                <DataGrid.Root<FixtureRow, typeof FEATURES>
+                    features={FEATURES}
                     columns={columns}
                     {...(groupedProps ?? {
                         rowCount,

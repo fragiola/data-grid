@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { pageCount } from "@fragiola/data-grid/local";
-import {
-    type Column,
-    type SortColumn,
-    typedDataGrid,
-} from "@fragiola/data-grid-vue";
+import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { type SortColumn, sorting } from "@fragiola/data-grid-vue/sorting";
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "@lucide/vue";
 import {
     computed,
@@ -23,8 +20,12 @@ import RequestLog from "./request-log.vue";
 import { fetchPeople } from "./server";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const PAGE_SIZE = 50;
 
@@ -157,6 +158,7 @@ const rowKey = (row: Person) => row.id;
         </div>
         <div :class="styles.layout">
             <DataGrid.Root
+                :features="features"
                 :columns="columns"
                 :rows="page.rows"
                 :row-key="rowKey"

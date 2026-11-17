@@ -1,4 +1,5 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
+import type { FeatureState } from "../feature/feature";
 import {
     headerCellsIn,
     headerRowCount,
@@ -293,6 +294,7 @@ export interface ViewInputs<TRow, TNode>
         | "fill"
         | "fillSource"
         | "direction"
+        | "features"
     > {
     readonly state: DataGridState<TRow, TNode>;
     readonly rowWindow: AxisWindow;
@@ -357,7 +359,7 @@ export function buildView<TRow, TNode>({
         indexes(start, end, extraColumn, indexes(0, pinnedCount, null)),
     );
     const { summaryRows } = state;
-    return {
+    const view: GridView<TRow, TNode> = {
         ...measures,
         rows,
         columns,
@@ -394,7 +396,7 @@ export function buildView<TRow, TNode>({
         columnDefs: state.columns,
         source: state.source,
         active,
-        sortColumns: state.sortColumns,
+        rowsOrdered: measures.features.rowsOrdered(state as FeatureState),
         expandedRows: state.expandedRows,
         rowKey: state.rowKey,
         rowSelection: state.rowSelection,
@@ -409,6 +411,13 @@ export function buildView<TRow, TNode>({
         measuredRows: state.rowHeight === "auto",
         measuredDetails: state.detailHeight === "auto",
     };
+    // the state keys the features read in their parts, on the view by name (Epic #141)
+    for (const key of measures.features.viewKeys) {
+        (view as unknown as Record<string, unknown>)[key] = (
+            state as unknown as Record<string, unknown>
+        )[key];
+    }
+    return view;
 }
 
 /**
@@ -429,7 +438,7 @@ const VIEW_KEYS = [
     "source",
     "active",
     "rowsRevision",
-    "sortColumns",
+    "rowsOrdered",
     "pinnedColumnCount",
     "pinnedEndColumnCount",
     "expandedRows",
@@ -470,6 +479,12 @@ export function viewChanged<TRow, TNode>(
         return true;
     }
     if (VIEW_KEYS.some((key) => current[key] !== next[key])) return true;
+    // the state keys the features' parts read (Epic #141)
+    const shared = current as unknown as Record<string, unknown>;
+    const fresh = next as unknown as Record<string, unknown>;
+    for (const key of next.features.viewKeys) {
+        if (shared[key] !== fresh[key]) return true;
+    }
     const { expandedRows, renderedRows, active, rowReorder } = next;
     // the visible area matters only to an empty grid, and its width to the details on
     // screen (as wide as the view): a resize alone renders nothing else

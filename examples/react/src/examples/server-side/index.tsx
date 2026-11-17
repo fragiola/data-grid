@@ -1,11 +1,8 @@
 "use client";
 
 import { pageCount } from "@fragiola/data-grid/local";
-import {
-    type Column,
-    DataGrid,
-    type SortColumn,
-} from "@fragiola/data-grid-react";
+import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -14,6 +11,9 @@ import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person } from "../_kit/data";
 import { api, fetchPeople } from "./server";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const PAGE_SIZE = 50;
 
@@ -138,6 +138,7 @@ export default function ServerSide() {
             </div>
             <div className={styles.layout}>
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rows={page.rows}
                     rowKey={(row) => row.id}

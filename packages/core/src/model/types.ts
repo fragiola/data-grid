@@ -1,4 +1,9 @@
 import type { Size } from "../axis/axis";
+import type {
+    AnyFeatures,
+    DataGridFeatures,
+    FeatureKeys,
+} from "../feature/feature";
 import type { Direction } from "../navigation/navigation";
 import type { Range } from "../viewport/window";
 
@@ -251,15 +256,6 @@ export interface ColumnGroup<TRow, TNode = unknown> {
 
 /** Which state of its collapsible group an entry shows in (E1.3): expanded only, or collapsed only. */
 export type GroupShow = "expanded" | "collapsed";
-
-/** A sort's direction: the values of `aria-sort`. */
-export type SortDirection = "ascending" | "descending";
-
-/** A sorted column: its key and its direction. */
-export interface SortColumn {
-    readonly columnKey: string;
-    readonly direction: SortDirection;
-}
 
 /**
  * The widths of the columns a person resized, by column key, over each column's `width` (W1). A
@@ -540,8 +536,6 @@ export interface DataGridState<TRow, TNode = unknown> {
      */
     readonly summaryRevision: number;
     readonly activePosition: CellPosition | null;
-    /** the sorted columns, the first one first (the grid keeps them; the app orders the rows) */
-    readonly sortColumns: readonly SortColumn[];
     /**
      * the last `rows.changed`: which rows' data changed (end excluded), and how many times it
      * was said (`revision`, 0 before the first)
@@ -634,8 +628,6 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     /** a summary row's height in pixels (default 35) */
     summaryRowHeight?: number;
     activePosition?: CellPosition | null;
-    /** the sorted columns to start with (entries that are not a sortable column are dropped) */
-    sortColumns?: readonly SortColumn[];
     /** the keys of the rows expanded to start with (a key given twice counts once) */
     expandedRowKeys?: readonly RowKey[];
     /** the keys of the row groups expanded to start with (a key given twice counts once) */
@@ -708,25 +700,6 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly end?: number | undefined;
         };
         result: Range;
-    };
-    /**
-     * replaces the sorted columns, the first one first: each a sortable column, once. Returns them
-     */
-    "sort-columns.set": {
-        payload: { readonly sortColumns: readonly SortColumn[] };
-        result: readonly SortColumn[];
-    };
-    /**
-     * toggles a sortable column through ascending, descending and not sorted. Alone, it becomes
-     * the only sorted column; with `multi`, the others stay and it is added last (or cycles in
-     * place). Returns the sorted columns
-     */
-    "sort-columns.toggle": {
-        payload: {
-            readonly columnKey: string;
-            readonly multi?: boolean | undefined;
-        };
-        result: readonly SortColumn[];
     };
     /**
      * replaces the expanded rows' keys (each once). A key whose row is not loaded is kept: the
@@ -1064,11 +1037,12 @@ export type ResultOf<
 
 /** Why a command did not apply. */
 export type CommandErrorCode =
-    /** no command has this name */
-    | "unknown_command"
     /** the payload is not what the command takes */
     | "invalid_payload"
-    /** the cell the payload names does not exist */
+    /**
+     * what the payload names does not exist (a cell, a column), or no command has this name: not
+     * the grid's, nor an installed feature's (Epic #141)
+     */
     | "not_found"
     /** a rule of the grid forbids it (nothing to move from, nothing to move to) */
     | "refused"
@@ -1097,21 +1071,85 @@ export type CommandResult<R> =
     | { readonly ok: true; readonly value: R }
     | CommandFailure;
 
+/** A grid's commands: the core's (`CommandMap`) and its installed features' (Epic #141). */
+export type GridCommands<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = CommandMap<TRow, TNode> & FeatureKeys<TFeatures, TRow, TNode>["commands"];
+
+/** A grid's command names: the core's and its features'. */
+export type GridCommandName<
+    TRow = unknown,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = keyof GridCommands<TRow, TNode, TFeatures> & string;
+
+/** A grid's `get` keys: the core's (`QueryMap`) and its features'. */
+export type GridQueries<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = QueryMap<TRow, TNode> & FeatureKeys<TFeatures, TRow, TNode>["queries"];
+
+/** A grid's `is` keys: the core's (`QuestionMap`) and its features'. */
+export type GridQuestions<
+    TRow = unknown,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = QuestionMap & FeatureKeys<TFeatures, TRow, TNode>["questions"];
+
+/** A grid model's state: the core's (`DataGridState`) and its features' slices. */
+export type ModelState<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = DataGridState<TRow, TNode> & FeatureKeys<TFeatures, TRow, TNode>["state"];
+
+/** What a key map entry takes (`payload`). */
+export type PayloadIn<E> = E extends { readonly payload: infer P } ? P : never;
+
+/** What a key map entry gives back (`result`). */
+export type ResultIn<E> = E extends { readonly result: infer R } ? R : never;
+
 /**
  * What a middleware sees: a union discriminated by `command`, so checking the command narrows the
  * payload (`if (ctx.command === "active-position.move") ctx.payload.direction`).
  */
-export type CommandContext<TRow, TNode = unknown> = {
-    [C in CommandName]: {
-        readonly command: C;
-        /** the payload; assign a new object to rewrite it before calling `next` */
-        payload: PayloadOf<C, TRow, TNode>;
-        /** `model.can`/`model.check`: nothing will be committed; do not cause side effects */
-        readonly dryRun: boolean;
-        /** the committed state the command applies to */
-        readonly state: DataGridState<TRow, TNode>;
-    };
-}[CommandName];
+export type CommandContext<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> =
+    | {
+          [C in GridCommandName<TRow, TNode, TFeatures>]: {
+              readonly command: C;
+              /** the payload; assign a new object to rewrite it before calling `next` */
+              payload: PayloadIn<GridCommands<TRow, TNode, TFeatures>[C]>;
+              /** `model.can`/`model.check`: nothing will be committed; do not cause side effects */
+              readonly dryRun: boolean;
+              /**
+               * the committed state the command applies to (the core's fields: a feature's are read
+               * through its `get` keys)
+               */
+              readonly state: DataGridState<TRow, TNode>;
+          };
+      }[GridCommandName<TRow, TNode, TFeatures>]
+    // a grid of any features may run a command of a feature no type names
+    | (true extends AnyFeatures<TFeatures>
+          ? FeatureCommandContext<TRow, TNode>
+          : never);
+
+/**
+ * What a middleware for a grid of any features (`DataGridFeatures`) sees of a command no type
+ * names: a feature's (Epic #141). With it in the union, a model with features is a model.
+ */
+export interface FeatureCommandContext<TRow, TNode = unknown> {
+    readonly command: string;
+    payload: unknown;
+    readonly dryRun: boolean;
+    readonly state: DataGridState<TRow, TNode>;
+}
 
 /**
  * Runs around every command, engine-issued or not: veto (return an error without calling
@@ -1119,17 +1157,28 @@ export type CommandContext<TRow, TNode = unknown> = {
  * result). Returning `undefined` passes on `next`'s result when it was called, and vetoes when it
  * was not.
  */
-export type Middleware<TRow, TNode = unknown> = (
-    ctx: CommandContext<TRow, TNode>,
-    next: () => CommandResult<unknown>,
-) => CommandResult<unknown> | undefined;
+export type Middleware<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = {
+    // a method's parameters compare both ways: a model with features is a model (Epic #141)
+    middleware(
+        ctx: CommandContext<TRow, TNode, TFeatures>,
+        next: () => CommandResult<unknown>,
+    ): CommandResult<unknown> | undefined;
+}["middleware"];
 
-/** What a listener receives: one event per committed command. */
+/**
+ * What a listener receives: one event per committed command, the core's or an installed
+ * feature's (its name a string: a listener reads every grid's events alike).
+ */
 export interface CommandEvent<TRow, TNode = unknown> {
-    readonly command: CommandName;
+    readonly command: string;
     readonly payload: unknown;
     /** the command's value */
     readonly result: unknown;
+    /** the state before (the core's fields: a feature's are read through its `get` keys) */
     readonly before: DataGridState<TRow, TNode>;
     readonly after: DataGridState<TRow, TNode>;
 }
@@ -1187,13 +1236,6 @@ export interface QueryMap<TRow, TNode = unknown> {
         result: unknown;
     };
     "active-position": { payload: undefined; result: CellPosition | null };
-    /** the sorted columns, the first one first */
-    "sort-columns": { payload: undefined; result: readonly SortColumn[] };
-    /** a column's sort, or `undefined` when it is not sorted */
-    "sort-column-by": {
-        payload: { readonly columnKey: string };
-        result: SortColumn | undefined;
-    };
     /** the resized columns' widths, by column key */
     "column-widths": { payload: undefined; result: ColumnWidths };
     /**
@@ -1261,8 +1303,6 @@ export interface QuestionMap {
     "row-active": { readonly rowIndex: number };
     /** whether the row is loaded (its getter answered a row), or a group row (Epic #87) */
     "row-loaded": { readonly rowIndex: number };
-    /** whether a column sorts the grid (a column, `sortable`) */
-    "column-sortable": { readonly columnKey: string };
     /** whether a group is collapsed: a collapsible group, its key collapsed */
     "group-collapsed": { readonly groupKey: string };
     /** whether the row shows its detail: loaded, and its key expanded */
@@ -1307,10 +1347,16 @@ type IsUnion<T, All = T> = T extends unknown
  * A command's arguments after its name. With a name typed as a union of commands, the payload is
  * required: one of them may need it.
  */
-export type CommandArgs<C extends CommandName, TRow, TNode> =
-    true extends IsUnion<C>
-        ? [payload: PayloadOf<C, TRow, TNode>]
-        : PayloadArgs<PayloadOf<C, TRow, TNode>>;
+export type CommandArgs<C extends CommandName, TRow, TNode> = KeyArgs<
+    CommandMap<TRow, TNode>,
+    C
+>;
+
+/** The arguments after a key of a key map (a grid's commands, say): its payload, as above. */
+export type KeyArgs<M, K extends keyof M> =
+    true extends IsUnion<K>
+        ? [payload: PayloadIn<M[K]>]
+        : PayloadArgs<PayloadIn<M[K]>>;
 
 // ── summary rows (Epic #86, E2.1) ────────────────────────────────────────────
 

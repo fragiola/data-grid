@@ -10,6 +10,7 @@ import type { ComponentFixture } from "@angular/core/testing";
 import {
     type ColumnOrGroup,
     DATA_GRID,
+    type DataGridFeatures,
     type DataGridNode,
     DataGridRoot,
     type GridRootProps,
@@ -20,10 +21,16 @@ import { type Rendered, render, settled } from "./helpers";
 // divs or as a table, its root's props given whole (the core's `GridRootProps`, handlers too)
 // through a test directive on the root, as `[dataGridLocalRows]` gives its own.
 
-/** A test's root props: the core's root props, the columns required. */
-export type TestProps<TRow = unknown> = Partial<
-    GridRootProps<TRow, DataGridNode>
-> & { columns: readonly ColumnOrGroup<TRow, DataGridNode>[] };
+/**
+ * A test's root props: the core's root props and its features' (`features` among them), the
+ * columns required.
+ */
+export type TestProps<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = Partial<GridRootProps<TRow, DataGridNode, TFeatures>> & {
+    columns: readonly ColumnOrGroup<TRow, DataGridNode>[];
+};
 
 /** Gives the root the props a test passes, over its inputs. */
 @Directive({ selector: "[dataGridRoot][testProps]" })

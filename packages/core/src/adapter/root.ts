@@ -10,6 +10,12 @@ import type {
     RangeFill,
     RowMove,
 } from "../engine/types";
+import type { DataGridFeatures, FeatureKeys } from "../feature/feature";
+import {
+    featureControlledProps,
+    featureOptions,
+    featuresOf,
+} from "../feature/registry";
 import { sameEditingCell } from "../model/editing";
 import { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "../model/expansion";
 import {
@@ -20,7 +26,6 @@ import {
 } from "../model/model";
 import { keptOrder, sameOrder } from "../model/order";
 import { keptRange, sameCellRange } from "../model/range";
-import { sameSortColumns, validSortColumns } from "../model/sort";
 import type {
     CellPosition,
     CellRange,
@@ -28,7 +33,6 @@ import type {
     ColumnOrder,
     ColumnOrGroup,
     ColumnWidths,
-    CommandName,
     DataGridState,
     DetailHeight,
     EditingCell,
@@ -41,7 +45,6 @@ import type {
     RowMetaGetter,
     RowSelectable,
     RowSelection,
-    SortColumn,
 } from "../model/types";
 import { keptWidths, sameWidths } from "../model/widths";
 import { sameKeys } from "../utils/utils";
@@ -50,7 +53,8 @@ import {
     bindControlled,
     type Controlled,
     type ControlledFlags,
-    type ControlledState,
+    type ControlledProp,
+    controlledProp,
 } from "./controlled";
 
 /**
@@ -127,17 +131,6 @@ export interface GridRootOptions<TRow, TNode> {
     /** the active cell changed (or, controlled, asks to) */
     onActivePositionChange?:
         | ((position: CellPosition | null) => void)
-        | undefined;
-    /**
-     * the sorted columns, controlled, the first one first; pair it with `onSortColumnsChange`.
-     * The grid keeps the sort: the app orders the rows it passes
-     */
-    sortColumns?: readonly SortColumn[] | undefined;
-    /** the sorted columns to start with, uncontrolled */
-    defaultSortColumns?: readonly SortColumn[] | undefined;
-    /** the sort changed (or, controlled, asks to): a header cell was toggled, or a command ran */
-    onSortColumnsChange?:
-        | ((sortColumns: readonly SortColumn[]) => void)
         | undefined;
     /**
      * the expanded rows' keys (a row's `rowKey`, else its index), controlled; pair it with
@@ -321,9 +314,24 @@ export interface GridRootOptions<TRow, TNode> {
     ownTabStop?: boolean | undefined;
 }
 
-/** A root's props as the core reads them: where its rows come from, and the rest. */
-export type GridRootProps<TRow, TNode> = GridRowsProps<TRow> &
-    GridRootOptions<TRow, TNode>;
+/**
+ * A root's props as the core reads them: where its rows come from, the rest, the features it
+ * installs (fixed when it is created, Epic #141) and the props they add (`sortColumns` with
+ * `sorting()`, …).
+ */
+export type GridRootProps<
+    TRow,
+    TNode,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = GridRowsProps<TRow> &
+    GridRootOptions<TRow, TNode> &
+    FeatureKeys<TFeatures, TRow, TNode>["props"] & {
+        /**
+         * the features the grid installs (`[sorting()]`), fixed when it is created: a list given
+         * later is ignored (told in the console). A feature not installed is not in the bundle
+         */
+        features?: TFeatures | undefined;
+    };
 
 /** Every prop name of a root's props (`GridRootProps`): what a root takes, not its element. */
 export const GRID_ROOT_PROPS = [
@@ -341,9 +349,6 @@ export const GRID_ROOT_PROPS = [
     "activePosition",
     "defaultActivePosition",
     "onActivePositionChange",
-    "sortColumns",
-    "defaultSortColumns",
-    "onSortColumnsChange",
     "expandedRowKeys",
     "defaultExpandedRowKeys",
     "onExpandedRowKeysChange",
@@ -386,21 +391,26 @@ export const GRID_ROOT_PROPS = [
     "maxScrollSize",
     "direction",
     "ownTabStop",
+    "features",
 ] as const satisfies readonly (keyof GridRootProps<unknown, unknown>)[];
 
 /** A root prop name: one of `GRID_ROOT_PROPS`, which lists every one (a type test checks it). */
 export type GridRootPropName = (typeof GRID_ROOT_PROPS)[number];
 
 /**
- * Props without the root's own (`GRID_ROOT_PROPS`): what goes on the root's element. A new object
- * (an adapter's render reads it once).
+ * Props without the root's own (`GRID_ROOT_PROPS`, and the props of the features it installs):
+ * what goes on the root's element. A new object (an adapter's render reads it once).
  */
 export function withoutRootProps<P extends object>(
     props: P,
+    features?: DataGridFeatures,
 ): Omit<P, GridRootPropName> {
+    const featureProps = features?.flatMap(
+        (feature): readonly string[] => feature.root?.props ?? [],
+    );
     const rest: Record<string, unknown> = {};
     for (const key in props) {
-        if (!ROOT_PROP_SET.has(key)) {
+        if (!ROOT_PROP_SET.has(key) && !featureProps?.includes(key)) {
             rest[key] = props[key];
         }
     }
@@ -410,8 +420,12 @@ export function withoutRootProps<P extends object>(
 const ROOT_PROP_SET: ReadonlySet<string> = new Set(GRID_ROOT_PROPS);
 
 /** What `bindGridRoot` gives the adapter's root. */
-export interface GridRoot<TRow, TNode> {
-    readonly model: DataGridModel<TRow, TNode>;
+export interface GridRoot<
+    TRow,
+    TNode,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> {
+    readonly model: DataGridModel<TRow, TNode, TFeatures>;
     readonly engine: DataGridEngine<TRow, TNode>;
     /**
      * After every render of the root (before paint, the parts' layout done): the props follow
@@ -454,41 +468,6 @@ export function sourceMatches<TRow, TNode>(
 }
 
 /**
- * A controlled state over the root's props (the active position, the sort, the expanded rows, the
- * selection, the column widths and order): its prop, its handler, its default.
- */
-interface PropsState<TRow, TNode, V>
-    extends Pick<
-        ControlledState<TRow, TNode, V>,
-        "prefix" | "read" | "same" | "apply" | "vetoed"
-    > {
-    readonly prop: (props: GridRootProps<TRow, TNode>) => V | undefined;
-    readonly onChange: (
-        props: GridRootProps<TRow, TNode>,
-    ) => ((value: V) => void) | undefined;
-    /** the value to start with, uncontrolled, when the grid may not take all of it */
-    readonly start?: (props: GridRootProps<TRow, TNode>) => V | undefined;
-    /** what a command makes it, from the command's value; without it, that value itself */
-    readonly fromCommand?: (command: CommandName, value: unknown) => V;
-}
-
-/** The controlled state the root's latest props hold: its prop, its handler, its default. */
-function propsState<TRow, TNode, V>(
-    latest: () => GridRootProps<TRow, TNode>,
-    spec: PropsState<TRow, TNode, V>,
-): ControlledState<TRow, TNode, V> {
-    const { start } = spec;
-    return {
-        // its `prefix`, `read`, `same`, `apply` and `vetoed` as given
-        ...spec,
-        valueOf: spec.fromCommand ?? ((_, value) => value as V),
-        prop: () => spec.prop(latest()),
-        report: (value) => spec.onChange(latest())?.(value),
-        start: start && (() => start(latest())),
-    };
-}
-
-/**
  * A group of props a root follows together: what it reads of them (compared one by one with the
  * last values it ran on, by identity), and what it runs when one changed.
  */
@@ -515,11 +494,21 @@ function sameInputs(
  * calls `sync()` after every render; its element's keys, clicks, presses and clipboard events go
  * to `engine.adapter` after the consumer's own handlers.
  */
-export function bindGridRoot<TRow, TNode>(
-    props: () => GridRootProps<TRow, TNode>,
-): GridRoot<TRow, TNode> {
+export function bindGridRoot<
+    TRow,
+    TNode,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+>(
+    gridProps: () => GridRootProps<TRow, TNode, TFeatures>,
+): GridRoot<TRow, TNode, TFeatures> {
+    // the core's props read as such; the features' through their own bindings
+    const props = gridProps as () => GridRootProps<TRow, TNode>;
     const initial = props();
+    // fixed for the grid's life (Epic #141): a list given later is told, never taken
+    const installed: DataGridFeatures = initial.features ?? [];
     const model = createDataGridModel<TRow, TNode>({
+        ...featureOptions(installed, initial),
+        features: installed as [],
         columns: initial.columns,
         ...(initial.rows !== undefined
             ? { rows: initial.rows }
@@ -535,7 +524,6 @@ export function bindGridRoot<TRow, TNode>(
             initial.activePosition !== undefined
                 ? initial.activePosition
                 : initial.defaultActivePosition,
-        sortColumns: initial.sortColumns ?? initial.defaultSortColumns,
         expandedRowKeys:
             initial.expandedRowKeys ?? initial.defaultExpandedRowKeys,
         expandedGroupKeys:
@@ -564,8 +552,13 @@ export function bindGridRoot<TRow, TNode>(
     const flags: ControlledFlags = { syncing: false, applying: false };
     // each piece guarded on its own commands (the order they are bound in tells uncontrolled
     // changes in that order)
-    const bind = <V>(spec: PropsState<TRow, TNode, V>) =>
-        bindControlled(model, flags, propsState(props, spec));
+    const bind = <V>(
+        spec: ControlledProp<
+            GridRootProps<TRow, TNode>,
+            DataGridState<TRow, TNode>,
+            V
+        >,
+    ) => bindControlled(model, flags, controlledProp(props, spec));
     const position = bind<CellPosition | null>({
         prefix: "active-position.",
         prop: (props) => props.activePosition,
@@ -579,23 +572,6 @@ export function bindGridRoot<TRow, TNode>(
         apply: (value) => {
             if (value === null) model.run("active-position.clear");
             else model.run("active-position.set", value);
-        },
-    });
-    const sort = bind<readonly SortColumn[]>({
-        prefix: "sort-columns.",
-        prop: (props) => props.sortColumns,
-        onChange: (props) => props.onSortColumnsChange,
-        // an uncontrolled sort the columns could not take all of (a column not sortable) starts
-        // without it: the app is told the sort the grid holds
-        start: (props) => props.defaultSortColumns,
-        read: (state) => state.sortColumns,
-        same: sameSortColumns,
-        // what the columns cannot take (a column not sortable, twice) is left out, as at mount,
-        // and the parent is told the sort as it settled
-        apply: (value) => {
-            model.run("sort-columns.set", {
-                sortColumns: validSortColumns(model.state.columnEntries, value),
-            });
         },
     });
     const expanded = bind<readonly RowKey[]>({
@@ -766,19 +742,32 @@ export function bindGridRoot<TRow, TNode>(
         if (onBeforeRangePaste?.(paste) === false) return;
         onRangePaste?.(paste);
     });
+    // the features' controlled props (Epic #141), bound after the core's, in their order
+    const features = featureControlledProps<GridRootProps<TRow, TNode>>(
+        featuresOf(model),
+        model as unknown as DataGridModel<unknown, unknown>,
+    ).map((spec) =>
+        bind(
+            spec as ControlledProp<
+                GridRootProps<TRow, TNode>,
+                DataGridState<TRow, TNode>,
+                unknown
+            >,
+        ),
+    );
     // followed before the data props, in this order: the layout inputs, then the active position
     const layout: readonly Controlled[] = [widths, order, collapsed, position];
     // settled (and started) in this order: the layout inputs first, so a position the order or a
-    // collapse moved settles in the same pass; then the selection before the sort, as their
-    // values to start with are told
+    // collapse moved settles in the same pass; then the selection, as its value to start with is
+    // told; the features' last
     const controlled: readonly Controlled[] = [
         ...layout,
         editing,
         selection,
         range,
-        sort,
         expanded,
         groups,
+        ...features,
     ];
     const data = dataGroups(model);
     const options: PropsGroup<TRow, TNode> = {
@@ -804,11 +793,23 @@ export function bindGridRoot<TRow, TNode>(
         group.run(current);
     };
     let started = false;
+    let toldFeatures = false;
     return {
-        model,
+        model: model as unknown as DataGridModel<TRow, TNode, TFeatures>,
         engine,
         sync() {
             const current = props();
+            // the features are the grid's from its creation: another list is not taken
+            if (
+                !toldFeatures &&
+                current.features !== initial.features &&
+                !sameFeatures(current.features ?? [], installed)
+            ) {
+                toldFeatures = true;
+                console.warn(
+                    "data grid: `features` changed after the grid was created; the grid keeps the features it was created with (remount it, with a new `key`, for others)",
+                );
+            }
             // the props follow onto the model. Controlled widths, order and collapsed groups
             // first: layout inputs, the axis a position scrolls into view against (an order or a
             // collapse moves the active cell with its column: there it stays unless its own prop
@@ -834,6 +835,14 @@ export function bindGridRoot<TRow, TNode>(
             follow(options, current);
         },
     };
+}
+
+/** Whether two feature lists are the same features, in the same order. */
+function sameFeatures(a: DataGridFeatures, b: DataGridFeatures): boolean {
+    return (
+        a.length === b.length &&
+        a.every((feature, index) => feature === b[index])
+    );
 }
 
 /** The engine's options a root's props give. */

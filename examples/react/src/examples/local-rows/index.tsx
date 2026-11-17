@@ -2,6 +2,7 @@
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import {
     ChevronLeft,
     ChevronRight,
@@ -15,6 +16,9 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const all = people(1_000);
 
@@ -170,6 +174,7 @@ export default function LocalRows() {
                 </div>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rowKey={(row) => row.id}
                 rowHeight={36}

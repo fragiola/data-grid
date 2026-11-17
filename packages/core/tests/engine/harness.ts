@@ -4,8 +4,9 @@ import {
     createDataGridModel,
     type DataGridEngine,
     type DataGridEngineOptions,
-    type DataGridModelOptions,
+    type DataGridFeatures,
     type GridView,
+    type ModelOptions,
 } from "../../src";
 import type { Row } from "./views";
 
@@ -148,8 +149,8 @@ export interface MountOptions extends DataGridEngineOptions {
  * otherwise) and its engine, attached to a fake viewport in the page holding the grid layer, and
  * the first view committed.
  */
-export function mountEngine(
-    modelOptions: DataGridModelOptions<Row>,
+export function mountEngine<const TFeatures extends DataGridFeatures = []>(
+    modelOptions: ModelOptions<Row, unknown, TFeatures>,
     options: MountOptions = {},
 ) {
     const {
@@ -161,12 +162,12 @@ export function mountEngine(
         ...engineOptions
     } = options;
     const resize = fakeResizeObserver();
-    const model = createDataGridModel<Row>({
+    const model = createDataGridModel<Row, unknown, TFeatures>({
         getRow: (id) => ({ id }),
         rowHeight: 20,
         headerRowHeight: 30,
         ...modelOptions,
-    });
+    } as ModelOptions<Row, unknown, TFeatures>);
     const engine = createDataGridEngine(model, engineOptions);
     const view = () => engine.adapter.getView();
     const {

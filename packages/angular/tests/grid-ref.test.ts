@@ -305,7 +305,7 @@ describe("gridRef", () => {
             template: `<div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [gridRef]="gridRef">${PARTS}</div>`,
         })
         class Given {
-            gridRef = made;
+            gridRef: DataGridRef<Person> = made;
             readonly rows = people;
             readonly columns = columns;
         }

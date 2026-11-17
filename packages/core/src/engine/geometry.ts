@@ -6,7 +6,6 @@ import type {
     GridDirection,
     HeaderCellLayout,
     PinnedSide,
-    SortDirection,
     SummaryPosition,
     SummaryRowCounts,
 } from "../model/types";
@@ -15,8 +14,7 @@ import { overlaps } from "../viewport/window";
 import type { GridView } from "./types";
 
 // Where the parts of a view go and what they say, as pure functions of a `GridView`: rows' and
-// cells' boxes, pinned columns, details, ARIA and a header cell's sort. An adapter renders with
-// them; the engine writes pinned cells' insets with `pinnedInset`.
+// cells' boxes, pinned columns, details and ARIA. An adapter renders with them; the engine writes pinned cells' insets with `pinnedInset`.
 //
 // Every offset counts from the view's inline start (E1.1): its left edge, or in a right-to-left
 // grid its right edge, where an adapter places by `right` (`inlineStart`) and the engine mirrors
@@ -499,51 +497,6 @@ export function summaryHeight(
     position: SummaryPosition,
 ): number {
     return grid.summaryRows[position] * grid.summaryRowHeight;
-}
-
-/** A header cell's sort, as the adapters show it (S6). */
-export interface HeaderCellSort {
-    /** its column sorts the grid (never a group) */
-    readonly sortable: boolean;
-    /** the direction its column is sorted in, when it is */
-    readonly direction: SortDirection | undefined;
-    /** its column's place among the sorted columns, 1-based, when it is sorted */
-    readonly priority: number | undefined;
-    /**
-     * `aria-sort`, on the first sorted column with a header cell of its own (ARIA 1.2: one header
-     * at a time; a column a collapsed group hides or a header span covers holds none, and may
-     * hold priority 1)
-     */
-    readonly ariaSort: SortDirection | undefined;
-}
-
-/** How a header cell shows the sort: sortable, and its direction and priority when sorted. */
-export function headerCellSort<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-): HeaderCellSort {
-    const column = cell.column;
-    const index = column
-        ? view.sortColumns.findIndex((entry) => entry.columnKey === column.key)
-        : -1;
-    const sorted = view.sortColumns[index];
-    // `aria-sort` on the first sorted column with a header cell of its own: one a collapsed
-    // group hides (E1.3) or a header span covers (E1.2) still sorts, and keeps its priority
-    const first =
-        sorted &&
-        view.sortColumns.find((entry) => {
-            const own = view.header.cellByKey(entry.columnKey);
-            return (
-                own !== undefined &&
-                view.header.cellAt(own.rowIndex, own.columnIndex) === own
-            );
-        });
-    return {
-        sortable: column?.sortable === true,
-        direction: sorted?.direction,
-        priority: sorted ? index + 1 : undefined,
-        ariaSort: first === sorted ? sorted?.direction : undefined,
-    };
 }
 
 /** An item of an axis and how far into it: where a view is kept while the axis changes. */

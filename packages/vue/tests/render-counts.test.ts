@@ -95,7 +95,7 @@ const Label = defineComponent({
 });
 
 type GridProps = Partial<
-    Omit<RootProps<Item>, "rows" | "rowCount" | "getRow">
+    Omit<RootProps<Item, []>, "rows" | "rowCount" | "getRow">
 > & { rows?: readonly Item[]; fillHandle?: boolean };
 
 /** Every part rendered: the header with group labels, summary rows, cells, details. */

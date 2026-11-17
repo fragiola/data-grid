@@ -7,6 +7,7 @@ import {
     type RowMeta,
 } from "../src";
 import { groupKeyOf, useLocalRows } from "../src/local";
+import { sorting } from "../src/sorting";
 import { tags } from "./helpers";
 
 // The grids the server-rendering tests share (Epic #89, E5.1): `server.test.tsx` renders each one
@@ -69,8 +70,11 @@ const treeMeta = (index: number): RowMeta =>
         : { depth: 0, expandable: true };
 
 /** A grid's root props over the sales: its columns and rows, else these. */
+/** the features a grid may install: sorting, which `useLocalRows`' sort is (Epic #141) */
+const FEATURES = [sorting()] as const;
+
 type GridOptions = Omit<
-    RootProps<Sale>,
+    RootProps<Sale, typeof FEATURES>,
     "columns" | "rows" | "rowCount" | "getRow"
 > & {
     columns?: readonly ColumnOrGroup<Sale>[];
@@ -174,7 +178,7 @@ function RowGroups({ table }: { table: boolean }) {
         rowKey,
         defaultExpandedGroupKeys: [groupKeyOf([["country", "Brazil"]])],
     });
-    return <Composition table={table} {...local.props} />;
+    return <Composition table={table} features={FEATURES} {...local.props} />;
 }
 
 /** The grids, by name: each one as a table and as divs. */

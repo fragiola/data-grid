@@ -1,5 +1,6 @@
 // @fragiola/data-grid: the framework-free core of the headless data grid.
 
+export type { ControlledProp } from "./adapter/controlled";
 export {
     type EditActions,
     editActions,
@@ -95,9 +96,7 @@ export {
     columnLeft,
     columnPinning,
     gridRole,
-    type HeaderCellSort,
     headerCellBox,
-    headerCellSort,
     inlineStart,
     measuredRow,
     renderedWidth,
@@ -171,6 +170,22 @@ export type {
     RowReorder,
     RowSpans,
 } from "./engine/types";
+export {
+    type DataGridFeature,
+    type DataGridFeatures,
+    defineControlled,
+    defineFeature,
+    type FeatureEngine,
+    type FeatureEngineContext,
+    type FeatureHandler,
+    type FeatureKeys,
+    type FeaturePartContribution,
+    type FeatureRoot,
+    type FeatureSpec,
+    type FeatureState,
+    type FeatureTypes,
+    type PartAttributes,
+} from "./feature/feature";
 export { sameEditingCell } from "./model/editing";
 export { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "./model/expansion";
 export {
@@ -178,11 +193,11 @@ export {
     type DataGridModel,
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
+    type ModelOptions,
 } from "./model/model";
 export { keptOrder, sameOrder } from "./model/order";
 export { keptRange, sameCellRange, valueText } from "./model/range";
-export { veto } from "./model/result";
-export { sameSortColumns, validSortColumns } from "./model/sort";
+export { done, fail, ok, veto } from "./model/result";
 export {
     cellValue,
     dataRowAt,
@@ -229,7 +244,11 @@ export type {
     EditCellRenderProps,
     EditingCell,
     EditorProps,
+    GridCommandName,
+    GridCommands,
     GridDirection,
+    GridQueries,
+    GridQuestions,
     GroupCellRenderProps,
     GroupColSpanArgs,
     GroupHeaderCellRenderProps,
@@ -238,9 +257,12 @@ export type {
     HeaderCellLayout,
     HeaderCellRenderProps,
     HeaderLayout,
+    KeyArgs,
     Middleware,
+    ModelState,
     NoPayload,
     PayloadArgs,
+    PayloadIn,
     PayloadOf,
     PinnedSide,
     QueryKey,
@@ -250,6 +272,7 @@ export type {
     RangeKeys,
     RangePaste,
     ReorderSide,
+    ResultIn,
     ResultOf,
     RowHeight,
     RowKey,
@@ -260,8 +283,6 @@ export type {
     RowSelection,
     RowSource,
     SelectionAnchor,
-    SortColumn,
-    SortDirection,
     SummaryCellRenderProps,
     SummaryColSpanArgs,
     SummaryPosition,

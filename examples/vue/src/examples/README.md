@@ -36,6 +36,11 @@ examples/vue/src/
   parts are typed by the row: `const DataGrid = typedDataGrid<Task>()` (a template cannot pass a
   type argument); columns are `Column<Task, VNodeChild>`, their renderers return vnodes
   (`h(SelectRow, { rowIndex })`).
+- **Features are installed**: a grid that sorts installs `sorting()` from
+  `@fragiola/data-grid-vue/sorting` (`const features = [sorting()] as const`, `:features="features"`
+  on the root) and types its parts by them (`typedDataGrid<Task, typeof features>()`); without it a
+  sortable column never sorts. `useLocalRows(...).props` hands the root its sort: an example that
+  binds them installs sorting too. The sort a view shows is `sortColumnsOf(view)`.
 - **React's components are sibling SFCs**, its hooks composables or `setup` code: `useState` is a
   `ref`, `useMemo` a `computed`, an effect a `watch` or `onMounted`/`onBeforeUnmount`, a context a
   `provide`/`inject` key in a sibling `.ts`.
@@ -49,7 +54,7 @@ examples/vue/src/
   frameworks look the same.
 - **State the grid keeps** is read through `useDataGrid()` (`{ model, engine }`) and re-read when
   the view changes: `useGridView()` inside a `computed`.
-- **Copyable imports only**: `vue`, `@fragiola/data-grid-vue` (and `/local`, `/selection`),
+- **Copyable imports only**: `vue`, `@fragiola/data-grid-vue` (and `/local`, `/selection`, `/sorting`),
   `@fragiola/data-grid/(local|selection|fill)`, `@lucide/vue`, the kit (`#/components/ui/*`,
   `#/components/atoms/*`, `#/lib/cn`) and relative files.
 

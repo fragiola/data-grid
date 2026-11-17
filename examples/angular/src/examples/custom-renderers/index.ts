@@ -21,6 +21,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { Input } from "#/components/atoms/fields";
 import { type Task, tasks } from "../_kit/tasks";
 import { SortStatus } from "./header-cell";
@@ -61,6 +62,7 @@ type EditProps = EditCellRenderProps<Task, DataGridNode>;
         <div [class]="styles.frame">
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowKey]="rowKey"
@@ -149,6 +151,8 @@ export default class CustomRenderers {
     ];
 
     private readonly rows = signal<readonly Task[]>(ROWS);
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(this.rows, this.columns);
 
     readonly rowKey = (row: Task) => row.id;

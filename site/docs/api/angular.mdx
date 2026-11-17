@@ -137,7 +137,9 @@ The template renders with the props the renderer was given, as its `$implicit` t
 | `className`, `style` | your element's `class` and `style`, under the structural style (structural keys win; the layers and the pinned cells drop the keys the engine writes from your static style; never bind those keys yourself) |
 | `className={(state) => …}` | a `data-*` selector (`data-active:outline-2`), or the part's state: `#cell="dataGridCell"`, then `[class.active]="cell.state()?.active"` |
 | `onKeyDown`, `onClick`, `onPointerDown`, `onCopy`, `onPaste`, … | your listeners (`(keydown)`, `(click)`, …): yours first, then the grid's keys, clicks, presses and clipboard on the root, so `preventDefault` in yours cancels the grid's |
-| `Root`'s `onXChange` and the other callbacks | outputs without `on`: `(activePositionChange)`, `(sortColumnsChange)`, `(cellEdit)`, `(rangePaste)`, `(rowWindowChange)`, `(rowsEndReached)`, …; `[(activePosition)]` binds both ways |
+| `features={features}` | the input `[features]="features"` on the root, fixed when the grid is created |
+| a feature's props (`sortColumns`, `defaultSortColumns`, `onSortColumnsChange`) | its own directive's inputs and outputs, on the root's element: `dataGridSorting` with `[(sortColumns)]`, `[defaultSortColumns]`, `(sortColumnsChange)` |
+| `Root`'s `onXChange` and the other callbacks | outputs without `on`: `(activePositionChange)`, `(expandedRowKeysChange)`, `(cellEdit)`, `(rangePaste)`, `(rowWindowChange)`, `(rowsEndReached)`, …; `[(activePosition)]` binds both ways |
 | `onRowMove`, `onFill` (given, the feature is on) | the inputs `reorderableRows` and `fillable` turn it on; the outputs `(rowMove)` and `(fill)` tell |
 | `onBeforeRangePaste` | the input `[beforeRangePaste]` (a function: `false` refuses) |
 | `ref` | your element's own template reference; a handle on the grid is a `gridRef` (`createDataGridRef()`) |
@@ -152,7 +154,8 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 
 | directive | inputs | template context |
 | --- | --- | --- |
-| `[dataGridRoot]` | the core's root props (`GridRootProps`: `columns`, `rows` or `rowCount` + `getRow`, `rowKey`, the sizes, every piece of state controlled or not, the engine's options), `reorderableRows`, `fillable`, `beforeRangePaste`, `gridRef`; the callbacks are outputs | |
+| `[dataGridRoot]` | the core's root props (`GridRootProps`: `columns`, `rows` or `rowCount` + `getRow`, `rowKey`, the sizes, every piece of state controlled or not, the engine's options), `reorderableRows`, `fillable`, `beforeRangePaste`, `gridRef`, `features`; the callbacks are outputs | |
+| `[dataGridRoot][dataGridSorting]` | `sortColumns` (`[(sortColumns)]` with the output `sortColumnsChange`), `defaultSortColumns`; from `@fragiola/data-grid-angular/sorting`, with `sorting()` in the root's features | |
 | `[dataGridGrid]` | none | |
 | `*dataGridHeader` | none | |
 | `ng-template[dataGridHeaderRows]` | what types it (optional) | `{ $implicit: row, row }` |
@@ -191,8 +194,8 @@ returns `{ state, props }` as signals (`PartInjectResult`); put `props()` on you
 
 | function | returns |
 | --- | --- |
-| `injectDataGrid()` | `{ model, engine }` of the root around (read them once its inputs are set: in a listener, an effect, `ngOnInit`); with a `gridRef`, a signal of them, `null` until a root holds it |
-| `createDataGridRef()` | a handle on a grid for `<div dataGridRoot [gridRef]="gridRef">` (React's `useDataGridRef` and `createDataGridRef`) |
+| `injectDataGrid()` | `{ model, engine }` of the root around (read them once its inputs are set: in a listener, an effect, `ngOnInit`); with a `gridRef`, a signal of them, `null` until a root holds it. `injectDataGrid<Person, typeof features>()` types the features' keys |
+| `createDataGridRef()` | a handle on a grid for `<div dataGridRoot [gridRef]="gridRef">` (React's `useDataGridRef` and `createDataGridRef`); `createDataGridRef<Person, typeof features>()` types the features' keys |
 | `injectRowWindow(gridRef?)`, `injectColumnWindow(gridRef?)` | the rows or the columns in view and rendered (`AxisWindow`), as a signal |
 | `injectGridView()` | the grid's view, as a signal |
 | `injectRows()`, `injectCells(row)` | the rendered rows, a row's rendered cells |
@@ -206,8 +209,45 @@ The opt-in entry points:
 
 | entry | exports |
 | --- | --- |
-| `@fragiola/data-grid-angular/local` | `injectLocalRows(rows, columns, options?)`: rows in memory, sorted, filtered, searched, grouped and paged, each field a getter; `[dataGridLocalRows]="local"` on the root gives it their props (React's `{...local.props}`) |
+| `@fragiola/data-grid-angular/local` | `injectLocalRows(rows, columns, options?)`: rows in memory, sorted, filtered, searched, grouped and paged, each field a getter; `[dataGridLocalRows]="local"` on the root gives it their props (React's `{...local.props}`); its sort needs `sorting()` in `[features]` |
 | `@fragiola/data-grid-angular/selection` | `injectSelectAll(rowKeys, gridRef?)`: a "select all" control's state and its `toggle`, each field a getter |
+| `@fragiola/data-grid-angular/sorting` | `sorting()`, the [sorting feature](/docs/concepts/sorting); `DataGridSorting`, the directive holding the sort's inputs on the root; `sortColumnsOf(view)`, `headerCellSort`, `SortColumn` (the core's, re-exported) |
+
+## Features
+
+A grid installs its [features](/docs/concepts/features) through the root's `[features]` input.
+A feature's inputs are a directive of its own on the root's element, from the feature's entry:
+sorting's is `DataGridSorting`. Without it imported, `[sortColumns]` is not a known input (strict
+templates).
+
+```ts title="people-grid.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { DataGridSorting, type SortColumn, sorting } from "@fragiola/data-grid-angular/sorting";
+
+@Component({
+    selector: "app-people-grid",
+    imports: [DATA_GRID, DataGridSorting],
+    template: `
+        <div dataGridRoot [features]="features" dataGridSorting [(sortColumns)]="sortColumns" [columns]="columns" [rows]="people()">
+            <!-- … -->
+        </div>
+    `,
+})
+export class PeopleGrid {
+    readonly features = [sorting()];
+    readonly sortColumns = signal<readonly SortColumn[]>([]);
+    // …
+}
+```
+
+With rows in memory, `[dataGridLocalRows]` gives the root the sort: leave `dataGridSorting` out,
+and keep `[features]`.
+
+A directive of your own gives the root props the same way: inject `DataGridRoot` and call
+`root.addPropsSource(() => props)`, which returns the function that removes it (call it on
+destroy). A source's props win over the root's inputs; with `{ inputs: true }` they rank as the
+root's own inputs instead, so another source (`[dataGridLocalRows]`) wins over them, as
+`DataGridSorting` does.
 
 ## Types
 
@@ -222,6 +262,7 @@ The opt-in entry points:
 | `RowInfo`, `CellInfo`, `HeaderRowInfo`, `HeaderCellInfo`, `SummaryRowInfo`, `SummaryCellInfo` | what the templates hand you, as in React |
 | `DataGridContextValue`, `DataGridRef` | the model and the engine; the handle on a grid |
 | `PartInjectResult<State>`, `ValueOrSignal<T>` | what a part's injection function returns; what it takes |
+| `RootPropsSource<TRow, TFeatures>`, `RootPropsSourceOptions` | what `addPropsSource` takes: the props a directive gives the root, and how they rank (`inputs`) |
 
 React's `<Part>Props`, `DivPrimitiveProps`, `PrimitiveProps`, `RenderedProps` and `RenderProp`
 have no Angular counterpart: a directive's inputs and your own element replace them.

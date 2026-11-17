@@ -7,22 +7,24 @@ import {
     type HeaderCellInfo,
     type RenderSlot,
     type RootState,
-    type SortColumn,
     typedDataGrid,
 } from "../src";
+import { type SortColumn, sorting } from "../src/sorting";
 import {
     click,
     h,
     headerAt,
     keyDown,
     renderGrid,
+    root,
     settled,
     stubViewportSize,
 } from "./helpers";
 
 // Sorting (Epic #27): `sortable` columns, the sort controlled or not like the active position
 // (S5), toggled by a click, Enter or Space on a header cell after the consumer's handlers (S4),
-// shown through aria-sort and data-* (S6). The grid never orders the rows (S7).
+// shown through aria-sort and data-* (S6). The grid never orders the rows (S7). A feature since
+// Epic #141: the grid installs it (`features`), its props fallthrough attributes to Vue.
 
 interface Person {
     id: number;
@@ -30,7 +32,9 @@ interface Person {
     age: number;
 }
 
-const G = typedDataGrid<Person>();
+const FEATURES = [sorting()] as const;
+
+const G = typedDataGrid<Person, typeof FEATURES>();
 
 const people: Person[] = Array.from({ length: 50 }, (_, i) => ({
     id: i,
@@ -61,13 +65,19 @@ interface GridProps {
     onClick?: (event: MouseEvent) => void;
     /** the root's element: a `render` slot of the consumer's */
     renderRoot?: RenderSlot<RootState>["render"];
-    gridRef?: DataGridRef<Person>;
+    gridRef?: DataGridRef<Person, typeof FEATURES>;
     cells?: Column<Person, VNodeChild>[];
     table?: boolean;
 }
 
 function grid({ cells = columns, table, renderRoot, ...props }: GridProps) {
-    const rootProps = { columns: cells, rows: people, rowHeight: 20, ...props };
+    const rootProps = {
+        columns: cells,
+        rows: people,
+        rowHeight: 20,
+        features: FEATURES,
+        ...props,
+    };
     const slots = renderRoot ? { render: renderRoot } : {};
     return table
         ? h(G.Root, rootProps, {
@@ -309,7 +319,7 @@ describe("controlled", () => {
 describe("the model", () => {
     it("drives the same state: sort-columns.set through a gridRef asks or tells", async () => {
         const onSortColumnsChange = vi.fn();
-        const gridRef = createDataGridRef<Person>();
+        const gridRef = createDataGridRef<Person, typeof FEATURES>();
         const set = async () => {
             gridRef.current?.model.run("sort-columns.set", {
                 sortColumns: [{ columnKey: "age", direction: "descending" }],
@@ -357,26 +367,35 @@ describe("cancelling", () => {
         await settled();
         // on the header cell itself: its own onClick runs first (bubbling)
         const { container } = renderGrid(() =>
-            h(G.Root, { columns, rows: people, onSortColumnsChange }, () => [
-                h(G.Grid, null, () => [
-                    h(G.Header, null, () => [
-                        h(G.HeaderRow, null, () => [
-                            h(G.HeaderCells, null, {
-                                default: ({
-                                    cell,
-                                }: {
-                                    cell: HeaderCellInfo<Person>;
-                                }) => [
-                                    h(G.HeaderCell, {
+            h(
+                G.Root,
+                {
+                    columns,
+                    rows: people,
+                    features: FEATURES,
+                    onSortColumnsChange,
+                },
+                () => [
+                    h(G.Grid, null, () => [
+                        h(G.Header, null, () => [
+                            h(G.HeaderRow, null, () => [
+                                h(G.HeaderCells, null, {
+                                    default: ({
                                         cell,
-                                        onClick: prevent,
-                                    }),
-                                ],
-                            }),
+                                    }: {
+                                        cell: HeaderCellInfo<Person>;
+                                    }) => [
+                                        h(G.HeaderCell, {
+                                            cell,
+                                            onClick: prevent,
+                                        }),
+                                    ],
+                                }),
+                            ]),
                         ]),
                     ]),
-                ]),
-            ]),
+                ],
+            ),
         );
         await settled();
         click(headerAt(container, 0));
@@ -410,5 +429,75 @@ describe("structure", () => {
             ),
         ];
         expect(sortAttributes).toHaveLength(0);
+    });
+});
+
+describe("installed", () => {
+    // a feature's props are fallthrough attributes to Vue: in either casing, read at their
+    // latest, never on the root's element
+    it("takes sorting's props in kebab-case and as listeners, off the element", async () => {
+        const onSortColumnsChange = vi.fn();
+        const sort = shallowRef<readonly SortColumn[]>([
+            { columnKey: "age", direction: "descending" },
+        ]);
+        const { container } = renderGrid(() =>
+            h(
+                G.Root,
+                {
+                    columns,
+                    rows: people,
+                    features: FEATURES,
+                    "sort-columns": sort.value,
+                    onSortColumnsChange,
+                    "data-testid": "root",
+                },
+                () => [h(G.Grid, null, () => [h(G.Header), h(G.Body)])],
+            ),
+        );
+        await settled();
+        expect(shown(container)[1]?.[1]).toBe("descending");
+        click(headerAt(container, 0));
+        await settled();
+        expect(onSortColumnsChange).toHaveBeenLastCalledWith([
+            { columnKey: "name", direction: "ascending" },
+        ]);
+        // controlled: the prop holds until the app changes it
+        expect(shown(container)[0]?.[1]).toBeNull();
+        sort.value = [{ columnKey: "name", direction: "ascending" }];
+        await settled();
+        expect(shown(container)[0]?.[1]).toBe("ascending");
+        const element = root(container);
+        expect(element).toHaveAttribute("data-testid", "root");
+        for (const name of [
+            "sort-columns",
+            "sortcolumns",
+            "onsortcolumnschange",
+            "features",
+        ]) {
+            expect(element.hasAttribute(name)).toBe(false);
+        }
+    });
+
+    it("is not there unless installed: a header click sorts nothing", async () => {
+        const onSortColumnsChange = vi.fn();
+        const { container } = renderGrid(() =>
+            h(
+                G.Root,
+                {
+                    columns,
+                    rows: people,
+                    defaultSortColumns: [
+                        { columnKey: "age", direction: "descending" },
+                    ],
+                    onSortColumnsChange,
+                },
+                () => [h(G.Grid, null, () => [h(G.Header)])],
+            ),
+        );
+        await settled();
+        click(headerAt(container, 0));
+        await settled();
+        expect(onSortColumnsChange).not.toHaveBeenCalled();
+        expect(container.querySelectorAll("[aria-sort]")).toHaveLength(0);
     });
 });

@@ -1,5 +1,6 @@
 import {
     bindGridRoot,
+    type DataGridFeatures,
     GRID_ROOT_PROPS,
     type GridRootProps,
     rootPropsOf,
@@ -39,12 +40,17 @@ export type RootState = Record<string, never>;
 
 /**
  * The root's props: the core's root props (the data, the sizes, every piece of state controlled
- * or not, what it tells, the engine's options; `GridRootProps`), with column renderers returning
- * vnodes, `as` and a `gridRef`. A handler is a prop (`:on-active-position-change`, or
- * `@active-position-change`).
+ * or not, what it tells, the engine's options, the `features` it installs and their props:
+ * `GridRootProps`), with column renderers returning vnodes, `as` and a `gridRef`. A handler is a
+ * prop (`:on-active-position-change`, or `@active-position-change`). A feature's props
+ * (`sort-columns`, `@sort-columns-change` with `sorting()`) are typed only with it installed
+ * (`typedDataGrid<TRow, typeof features>()`).
  */
-export type RootProps<TRow = unknown> = PrimitiveProps &
-    GridRootProps<TRow, VNodeChild> & {
+export type RootProps<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = PrimitiveProps &
+    GridRootProps<TRow, VNodeChild, TFeatures> & {
         /**
          * a handle on this grid from outside the root (`useDataGridRef()`): its model and engine,
          * and the composables that take it. A template ref stays the root's component.
@@ -57,11 +63,57 @@ export interface RootSlots extends RenderSlot<RootState> {
     default?: SlotFunction<Record<never, never>>;
 }
 
+/** A feature prop's name as a root may receive it: as declared, and in kebab-case. */
+function spellings(name: string): readonly [string, string] {
+    return [name, name.replace(/\B([A-Z])/g, "-$1").toLowerCase()];
+}
+
+/**
+ * The props the core reads: the root's declared props, and its features' props, which Vue hands
+ * as fallthrough attributes (a component declares its props once, the features are the app's).
+ * Without a feature prop, the props themselves; else one object for the root's life, each key a
+ * getter of the latest value (the core reads them, and calls the handlers, when it needs them).
+ */
+function gridPropsOf(
+    props: Record<string, unknown>,
+    attrs: Record<string, unknown>,
+    featureProps: readonly (readonly [string, string])[],
+): Record<string, unknown> {
+    if (featureProps.length === 0) return props;
+    const gridProps: PropertyDescriptorMap = {};
+    for (const key of GRID_ROOT_PROPS) {
+        gridProps[key] = { enumerable: true, get: () => props[key] };
+    }
+    for (const [name, kebab] of featureProps) {
+        gridProps[name] = {
+            enumerable: true,
+            get: () => (name in attrs ? attrs[name] : attrs[kebab]),
+        };
+    }
+    return Object.defineProperties({}, gridProps);
+}
+
+/** The fallthrough attributes without the features' props: what goes on the element. */
+function elementAttrs(
+    attrs: Record<string, unknown>,
+    dropped: ReadonlySet<string>,
+): Record<string, unknown> {
+    if (dropped.size === 0) return attrs;
+    const rest: Record<string, unknown> = {};
+    for (const key in attrs) {
+        if (!dropped.has(key)) rest[key] = attrs[key];
+    }
+    return rest;
+}
+
 /**
  * The grid's root: the scroll container (a `div`, overflow auto; give it a size). It holds the
- * model and the engine, maps its props onto the model's commands (controlled or not: the core's
- * `bindGridRoot`, after every render), and runs the grid's keys, clicks and presses after the
- * consumer's own listeners, so `preventDefault` cancels one.
+ * model and the engine, installs its `features` (fixed when it is created: a later list is told
+ * in the console, never taken), maps its props onto the model's commands (controlled or not: the
+ * core's `bindGridRoot`, after every render), and runs the grid's keys, clicks and presses after
+ * the consumer's own listeners, so `preventDefault` cancels one. A feature's props are
+ * fallthrough attributes to Vue (`sort-columns` or `sortColumns`, `@sort-columns-change`): the
+ * root takes them, they never reach its element.
  */
 export const Root: DataGridComponent<RootProps, RootSlots> = definePrimitive<
     RootProps,
@@ -70,9 +122,20 @@ export const Root: DataGridComponent<RootProps, RootSlots> = definePrimitive<
     "Root",
     [...GRID_ROOT_PROPS, "gridRef", "as"],
     (props, { attrs, slots }) => {
+        // the features' props, by name: the features are fixed for the grid's life
+        const featureProps = (props.features ?? []).flatMap(
+            (feature): readonly (readonly [string, string])[] =>
+                (feature.root?.props ?? []).map(spellings),
+        );
+        const dropped = new Set(featureProps.flat());
+        const gridProps = gridPropsOf(
+            props as unknown as Record<string, unknown>,
+            attrs,
+            featureProps,
+        ) as unknown as GridRootProps<unknown, VNodeChild>;
         const root = bindGridRoot<unknown, VNodeChild>(
             // the props as they are when read: the handlers are read when called
-            () => props as GridRootProps<unknown, VNodeChild>,
+            () => gridProps,
         );
         const { model, engine } = root;
         const view = shallowRef(engine.adapter.getView());
@@ -139,7 +202,7 @@ export const Root: DataGridComponent<RootProps, RootSlots> = definePrimitive<
             renderElement({
                 tag: "div",
                 as: props.as,
-                attrs,
+                attrs: elementAttrs(attrs, dropped),
                 render: slots.render,
                 state: {},
                 ref,

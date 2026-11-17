@@ -11,8 +11,12 @@ import {
     type Column,
     DATA_GRID,
     type DataGridNode,
-    type SortColumn,
 } from "@fragiola/data-grid-angular";
+import {
+    DataGridSorting,
+    type SortColumn,
+    sorting,
+} from "@fragiola/data-grid-angular/sorting";
 import {
     LucideChevronLeft,
     LucideChevronRight,
@@ -61,6 +65,7 @@ const columns: Column<Person, DataGridNode>[] = [
     selector: "example-server-side",
     imports: [
         DATA_GRID,
+        DataGridSorting,
         ClickableButton,
         FIELDS,
         SELECT_PARTS,
@@ -110,6 +115,8 @@ const columns: Column<Person, DataGridNode>[] = [
                     [rows]="page().rows"
                     [rowKey]="rowKey"
                     [rowHeight]="36"
+                    [features]="features"
+                    dataGridSorting
                     [sortColumns]="sortColumns()"
                     (sortColumnsChange)="sortBy($event)"
                     [attr.aria-busy]="loading() || null"
@@ -175,6 +182,8 @@ export default class ServerSide {
     protected readonly formatNumber = formatNumber;
 
     readonly columns = columns;
+    // the grid sorts only with sorting installed: the header toggles the sort the app keeps
+    readonly features = [sorting()];
 
     // the external mode: the app keeps the sort (grid state, the header toggles it), the filter,
     // the search and the page, and asks the server; the grid shows the page it gets back

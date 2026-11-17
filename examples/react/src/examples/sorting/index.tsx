@@ -7,9 +7,13 @@ import {
     useGridView,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sortColumnsOf, sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const all = people(200);
 
@@ -48,6 +52,7 @@ export default function Sorting() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rowKey={(row) => row.id}
                 rowHeight={36}
@@ -89,7 +94,7 @@ export default function Sorting() {
  * direction and, with more than one sorted column, its priority.
  */
 function HeaderCell({ cell }: { cell: HeaderCellInfo<Person> }) {
-    const { sortColumns } = useGridView();
+    const sortColumns = sortColumnsOf(useGridView());
     return (
         <DataGrid.HeaderCell
             cell={cell}

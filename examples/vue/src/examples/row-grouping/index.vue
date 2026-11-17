@@ -5,6 +5,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Search } from "@lucide/vue";
 import { h, ref, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
@@ -22,8 +23,12 @@ const searchInset = {
     start: h(Search, { "aria-hidden": "true", class: styles.icon }),
 };
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const ROWS = people(500);
 
@@ -131,6 +136,7 @@ const setSelected = (keys: readonly RowKey[]) => {
             </span>
         </div>
         <DataGrid.Root
+            :features="features"
             v-bind="local.props"
             :columns="columns"
             :row-height="38"

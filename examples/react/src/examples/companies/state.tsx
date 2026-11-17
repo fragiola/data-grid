@@ -7,6 +7,7 @@ import {
     useGridView,
 } from "@fragiola/data-grid-react";
 import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { sortColumnsOf } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -91,7 +92,7 @@ export function SortLabel({
     icon: ReactNode;
     children: ReactNode;
 }) {
-    const { sortColumns } = useGridView();
+    const sortColumns = sortColumnsOf(useGridView());
     const sorted = sortColumns.find((entry) => entry.columnKey === columnKey);
     return (
         <span className={styles.headerLabel}>

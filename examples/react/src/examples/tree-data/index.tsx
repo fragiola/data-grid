@@ -9,6 +9,7 @@ import {
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronRight, FileText, Folder, Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -19,6 +20,9 @@ import { createFakeApi } from "../_kit/fake-api";
 import { type Entry, FILES, formatSize } from "./files";
 import { useLazyTree } from "./lazy";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const columns: Column<Entry>[] = [
     { key: "select", width: 44, pinned: "start" },
@@ -200,6 +204,7 @@ function InMemory() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowHeight={34}

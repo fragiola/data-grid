@@ -6,6 +6,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { h, shallowRef, type VNodeChild } from "vue";
 import { type Task, tasks } from "../_kit/tasks";
 import TextEditor from "../editing/text-editor.vue";
@@ -18,8 +19,12 @@ import * as styles from "./styles";
 // `renderCell`, `renderRow`). Here there is nothing else: the checkbox, the sort indicator, a
 // cell's and a row's look are the app's markup and classes, from the parts' state and the row.
 
-// The parts typed by the row type: a template cannot pass `Task` as a type argument.
-const DataGrid = typedDataGrid<Task>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 const ROWS = tasks(500);
 const IDS = ROWS.map((task) => task.id);
@@ -73,6 +78,7 @@ function onCellEdit({ row, value }: CellEditEvent<Task>) {
 <template>
     <div :class="styles.frame">
         <DataGrid.Root
+            :features="features"
             v-bind="local.props"
             :columns="columns"
             :row-key="rowKey"

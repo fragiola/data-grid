@@ -23,10 +23,10 @@ Vue follows React (Epic #123), then Angular (Epic #129), and other adapters may 
 
 | package | name | contains | depends on |
 |---|---|---|---|
-| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`) | DOM only |
-| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `react`, `react-dom` (^19) |
-| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow>()`) and composables over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `vue` (^3.5) |
-| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; `/selection`: `injectSelectAll` | peer `@angular/core` (^22) |
+| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM, the feature registry (below); opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`); the features: `/sorting` (`sorting()`) | DOM only |
+| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll`; `/sorting`: the core's, re-exported | peer `react`, `react-dom` (^19) |
+| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow, TFeatures>()`) and composables over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll`; `/sorting`: the core's, re-exported | peer `vue` (^3.5) |
+| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; `/selection`: `injectSelectAll`; `/sorting`: the core's and `[dataGridSorting]` (the sort's inputs) | peer `@angular/core` (^22) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react`, `examples/shared` |
 
 ## Non-negotiable rules
@@ -156,15 +156,19 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     renderEditCell?, meta? }`. Without children, a header cell renders
     `renderHeaderCell`, else the column's `name` (the app's own text, never translated or made
     up); a cell renders `renderCell` for a loaded row, else its value as text. No column helper,
-    no feature registry, no `flexRender`. **Column groups live in `columns` (Epic #13, G1):** an
+    no `flexRender`; a column's options stay on `Column` (one generic), read only by the feature
+    that uses them (`sortable`, `compare`: sorting). **Optional behaviour is a feature (Epic
+    #141, revising D10's "no feature registry", maintainer's decision 2026-11-17):** the grid
+    installs a fixed list of features at creation (`features`, below). **Column groups live in `columns` (Epic #13, G1):** an
     entry is a `Column` or a `ColumnGroup<TRow>` `{ key, name?, renderHeaderCell?, children,
     reorderable?, collapsible?, groupShow?, meta? }`, nested to any depth, keys unique across both; the leaves, in order, are the grid's
     columns (the column axis, cells and windows never see groups). The header has a row per level
     (rows `-depth … -1`, each `headerRowHeight` tall); a leaf with fewer groups above it spans the
     rows down to -1 (G2). The core lays the header cells out per column window (G3, a cut group
     included); a header cell's position is its first column on its row, a leaf spanning rows has
-    one per row (G4); `aria-colspan`/`aria-rowspan` (G5). **Sorting (Epic #27, S1–S7):** the
-    model keeps `sortColumns` (`{ columnKey, direction: "ascending" | "descending" }[]`, the
+    one per row (G4); `aria-colspan`/`aria-rowspan` (G5). **Sorting (Epic #27, S1–S7; the first
+    feature, Epic #141: `@fragiola/data-grid/sorting`, `src/sorting/`, everything below only with
+    `sorting()` installed):** the model keeps `sortColumns` (`{ columnKey, direction: "ascending" | "descending" }[]`, the
     first one first; `sort-columns.set`, `sort-columns.toggle { columnKey, multi }`), controlled
     or not on `Root` like the active position (`sortColumns`/`defaultSortColumns`/
     `onSortColumnsChange`, one helper for both). A click, Enter or Space on a sortable column's
@@ -851,7 +855,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    (`utils/utils.ts`, the engine's too); `useLocalRows`'s `moveRow(move)` placing it beside the row it
    lands next to on screen, filtered or paged). Measured heights are kept by index with their key:
    after a move, the shifted rows off screen count at the estimate until they render again
-   (documented; the store is not remapped). Refused (`rowsMove(reorderableRows, sortColumns)`, parts): while sorted (the handle
+   (documented; the store is not remapped). Refused (`rowsMove(reorderableRows, rowsOrdered, source)`, parts: a feature's `rowsOrdered`): while sorted (the handle
    does not drag, the keys move nothing, documented: clear the sort), a row not loaded (no
    key: neither dragged nor a target), a drop beside itself (null target, nothing told). The
    handle is the app's element with `useRowDragHandle(row)`'s props (a row's or a cell's info;
@@ -1012,6 +1016,64 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 14. **App policy stays in the app.** The packages ship no fetching, caching, persistence or
     translations.
 
+## Features (Epic #141)
+
+A **minimal core plus opt-in features** (the ecosystem's pattern,
+`../guidelines/architecture/features.md`; this repo is its reference): a feature the app does
+not import is not in its bundle. Epics #144–#153 move every other optional behaviour onto it
+(navigation, selection, ranges, clipboard, fill, editing, column and row features, filtering,
+search, paging); sorting is the first.
+
+- **The contract** (`src/feature/feature.ts`): a feature is a plain object a factory makes,
+  exported from its own entry point (`sorting()` from `@fragiola/data-grid/sorting`; the
+  factory camelCase, the subpath kebab-case), written with `defineFeature<Types>(spec)`. Its
+  `FeatureTypes` (`state`, `options`, `commands`, `queries`, `questions`, `props`; `this["row"]`
+  at a member's level is the grid's row type) type the grid; its spec contributes, each part
+  optional: `name`, `requires` (other features by name), `initial(state, options)` (its state
+  slice, flat in the model's immutable state), `commands` (handlers on the same bus: same
+  middleware, `CommandResult`, error codes; `done`/`fail`/`ok`/`veto`), `queries`/`questions`
+  (`get`/`is` keys, `(state, payload)`), `sourceChanged(after, before)` (after `data.set`,
+  `columns.set`, `rows.changed`: keep or drop what no longer exists), `view` (the state keys an
+  engine's view carries, compared by identity), `rowsOrdered(state)` (rows in an order of the
+  app's: rows do not move), `headerCell(view, cell)` (part state fields and attributes, `data-*`
+  and ARIA, merged in the features' order), `engine(context)` (its `keydown`/`click`, walked in
+  the features' order where the engine's own would act; `context`: the typed `model`,
+  `headerCellOf`) and `root` (its props' names, the model options they give, its controlled
+  pieces through `defineControlled` and the same `bindControlled`). Features read each other only
+  through keys. The part state fields a feature fills stay declared, optional, on the core's
+  part types (`HeaderCellState.sortable`, …: `undefined` without it): a type costs no bytes.
+- **The registry** (`src/feature/registry.ts`): `createDataGridModel({ features })` composes
+  them once (`composeFeatures`: one function or list per contribution point, nothing allocated
+  per cell; `undefined` when no feature contributes) and keeps them for its engines and root in
+  a WeakMap (`featuresOf(model)`): the model's surface stays its verbs. A feature twice, a
+  missing requirement, or a command/key two contribute (or the core has) throws at creation. A
+  command no installed feature has is `not_found` (`unknown_command` is gone), never a throw;
+  `get`/`is` of such a key read `undefined`/`false`. `bindGridRoot` takes `features` from the
+  first props: fixed for the root's life, a later list (by its items) is told once with
+  `console.warn` and not taken; a feature's controlled pieces settle after the core's.
+  `withoutRootProps(props, features)` leaves its props off the element.
+- **Typed keys**: `DataGridModel<TRow, TNode, TFeatures>`' key maps are the core's merged with
+  the features' (`FeatureKeys`, `GridCommands`, `GridQueries`, `GridQuestions`, `ModelState`),
+  inferred from `features` (`const` type parameters). `[]` is a grid without features, exact;
+  the default `DataGridFeatures` is a grid of any features, what a model with features is
+  assignable to: its `run`/`get`/`is` check the core's keys, its middleware also sees a command
+  no type names (`FeatureCommandContext`; `use` compares its middleware both ways), and
+  `CommandEvent.command` is a string. Root props: `GridRootProps<TRow, TNode, TFeatures>` (`sortColumns` compiles only with
+  `sorting()`). The adapters' hooks, composables, inject functions and refs take the features as
+  a type argument (`useDataGrid<Person, typeof features>()`, `createDataGridRef<…>()`); any ref
+  fits a root. Type fixtures: `tests/types/features.ts(x)` in every package.
+- **Entries**: each feature is a tsdown entry and an `exports`/`publishConfig.exports` subpath
+  of the core; an adapter re-exports it under its own subpath (Angular: an ng-packagr secondary
+  entry with its own directive for the feature's inputs). Nothing a main entry imports reaches
+  a feature (the entry tests), and **the bundle guard** (`scripts/check-features.ts`, run by
+  `pnpm build`, tested by `site/tests/check-features.test.ts`) fails when a package's main entry
+  or a chunk it imports holds a feature's markers (its command, `get` and `is` keys, read from
+  the built feature) or imports a feature's entry point. `pnpm size` lists each entry.
+- **The bare grid**: `apps/playground/fixtures/bare-grid` (no feature, both structures, both
+  axes scaled) and `e2e/bare.spec.ts`. Every example and fixture that sorts installs
+  `sorting()` (`useLocalRows`' props carry the sort: install it with them); the stress fixture
+  installs every migrated feature.
+
 ## Commands
 
 | command | does |
@@ -1023,7 +1085,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit; `examples/vue` runs `vue-tsc` on its own TypeScript 6; `packages/angular` and `examples/angular` run `ngc` (strict templates) on their own TypeScript 6.0.3) |
 | `pnpm test` | Vitest: `core` (node), `react` (jsdom), `vue` (jsdom), `angular` (jsdom, `@analogjs/vitest-angular`, zoneless TestBed), `playground`, `examples-react`, `examples-vue`, `examples-angular`, `examples-shared`, `site` (`--project <name>` for one) |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
-| `pnpm build` | `pnpm -r build` (tsdown for the packages, ng-packagr for `packages/angular`, Vite for the apps), then the `.d.ts` check (the Angular compiler's own `static ɵ…` metadata aside) |
+| `pnpm build` | `pnpm -r build` (tsdown for the packages, ng-packagr for `packages/angular`, Vite for the apps), then the `.d.ts` check (the Angular compiler's own `static ɵ…` metadata aside) and the features' bundle guard (`scripts/check-features.ts`, below) |
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip; ng-packagr's `fesm2022/*.mjs` too): a report, after `pnpm build` |
 | `pnpm e2e` | Playwright: the playground and every examples app (`./examples/*`, each running the shared specs against its embed), each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
@@ -1034,7 +1096,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 
 ```
 packages/core/      @fragiola/data-grid        src/<domain>/ (axis, engine, model, …, clipboard,
-                                               utils), local/, selection/, fill/; tests/ mirrors src/
+                                               feature, utils), local/, selection/, fill/, the
+                                               features (sorting/); tests/ mirrors src/
 packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid.*`), context.ts
                     src/components/            one primitive per file (root.tsx, grid.tsx, cell.tsx, …)
                     src/hooks/                 one public hook per file (use-cell.ts, …,
@@ -1340,6 +1403,10 @@ React prop.
   engine's (`after`: `keydown`, `click`, `pointerdown`, `copy`, `paste` on `Root`), so a
   `preventDefault` cancels the grid's. `Root`'s callbacks are props (`onActivePositionChange`, or
   `@active-position-change`).
+- **A feature's props are fallthrough attributes** (Epic #141): `Root` declares its own props
+  once, so `sort-columns`/`sortColumns`, `@sort-columns-change` reach it as attrs; it hands them
+  to the core through getters of the latest values (`gridPropsOf`, only with features) and keeps
+  them off its element. `typedDataGrid<TRow, typeof features>()` types them.
 - **Column renderers return vnodes**: columns are the core's `Column<TRow, VNodeChild>`.
 - **Composables return computed refs.** A part composable takes a value, a ref or a getter and
   returns `{ state, props }` (`PartComposableResult`); `useRowWindow(gridRef?)` and
@@ -1393,7 +1460,11 @@ React prop.
   `onCellEdit` `cellEdit`, `onRangePaste` `rangePaste`, …; `onBeforeRangePaste` is the input
   `beforeRangePaste`; `onRowMove` and `onFill` (on by presence in React) are the inputs
   `reorderableRows` and `fillable` with the outputs `rowMove` and `fill`. Another directive on
-  the root's element may add props over its inputs (`addPropsSource`: `[dataGridLocalRows]`). The
+  the root's element may add props over its inputs (`addPropsSource`: `[dataGridLocalRows]`;
+  with `{ inputs: true }` they rank as the root's own inputs: `[dataGridSorting]`). A feature's
+  inputs are its own directive's, in its entry point (`@fragiola/data-grid-angular/sorting`'s
+  `[dataGridRoot][dataGridSorting]`: `[(sortColumns)]`, `[defaultSortColumns]`), so they compile
+  only where the app imports it; the root takes `[features]`. The
   model and the engine are made from the inputs the first time a part reads them (after the
   inputs are set: `injectDataGrid()`'s are read when used). The view is a signal fed by the
   engine's subscription; a scroll within the rendered window changes no signal (D9,

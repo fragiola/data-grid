@@ -10,6 +10,7 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { Profiler, StrictMode, useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -30,6 +31,9 @@ import {
     TextEditor,
     tags,
 } from "./grid-fixture.tsx";
+
+/** the features the fixture installs: sorting (Epic #141) */
+const FEATURES = [sorting()];
 
 // The combined stress fixture (Epic #89, E5.3): every feature on at once, over 1,000,000 rows and
 // 1,000 columns, both axes scaled, as a table (`?kind=table`) or as divs (the default). Its parts
@@ -290,7 +294,8 @@ function StressFixture({
                     window.commits += 1;
                 }}
             >
-                <DataGrid.Root<FixtureRow>
+                <DataGrid.Root<FixtureRow, typeof FEATURES>
+                    features={FEATURES}
                     columns={columns}
                     {...(grouped
                         ? local.props

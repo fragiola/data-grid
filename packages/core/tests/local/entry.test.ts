@@ -3,7 +3,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // The local pipeline is opt-in (Epic #47, L2): nothing the grid's own entry imports, however
-// deep, reaches `src/local`, so an app that never imports `/local` never ships it.
+// deep, reaches `src/local`, so an app that never imports `/local` never ships it. The features
+// are opt-in the same way (Epic #141): `src/sorting` too.
 
 const src = join(import.meta.dirname, "../../src");
 
@@ -31,7 +32,7 @@ function reachable(entry: string): Set<string> {
 }
 
 describe("the grid's own entry", () => {
-    it("never reaches the local pipeline nor the selection's extras", () => {
+    it("never reaches the local pipeline, the selection's extras nor a feature", () => {
         const files = [...reachable(join(src, "index.ts"))].map((file) =>
             relative(src, file),
         );
@@ -42,5 +43,7 @@ describe("the grid's own entry", () => {
             [],
         );
         expect(files.filter((file) => file.startsWith("fill"))).toEqual([]);
+        // the features (Epic #141): sorting
+        expect(files.filter((file) => file.startsWith("sorting"))).toEqual([]);
     });
 });

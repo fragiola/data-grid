@@ -1,5 +1,7 @@
 import type { Axis } from "../axis/axis";
 import { parseTsv } from "../clipboard/clipboard";
+import type { DataGridFeatures, FeatureState } from "../feature/feature";
+import { featureEngine, featuresOf } from "../feature/registry";
 import {
     columnPart,
     headerRowCount,
@@ -234,10 +236,27 @@ const NO_OVERSCAN: NonNullable<DataGridEngineOptions["overscan"]> = {};
 let engineCount = 0;
 
 /** Creates the engine of one grid on screen. */
-export function createDataGridEngine<TRow, TNode = unknown>(
-    model: DataGridModel<TRow, TNode>,
+export function createDataGridEngine<
+    TRow,
+    TNode = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+>(
+    gridModel: DataGridModel<TRow, TNode, TFeatures>,
     initialOptions: DataGridEngineOptions = {},
 ): DataGridEngine<TRow, TNode> {
+    // the engine runs the core's commands; the features' handlers run their own (Epic #141)
+    const model = gridModel as unknown as DataGridModel<TRow, TNode, []>;
+    /** the model's installed features, composed once */
+    const features = featuresOf(model);
+    /** the features' keys and clicks, made once with what the engine hands them */
+    const featureHandlers = featureEngine(
+        features,
+        model as unknown as DataGridModel<unknown, unknown>,
+        (target) =>
+            (headerCellOf(target)?.cell as
+                | HeaderCellLayout<unknown, unknown>
+                | undefined) ?? null,
+    );
     let options = initialOptions;
     let viewport: HTMLElement | null = null;
     /** the layers' elements: the header layer has one per header row */
@@ -471,6 +490,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             rowReorder,
             direction,
             headerRowsFor,
+            features,
         });
     }
 
@@ -1498,10 +1518,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
             // a row that cannot move (sorted, not loaded): a plain press
             const rowIndex = Number(handle.value);
             const rowKey = loadedRowKey(state, rowIndex);
-            if (
-                rowKey === undefined ||
-                !rowsMove(options.reorderableRows, state)
-            ) {
+            if (rowKey === undefined || !rowsOrderedMove()) {
                 return false;
             }
             return press(event, {
@@ -3137,7 +3154,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
      */
     function followRowDrag(current: RowDrag) {
         if (
-            !rowsMove(options.reorderableRows, state) ||
+            !rowsOrderedMove() ||
             loadedRowKey(state, current.rowIndex) !== current.rowKey
         ) {
             stopDrag();
@@ -3245,7 +3262,7 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (
             rowKey !== undefined &&
             loadedRowKey(state, toIndex) !== undefined &&
-            rowsMove(options.reorderableRows, state)
+            rowsOrderedMove()
         ) {
             moveRow(rowIndex, toIndex, rowKey);
         }
@@ -3281,15 +3298,13 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         return cell ? { cell, element } : null;
     }
 
-    /**
-     * The sortable column whose header cell an event happened in, or `null`: not a header cell
-     * (`headerCellOf`), a group, or a column that is not sortable.
-     */
-    function sortableColumnOf(
-        target: EventTarget | null,
-    ): Column<TRow, TNode> | null {
-        const column = headerCellOf(target)?.cell.column;
-        return column?.sortable === true ? column : null;
+    /** Whether the grid's rows move now (`rowsMove`): reorderable, in no feature's order. */
+    function rowsOrderedMove(): boolean {
+        return rowsMove(
+            options.reorderableRows,
+            features.rowsOrdered(state as FeatureState),
+            state.source,
+        );
     }
 
     function click(event: MouseEvent): boolean {
@@ -3346,14 +3361,11 @@ export function createDataGridEngine<TRow, TNode = unknown>(
                 return true;
             }
         }
-        if (event.altKey || event.shiftKey) return false;
-        const column = sortableColumnOf(event.target);
-        if (!column) return false;
-        model.run("sort-columns.toggle", {
-            columnKey: column.key,
-            multi: event.ctrlKey || event.metaKey,
-        });
-        return true;
+        // the installed features' clicks (Epic #141): a sortable header cell's sort
+        for (const featureClick of featureHandlers.click) {
+            if (featureClick(event)) return true;
+        }
+        return false;
     }
 
     /** A release anywhere (or a pointer the browser took over for a scroll) ends the press. */
@@ -3718,20 +3730,10 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         if (isEditable(target) || !ownsKeysOf(target)) return false;
         // a character typed with Alt (AltGr, Option) edits a cell, and is nothing else of the grid's
         if (event.altKey) return editStartKey(event, target);
-        if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) {
-            // Enter or Space on a sortable column's header cell toggles its sort, once per press:
-            // a key held down repeats, and would cycle through the sort
-            const column = sortableColumnOf(target);
-            if (column) {
-                event.preventDefault();
-                if (!event.repeat) {
-                    model.run("sort-columns.toggle", {
-                        columnKey: column.key,
-                        multi: ctrl,
-                    });
-                }
-                return true;
-            }
+        // the installed features' keys (Epic #141), before the grid's own: Enter or Space on a
+        // sortable column's header cell
+        for (const featureKey of featureHandlers.keydown) {
+            if (featureKey(event, target)) return true;
         }
         // a row group's keys (Epic #87): Enter and Space toggle a group row (its controls get the
         // keys by F2), the arrows on a row's first column expand, collapse or go up the tree
@@ -3740,7 +3742,8 @@ export function createDataGridEngine<TRow, TNode = unknown>(
         // the interaction's Enter and F2, which stay a cell's without an edit
         if (editStartKey(event, target)) return true;
         // Enter or F2 on a cell itself hand the keys to its controls (a sortable header cell's
-        // Enter sorted above: F2 enters it); a cell without controls lets the key through
+        // Enter sorted above, sorting installed: F2 enters it); a cell without controls lets the
+        // key through
         if (
             (event.key === "Enter" || event.key === "F2") &&
             !ctrl &&

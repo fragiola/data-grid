@@ -23,11 +23,11 @@ import {
     type RowInfo,
     type RowMove,
     type RowState,
-    type SortColumn,
     typedDataGrid,
     useRowDragHandle,
 } from "../src";
 import { useLocalRows } from "../src/local";
+import { type SortColumn, sorting } from "../src/sorting";
 import {
     cellAt,
     fire,
@@ -53,7 +53,9 @@ interface Task {
     title: string;
 }
 
-const G = typedDataGrid<Task>();
+const FEATURES = [sorting()] as const;
+
+const G = typedDataGrid<Task, typeof FEATURES>();
 
 const tasks: Task[] = Array.from({ length: 10 }, (_, id) => ({
     id,
@@ -109,6 +111,7 @@ function grid({ rows = tasks, table = false, ...props }: GridProps) {
             rowKey: (row: Task) => row.id,
             rowHeight: 20,
             headerRowHeight: 20,
+            features: FEATURES,
             ...props,
         },
         () => [

@@ -1,4 +1,5 @@
 import type { Axis } from "../axis/axis";
+import type { GridFeatures } from "../feature/registry";
 import type {
     CellPosition,
     CellRange,
@@ -17,7 +18,6 @@ import type {
     RowSelectable,
     RowSelection,
     RowSource,
-    SortColumn,
     SummaryRowCounts,
 } from "../model/types";
 import type { ScrollAlign } from "../viewport/scroll-target";
@@ -147,8 +147,17 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * row): their data is new, read it again
      */
     readonly rowsRevision: number;
-    /** the sorted columns, the first one first */
-    readonly sortColumns: readonly SortColumn[];
+    /**
+     * whether an installed feature keeps the rows in an order of the app's (sorted: Epic #141's
+     * `rowsOrdered`): then rows do not move
+     */
+    readonly rowsOrdered: boolean;
+    /**
+     * the grid's installed features, composed (its model's): what the parts ask them. The state
+     * keys a feature lists in its `view` are on the view too, by their names
+     * @internal
+     */
+    readonly features: GridFeatures;
     /** how many columns are pinned at the start (always rendered, in `columns` first) */
     readonly pinnedColumnCount: number;
     /** their width: the column window covers the view after it */

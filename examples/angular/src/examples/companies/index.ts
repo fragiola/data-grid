@@ -21,6 +21,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideAtSign,
     LucideBuilding2,
@@ -140,6 +141,7 @@ type CompanyHeader = TemplateRef<
                 [headerRowHeight]="40"
                 rowSelection="multiple"
                 [(selectedRowKeys)]="selected"
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [class]="styles.root"
             >
@@ -437,6 +439,8 @@ export default class Companies {
     readonly selected = signal<readonly RowKey[]>([]);
     // the rows in memory sorted by one injection function: the header and the toolbar's select
     // both set its sort (the first column first, the next ones breaking ties)
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(this.all, this.columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

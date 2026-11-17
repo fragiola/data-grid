@@ -57,6 +57,7 @@ export {
 export {
     DataGridRoot,
     type RootPropsSource,
+    type RootPropsSourceOptions,
     type RootState,
 } from "./lib/directives/root.directive";
 export { DataGridRow } from "./lib/directives/row.directive";

@@ -1,6 +1,6 @@
 import type { DataGridModel } from "../model/model";
 import { veto } from "../model/result";
-import type { CommandName, DataGridState } from "../model/types";
+import type { DataGridState } from "../model/types";
 
 // A piece of the model's state a root prop can control (D3): the column widths and order, the
 // active position, the selection, the sort, the expanded rows. One way for all of them:
@@ -22,7 +22,7 @@ export interface ControlledState<TRow, TNode, V> {
     readonly read: (state: DataGridState<TRow, TNode>) => V;
     readonly same: (a: V, b: V) => boolean;
     /** what a command that changes it makes it, from the command's value */
-    readonly valueOf: (command: CommandName, value: unknown) => V;
+    readonly valueOf: (command: string, value: unknown) => V;
     /** asks the parent for it (controlled), or tells it (uncontrolled) */
     readonly report: (value: V) => void;
     /** makes the model hold the prop's value (the root's own sync: never reported back) */
@@ -31,11 +31,48 @@ export interface ControlledState<TRow, TNode, V> {
      * a command the parent was asked about, vetoed meanwhile, with the value it would have
      * returned: what of it is the grid's own (a toggle's anchor) still happens
      */
-    readonly vetoed?:
-        | ((command: CommandName, value: unknown) => void)
-        | undefined;
+    readonly vetoed?: ((command: string, value: unknown) => void) | undefined;
     /** the value to start with, uncontrolled (`default…`): the grid may not take all of it */
     readonly start?: (() => V | undefined) | undefined;
+}
+
+/**
+ * A piece of state a root's props control (the active position, the sort, the expanded rows,
+ * …): its prop, its handler, its default, read from the root's latest props. A feature's root
+ * binding gives its own (`FeatureRoot.controlled`): the same helper binds it.
+ */
+export interface ControlledProp<TProps, TState, V>
+    extends Pick<
+        ControlledState<unknown, unknown, V>,
+        "prefix" | "same" | "apply" | "vetoed"
+    > {
+    readonly prop: (props: TProps) => V | undefined;
+    readonly onChange: (props: TProps) => ((value: V) => void) | undefined;
+    /** where it is in the model's state */
+    readonly read: (state: TState) => V;
+    /** the value to start with, uncontrolled, when the grid may not take all of it */
+    readonly start?: ((props: TProps) => V | undefined) | undefined;
+    /** what a command makes it, from the command's value; without it, that value itself */
+    readonly fromCommand?: ((command: string, value: unknown) => V) | undefined;
+}
+
+/** A controlled piece over the root's latest props: its prop, its handler, its default. */
+export function controlledProp<TRow, TNode, TProps, V>(
+    latest: () => TProps,
+    spec: ControlledProp<TProps, DataGridState<TRow, TNode>, V>,
+): ControlledState<TRow, TNode, V> {
+    const { start } = spec;
+    return {
+        prefix: spec.prefix,
+        read: spec.read,
+        same: spec.same,
+        apply: spec.apply,
+        vetoed: spec.vetoed,
+        valueOf: spec.fromCommand ?? ((_, value) => value as V),
+        prop: () => spec.prop(latest()),
+        report: (value) => spec.onChange(latest())?.(value),
+        start: start && (() => start(latest())),
+    };
 }
 
 /** A piece of state bound to the model: what the root runs on it, whatever its value's type. */

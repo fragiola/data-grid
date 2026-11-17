@@ -6,14 +6,15 @@ import {
     DataGrid,
     type DataGridRef,
     type RootProps,
-    type SortColumn,
     useDataGridRef,
 } from "../src";
+import { type SortColumn, sorting } from "../src/sorting";
 import { headerAt, stubViewportSize } from "./helpers";
 
 // Sorting (Epic #27): `sortable` columns, the sort controlled or not like the active position
 // (S5), toggled by a click, Enter or Space on a header cell after the consumer's handlers (S4),
-// shown through aria-sort and data-* (S6). The grid never orders the rows (S7).
+// shown through aria-sort and data-* (S6). The grid never orders the rows (S7). A feature since
+// Epic #141: the grid installs it (`features`).
 
 interface Person {
     id: number;
@@ -44,8 +45,10 @@ const columns: Column<Person>[] = [
 
 stubViewportSize(400, 235);
 
+const FEATURES = [sorting()] as const;
+
 type GridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, typeof FEATURES>,
     | "sortColumns"
     | "defaultSortColumns"
     | "onSortColumnsChange"
@@ -56,7 +59,13 @@ type GridProps = Pick<
 
 function Grid({ cells = columns, table, ...props }: GridProps) {
     return table ? (
-        <DataGrid.Root columns={cells} rows={people} rowHeight={20} {...props}>
+        <DataGrid.Root
+            columns={cells}
+            rows={people}
+            rowHeight={20}
+            features={FEATURES}
+            {...props}
+        >
             <DataGrid.Grid render={<table />}>
                 <DataGrid.Header render={<thead />}>
                     <DataGrid.HeaderRow render={<tr />}>
@@ -74,7 +83,13 @@ function Grid({ cells = columns, table, ...props }: GridProps) {
             </DataGrid.Grid>
         </DataGrid.Root>
     ) : (
-        <DataGrid.Root columns={cells} rows={people} rowHeight={20} {...props}>
+        <DataGrid.Root
+            columns={cells}
+            rows={people}
+            rowHeight={20}
+            features={FEATURES}
+            {...props}
+        >
             <DataGrid.Grid>
                 <DataGrid.Header />
                 <DataGrid.Body />
@@ -291,9 +306,9 @@ describe("controlled", () => {
 describe("the model", () => {
     it("drives the same state: sort-columns.set through a gridRef asks or tells", () => {
         const onSortColumnsChange = vi.fn();
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, typeof FEATURES> | undefined;
         function App(props: GridProps) {
-            const ref = useDataGridRef<Person>();
+            const ref = useDataGridRef<Person, typeof FEATURES>();
             gridRef = ref;
             return <Grid gridRef={ref} {...props} />;
         }
@@ -350,6 +365,7 @@ describe("cancelling", () => {
         // on the header cell itself: its own onClick runs first (bubbling)
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={people}
                 onSortColumnsChange={onSortColumnsChange}

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
 import { DATA_GRID, type RowKey } from "@fragiola/data-grid-angular";
 import { DataGridLocalRows } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { FIELDS } from "#/components/atoms/fields";
@@ -94,6 +95,7 @@ let ids = 0;
                     </div>
                     <div
                         dataGridRoot
+                        [features]="features"
                         [dataGridLocalRows]="local"
                         [columns]="columns"
                         [rowHeight]="34"
@@ -117,6 +119,8 @@ export default class TreeData {
     protected readonly styles = styles;
     protected readonly columns = columns;
     protected readonly NONE = NONE;
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
 
     readonly lazy = signal(false);
     readonly lazyLabel = `tree-data-lazy-${++ids}`;

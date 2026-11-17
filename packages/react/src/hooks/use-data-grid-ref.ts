@@ -1,6 +1,7 @@
 import {
     attachGridHandle,
     createGridHandle,
+    type DataGridFeatures,
     type GridHandle,
 } from "@fragiola/data-grid";
 import { useState, useSyncExternalStore } from "react";
@@ -12,9 +13,10 @@ import type { DataGridContextValue } from "../context";
  * ref it tells when that changes, so hooks take it (`useRowWindow(gridRef)`,
  * `useDataGrid(gridRef)`) and follow the grid from anywhere, re-rendering only their component.
  */
-export type DataGridRef<TRow = unknown> = GridHandle<
-    DataGridContextValue<TRow>
->;
+export type DataGridRef<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = GridHandle<DataGridContextValue<TRow, TFeatures>>;
 
 const noop = () => {};
 
@@ -23,15 +25,25 @@ export const noSubscription = () => noop;
 
 /**
  * A handle on a grid, made outside a component (a module, a test, a store): the same as
- * `useDataGridRef()` returns. A `gridRef` must be made by one of the two.
+ * `useDataGridRef()` returns. A `gridRef` must be made by one of the two. Its model's keys are
+ * the core's and the features' it is typed with (`createDataGridRef<Person, typeof features>()`).
  */
-export function createDataGridRef<TRow = unknown>(): DataGridRef<TRow> {
-    return createGridHandle<DataGridContextValue<TRow>>();
+export function createDataGridRef<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = [],
+>(): DataGridRef<TRow, TFeatures> {
+    return createGridHandle<DataGridContextValue<TRow, TFeatures>>();
 }
 
-/** A handle on a grid, for `<DataGrid.Root gridRef>`: the same object for the component's life. */
-export function useDataGridRef<TRow = unknown>(): DataGridRef<TRow> {
-    const [gridRef] = useState(createDataGridRef<TRow>);
+/**
+ * A handle on a grid, for `<DataGrid.Root gridRef>`: the same object for the component's life,
+ * typed by the row and the features (`useDataGridRef<Person, typeof features>()`).
+ */
+export function useDataGridRef<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = [],
+>(): DataGridRef<TRow, TFeatures> {
+    const [gridRef] = useState(createDataGridRef<TRow, TFeatures>);
     return gridRef;
 }
 
