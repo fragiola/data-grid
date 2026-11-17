@@ -1,0 +1,51 @@
+import type { RowInfo } from "@fragiola/data-grid-vue";
+import { cn } from "#/lib/cn";
+
+export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";
+
+export const readout =
+    "palette-surface flex flex-wrap gap-x-4 gap-y-1 text-xs text-palette-accent/85 font-(family-name:--dg-font)";
+
+export const figure =
+    "font-(family-name:--dg-numeric-font) tabular-nums text-palette-contrast";
+
+/** the scroll container: the theme's frame, font and size */
+export const root = cn(
+    "palette-raised min-h-0 flex-1 bg-palette-base text-palette-contrast",
+    "rounded-(--dg-radius) border-(length:--dg-border) border-palette-line shadow-(--dg-shadow)",
+    "font-(family-name:--dg-font) text-(length:--dg-font-size)",
+);
+
+/** the grid is the tab stop until a cell is active */
+export const grid =
+    "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
+
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
+
+export const headerRow = cn(
+    "bg-(--dg-header-bg) text-palette-accent",
+    "border-b-(length:--dg-gridline) border-(--dg-gridline-color)",
+);
+
+export const headerCell = cn(
+    "flex items-center px-(--dg-cell-padding) outline-none",
+    "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
+    "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
+);
+
+/** by the row (`DataGrid.Rows` hands it to its slot): every other one tinted */
+export const row = (row: RowInfo) =>
+    cn(
+        "border-b-(length:--dg-gridline) border-(--dg-gridline-color) hover:bg-(--dg-row-hover-bg)",
+        row.rowIndex % 2 === 1 && "bg-(--dg-row-alt-bg)",
+    );
+
+/** the active cell's outline sits inside it, so neighbours never cover it */
+export const cell = cn(
+    "flex items-center justify-end overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
+    "font-(family-name:--dg-numeric-font) tabular-nums",
+    "border-r-(length:--dg-gridline) border-(--dg-gridline-color)",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
+);
