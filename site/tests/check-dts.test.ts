@@ -18,4 +18,13 @@ describe("the built declarations check", () => {
         ).toEqual([]);
         expect(codeOnly('type A = "any"; // any')).not.toMatch(/\bany\b/);
     });
+
+    it("ignores the Angular compiler's own metadata, not a member typed with `any`", () => {
+        expect(
+            anyUses(
+                "    static ɵfac: i0.ɵɵFactoryDeclaration<DataGridRow<any>, never>;\n    static ɵdir: i0.ɵɵDirectiveDeclaration<DataGridRow<any>, never>;",
+            ),
+        ).toEqual([]);
+        expect(anyUses("    readonly state: Signal<any>;")).toHaveLength(1);
+    });
 });

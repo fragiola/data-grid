@@ -1,0 +1,7 @@
+{
+    // the tests' compilation (@analogjs/vite-plugin-angular emits through it: no `noEmit`)
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": false
+    }
+}

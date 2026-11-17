@@ -1,0 +1,23 @@
+{
+    // TypeScript 6.0.3, pinned in this package only: the Angular compiler (ngc, ng-packagr) supports
+    // `typescript >=6.0 <6.1`. The core's sources it imports compile with it too.
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "types": ["@testing-library/jest-dom/vitest"],
+        "customConditions": ["@fragiola/source"],
+        "allowImportingTsExtensions": true,
+        "experimentalDecorators": false,
+        "useDefineForClassFields": false
+    },
+    "angularCompilerOptions": {
+        "strictTemplates": true,
+        "strictInjectionParameters": true,
+        "strictInputAccessModifiers": true,
+        "strictStandalone": true,
+        "typeCheckHostBindings": true,
+        "extendedDiagnostics": {
+            "defaultCategory": "error"
+        }
+    },
+    "include": ["src", "tests", "*.config.ts"]
+}

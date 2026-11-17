@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install the React or the Vue package, check the peer dependencies, and give the grid a size to scroll in.
+description: Install the React, the Vue or the Angular package, check the peer dependencies, and give the grid a size to scroll in.
 ---
 
 ## Install the package
@@ -27,7 +27,19 @@ pnpm add @fragiola/data-grid-vue vue
 
 </Framework>
 
-The core, `@fragiola/data-grid`, comes along: import its types and helpers from either package.
+<Framework name="angular">
+
+An Angular app installs one package, `@fragiola/data-grid-angular`: the directives, the
+injection functions and the whole framework-agnostic core, re-exported.
+
+```sh title="Terminal"
+pnpm add @fragiola/data-grid-angular
+```
+
+</Framework>
+
+The core, `@fragiola/data-grid`, comes along: import its types and helpers from any of the
+packages.
 
 ## Peer dependencies
 
@@ -46,17 +58,27 @@ yet.
 
 </Framework>
 
+<Framework name="angular">
+
+The Angular package needs Angular 22 (`@angular/core` **^22**). It has no other runtime
+dependency, and the core has none at all. Its directives are standalone, zoneless and
+`OnPush`-safe. The Angular package renders in the browser only: server rendering is not
+supported yet.
+
+</Framework>
+
 ## No stylesheet
 
 There is nothing to import for styles: the primitives set only the inline style they need to
 place things (positions and sizes). Style the parts with your own classes: in React through
 `className`, `style` or `render`, in Vue through `class`, `style`, `as` or the `render` slot
-([Vue primitives](/docs/api/vue) maps each React prop the other pages show). See
+([Vue primitives](/docs/api/vue) maps each React prop the other pages show), in Angular on your
+own elements, which the directives go on ([Angular directives](/docs/api/angular)). See
 [Styling with Tailwind](/docs/guides/styling-tailwind) and
 [Styling with plain CSS](/docs/guides/styling-css).
 
 <Callout type="info" title="A size to scroll in">
-`DataGrid.Root` is the scroll container. Give it a height (and a width, or let it fill its
+`DataGrid.Root` (in Angular, the element `dataGridRoot` is on) is the scroll container. Give it a height (and a width, or let it fill its
 parent), or it grows with its content and nothing is virtualized. See
 [Sizing the grid](/docs/getting-started/sizing).
 </Callout>

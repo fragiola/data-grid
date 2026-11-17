@@ -50,7 +50,11 @@ const appOf = (vue: ExamplesApp) => (framework: Framework) =>
 
 describe("the frameworks of project.json", () => {
     it("are known frameworks; an unknown one throws", () => {
-        expect(frameworksOf(readProject())).toEqual(["react", "vue"]);
+        expect(frameworksOf(readProject())).toEqual([
+            "react",
+            "vue",
+            "angular",
+        ]);
         expect(frameworksOf({ frameworks: ["react", "vue"] })).toEqual([
             "react",
             "vue",
@@ -99,7 +103,8 @@ describe("the frameworks of project.json", () => {
     it("validate as an export with several frameworks, each embed checked on its own", async () => {
         const out = temp("site-export-");
         const base = "/data-grid";
-        const frameworks: Framework[] = ["react", "vue"];
+        // every framework the docs name: a page's <Framework> block needs its framework
+        const frameworks: Framework[] = ["react", "vue", "angular"];
         const project = { ...readProject(), frameworks };
         const manifests = await buildManifests(frameworks, appOf(fakeVueApp()));
         cpSync(DOCS_DIR, join(out, "docs"), { recursive: true });
@@ -123,7 +128,9 @@ describe("the frameworks of project.json", () => {
             );
         }
         const problems = validateExport(out, base);
-        expect(problems.filter((p) => p.includes("embed/react/"))).toEqual([]);
+        expect(
+            problems.filter((p) => /embed\/(react|angular)\//.test(p)),
+        ).toEqual([]);
         expect(problems).toEqual([
             expect.stringMatching(
                 /^embed\/vue\/index\.html:3: needs <meta name="robots"/,

@@ -1,0 +1,93 @@
+{
+    "name": "@fragiola/data-grid-angular",
+    "version": "0.0.0",
+    "description": "Composable, unstyled Angular directives for @fragiola/data-grid: render the grid as a table, as divs, or as anything else.",
+    "license": "MIT",
+    "type": "module",
+    "author": {
+        "name": "Mauro de Souza",
+        "email": "maurodesouza.me@gmail.com",
+        "url": "https://github.com/maurodesouza"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/fragiola/data-grid.git",
+        "directory": "packages/angular"
+    },
+    "homepage": "https://fragiola.com/data-grid",
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "@fragiola/source": "./src/public-api.ts",
+            "types": "./dist/types/fragiola-data-grid-angular.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular.mjs"
+        },
+        "./local": {
+            "@fragiola/source": "./src/local/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-local.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs"
+        },
+        "./selection": {
+            "@fragiola/source": "./src/selection/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-selection.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "publishConfig": {
+        "exports": {
+            ".": {
+                "types": "./dist/types/fragiola-data-grid-angular.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular.mjs"
+            },
+            "./local": {
+                "types": "./dist/types/fragiola-data-grid-angular-local.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs"
+            },
+            "./selection": {
+                "types": "./dist/types/fragiola-data-grid-angular-selection.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs"
+            },
+            "./package.json": "./package.json"
+        }
+    },
+    "scripts": {
+        "build": "ng-packagr -p ng-package.json -c tsconfig.build.json && node scripts/check-dist.ts",
+        "typecheck": "ngc -p tsconfig.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@fragiola/data-grid": "workspace:*"
+    },
+    "peerDependencies": {
+        "@angular/core": "^22.0.0"
+    },
+    "devDependencies": {
+        "@analogjs/vite-plugin-angular": "2.9.6",
+        "@analogjs/vitest-angular": "2.9.6",
+        "@angular/build": "22.2.6",
+        "@angular/common": "22.2.5",
+        "@angular/compiler": "22.2.5",
+        "@angular/compiler-cli": "22.2.5",
+        "@angular/core": "22.2.5",
+        "@angular/platform-browser": "22.2.5",
+        "@testing-library/jest-dom": "7.0.1",
+        "jsdom": "30.1.1",
+        "ng-packagr": "22.2.6",
+        "rxjs": "7.8.2",
+        "typescript": "6.0.3",
+        "vite": "8.3.1",
+        "vitest": "5.0.2"
+    }
+}

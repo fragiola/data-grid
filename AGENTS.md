@@ -17,8 +17,8 @@ and **row reordering**. It also takes rows by index (`rowCount` + `getRow`) and 
 past the browser's size limit. What it leaves out is `site/docs/beyond-v0.mdx`; next come the
 maintainer's API review, then features and examples inspired by Bryntum Grid, then publishing.
 
-Vue follows React (Epic #123), and other adapters may follow, so **every piece of logic that
-isn't rendering lives in the core**: a decision every adapter takes is a core helper
+Vue follows React (Epic #123), then Angular (Epic #129), and other adapters may follow, so
+**every piece of logic that isn't rendering lives in the core**: a decision every adapter takes is a core helper
 (`packages/core/src/adapter/`, below).
 
 | package | name | contains | depends on |
@@ -26,14 +26,15 @@ isn't rendering lives in the core**: a decision every adapter takes is a core he
 | `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, cell navigation, the engine that binds one grid to the DOM; opt-in entry points: `/local` (the pipeline for rows in memory), `/selection` (selection helpers), `/fill` (`repeatedFill`) | DOM only |
 | `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `react`, `react-dom` (^19) |
 | `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow>()`) and composables over the core; `/local`: `useLocalRows`; `/selection`: `useSelectAll` | peer `vue` (^3.5) |
+| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; `/selection`: `injectSelectAll` | peer `@angular/core` (^22) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react`, `examples/shared` |
 
 ## Non-negotiable rules
 
 Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 
-1. **Names (D1).** `@fragiola/data-grid` (core), `@fragiola/data-grid-react` and
-   `@fragiola/data-grid-vue`; the site's slug is `/data-grid`.
+1. **Names (D1).** `@fragiola/data-grid` (core), `@fragiola/data-grid-react`,
+   `@fragiola/data-grid-vue` and `@fragiola/data-grid-angular`; the site's slug is `/data-grid`.
 2. **Own implementation, referenced sources (D2).** React Data Grid (`../react-data-grid`,
    7.0.0-beta.60, MIT) and TanStack Table (`../tanstack-table`, v9.2.4, MIT) are **study
    references, read-only: never modified, never copied wholesale**. A file whose algorithm or code
@@ -1019,11 +1020,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 | `pnpm check` | Biome lint + format + assist (non-mutating), then `check:layout` |
 | `pnpm check:layout` | the source layout over `git ls-files` (`scripts/check-layout.ts`, from Dockable): kebab-case names, only entries at a package's `src/` root |
 | `pnpm check:fix` | Biome check with auto-fix |
-| `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit; `examples/vue` runs `vue-tsc` on its own TypeScript 6) |
-| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `vue` (jsdom), `playground`, `examples-react`, `examples-vue`, `examples-shared`, `site` (`--project <name>` for one) |
+| `pnpm typecheck` | `pnpm -r typecheck` (TypeScript 7, no emit; `examples/vue` runs `vue-tsc` on its own TypeScript 6; `packages/angular` and `examples/angular` run `ngc` (strict templates) on their own TypeScript 6.0.3) |
+| `pnpm test` | Vitest: `core` (node), `react` (jsdom), `vue` (jsdom), `angular` (jsdom, `@analogjs/vitest-angular`, zoneless TestBed), `playground`, `examples-react`, `examples-vue`, `examples-angular`, `examples-shared`, `site` (`--project <name>` for one) |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
-| `pnpm build` | `pnpm -r build` (tsdown for the packages, Vite for the apps), then the `.d.ts` check |
-| `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip): a report, after `pnpm build` |
+| `pnpm build` | `pnpm -r build` (tsdown for the packages, ng-packagr for `packages/angular`, Vite for the apps), then the `.d.ts` check (the Angular compiler's own `static ɵ…` metadata aside) |
+| `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip; ng-packagr's `fesm2022/*.mjs` too): a report, after `pnpm build` |
 | `pnpm e2e` | Playwright: the playground and every examples app (`./examples/*`, each running the shared specs against its embed), each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
 | `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
@@ -1043,6 +1044,12 @@ packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid
 packages/vue/       @fragiola/data-grid-vue    the same layout: src/components/ (root.ts, …),
                                                src/composables/ (use-cell.ts, …), src/utils/,
                                                typed.ts (`typedDataGrid`), local/, selection/
+packages/angular/   @fragiola/data-grid-angular src/public-api.ts (the entry), src/lib/: context.ts,
+                                               data-grid.ts (`DATA_GRID`), directives/
+                                               (<part>.directive.ts), inject/ (inject-<hook>.ts),
+                                               utils/; src/local/, src/selection/ (ng-packagr's
+                                               secondary entries: local/ and selection/
+                                               ng-package.json); scripts/check-dist.ts
 apps/playground/    src/main.tsx, app.tsx      the entries
                     src/shell/                 the shell: catalog, sidebar, toolbar, stage, source
                     src/fixture/               the fixtures' grids
@@ -1061,6 +1068,12 @@ examples/vue/       src/examples/<slug>/       the site's Vue examples, every Re
                     src/components, hooks      the Vue kit: Fragiola UI's pieces over Reka UI (its
                                                families copied from examples/react)
                     src/lib, styles            `cn` and the theme, copied from examples/react
+                    playwright.config.ts       the shared specs against this embed
+examples/angular/   src/examples/<slug>/       the site's Angular examples (index.ts, a standalone
+                                               component exported by default, and styles.ts):
+                                               hello-grid and unstyled so far (Epic #132 brings the
+                                               others); the embed app, Vite with the Analog plugin
+                    src/lib, styles, _kit      `cn`, the theme and the kit's data, copied
                     playwright.config.ts       the shared specs against this embed
 site/               docs/                      the pages fragiola.com/data-grid serves
                     export.ts, contract.ts     `pnpm site:export` and its validation, every framework
@@ -1337,6 +1350,72 @@ React prop.
   grid is a `gridRef`.
 - **Vue SSR is not supported yet**: the package renders in the browser.
 
+## The primitive contract in Angular (`@fragiola/data-grid-angular`)
+
+The same contract, with Angular's own means (Epic #129, Dockable's Angular decisions): the parts
+put the same `data-*`, ARIA and structural style on the app's elements, the tests of
+`packages/angular` mirror Vue's (one file per Vue file). `site/docs/api/angular.mdx` maps each
+React prop.
+
+- **Attribute directives on the app's elements, never `asChild`** (the Angular form of
+  `render`): `<div dataGridRoot>`, `<table dataGridGrid>`, `<tr [dataGridRow]="row">`,
+  `<td [dataGridCell]="cell">`. A part that renders only sometimes is a **structural directive**
+  on its element (the template's first root element is the part's): `*dataGridHeader`,
+  `*dataGridEmpty` (it makes the area and the row around the app's cell), `*dataGridRowDetail`,
+  `*dataGridSummary="'top'"`, and the app's elements React gives through hooks:
+  `*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle`, `*dataGridCellEdit`;
+  `[dataGridRowDragHandle]` and `[dataGridGroupLabel]` always render. Selectors
+  `dataGrid<Part>`, classes `DataGrid<Part>`, `exportAs` the selector; `DATA_GRID` is every
+  directive (React's `DataGrid` namespace).
+- **The recursion is templates**: `ng-template[dataGridRows]`, `[dataGridCells]`,
+  `[dataGridHeaderRows]`, `[dataGridHeaderCells]`, `[dataGridSummaryRows]`,
+  `[dataGridSummaryCells]`, each a keyed view per item (`utils/views.ts`, from Dockable: a view
+  kept while its key stays, its context a `SignalContext` updated in place), typed by their input
+  (the columns or the root: `TypedBy<TRow>`) through `ngTemplateContextGuard`. No default content:
+  `*dataGridCellContent` renders a cell's, a header cell's or a summary cell's (the core's
+  `cellContent`, `headerCellContent`, `summaryCellContent`; edited, `renderEditCell` given the
+  draft).
+- **Column renderers return `DataGridNode`** (`Column<TRow, DataGridNode>`): text, nothing, or
+  `templateContent(template, context)` (`TemplateContent`), rendered with the context as its
+  fields and its `$implicit`; `[dataGridTemplate]="contextOf<C>()"` types the template.
+- **The props through one binding** (`bindPart`, `utils/helpers.ts`): the core's part props
+  written as attributes (`tabIndex` → `tabindex`, a `<td>`/`<th>`'s `colspan`/`rowspan`; a
+  boolean `data-*` absent, never `"false"`), an attribute the element had at creation is the
+  app's and never touched; the structural style kept over the app's `style` (a key it stops
+  setting gets the app's value back; the drop keys removed from the static style once); the engine
+  layer registered after the style is written and released before (an unpinned cell gives up the
+  engine's inset before the structural one is written).
+- **Signals, `input()`, `output()`, `inject()`; zoneless and `OnPush`-safe.** The root's inputs
+  are `GridRootProps`' names; each `onXChange` is the output `xChange` (`[(x)]` binds both ways),
+  `onCellEdit` `cellEdit`, `onRangePaste` `rangePaste`, …; `onBeforeRangePaste` is the input
+  `beforeRangePaste`; `onRowMove` and `onFill` (on by presence in React) are the inputs
+  `reorderableRows` and `fillable` with the outputs `rowMove` and `fill`. Another directive on
+  the root's element may add props over its inputs (`addPropsSource`: `[dataGridLocalRows]`). The
+  model and the engine are made from the inputs the first time a part reads them (after the
+  inputs are set: `injectDataGrid()`'s are read when used). The view is a signal fed by the
+  engine's subscription; a scroll within the rendered window changes no signal (D9,
+  `render-counts.test.ts`); past it, the component's templates are refreshed (Angular checks an
+  OnPush component's embedded views together), the DOM written only where a value changed.
+- **The lifecycle**: the root attaches once its element is in the page (`afterNextRender`,
+  `earlyRead`) and adds its keys, clicks, presses and clipboard listeners then, after the app's
+  (registered at the element's creation), so `preventDefault` in the app's cancels the grid's;
+  `[dataGridGrid]` commits the view the parts were refreshed with (`afterRenderEffect`, `write`);
+  the root syncs its props after every render that changed an input or the view
+  (`afterRenderEffect`, `mixedReadWrite`).
+- **A part's `state()`** (through `exportAs`: `#cell="dataGridCell"`) is `undefined` on the first
+  pass of a binding on its own element (Angular evaluates class bindings before the element's
+  inputs: `beforeInputs`).
+- **Injection functions mirror the hooks** (`inject<Hook>`, React's `useDataGridRef` is
+  `createDataGridRef`): a part's takes a value, a signal or a getter and returns
+  `{ state, props }` signals (`PartInjectResult`), `props()` put on an element with
+  `[dataGridBind]`. `tests/exports.test.ts` maps every React name onto its Angular name and lists
+  the Angular-only ones.
+- **The package**: ng-packagr (partial compilation, TypeScript 6.0.3 pinned in the package),
+  packed from its folder like the others (`files: ["dist"]`, dist-only `publishConfig.exports`);
+  `scripts/check-dist.ts` removes the manifests ng-packagr writes into `dist` and checks the
+  bundles import only Angular and the core. The opt-in entries import the main one by its name.
+- **Angular SSR is not supported yet**: the package renders in the browser.
+
 ## The core's adapter helpers (`packages/core/src/adapter/`)
 
 **A decision every adapter takes is a core helper**: an adapter adds only its framework's own
@@ -1369,7 +1448,8 @@ repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: th
 (`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
 and one examples app per framework of `site/project.json`'s `frameworks` (`examples/<framework>`,
 package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest:
-`examples/react` and `examples/vue`, each with every example, Epic #126). What every framework's examples share (the metadata, the themes, the
+`examples/react` and `examples/vue`, each with every example, Epic #126; `examples/angular`
+with `hello-grid` and `unstyled`, Epic #129, the others in Epic #132). What every framework's examples share (the metadata, the themes, the
 embed's messages, the manifest builder, the loader generator and every Playwright spec) lives
 once in `examples/shared` (`examples-shared`, private, imports no framework); an example keeps
 its id in every framework, and a spec for an example a framework lacks is skipped there, unless

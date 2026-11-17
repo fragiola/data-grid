@@ -1,0 +1,31 @@
+{
+    // ng-packagr's build: the sources only, the core from its built declarations (no source
+    // condition), partial compilation (the Angular Package Format)
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitOverride": true,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "skipLibCheck": true,
+        "declaration": true,
+        "declarationMap": false,
+        "inlineSources": true,
+        "sourceMap": true,
+        "stripInternal": true,
+        "useDefineForClassFields": false,
+        "types": []
+    },
+    "angularCompilerOptions": {
+        "compilationMode": "partial",
+        "strictTemplates": true,
+        "strictInjectionParameters": true,
+        "strictInputAccessModifiers": true,
+        "typeCheckHostBindings": true
+    },
+    "files": ["src/public-api.ts"]
+}

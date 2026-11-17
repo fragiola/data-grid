@@ -193,6 +193,16 @@
             ]
         },
         {
+            "label": "API: Angular (@fragiola/data-grid-angular)",
+            "collapsible": true,
+            "pages": [
+                {
+                    "label": "Angular directives",
+                    "path": "api/angular"
+                }
+            ]
+        },
+        {
             "label": "Project",
             "pages": [
                 {
