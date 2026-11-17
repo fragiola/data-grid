@@ -482,8 +482,8 @@ export function viewChanged<TRow, TNode>(
     // the state keys the features' parts read (Epic #141)
     const shared = current as unknown as Record<string, unknown>;
     const fresh = next as unknown as Record<string, unknown>;
-    if (next.features.viewKeys.some((key) => shared[key] !== fresh[key])) {
-        return true;
+    for (const key of next.features.viewKeys) {
+        if (shared[key] !== fresh[key]) return true;
     }
     const { expandedRows, renderedRows, active, rowReorder } = next;
     // the visible area matters only to an empty grid, and its width to the details on

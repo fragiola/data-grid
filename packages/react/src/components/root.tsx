@@ -59,8 +59,10 @@ export function Root<TRow, const TFeatures extends DataGridFeatures = []>(
     props: RootProps<TRow, TFeatures>,
 ) {
     const { gridRef, children, ...elementProps } = props;
-    // the element's props: the root's own (the core's, and its features') left out
-    const rest = withoutRootProps(elementProps, props.features);
+    // the features it installed when it mounted (a later list is not taken)
+    const [installed] = useState(() => props.features);
+    // the element's props: the root's own (the core's, and its installed features') left out
+    const rest = withoutRootProps(elementProps, installed);
     const latest = useRef(props);
     latest.current = props;
 

@@ -56,6 +56,10 @@ describe("the features' bundle guard", () => {
         expect(featureLeaks("index.js", adapter, [SORTING])).toEqual([
             "index.js: imports the sorting entry",
         ]);
+        const deep = built({
+            "index.js": 'import "@fragiola/data-grid-react/sorting/index.js";',
+        });
+        expect(featureLeaks("index.js", deep, [SORTING])).toHaveLength(1);
         const inlined = built({
             "fesm.mjs": "model.run('sort-columns.set', payload);",
         });

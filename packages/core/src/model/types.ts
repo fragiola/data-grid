@@ -1,5 +1,9 @@
 import type { Size } from "../axis/axis";
-import type { DataGridFeatures, FeatureKeys } from "../feature/feature";
+import type {
+    AnyFeatures,
+    DataGridFeatures,
+    FeatureKeys,
+} from "../feature/feature";
 import type { Direction } from "../navigation/navigation";
 import type { Range } from "../viewport/window";
 
@@ -1116,20 +1120,36 @@ export type CommandContext<
     TRow,
     TNode = unknown,
     TFeatures extends DataGridFeatures = DataGridFeatures,
-> = {
-    [C in GridCommandName<TRow, TNode, TFeatures>]: {
-        readonly command: C;
-        /** the payload; assign a new object to rewrite it before calling `next` */
-        payload: PayloadIn<GridCommands<TRow, TNode, TFeatures>[C]>;
-        /** `model.can`/`model.check`: nothing will be committed; do not cause side effects */
-        readonly dryRun: boolean;
-        /**
-         * the committed state the command applies to (the core's fields: a feature's are read
-         * through its `get` keys)
-         */
-        readonly state: DataGridState<TRow, TNode>;
-    };
-}[GridCommandName<TRow, TNode, TFeatures>];
+> =
+    | {
+          [C in GridCommandName<TRow, TNode, TFeatures>]: {
+              readonly command: C;
+              /** the payload; assign a new object to rewrite it before calling `next` */
+              payload: PayloadIn<GridCommands<TRow, TNode, TFeatures>[C]>;
+              /** `model.can`/`model.check`: nothing will be committed; do not cause side effects */
+              readonly dryRun: boolean;
+              /**
+               * the committed state the command applies to (the core's fields: a feature's are read
+               * through its `get` keys)
+               */
+              readonly state: DataGridState<TRow, TNode>;
+          };
+      }[GridCommandName<TRow, TNode, TFeatures>]
+    // a grid of any features may run a command of a feature no type names
+    | (true extends AnyFeatures<TFeatures>
+          ? FeatureCommandContext<TRow, TNode>
+          : never);
+
+/**
+ * What a middleware for a grid of any features (`DataGridFeatures`) sees of a command no type
+ * names: a feature's (Epic #141). With it in the union, a model with features is a model.
+ */
+export interface FeatureCommandContext<TRow, TNode = unknown> {
+    readonly command: string;
+    payload: unknown;
+    readonly dryRun: boolean;
+    readonly state: DataGridState<TRow, TNode>;
+}
 
 /**
  * Runs around every command, engine-issued or not: veto (return an error without calling

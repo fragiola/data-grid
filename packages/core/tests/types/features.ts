@@ -79,6 +79,12 @@ const typed: DataGridModel<
     readonly [ReturnType<typeof sorting>]
 > = sorted;
 const anyFeatures: DataGridModel<Person> = sorted;
+// a model of any features still checks the core's keys
+// @ts-expect-error: a typo
+anyFeatures.run("active-positon.clear");
+// @ts-expect-error
+anyFeatures.get("nope");
+anyFeatures.run("active-position.clear");
 const noFeatures: DataGridModel<Person> = bare;
 // a middleware written for a grid without features fits one with them
 declare const coreOnly: Middleware<Person, unknown, []>;

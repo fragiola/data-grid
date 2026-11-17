@@ -285,28 +285,10 @@ export interface FeatureKeys<
 > {
     readonly state: Merged<TFeatures, "state", TRow, TNode>;
     readonly options: Merged<TFeatures, "options", TRow, TNode>;
-    readonly commands: Open<
-        TFeatures,
-        Merged<TFeatures, "commands", TRow, TNode>,
-        KeyEntry
-    >;
-    readonly queries: Open<
-        TFeatures,
-        Merged<TFeatures, "queries", TRow, TNode>,
-        KeyEntry
-    >;
-    readonly questions: Open<
-        TFeatures,
-        Merged<TFeatures, "questions", TRow, TNode>,
-        unknown
-    >;
+    readonly commands: Merged<TFeatures, "commands", TRow, TNode>;
+    readonly queries: Merged<TFeatures, "queries", TRow, TNode>;
+    readonly questions: Merged<TFeatures, "questions", TRow, TNode>;
     readonly props: Merged<TFeatures, "props", TRow, TNode>;
-}
-
-/** An entry of a key map no type names (a grid of any features). */
-interface KeyEntry {
-    readonly payload: unknown;
-    readonly result: unknown;
 }
 
 /** A feature's own types, as its factory declares them. */
@@ -315,14 +297,14 @@ type OwnTypes<F> = F extends { readonly "~types"?: infer T }
     : never;
 
 /**
- * A key map, open to any key when the features are not known (a list of `DataGridFeature`, as
- * `DataGridFeatures`: a grid of any features, what a model with features is assignable to); as
- * merged otherwise (a list of known features, a tuple or an array alike).
+ * Whether a list's features are not known (a list of `DataGridFeature`, as `DataGridFeatures`: a
+ * grid of any features, what a model with features is assignable to). A list of known features,
+ * a tuple or an array alike, is not.
  */
-type Open<TFeatures extends DataGridFeatures, M, E> = [
+export type AnyFeatures<TFeatures extends DataGridFeatures> = [
     TFeatures[number],
 ] extends [never]
-    ? M
+    ? false
     : FeatureTypes extends OwnTypes<TFeatures[number]>
-      ? Readonly<Record<string, E>>
-      : M;
+      ? true
+      : false;

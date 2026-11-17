@@ -306,9 +306,9 @@ describe("controlled", () => {
 describe("the model", () => {
     it("drives the same state: sort-columns.set through a gridRef asks or tells", () => {
         const onSortColumnsChange = vi.fn();
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, typeof FEATURES> | undefined;
         function App(props: GridProps) {
-            const ref = useDataGridRef<Person>();
+            const ref = useDataGridRef<Person, typeof FEATURES>();
             gridRef = ref;
             return <Grid gridRef={ref} {...props} />;
         }

@@ -123,7 +123,8 @@ export function composeFeatures(
         feature.headerCell ? [feature.headerCell] : [],
     );
     return {
-        list: features,
+        // the app's array changing later changes nothing: the list is fixed
+        list: Object.freeze([...features]),
         commands,
         queries,
         questions,
@@ -143,7 +144,10 @@ export function composeFeatures(
                       )
                 : undefined,
         viewKeys: features.flatMap((feature) => feature.view ?? []),
-        rowsOrdered: (state) => ordering.some((ordered) => ordered(state)),
+        rowsOrdered: (state) => {
+            for (const ordered of ordering) if (ordered(state)) return true;
+            return false;
+        },
         headerCell:
             headerCells.length === 0
                 ? undefined

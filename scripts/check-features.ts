@@ -63,7 +63,7 @@ async function builtMarkers(): Promise<FeatureMarkers[]> {
 /** An import of a feature's entry point, from any package: `@fragiola/<package>/<subpath>`. */
 function importsSubpath(source: string, subpath: string): boolean {
     return new RegExp(
-        `(?:from|import)\\s*\\(?\\s*["']@fragiola/[\\w-]+/${subpath}["']`,
+        `(?:from|import)\\s*\\(?\\s*["']@fragiola/[\\w-]+/${subpath}(?:/[^"']*)?["']`,
     ).test(source);
 }
 
