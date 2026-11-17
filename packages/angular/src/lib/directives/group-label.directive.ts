@@ -1,7 +1,7 @@
 import { computed, Directive, input, type Signal } from "@angular/core";
 import { type GroupLabelState, groupLabelPartOf } from "@fragiola/data-grid";
 import { type HeaderCellInfo, injectGrid } from "../context";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A group's label (Epic #85, E1.3), the app's element inside a group's header cell (its name, its
@@ -21,8 +21,10 @@ export class DataGridGroupLabel<TRow = unknown> {
         groupLabelPartOf(this.dataGridGroupLabel()),
     );
 
-    /** the label's state: its group's key */
-    readonly state: Signal<GroupLabelState> = computed(() => this.part().state);
+    /** the label's state: its group's key (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<GroupLabelState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
+    );
 
     constructor() {
         const grid = injectGrid("[dataGridGroupLabel]");

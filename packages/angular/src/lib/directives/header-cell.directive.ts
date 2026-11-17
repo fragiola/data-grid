@@ -19,7 +19,7 @@ import {
 } from "../context";
 import { cellBinding } from "../utils/cell-binding";
 import type { DataGridNode } from "../utils/content";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A header cell (`role="columnheader"`), a group's or a column's: `<div [dataGridHeaderCell]="cell">`,
@@ -50,8 +50,10 @@ export class DataGridHeaderCell<TRow = unknown> implements CellContext {
         ),
     );
 
-    /** the header cell's state: its sort, its resize, its drag, its group's collapse */
-    readonly state: Signal<HeaderCellState> = computed(() => this.part().state);
+    /** the header cell's state: its sort, its resize, its drag, its group's collapse (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<HeaderCellState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
+    );
 
     /** @internal */
     readonly content: Signal<DataGridNode> = computed(

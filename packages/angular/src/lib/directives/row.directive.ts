@@ -12,7 +12,7 @@ import {
     type RowContext,
     type RowInfo,
 } from "../context";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A body row (`role="row"`), positioned in the body layer: `<div [dataGridRow]="row">`, or a
@@ -39,8 +39,10 @@ export class DataGridRow<TRow = unknown> implements RowContext {
     /** @internal */
     readonly rowInfo: Signal<RowInfo> = this.dataGridRow;
 
-    /** the row's state (`#row="dataGridRow"`, then `row.state().active`) */
-    readonly state: Signal<RowState> = computed(() => this.part().state);
+    /** the row's state (`#row="dataGridRow"`, then `row.state().active`) (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<RowState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
+    );
 
     constructor() {
         bindPart(

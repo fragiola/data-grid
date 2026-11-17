@@ -19,7 +19,7 @@ import {
 } from "../context";
 import { cellBinding } from "../utils/cell-binding";
 import type { DataGridNode } from "../utils/content";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A summary row's cell (`role="gridcell"`, `data-summary`), positioned in its row as a body cell:
@@ -50,9 +50,9 @@ export class DataGridSummaryCell<TRow = unknown> implements CellContext {
         ),
     );
 
-    /** the cell's state */
-    readonly state: Signal<SummaryCellState> = computed(
-        () => this.part().state,
+    /** the cell's state (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<SummaryCellState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
     );
 
     /** @internal */

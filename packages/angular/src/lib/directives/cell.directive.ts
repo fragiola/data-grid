@@ -20,7 +20,7 @@ import {
 } from "../context";
 import { cellBinding } from "../utils/cell-binding";
 import type { DataGridNode } from "../utils/content";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A body cell (`role="gridcell"`), positioned in its row: `<div [dataGridCell]="cell">`, or a
@@ -49,8 +49,10 @@ export class DataGridCell<TRow = unknown> implements CellContext {
         cellPartOf(this.grid.view(), this.dataGridCell() as CellInfo),
     );
 
-    /** the cell's state (`#cell="dataGridCell"`, then `cell.state().active`) */
-    readonly state: Signal<CellState> = computed(() => this.part().state);
+    /** the cell's state (`#cell="dataGridCell"`, then `cell.state().active`) (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<CellState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
+    );
 
     /** @internal */
     readonly bodyCell: Signal<CellInfo | null> = computed(
@@ -61,7 +63,7 @@ export class DataGridCell<TRow = unknown> implements CellContext {
     readonly content: Signal<DataGridNode> = computed(() => {
         const cell = this.dataGridCell() as CellInfo;
         const { column } = cell;
-        if (this.state().editing && column.renderEditCell) {
+        if (this.part().state.editing && column.renderEditCell) {
             const props = editCellPropsOf(
                 this.grid.view(),
                 cell,

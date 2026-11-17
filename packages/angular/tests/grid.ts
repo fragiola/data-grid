@@ -27,11 +27,11 @@ export type TestProps<TRow = unknown> = Partial<
 
 /** Gives the root the props a test passes, over its inputs. */
 @Directive({ selector: "[dataGridRoot][testProps]" })
-export class TestRootProps {
-    readonly testProps = input.required<TestProps<unknown>>();
+export class TestRootProps<TRow = unknown> {
+    readonly testProps = input.required<TestProps<TRow>>();
 
     constructor() {
-        const root = inject(DataGridRoot);
+        const root = inject<DataGridRoot<TRow>>(DataGridRoot);
         inject(DestroyRef).onDestroy(
             root.addPropsSource(() => this.testProps()),
         );

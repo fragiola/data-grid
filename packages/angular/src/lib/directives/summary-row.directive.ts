@@ -16,7 +16,7 @@ import {
     type SummaryRowContext,
     type SummaryRowInfo,
 } from "../context";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A summary row (`role="row"`, `data-summary`), one of the layers the engine moves with the
@@ -45,8 +45,10 @@ export class DataGridSummaryRow implements SummaryRowContext {
         summaryRowPartOf(this.grid.view(), this.dataGridSummaryRow()),
     );
 
-    /** the summary row's state */
-    readonly state: Signal<SummaryRowState> = computed(() => this.part().state);
+    /** the summary row's state (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<SummaryRowState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
+    );
 
     constructor() {
         bindPart(

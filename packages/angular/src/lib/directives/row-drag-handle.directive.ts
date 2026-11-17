@@ -4,7 +4,7 @@ import {
     rowDragHandlePartOf,
 } from "@fragiola/data-grid";
 import { injectGrid } from "../context";
-import { bindPart, injectHost } from "../utils/helpers";
+import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
  * A row's drag handle (Epic #86), the app's element in a row (a cell of it):
@@ -29,9 +29,9 @@ export class DataGridRowDragHandle {
         rowDragHandlePartOf(this.grid.view(), this.dataGridRowDragHandle()),
     );
 
-    /** the handle's state */
-    readonly state: Signal<RowDragHandleState> = computed(
-        () => this.part().state,
+    /** the handle's state (`undefined` on the first pass of a binding on its own element, before its input is set) */
+    readonly state: Signal<RowDragHandleState | undefined> = computed(() =>
+        beforeInputs(undefined, () => this.part().state),
     );
 
     constructor() {
