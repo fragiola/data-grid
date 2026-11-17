@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
-    type CellEditEvent,
     type Column,
     type RowKey,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
@@ -42,8 +42,8 @@ interface Job extends BudgetedTask {
 }
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-const features = [sorting(), navigation(), rowSelection()] as const;
+// navigation (the keys, the active cell, the tab stop), row selection, cell editing
+const features = [sorting(), navigation(), rowSelection(), editing()] as const;
 
 const DataGrid = typedDataGrid<Job, typeof features>();
 

@@ -1,9 +1,6 @@
 <script setup lang="ts">
-import {
-    type CellEditEvent,
-    type Column,
-    typedDataGrid,
-} from "@fragiola/data-grid-vue";
+import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, ref, shallowRef, type VNodeChild } from "vue";
 import {
@@ -23,8 +20,9 @@ import TextEditor from "./text-editor.vue";
 // edit, its draft and the ways to change, commit and cancel it, its look by its caller's `class`)
 // and so is the data: each commit is told, and the app writes it into its rows.
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const features = [navigation()] as const;
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop) and
+// cell editing (the edit's keys, its draft, its commit), which requires it
+const features = [navigation(), editing()] as const;
 
 const DataGrid = typedDataGrid<Row, typeof features>();
 
