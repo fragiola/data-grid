@@ -10,9 +10,84 @@ grid tells which cells to fill from which, and you produce and write them.
 
 <Example id="fill" />
 
+## Install the fill handle
+
+The fill handle is a [feature](/docs/concepts/features): `fillHandle()` from the `/fill` entry,
+which needs `cellRange()` (and so `navigation()`). The handle's hook and `repeatedFill` come from
+the same entry. Without it, `onFill` does not compile and no cell fills.
+
+<Framework name="react">
+
+```tsx title="plan.tsx"
+import { fillHandle, repeatedFill, useFillHandle } from "@fragiola/data-grid-react/fill";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellRange } from "@fragiola/data-grid-react/range";
+
+const features = [navigation(), cellRange(), fillHandle()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="plan.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { fillHandle, repeatedFill } from "@fragiola/data-grid-vue/fill";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { cellRange } from "@fragiola/data-grid-vue/range";
+
+const features = [navigation(), cellRange(), fillHandle()] as const;
+const DataGrid = typedDataGrid<Plan, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="plans" cell-selection="range"
+        :on-fill="fill">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+The handle's composable is `useFillHandle(() => cell)`, from the same `/fill` entry.
+
+</Framework>
+
+<Framework name="angular">
+
+The fill is `DataGridFill`'s, a directive on the root's element: `dataGridFill` turns it on
+(`[dataGridFill]="false"` off) and `(fill)` tells each fill. The handle is
+`*dataGridFillHandle` (`DataGridFillHandle`), and `injectFillHandle` its injection function, all
+from `/fill`.
+
+```ts title="plan.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { DataGridFill, DataGridFillHandle, fillHandle, repeatedFill } from "@fragiola/data-grid-angular/fill";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import { cellRange, DataGridCellRange } from "@fragiola/data-grid-angular/range";
+
+@Component({
+    selector: "app-plan",
+    imports: [DATA_GRID, DataGridCellRange, DataGridFill, DataGridFillHandle],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="plans()"
+            dataGridCellRange cellSelection="range" dataGridFill (fill)="fill($event)">
+            <!-- … a cell: <span *dataGridFillHandle="cell; let state" aria-hidden="true"></span> -->
+        </div>
+    `,
+})
+export class Plan {
+    readonly features = [navigation(), cellRange(), fillHandle()];
+    // …
+}
+```
+
+</Framework>
+
 ## Turning it on
 
-Give `DataGrid.Root` an `onFill`: while it has one, cells fill. Each fill is `{ source, target }`,
+Give `DataGrid.Root` an `onFill` (Vue: `:on-fill`; Angular: `dataGridFill`): while it has one,
+cells fill. Each fill is `{ source, target }`,
 two ranges of body cells, each as its first cell (`anchor`: its top row, its first column) and its
 last (`focus`): the cells it fills from (the selected range, else the active cell) and the cells to
 fill, never including the source. A source cutting a cell that
@@ -20,9 +95,10 @@ fill, never including the source. A source cutting a cell that
 fill down is as wide as the spans and a fill across starts past them.
 
 ```tsx title="plan.tsx"
-import { repeatedFill } from "@fragiola/data-grid/fill";
+import { repeatedFill } from "@fragiola/data-grid-react/fill";
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={plans}
     cellSelection="range"
@@ -36,7 +112,7 @@ import { repeatedFill } from "@fragiola/data-grid/fill";
 </DataGrid.Root>
 ```
 
-`repeatedFill(fill, valueAt)`, from the opt-in `@fragiola/data-grid/fill`, is the usual fill: the
+`repeatedFill(fill, valueAt)`, from the `/fill` entry, is the usual fill: the
 source repeated over the target, row by row for a fill down (starting again after its last row),
 column by column for a fill across. It returns `{ rowIndex, columnIndex, value }` for each target
 cell, top to bottom, reading the source's values through `valueAt` (your rows, or
@@ -45,7 +121,8 @@ yours to compute from the same ranges, as the [example](/examples/fill)'s series
 
 ## The handle
 
-The handle is an element of yours: render it in your cells with `useFillHandle(cell)`. It is
+The handle is an element of yours: render it in your cells with `useFillHandle(cell)` (from
+`/fill`). It is
 visible in one cell only, the corner a fill drags from: the selected range's last row and last
 column (past any cell spanning columns the range cuts), else the active cell (a body cell), and
 never while a cell is
@@ -54,6 +131,8 @@ never while a cell is
 elsewhere it has none: render nothing.
 
 ```tsx title="handle.tsx"
+import { useFillHandle } from "@fragiola/data-grid-react/fill";
+
 function FillHandle({ cell }: { cell: CellInfo<Plan> }) {
     const { state, props } = useFillHandle(cell);
     if (!state.visible) return null;

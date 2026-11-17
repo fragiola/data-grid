@@ -12,6 +12,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucideRefreshCw, LucideTriangleAlert } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { SWITCH } from "#/components/ui/switch";
@@ -83,6 +84,7 @@ let nextId = 0;
             }
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rowCount]="rowCount()"
                 [getRow]="getRow()"
@@ -137,6 +139,8 @@ let nextId = 0;
     `,
 })
 export default class LoadingStates implements OnInit {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly columns: Column<Person, DataGridNode>[] = [

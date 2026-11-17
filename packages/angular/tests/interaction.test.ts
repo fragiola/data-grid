@@ -18,6 +18,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "../src/public-api";
+import { TEST_FEATURES } from "./grid";
 import { cellAt, keyDown, render, settled, stubViewportSize } from "./helpers";
 
 // Interactive cells (Epic #52, I5): the cell whose controls have the keys carries
@@ -51,7 +52,7 @@ type Cells = "actions" | "menu" | "plain";
     template: `
         <ng-template #actions [dataGridTemplate]="cellContext" let-row="row"><button type="button">Edit {{ row.id }}</button><a [href]="'#task-' + row.id">Open {{ row.id }}</a></ng-template>
         <ng-template #menu [dataGridTemplate]="headerContext">Title <button type="button">Menu</button></ng-template>
-        <div dataGridRoot [columns]="columns()" [rows]="rows" [rowHeight]="24">
+        <div dataGridRoot [features]="features" [columns]="columns()" [rows]="rows" [rowHeight]="24">
             @if (table()) {
                 <table dataGridGrid>
                     <thead *dataGridHeader>
@@ -99,6 +100,7 @@ type Cells = "actions" | "menu" | "plain";
     `,
 })
 class InteractionGrid {
+    readonly features = TEST_FEATURES;
     readonly rows = tasks;
     readonly table = input(false);
     readonly cells = input<Cells>("actions");

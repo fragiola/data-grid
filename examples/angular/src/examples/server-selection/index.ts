@@ -20,6 +20,11 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import {
     LucideChevronLeft,
     LucideChevronRight,
@@ -65,6 +70,10 @@ const describe = (selection: Selection) =>
             : `every person but ${formatNumber(selection.keys.size)}`
         : `${formatNumber(selection.keys.size)} people`;
 
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+// row selection
+const FEATURES = [navigation(), rowSelection()];
+
 @Component({
     selector: "example-server-selection",
     imports: [
@@ -76,6 +85,7 @@ const describe = (selection: Selection) =>
         LucideChevronLeft,
         LucideChevronRight,
         LucideDownload,
+        DataGridRowSelection,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -116,10 +126,12 @@ const describe = (selection: Selection) =>
             <div [class]="styles.layout">
                 <div
                     dataGridRoot
+                    [features]="features"
                     [columns]="columns"
                     [rows]="rows()"
                     [rowKey]="rowKey"
                     [rowHeight]="40"
+                    dataGridRowSelection
                     rowSelection="multiple"
                     [selectedRowKeys]="selectedRowKeys()"
                     (selectedRowKeysChange)="setSelected($event)"
@@ -184,6 +196,7 @@ const describe = (selection: Selection) =>
     `,
 })
 export default class ServerSelection {
+    readonly features = FEATURES;
     protected readonly styles = styles;
     protected readonly formatNumber = formatNumber;
     protected readonly TOTAL = TOTAL;
@@ -217,7 +230,7 @@ export default class ServerSelection {
     protected readonly rows = signal<readonly Person[]>([]);
     protected readonly selection = signal<Selection>(NONE);
     protected readonly exported = signal("");
-    readonly gridRef = createDataGridRef<Person>();
+    readonly gridRef = createDataGridRef<Person, typeof FEATURES>();
     private readonly grid = injectDataGrid(this.gridRef);
 
     protected readonly count = computed(() => countOf(this.selection()));

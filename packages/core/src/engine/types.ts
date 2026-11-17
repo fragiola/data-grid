@@ -3,7 +3,6 @@ import type { GridFeatures } from "../feature/registry";
 import type {
     CellPosition,
     CellRange,
-    CellSelection,
     Column,
     ColumnWidths,
     EditingCell,
@@ -15,8 +14,6 @@ import type {
     ReorderSide,
     RowKey,
     RowKeyGetter,
-    RowSelectable,
-    RowSelection,
     RowSource,
     SummaryRowCounts,
 } from "../model/types";
@@ -35,9 +32,10 @@ export interface DataGridEngineOptions {
     /** `rows-end-reached` fires when the view's last row is this close to the end (default 10) */
     endReachedThreshold?: number;
     /**
-     * cells fill (Epic #88, E4.4): a press on a fill handle drags the range (or the active cell)
-     * down or right, the release a `range-fill` event the app applies (the grid writes no data).
-     * Default off
+     * cells fill (Epic #88, E4.4), with the fill handle installed (`fillHandle()`, Epic #144): a
+     * press on a fill handle drags the range (or the active cell) down or right, the release a
+     * `range-fill` event the app applies (the grid writes no data). Default off; a root sets it
+     * while it has `onFill`
      */
     fillable?: boolean;
     /**
@@ -194,28 +192,8 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
     readonly rowKey: RowKeyGetter<TRow> | undefined;
-    /** how rows are selected; `undefined` when they are not */
-    readonly rowSelection: RowSelection | undefined;
-    /** the selected rows' keys (`rowSelected` tells a row's state) */
-    readonly selectedRowKeys: readonly RowKey[];
-    /** whether a loaded row can be selected; `undefined`: every row can */
-    readonly isRowSelectable: RowSelectable<TRow> | undefined;
-    /** how cells are selected (Epic #88); `undefined` when they are not */
-    readonly cellSelection: CellSelection | undefined;
     /** the cell being edited (Epic #88, E4.3): its part is `editing`, its editor rendered */
     readonly editingCell: EditingCell | null;
-    /** cells fill by a handle (`fillable`, Epic #88, E4.4) */
-    readonly fillable: boolean;
-    /** the fill a handle's drag is making, or `null` */
-    readonly fill: FillDrag | null;
-    /**
-     * the cells a fill drags from (E4.4): the selected range, else the active body cell, widened
-     * to the column spans it cuts, as its first and last cells; its handle at the last one.
-     * `null` without one, cells not filling, or while a cell is edited
-     */
-    readonly fillSource: CellRange | null;
-    /** the selected range of body cells, or `null` (a cell's part tells whether it is in it) */
-    readonly selectedRange: CellRange | null;
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
     readonly collapsedGroupKeys: readonly string[];
     /**
@@ -383,8 +361,11 @@ export interface EngineQueryMap {
     "column-auto-widths": ColumnWidths;
     /** the edit's draft (Epic #88), or `null` while no cell is edited */
     "edit-draft": EditDraft | null;
-    /** the fill a handle's drag is making (Epic #88, E4.4), or `null` */
-    fill: FillDrag | null;
+    /**
+     * the fill a handle's drag is making (Epic #88, E4.4), or `null`: the fill handle's
+     * (`fillHandle()`), `undefined` without it
+     */
+    fill: FillDrag | null | undefined;
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;

@@ -5,6 +5,9 @@ import {
     type RangePaste,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { clipboard } from "@fragiola/data-grid-vue/clipboard";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { cellRange } from "@fragiola/data-grid-vue/range";
 import { h, ref, shallowRef, type VNodeChild } from "vue";
 import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
@@ -163,8 +166,12 @@ function withPaste(
     return { rows: next, skipped };
 }
 
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), cell
+// ranges, the clipboard (a range's copy and paste)
+const features = [navigation(), cellRange(), clipboard()] as const;
+
 // the parts typed by the row type: a template cannot pass `Line` as a type argument
-const DataGrid = typedDataGrid<Line>();
+const DataGrid = typedDataGrid<Line, typeof features>();
 
 // the app's rows: the grid never writes them, a paste is told
 const rows = shallowRef<readonly Line[]>(budget);
@@ -214,6 +221,7 @@ function writePaste(paste: RangePaste) {
             <span role="status" :class="styles.status">{{ announcement }}</span>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rows"
             :row-key="rowKey"

@@ -8,6 +8,8 @@ import {
     useDataGridRef,
     useGridView,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { rowSelection } from "@fragiola/data-grid-react/row-selection";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import {
     createContext,
@@ -23,6 +25,10 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { formatNumber, type Person, person } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
 import * as styles from "./styles";
+
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), row
+// selection
+const FEATURES = [navigation(), rowSelection()];
 
 const TOTAL = 10_000;
 const PAGE_SIZE = 50;
@@ -57,7 +63,7 @@ const describe = (selection: Selection) =>
 
 /** A row's checkbox: the grid toggles the row. */
 function SelectRow({ rowIndex, name }: { rowIndex: number; name: string }) {
-    const { model } = useDataGrid<Person>();
+    const { model } = useDataGrid<Person, typeof FEATURES>();
     // the view moves with the selection: the box follows
     useGridView();
     return (
@@ -114,7 +120,7 @@ export default function ServerSelection() {
     const [rows, setRows] = useState<readonly Person[]>([]);
     const [selection, setSelection] = useState<Selection>(NONE);
     const [exported, setExported] = useState("");
-    const gridRef = useDataGridRef<Person>();
+    const gridRef = useDataGridRef<Person, typeof FEATURES>();
     const grid = useDataGrid(gridRef);
     // the page on screen, for the selection's handler
     const page = useRef(rows);
@@ -236,6 +242,7 @@ export default function ServerSelection() {
                 ) : null}
                 <div className={styles.layout}>
                     <DataGrid.Root
+                        features={FEATURES}
                         columns={columns}
                         rows={rows}
                         rowKey={(row) => row.id}

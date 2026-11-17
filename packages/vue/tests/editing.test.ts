@@ -20,6 +20,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -38,7 +40,7 @@ interface Item {
     name: string;
 }
 
-const G = typedDataGrid<Item>();
+const G = typedDataGrid<Item, Features>();
 
 const items: Item[] = Array.from({ length: 10 }, (_, id) => ({
     id,
@@ -68,7 +70,7 @@ stubViewportSize(400, 300);
 
 type GridProps = Partial<
     Pick<
-        RootProps<Item>,
+        RootProps<Item, Features>,
         | "editingCell"
         | "defaultEditingCell"
         | "onEditingCellChange"
@@ -81,7 +83,7 @@ function grid({ table = false, ...props }: GridProps = {}) {
     const tag = tags(table);
     return h(
         G.Root,
-        { columns, rows: items, rowHeight: 20, ...props },
+        { features: FEATURES, columns, rows: items, rowHeight: 20, ...props },
         {
             default: () => [
                 h(
@@ -276,6 +278,7 @@ describe("the edited cell", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns: portalled,
                     rows: items,
                     rowHeight: 20,

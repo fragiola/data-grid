@@ -11,6 +11,7 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
+import { DataGridNavigation } from "../src/navigation";
 import {
     type CellEditEvent,
     type CellPosition,
@@ -23,6 +24,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "../src/public-api";
+import { TEST_FEATURES } from "./grid";
 import { cellAt, keyDown, render, settled, stubViewportSize } from "./helpers";
 
 // Cell editing (Epic #88, E4.3): the root maps the edited cell (controlled or not) onto the model
@@ -84,7 +86,7 @@ interface EditGridOptions {
 
 @Component({
     selector: "test-edit-grid",
-    imports: [DATA_GRID, PortalEditor],
+    imports: [DATA_GRID, DataGridNavigation, PortalEditor],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <ng-template #nameEditor [dataGridTemplate]="editContext" let-edit>
@@ -95,7 +97,7 @@ interface EditGridOptions {
             <test-portal-editor [edit]="edit" />
         </ng-template>
         <div dataGridRoot [rows]="rows" [columns]="columns()" [rowHeight]="20"
-            [defaultActivePosition]="options().defaultActivePosition"
+            [features]="features" dataGridNavigation [defaultActivePosition]="options().defaultActivePosition"
             [defaultEditingCell]="options().defaultEditingCell"
             [editingCell]="editingCell()"
             (editingCellChange)="options().onEditingCellChange?.($event)"
@@ -133,6 +135,7 @@ interface EditGridOptions {
 })
 class EditGrid {
     readonly rows = items;
+    readonly features = TEST_FEATURES;
     readonly options = input<EditGridOptions>({});
     /** controlled: the edited cell; `undefined`, not controlled */
     readonly editingCell = input<EditingCell | null | undefined>(undefined);

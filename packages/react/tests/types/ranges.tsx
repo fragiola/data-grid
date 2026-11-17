@@ -1,6 +1,5 @@
 // Type fixtures: checked by `tsc`, never run. `@ts-expect-error` marks what must not compile.
 
-import { parseTsv, toTsv } from "@fragiola/data-grid";
 import { useState } from "react";
 import {
     type CellRange,
@@ -10,6 +9,12 @@ import {
     type RangePaste,
     useDataGrid,
 } from "../../src";
+import { clipboard, parseTsv, toTsv } from "../../src/clipboard";
+import { navigation } from "../../src/navigation";
+import { cellRange } from "../../src/range";
+
+// ranges and their clipboard are features (Epic #144): installed, their props and keys compile
+const features = [navigation(), cellRange(), clipboard()] as const;
 
 interface Sale {
     id: string;
@@ -34,6 +39,7 @@ export function Sales() {
         <DataGrid.Root
             columns={columns}
             rows={sales}
+            features={features}
             cellSelection="range"
             selectedRange={range}
             onSelectedRangeChange={setRange}
@@ -74,7 +80,7 @@ export function Sales() {
 }
 
 export function Commands() {
-    const { model } = useDataGrid<Sale>();
+    const { model } = useDataGrid<Sale, typeof features>();
     model.run("selected-range.set", {
         anchor: { rowIndex: 0, columnIndex: 0 },
         focus: { rowIndex: 2, columnIndex: 1 },
@@ -106,6 +112,7 @@ export function Wrong() {
         <DataGrid.Root
             columns={columns}
             rows={sales}
+            features={features}
             // @ts-expect-error: cells are selected by range
             cellSelection="single"
         />

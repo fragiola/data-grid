@@ -12,6 +12,11 @@ import {
     useDataGridRef,
     useRowWindow,
 } from "../../src";
+import { clipboard } from "../../src/clipboard";
+import { fillHandle } from "../../src/fill";
+import { navigation } from "../../src/navigation";
+import { cellRange } from "../../src/range";
+import { rowSelection } from "../../src/row-selection";
 import { type SortColumn, sorting } from "../../src/sorting";
 
 interface Person {
@@ -90,3 +95,134 @@ export const WithRef = defineComponent(() => {
     ];
 });
 export const outside = createDataGridRef<Person, typeof features>();
+
+// navigation, row selection, cell ranges, the clipboard and the fill handle (Epic #144): each
+// one's props compile only with it installed
+const navigated = [navigation()] as const;
+const selectable = [rowSelection()] as const;
+const ranged = [navigation(), cellRange()] as const;
+const pasting = [navigation(), cellRange(), clipboard()] as const;
+const filling = [navigation(), cellRange(), fillHandle()] as const;
+
+export const bareNavigation: PropsOf<typeof Bare.Root> = {
+    columns,
+    rows: people,
+    // @ts-expect-error
+    defaultActivePosition: { rowIndex: 0, columnIndex: 0 },
+};
+export const bareActivePosition: PropsOf<typeof Bare.Root> = {
+    columns,
+    rows: people,
+    // @ts-expect-error
+    onActivePositionChange: () => {},
+};
+const Navigated = typedDataGrid<Person, typeof navigated>();
+h(Navigated.Root, {
+    columns,
+    rows: people,
+    features: navigated,
+    activePosition: null,
+    defaultActivePosition: { rowIndex: 0, columnIndex: 0 },
+    onActivePositionChange: (position) => position?.rowIndex,
+});
+
+export const bareSelection: PropsOf<typeof Bare.Root> = {
+    columns,
+    rows: people,
+    // @ts-expect-error
+    rowSelection: "multiple",
+};
+export const bareSelectedRowKeys: PropsOf<typeof Bare.Root> = {
+    columns,
+    rows: people,
+    // @ts-expect-error
+    selectedRowKeys: [],
+};
+const Selectable = typedDataGrid<Person, typeof selectable>();
+h(Selectable.Root, {
+    columns,
+    rows: people,
+    features: selectable,
+    rowSelection: "multiple",
+    isRowSelectable: (row) => row.name !== "",
+    defaultSelectedRowKeys: [0],
+    onSelectedRowKeysChange: (keys) => keys.length,
+});
+
+export const bareRange: PropsOf<typeof Bare.Root> = {
+    columns,
+    rows: people,
+    // @ts-expect-error
+    cellSelection: "range",
+};
+export const navigatedRange: PropsOf<typeof Navigated.Root> = {
+    columns,
+    rows: people,
+    features: navigated,
+    // @ts-expect-error: the range's, not navigation's
+    selectedRange: null,
+};
+const Ranged = typedDataGrid<Person, typeof ranged>();
+h(Ranged.Root, {
+    columns,
+    rows: people,
+    features: ranged,
+    cellSelection: "range",
+    selectedRange: null,
+    onSelectedRangeChange: (range) => range?.anchor,
+});
+
+export const rangedPaste: PropsOf<typeof Ranged.Root> = {
+    columns,
+    rows: people,
+    features: ranged,
+    // @ts-expect-error: the clipboard's, not the range's
+    onRangePaste: () => {},
+};
+const Pasting = typedDataGrid<Person, typeof pasting>();
+h(Pasting.Root, {
+    columns,
+    rows: people,
+    features: pasting,
+    cellSelection: "range",
+    onRangePaste: (paste) => paste.values.length,
+    onBeforeRangePaste: () => false,
+});
+
+export const rangedFill: PropsOf<typeof Ranged.Root> = {
+    columns,
+    rows: people,
+    features: ranged,
+    // @ts-expect-error: the fill handle's, not the range's
+    onFill: () => {},
+};
+const Filling = typedDataGrid<Person, typeof filling>();
+h(Filling.Root, {
+    columns,
+    rows: people,
+    features: filling,
+    cellSelection: "range",
+    onFill: (fill) => fill.target,
+});
+
+// their keys, through the composables' model
+export const FeatureKeys = defineComponent(() => {
+    const plain = useDataGrid<Person>();
+    // @ts-expect-error
+    plain.model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
+    // @ts-expect-error
+    plain.model.run("selected-rows.set", { rowKeys: [] });
+    // @ts-expect-error
+    plain.model.get("selected-range");
+    // @ts-expect-error
+    plain.model.is("row-selected", { rowIndex: 0 });
+    useDataGrid<Person, typeof navigated>().model.run("active-position.set", {
+        rowIndex: 0,
+        columnIndex: 0,
+    });
+    const selection = useDataGrid<Person, typeof selectable>();
+    selection.model.run("selected-rows.set", { rowKeys: [] });
+    selection.model.is("row-selected", { rowIndex: 0 });
+    useDataGrid<Person, typeof ranged>().model.get("selected-range");
+    return () => null;
+});

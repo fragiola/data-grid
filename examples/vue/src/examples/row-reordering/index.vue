@@ -5,6 +5,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDown, ArrowUp, RotateCcw, Search } from "@lucide/vue";
 import { computed, h, shallowRef, type VNodeChild } from "vue";
@@ -14,8 +15,9 @@ import { type Task, tasks } from "../_kit/tasks";
 import Handle from "./handle.vue";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const features = [sorting()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop)
+const features = [sorting(), navigation()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

@@ -14,6 +14,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatMoney } from "../_kit/data";
 import {
     ITEM_HEADER,
@@ -37,6 +38,7 @@ type ItemCell = TemplateRef<TemplateContext<CellTemplateProps<Item>>>;
     template: `
         <div
             dataGridRoot
+            [features]="features"
             [columns]="columns"
             [rows]="order().items"
             [rowHeight]="ITEM_ROW"
@@ -77,6 +79,8 @@ type ItemCell = TemplateRef<TemplateContext<CellTemplateProps<Item>>>;
     `,
 })
 export class OrderItems {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly formatMoney = formatMoney;
     protected readonly itemsHeight = itemsHeight;

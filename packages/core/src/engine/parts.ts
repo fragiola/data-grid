@@ -1,7 +1,5 @@
 import type { PartAttributes } from "../feature/feature";
 import { isReorderable } from "../model/order";
-import { inRange, rangeEdgesOf } from "../model/range";
-import { rowSelectableWith, rowSelectedWith } from "../model/selection";
 import {
     dataRowAt,
     depthOf,
@@ -32,7 +30,6 @@ import { sameCell } from "../navigation/navigation";
 import { keySet } from "../utils/utils";
 import {
     COLUMN_RESIZER_ATTRIBUTE,
-    FILL_HANDLE_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
     ROW_DRAG_HANDLE_ATTRIBUTE,
 } from "./dom";
@@ -61,7 +58,10 @@ export interface RowState {
     readonly active: boolean;
     /** it shows its detail (`DataGrid.RowDetail`): loaded, and its key expanded */
     readonly expanded: boolean;
-    /** it is selected: rows are selectable, it is loaded and its key selected */
+    /**
+     * it is selected: rows are selectable, it is loaded and its key selected (row selection's,
+     * `@fragiola/data-grid/row-selection`: false without it)
+     */
     readonly selected: boolean;
     /**
      * a drag is moving it (its handle's, Epic #86, E2.3); `undefined` while the grid's rows do not
@@ -107,7 +107,8 @@ export interface CellState {
     readonly interacting: boolean;
     /**
      * it is in the selected range of cells (Epic #88, E4.1; a cell spanning columns while any of
-     * them is); `undefined` while cells are not selectable (`cellSelection`), and in a summary row
+     * them is); `undefined` while cells are not selectable (`cellSelection`), and in a summary row.
+     * Cell ranges' (`@fragiola/data-grid/range`), as `rangeEdges`
      */
     readonly selected: boolean | undefined;
     /**
@@ -120,28 +121,9 @@ export interface CellState {
     readonly editing: boolean;
     /**
      * a fill's drag would fill it (Epic #88, E4.4: in its target); `undefined` while cells do not
-     * fill (`fillable` off)
+     * fill (the fill handle's, `@fragiola/data-grid/fill`)
      */
     readonly fillTarget: boolean | undefined;
-}
-
-/** The state of a fill handle (Epic #88, E4.4): the element the app renders at a range's corner. */
-export interface FillHandleState {
-    /**
-     * its cell is the corner a fill drags from: the last row's last cell of the selected range,
-     * else the active body cell; cells fill and no cell is edited. Else render none
-     */
-    readonly visible: boolean;
-    /** a drag on it is filling */
-    readonly filling: boolean;
-}
-
-/** A fill handle's state and its attributes (the mark the engine finds it by), when visible. */
-export interface FillHandlePart {
-    readonly state: FillHandleState;
-    readonly attributes:
-        | { readonly [FILL_HANDLE_ATTRIBUTE]: number }
-        | undefined;
 }
 
 /** The state of a summary row (Epic #86, E2.1). */
@@ -281,12 +263,44 @@ export interface RowRead {
     readonly meta: RowMeta | undefined;
 }
 
+/**
+ * What the features fill in a body row's part (`FeatureSpec.row`, Epic #144): its fields start
+ * as a grid without them has them. One object the parts reuse: nothing is allocated per row.
+ */
+export interface RowShare {
+    selected: boolean;
+    ariaSelected: boolean | undefined;
+}
+
+/**
+ * What the features fill in a body cell's part (`FeatureSpec.cell`, Epic #144): its fields start
+ * as a grid without them has them (`undefined`). One object the parts reuse: nothing is allocated
+ * per cell.
+ */
+export interface CellShare {
+    selected: boolean | undefined;
+    rangeEdges: string | undefined;
+    fillTarget: boolean | undefined;
+    ariaSelected: boolean | undefined;
+}
+
+/** The share a row's part is made with (reset per row). */
+const ROW_SHARE: RowShare = { selected: false, ariaSelected: undefined };
+/** The share a cell's part is made with (reset per cell). */
+const CELL_SHARE: CellShare = {
+    selected: undefined,
+    rangeEdges: undefined,
+    fillTarget: undefined,
+    ariaSelected: undefined,
+};
+
 /** A body row's state, its `aria-selected` and its tree's ARIA. */
 export interface RowPart {
     readonly state: RowState;
     /**
      * `aria-selected` (R7), in ARIA's own vocabulary: `false` is "selectable, not selected"; a row
-     * that cannot be selected (or is not loaded) carries none (`undefined`)
+     * that cannot be selected (or is not loaded) carries none (`undefined`); none without row
+     * selection
      */
     readonly ariaSelected: boolean | undefined;
     /**
@@ -319,8 +333,11 @@ export interface GroupTogglePart {
 /** A body cell's state, its `tabIndex`, its `aria-colspan` and its `aria-selected`. */
 export interface CellPart {
     readonly state: CellState;
-    /** the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others */
-    readonly tabIndex: 0 | -1;
+    /**
+     * the roving tab stop: 0 on the active cell, the grid's tab stop; -1 on the others;
+     * `undefined` (none) without navigation (Epic #144: no cell takes focus from the grid)
+     */
+    readonly tabIndex: 0 | -1 | undefined;
     /**
      * `aria-selected` (Epic #88), in ARIA's own vocabulary while cells are selectable: `true` in
      * the selected range, `false` ("selectable, not selected") elsewhere; `undefined` (none)
@@ -343,7 +360,7 @@ export interface SummaryCellPart extends Omit<CellPart, "state"> {
 export interface HeaderCellPart {
     readonly state: HeaderCellState;
     /** the roving tab stop, as a body cell's */
-    readonly tabIndex: 0 | -1;
+    readonly tabIndex: 0 | -1 | undefined;
     /**
      * what the installed features add to its element (sorting's `aria-sort`, `data-sort`, …);
      * `undefined` without them
@@ -424,12 +441,20 @@ export function rowPart<TRow, TNode>(
         : tree
           ? rowMetaAt(view.source, rowIndex)
           : undefined;
-    // its data row, only when the selection or its key needs it
-    const row =
-        view.rowSelection || meta?.expandable
-            ? dataRowAt(view.source, rowIndex, meta)
-            : undefined;
-    const selected = rowSelectedWith(view, rowIndex, meta, row);
+    // its data row, only when its key needs it
+    const row = meta?.expandable
+        ? dataRowAt(view.source, rowIndex, meta)
+        : undefined;
+    // what the features add (row selection's: selected), from a grid without them
+    const share = ROW_SHARE;
+    share.selected = false;
+    share.ariaSelected = undefined;
+    view.features.row?.(
+        view as GridView<unknown, unknown>,
+        rowIndex,
+        meta,
+        share,
+    );
     const groupKey = meta && groupKeyAt(view, rowIndex, meta, row);
     const expanded =
         groupKey === undefined ? undefined : groupExpanded(view, groupKey);
@@ -440,7 +465,7 @@ export function rowPart<TRow, TNode>(
             loaded,
             active: view.active?.rowIndex === rowIndex,
             expanded: rowExpanded(view, rowIndex),
-            selected,
+            selected: share.selected,
             dragging: moves ? reorder?.rowIndex === rowIndex : undefined,
             dropTarget: moves
                 ? reorder?.targetIndex === rowIndex
@@ -451,10 +476,7 @@ export function rowPart<TRow, TNode>(
             group: meta?.group,
             groupExpanded: expanded,
         },
-        ariaSelected:
-            selected || rowSelectableWith(view, rowIndex, meta, row)
-                ? selected
-                : undefined,
+        ariaSelected: share.ariaSelected,
         ariaTree:
             depth === undefined
                 ? undefined
@@ -504,8 +526,20 @@ export function groupTogglePart<TRow, TNode>(
 }
 
 /**
+ * The roving tab stop of a cell (`active`): 0 on the active cell while the grid's tab stop is in
+ * the page's order (a nested grid's: E5.2), -1 on the others; none without navigation (Epic #144).
+ */
+function tabStop<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    active: boolean,
+): 0 | -1 | undefined {
+    if (!view.features.navigable) return undefined;
+    return active && view.tabbable ? 0 : -1;
+}
+
+/**
  * A body cell's state, its `tabIndex` and its `aria-colspan`: a cell spanning columns (E1.2) is
- * active on any of them.
+ * active on any of them. The features fill the rest (a range's, a fill's: `CellShare`).
  */
 export function cellPart<TRow, TNode>(
     view: GridView<TRow, TNode>,
@@ -523,11 +557,13 @@ export function cellPart<TRow, TNode>(
         cell.columnIndex,
         span,
     );
-    // in the selected range (Epic #88): nothing asked while cells are not selectable
-    const range = view.selectedRange;
-    const selected = view.cellSelection
-        ? inRange(range, cell.rowIndex, cell.columnIndex, span)
-        : undefined;
+    // what the features add (a range's, a fill's), from a grid without them
+    const share = CELL_SHARE;
+    share.selected = undefined;
+    share.rangeEdges = undefined;
+    share.fillTarget = undefined;
+    share.ariaSelected = undefined;
+    view.features.cell?.(view as GridView<unknown, unknown>, cell, span, share);
     return {
         state: {
             rowIndex: cell.rowIndex,
@@ -538,24 +574,14 @@ export function cellPart<TRow, TNode>(
             pinnedEdge,
             pinnedSide,
             interacting: isHeldCell(view.interaction, cell),
-            selected,
-            rangeEdges: selected
-                ? rangeEdgesOf(range, cell.rowIndex, cell.columnIndex, span)
-                : undefined,
+            selected: share.selected,
+            rangeEdges: share.rangeEdges,
             editing: isHeldCell(view.editingCell, cell),
-            fillTarget: view.fillable
-                ? inRange(
-                      view.fill?.target ?? null,
-                      cell.rowIndex,
-                      cell.columnIndex,
-                      span,
-                  )
-                : undefined,
+            fillTarget: share.fillTarget,
         },
-        // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
-        tabIndex: active && view.tabbable ? 0 : -1,
+        tabIndex: tabStop(view, active),
         ariaColSpan: span > 1 ? span : undefined,
-        ariaSelected: selected,
+        ariaSelected: share.ariaSelected,
     };
 }
 
@@ -666,7 +692,7 @@ export function headerCellPart<TRow, TNode>(
         interacting: isHeldCell(view.interaction, cell),
     };
     // the tab stop while the grid's is in the page's order (a nested grid's: E5.2)
-    const tabIndex = active && view.tabbable ? 0 : -1;
+    const tabIndex = tabStop(view, active);
     const share = view.features.headerCell?.(
         view as GridView<unknown, unknown>,
         cell as HeaderCellLayout<unknown, unknown>,
@@ -722,44 +748,6 @@ export function columnResizerPart<TRow, TNode>(
         },
     };
 }
-
-/**
- * A cell's fill handle (Epic #88, E4.4): visible in the cell at the last cell of what a fill
- * drags from (`view.fillSource`, worked out once a view: the selected range's last row and last
- * column, widened to the spans it cuts, else the active body cell; a cell spanning columns when
- * it reaches it), while cells fill and none is edited; its attributes then.
- */
-export function fillHandlePart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: CellPosition,
-): FillHandlePart {
-    const filling = view.fill !== null;
-    const corner = view.fillSource?.focus;
-    const visible =
-        corner !== undefined &&
-        corner.rowIndex === cell.rowIndex &&
-        corner.columnIndex >= cell.columnIndex &&
-        corner.columnIndex <
-            cell.columnIndex + cellSpan(view, cell.rowIndex, cell.columnIndex);
-    return visible
-        ? {
-              state: { visible, filling },
-              attributes: { [FILL_HANDLE_ATTRIBUTE]: cell.rowIndex },
-          }
-        : filling
-          ? HIDDEN_FILLING
-          : HIDDEN;
-}
-
-/** A fill handle not shown (the one part for every other cell: nothing allocated). */
-const HIDDEN: FillHandlePart = {
-    state: { visible: false, filling: false },
-    attributes: undefined,
-};
-const HIDDEN_FILLING: FillHandlePart = {
-    state: { visible: false, filling: true },
-    attributes: undefined,
-};
 
 /**
  * Whether a grid's rows move now (E2.3): they move (`reorderableRows`), no feature keeps them in

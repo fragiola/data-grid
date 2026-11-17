@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 import { describe, expect, it } from "vitest";
+import { DataGridFill, DataGridFillHandle } from "../src/fill";
+import { DataGridNavigation } from "../src/navigation";
 import {
     type CellPosition,
     type CellRange,
@@ -8,9 +10,12 @@ import {
     type DataGridNode,
     type RangeFill,
 } from "../src/public-api";
+import { DataGridCellRange } from "../src/range";
+import { TEST_FEATURES } from "./grid";
 import { cellAt, render, settled, stubViewportSize } from "./helpers";
 
-// The fill handle (Epic #88, E4.4): the root's `fillable` turns filling on; `*dataGridFillHandle`
+// The fill handle (Epic #88, E4.4; a feature since Epic #144: `fillHandle()` installed, its root's
+// output on `[dataGridFill]`): `[dataGridFill]` turns filling on; `*dataGridFillHandle`
 // renders the app's element, with its mark, in the cell at the range's corner (else the active
 // cell), none elsewhere; a press on it dragged and released past the source tells `(fill)` once,
 // as divs or as a table, and the range grows to the filled cells.
@@ -30,12 +35,19 @@ stubViewportSize(400, 300);
 
 @Component({
     selector: "test-fill-grid",
-    imports: [DATA_GRID],
+    imports: [
+        DATA_GRID,
+        DataGridNavigation,
+        DataGridCellRange,
+        DataGridFill,
+        DataGridFillHandle,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [headerRowHeight]="0"
+            [features]="features" dataGridNavigation dataGridCellRange
             cellSelection="range" [defaultActivePosition]="active" [defaultSelectedRange]="selected"
-            [fillable]="fills() !== undefined" (fill)="fills()?.push($event)">
+            [dataGridFill]="fills() !== undefined" (fill)="fills()?.push($event)">
             @if (table()) {
                 <table dataGridGrid>
                     <tbody dataGridBody>
@@ -66,6 +78,7 @@ stubViewportSize(400, 300);
 })
 class FillGrid {
     readonly rows = items;
+    readonly features = TEST_FEATURES;
     readonly columns = columns;
     readonly active: CellPosition = { rowIndex: 1, columnIndex: 1 };
     readonly selected: CellRange = {

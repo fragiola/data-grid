@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDataGridModel } from "../../src";
+import { gridModel } from "../features";
 import { CELLS, leaf, type Row, TREE } from "../header/tree";
 
 // Column groups in the model (Epic #13, G1–G4): the leaves are the grid's columns, the header has
@@ -8,7 +8,7 @@ import { CELLS, leaf, type Row, TREE } from "../header/tree";
 const rows: Row[] = Array.from({ length: 10 }, (_, id) => ({ id }));
 
 function grouped(headerRowHeight?: number) {
-    return createDataGridModel<Row>({ columns: TREE, rows, headerRowHeight });
+    return gridModel<Row>({ columns: TREE, rows, headerRowHeight });
 }
 
 describe("columns with groups", () => {
@@ -61,7 +61,7 @@ describe("columns with groups", () => {
 
     it("keeps the very array of columns without groups", () => {
         const flat = [leaf("a"), leaf("b")];
-        const model = createDataGridModel<Row>({ columns: flat, rows });
+        const model = gridModel<Row>({ columns: flat, rows });
         expect(model.get("columns")).toBe(flat);
         expect(model.get("column-entries")).toBe(flat);
         expect(model.get("header-depth")).toBe(1);
@@ -73,17 +73,17 @@ describe("columns with groups", () => {
 
     it("refuses to start with columns it would not set", () => {
         expect(() =>
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: [{ key: "x", children: [leaf("x")] }],
             }),
         ).toThrow(/invalid columns: two columns or groups have the key "x"/);
         expect(() =>
-            createDataGridModel<Row>({ columns: [{ key: "g", children: [] }] }),
+            gridModel<Row>({ columns: [{ key: "g", children: [] }] }),
         ).toThrow(/"g" has no column/);
     });
 
     it("sets groups, and refuses a key used by a group and a column", () => {
-        const model = createDataGridModel<Row>({ columns: [leaf("a")], rows });
+        const model = gridModel<Row>({ columns: [leaf("a")], rows });
         expect(model.run("columns.set", { columns: TREE })).toEqual({
             ok: true,
             value: { columnCount: 6 },
@@ -157,7 +157,7 @@ describe("the active header cell", () => {
     });
 
     it("keeps the active cell on a header cell when the columns change shape", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: ["A", "B", "C", "D", "E", "F"].map((key) => leaf(key)),
             rows,
             activePosition: { rowIndex: -1, columnIndex: 3 },
@@ -181,7 +181,7 @@ describe("the active header cell", () => {
     });
 
     it("starts on a header cell's own position", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: TREE,
             rows,
             activePosition: { rowIndex: -2, columnIndex: 5 },

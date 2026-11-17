@@ -14,14 +14,7 @@ import {
     isHeaderRow,
     layoutColumns,
 } from "../header/header";
-import {
-    DIRECTIONS,
-    type GridBounds,
-    isRowOf,
-    keptRow,
-    nextPosition,
-    sameCell,
-} from "../navigation/navigation";
+import { keptRow, sameCell } from "../navigation/navigation";
 import {
     clamp,
     isIndex,
@@ -31,6 +24,7 @@ import {
     toggledKey,
 } from "../utils/utils";
 import { overlaps } from "../viewport/window";
+import { boundsOf, cellPosition } from "./bounds";
 import {
     collapsingKeys,
     followedColumn,
@@ -59,32 +53,15 @@ import {
     siblingOrder,
     siblingsOf,
 } from "./order";
-import { isBodyCell, isCellSelected, keptRange, sameCellRange } from "./range";
-import { done, fail, ok, veto } from "./result";
-import {
-    allKeys,
-    extendedKeys,
-    groupSelectable,
-    groupToggledKeys,
-    isRowSelectable,
-    isRowSelected,
-    keptAnchor,
-    keptRowKeys,
-    notLoaded,
-    ROW_SELECTIONS,
-    sameAnchor,
-    toggledKeys,
-    validAnchor,
-} from "./selection";
+import { done, fail, invalid, noRow, notOneOf, ok, veto } from "./result";
 import {
     cellKeysAt,
     dataRowAt,
     groupAt,
     groupKeyAt,
     isGroupExpanded,
-    keyOf,
+    loadedKeyAt,
     loadedRowKey,
-    type RowsState,
     rowAt,
     rowCellValue,
     rowCountOf,
@@ -92,9 +69,7 @@ import {
     rowLoaded,
     rowMetaAt,
     sameCellKeys,
-    sameKnownKeys,
 } from "./source";
-import { activeInCell, coveringCell, hasColumnSpans, spanAt } from "./spans";
 import {
     NO_SUMMARY_ROWS,
     summaryRowAt,
@@ -102,15 +77,11 @@ import {
     summaryRowIndex,
 } from "./summary";
 import type {
-    CellPosition,
-    CellRange,
-    CellSelection,
     Column,
     ColumnOrder,
     ColumnOrGroup,
     ColumnWidths,
     CommandContext,
-    CommandFailure,
     CommandListener,
     CommandMap,
     CommandName,
@@ -123,7 +94,6 @@ import type {
     GridDirection,
     GridQueries,
     GridQuestions,
-    GroupRow,
     KeyArgs,
     Middleware,
     ModelState,
@@ -139,9 +109,7 @@ import type {
     ResultOf,
     RowKey,
     RowKeyGetter,
-    RowMeta,
     RowSource,
-    SelectionAnchor,
 } from "./types";
 import {
     type ColumnSpan,
@@ -253,102 +221,29 @@ const PART_NAMES = {
 /** The grid's directions. */
 const GRID_DIRECTIONS: readonly GridDirection[] = ["ltr", "rtl"];
 
-/** The refusal of a payload that is not what the command takes. */
-function invalid(message: string): CommandFailure {
-    return fail("invalid_payload", message);
-}
-
-/** The refusal of a value that is none of `list`. */
-function notOneOf(name: string, list: readonly string[]): CommandFailure {
-    return invalid(`${name} must be one of ${list.join(", ")}`);
-}
-
-/** Every selection command's refusal while rows are not selectable. */
-function selectionOff(): CommandFailure {
-    return fail("refused", "rows are not selectable (no rowSelection)");
-}
-
 /**
- * The state after a command, its range and its edit kept to their rules (Epic #88). A range's
- * anchor is the active cell where it started, so the active cell moving elsewhere (a click, a
- * Tab, a control taking focus, the keys, the app's `active-position.set`, a new order) leaves no
- * range; a range the active cell did not start (select-all) stays until it moves. A range and an
- * edit stay on the cells they were set on, by key (`withRangeKeys`, `withKeptEditing`); both are
- * looked at only when what they depend on changed (the rows, or `rows.changed` over their rows,
- * the columns, the active cell, the range or the edit), never after an unrelated command.
+ * The state after a command, its edit kept to its rule (E4.3): it stays on the cell it was set on,
+ * by key (`withKeptEditing`), looked at only when what it depends on changed (the rows, or
+ * `rows.changed` over its row, the columns, the active cell or the edit), never after an
+ * unrelated command. (A range's rule is cell ranges', Epic #144: their `stateChanged`.)
  */
 function withActiveRules<TRow, TNode>(
     before: DataGridState<TRow, TNode>,
     after: DataGridState<TRow, TNode>,
 ): DataGridState<TRow, TNode> {
-    const range = after.selectedRange;
-    const active = after.activePosition;
+    const editing = after.editingCell;
+    if (!editing) return after;
     const shaped =
         after.source !== before.source || after.columns !== before.columns;
-    /** rows told changed behind the same `getRow`: what holds one of them looks again */
-    const changed =
-        after.rowsChanged !== before.rowsChanged ? after.rowsChanged : null;
-    const reread = (position: CellPosition) =>
-        changed !== null &&
-        overlaps(changed, position.rowIndex, position.rowIndex + 1);
-    let next =
-        !range ||
-        active === before.activePosition ||
-        (active !== null && sameCell(active, range.anchor))
-            ? after
-            : { ...after, selectedRange: null };
-    const kept = next.selectedRange;
-    const rangeShaped =
-        shaped ||
-        (kept !== null && (reread(kept.anchor) || reread(kept.focus)));
-    if (rangeShaped || kept !== before.selectedRange) {
-        next = withRangeKeys(next, rangeShaped ? before : null);
-    }
-    const editing = next.editingCell;
-    return editing &&
-        (shaped ||
-            reread(editing) ||
-            active !== before.activePosition ||
-            editing !== before.editingCell)
-        ? withKeptEditing(next)
-        : next;
-}
-
-/**
- * The state with its range's keys (E4.1): taken at its corners when it is set; after new rows or
- * columns (`before`, the state the range's keys were taken in), other keys at a corner (a sort,
- * rows inserted above, a column hidden or moved) leave no range, the same ones keep it (rows
- * growing at the end). A corner on a row not loaded is kept by index, its keys taken once it is.
- */
-function withRangeKeys<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    before: DataGridState<TRow, TNode> | null,
-): DataGridState<TRow, TNode> {
-    const range = state.selectedRange;
-    if (!range) {
-        return state.selectedRangeKeys
-            ? { ...state, selectedRangeKeys: null }
-            : state;
-    }
-    const was = before?.selectedRange ? before.selectedRangeKeys : null;
-    const anchor = cellKeysAt(state, range.anchor);
-    const focus = cellKeysAt(state, range.focus);
-    if (
-        was &&
-        (!sameKnownKeys(was.anchor, anchor) || !sameKnownKeys(was.focus, focus))
-    ) {
-        return { ...state, selectedRange: null, selectedRangeKeys: null };
-    }
-    const keys = state.selectedRangeKeys;
-    const next = {
-        anchor: anchor ?? was?.anchor,
-        focus: focus ?? was?.focus,
-    };
-    return keys &&
-        sameCellKeys(keys.anchor, next.anchor) &&
-        sameCellKeys(keys.focus, next.focus)
-        ? state
-        : { ...state, selectedRangeKeys: next };
+    const reread =
+        after.rowsChanged !== before.rowsChanged &&
+        overlaps(after.rowsChanged, editing.rowIndex, editing.rowIndex + 1);
+    return shaped ||
+        reread ||
+        after.activePosition !== before.activePosition ||
+        editing !== before.editingCell
+        ? withKeptEditing(after)
+        : after;
 }
 
 /**
@@ -375,108 +270,6 @@ function withKeptEditing<TRow, TNode>(
         return state.editingKeys ? state : { ...state, editingKeys: keys };
     }
     return { ...state, editingCell: null, editingKeys: null };
-}
-
-/** The cell selection modes, for validation. */
-const CELL_SELECTIONS: readonly CellSelection[] = ["range"];
-
-/** Every range command's refusal while cells are not selectable (Epic #88). */
-function cellsOff(): CommandFailure {
-    return fail("refused", "cells are not selectable (no cellSelection)");
-}
-
-/** The refusal of a row index with no row. */
-function noRow(rowIndex: number): CommandFailure {
-    return fail("not_found", `no row ${rowIndex}`);
-}
-
-/** The refusal of a range corner that is no body cell. */
-function noBodyCell(position: CellPosition): CommandFailure {
-    return fail(
-        "not_found",
-        `no body cell at row ${position?.rowIndex}, column ${position?.columnIndex}`,
-    );
-}
-
-/** The state with a selected range (the same object when it is the same cells), and it. */
-function withRange<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    range: CellRange,
-): Applied<TRow, TNode, CellRange> {
-    if (sameCellRange(range, state.selectedRange) && state.selectedRange) {
-        return done(state, state.selectedRange);
-    }
-    const kept = {
-        anchor: {
-            rowIndex: range.anchor.rowIndex,
-            columnIndex: range.anchor.columnIndex,
-        },
-        focus: {
-            rowIndex: range.focus.rowIndex,
-            columnIndex: range.focus.columnIndex,
-        },
-    };
-    return done({ ...state, selectedRange: kept }, kept);
-}
-
-/**
- * What the keys move a range's focus in (E4.1): the body's rows only (no header, no summary rows),
- * the columns, and their spans (E1.2).
- */
-function bodyBoundsOf<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-): GridBounds {
-    const bounds = boundsOf(state);
-    return {
-        rowCount: bounds.rowCount,
-        columnCount: bounds.columnCount,
-        headerRowCount: 0,
-        cellSpanAt: bounds.cellSpanAt,
-    };
-}
-
-/**
- * What moves in the grid are bounded by: its rows, its columns, its header's cells, its summary
- * rows (E2.1) and, with column spans, its body and summary rows' cells (E1.2).
- */
-function boundsOf<TRow, TNode>(state: DataGridState<TRow, TNode>): GridBounds {
-    return {
-        rowCount: state.rowCount,
-        columnCount: state.columns.length,
-        headerRowCount: headerRowCount(state),
-        headerDepth: state.header.depth,
-        summaryRows: state.summaryRows,
-        headerCellAt: state.header.cellAt,
-        cellSpanAt: hasColumnSpans(state.columns)
-            ? (rowIndex, columnIndex) => spanAt(state, rowIndex, columnIndex)
-            : undefined,
-    };
-}
-
-/**
- * A position inside a cell's span, as that cell's position: its first column, on the same row (a
- * header cell's; a column spanning header rows has a position on each of them; a body cell's
- * under a column span, E1.2).
- */
-function cellPosition<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    position: CellPosition,
-): CellPosition {
-    const columnIndex = coveringCell(state, position)?.columnIndex;
-    return columnIndex !== undefined && columnIndex !== position.columnIndex
-        ? { rowIndex: position.rowIndex, columnIndex }
-        : position;
-}
-
-/** Whether a position is a cell: a header row shown, a summary row or a body row, and a column. */
-function isCell<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    { rowIndex, columnIndex }: CellPosition,
-): boolean {
-    return (
-        isRowOf(rowIndex, boundsOf(state)) &&
-        isIndex(columnIndex, state.columns.length)
-    );
 }
 
 /**
@@ -516,25 +309,12 @@ function keptActiveRow<TRow, TNode>(
 
 /**
  * The active position kept inside the grid after its shape changed from `before`'s (or none
- * left): on the same row where it can be (`keptActiveRow`), and column; and the selected range
- * inside its body (`keptRange`, Epic #88). Its keys and the edit's are the command's rules'
- * (`withActiveRules`).
+ * left): on the same row where it can be (`keptActiveRow`), and column. The edit's keys are the
+ * command's rules' (`withActiveRules`); a feature's state, its own (`stateChanged`).
  */
 function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     before: DataGridState<TRow, TNode> = state,
-): DataGridState<TRow, TNode> {
-    const next = keptActive(state, before);
-    const range = keptRange(next, next.selectedRange);
-    return range === next.selectedRange
-        ? next
-        : { ...next, selectedRange: range };
-}
-
-/** `reconcile`'s active position. */
-function keptActive<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    before: DataGridState<TRow, TNode>,
 ): DataGridState<TRow, TNode> {
     const active = state.activePosition;
     if (!active) return state;
@@ -588,7 +368,7 @@ function sourceOf<TRow>(given: RowSource<TRow>): RowSource<TRow> {
 }
 
 /** The keys a `set` takes, once each, or why they are refused. */
-function validRowKeys(
+export function validRowKeys(
     rowKeys: readonly RowKey[],
     name = "rowKeys",
 ): CommandResult<readonly RowKey[]> {
@@ -597,69 +377,6 @@ function validRowKeys(
     return keys
         ? ok(keys)
         : invalid("a row key must be a string or a finite number");
-}
-
-/**
- * The key of the loaded row at `rowIndex`, or why there is none: no such row, or what `unloaded`
- * says while it is not loaded (its key is unknown).
- */
-function loadedKeyAt<TRow>(
-    state: RowsState<TRow>,
-    rowIndex: number,
-    unloaded: (rowIndex: number) => CommandFailure,
-    meta: RowMeta | undefined = rowMetaAt(state.source, rowIndex),
-): CommandResult<RowKey> {
-    if (!isIndex(rowIndex, state.rowCount)) {
-        return noRow(rowIndex);
-    }
-    const row = dataRowAt(state.source, rowIndex, meta);
-    const key = row === undefined ? undefined : keyOf(state, row, rowIndex);
-    return key === undefined ? unloaded(rowIndex) : ok(key);
-}
-
-/** A toggle's value: the keys, and the anchor it leaves (a controlled root keeps that part). */
-function toggled<TRow, TNode>(
-    applied: Applied<TRow, TNode, readonly RowKey[]>,
-): Applied<TRow, TNode, ResultOf<"selected-rows.toggle">> {
-    if (!applied.ok) return applied;
-    const { state } = applied.value;
-    return done(state, {
-        rowKeys: state.selectedRowKeys,
-        anchor: state.selectionAnchor,
-    });
-}
-
-/** A range of rows toggled from the anchor (`extendedKeys`): selected, the anchor where it is. */
-function extendedTo<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    extended: CommandResult<readonly RowKey[]>,
-): Applied<TRow, TNode, ResultOf<"selected-rows.toggle">> {
-    return extended.ok
-        ? toggled(selected(state, extended.value, state.selectionAnchor))
-        : extended;
-}
-
-/** The state with the selected keys and the anchor, the same object when neither changed. */
-function selected<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    keys: readonly RowKey[],
-    anchor: SelectionAnchor | null,
-): Applied<TRow, TNode, readonly RowKey[]> {
-    const sameKeys = sameRowKeys(keys, state.selectedRowKeys);
-    const next =
-        sameKeys && sameAnchor(anchor, state.selectionAnchor)
-            ? state
-            : {
-                  ...state,
-                  selectedRowKeys: sameKeys ? state.selectedRowKeys : keys,
-                  selectionAnchor: anchor,
-              };
-    return done(next, next.selectedRowKeys);
-}
-
-/** A setting's next value: `undefined` keeps the current one, `null` clears it. */
-function setting<T>(value: T | null | undefined, current: T | undefined) {
-    return value === undefined ? current : (value ?? undefined);
 }
 
 /**
@@ -753,7 +470,7 @@ function withLayout<TRow, TNode>(
         columnIndex !== active.columnIndex
             ? { rowIndex: active.rowIndex, columnIndex }
             : active;
-    // in its new place, a span may cover it (E1.2); a range's columns are others now (Epic #88)
+    // in its new place, a span may cover it (E1.2)
     return reconcile(
         {
             ...state,
@@ -762,7 +479,6 @@ function withLayout<TRow, TNode>(
             columns,
             header,
             activePosition,
-            selectedRange: null,
         },
         state,
     );
@@ -824,39 +540,6 @@ function withGroupKeys<TRow, TNode>(
         ? state
         : { ...state, expandedGroupKeys: keys };
     return done(next, next.expandedGroupKeys);
-}
-
-/**
- * A group row's selection toggled (Epic #87): its rows' keys, all selected or all cleared (many
- * rows only; a group naming none cannot be). With `extend`, a range from the anchor to it (group
- * rows giving their rows' keys); without an anchor, a toggle.
- */
-function toggledGroup<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    group: GroupRow,
-    rowIndex: number,
-    extend: boolean,
-): Applied<TRow, TNode, ResultOf<"selected-rows.toggle">> {
-    if (!groupSelectable(state, group)) {
-        return fail(
-            "refused",
-            `group row "${String(group.key)}" cannot be selected (multiple mode, its rows' keys)`,
-        );
-    }
-    // a range from the anchor; without one, a toggle (as a data row's)
-    const extended = extend ? extendedKeys(state, rowIndex) : undefined;
-    if (extended) {
-        return extendedTo(state, extended);
-    }
-    // a toggle by index makes its row the anchor, with the state it gave (as a data row's)
-    const was = isRowSelected(state, rowIndex);
-    return toggled(
-        selected(state, groupToggledKeys(state, group), {
-            rowKey: group.key,
-            rowIndex,
-            selected: !was,
-        }),
-    );
 }
 
 /**
@@ -1035,135 +718,6 @@ function createHandlers<TRow, TNode>(
                 toggledKey(state.expandedGroupKeys, key),
             );
         },
-        "selected-rows.set": (state, { rowKeys }) => {
-            if (!state.rowSelection) return selectionOff();
-            const unique = validRowKeys(rowKeys);
-            if (!unique.ok) return unique;
-            const keys = keptRowKeys(unique.value, state.rowSelection);
-            return selected(
-                state,
-                keys,
-                keptAnchor(state, state.selectionAnchor, keys),
-            );
-        },
-        "selected-rows.toggle": (state, payload) => {
-            if (!state.rowSelection) return selectionOff();
-            if (payload.rowIndex === undefined) {
-                if (!isRowKey(payload.rowKey)) return invalid(TOGGLE_BY);
-                // no index to start a range from: the anchor goes
-                return toggled(
-                    selected(state, toggledKeys(state, payload.rowKey), null),
-                );
-            }
-            const rowIndex = payload.rowIndex;
-            // the row read once: a group row, or a data row's key
-            const meta = rowMetaAt(state.source, rowIndex);
-            if (meta?.group) {
-                return toggledGroup(
-                    state,
-                    meta.group,
-                    rowIndex,
-                    payload.extend === true,
-                );
-            }
-            const found = loadedKeyAt(state, rowIndex, notLoaded, meta);
-            if (!found.ok) return found;
-            const key = found.value;
-            // one row at a time has no range: a Shift+click is a toggle there
-            if (payload.extend === true && state.rowSelection === "multiple") {
-                const extended = extendedKeys(state, rowIndex);
-                // the range starts where it did: the anchor stays
-                if (extended) {
-                    return extendedTo(state, extended);
-                }
-                // nothing to extend from: a toggle
-            }
-            const was = keySet(state.selectedRowKeys).has(key);
-            // a row that cannot be selected is never added; one selected already can be cleared
-            if (!isRowSelectable(state, rowIndex) && !was) {
-                return fail("refused", `row ${rowIndex} cannot be selected`);
-            }
-            return toggled(
-                selected(state, toggledKeys(state, key), {
-                    rowKey: key,
-                    rowIndex,
-                    selected: !was,
-                }),
-            );
-        },
-        "selection-anchor.clear": (state) =>
-            done(
-                state.selectionAnchor
-                    ? { ...state, selectionAnchor: null }
-                    : state,
-                undefined,
-            ),
-        "selection-anchor.set": (state, { rowIndex, selected: selects }) => {
-            if (!state.rowSelection) return selectionOff();
-            if (!isIndex(rowIndex, state.rowCount)) {
-                return noRow(rowIndex);
-            }
-            // a group row's anchor is its group key (Epic #87)
-            const rowKey = rowKeyAt(state, rowIndex);
-            if (rowKey === undefined) return notLoaded(rowIndex);
-            const anchor = {
-                rowKey,
-                rowIndex,
-                selected: selects !== false,
-            };
-            const next = sameAnchor(state.selectionAnchor, anchor)
-                ? state
-                : { ...state, selectionAnchor: anchor };
-            return done(next, next.selectionAnchor ?? anchor);
-        },
-        "selected-rows.select-all": (state) => {
-            if (!state.rowSelection) return selectionOff();
-            if (state.rowSelection === "single") {
-                return fail("refused", "a single selection selects one row");
-            }
-            const all = allKeys(state);
-            if (!all.ok) return all;
-            return selected(
-                state,
-                all.value,
-                keptAnchor(state, state.selectionAnchor, all.value),
-            );
-        },
-        "row-selection.set": (state, { rowSelection, isRowSelectable }) => {
-            if (
-                rowSelection !== undefined &&
-                rowSelection !== null &&
-                !ROW_SELECTIONS.includes(rowSelection)
-            ) {
-                return notOneOf("rowSelection", ROW_SELECTIONS);
-            }
-            if (
-                isRowSelectable !== undefined &&
-                isRowSelectable !== null &&
-                typeof isRowSelectable !== "function"
-            ) {
-                return invalid("isRowSelectable must be a function");
-            }
-            const mode = setting(rowSelection, state.rowSelection);
-            const filter = setting(isRowSelectable, state.isRowSelectable);
-            const keys = keptRowKeys(state.selectedRowKeys, mode);
-            const next =
-                mode === state.rowSelection &&
-                filter === state.isRowSelectable &&
-                keys === state.selectedRowKeys
-                    ? state
-                    : {
-                          ...state,
-                          rowSelection: mode,
-                          isRowSelectable: filter,
-                          selectedRowKeys: keys,
-                          // no range survives selection turned off, nor its row trimmed
-                          selectionAnchor: mode
-                              ? keptAnchor(state, state.selectionAnchor, keys)
-                              : null,
-                      };
-            return done(next, undefined);
-        },
         "editing-cell.set": (state, payload) => {
             if (
                 !Number.isInteger(payload?.rowIndex) ||
@@ -1206,91 +760,6 @@ function createHandlers<TRow, TNode>(
                 state.editingCell
                     ? { ...state, editingCell: null, editingKeys: null }
                     : state,
-                undefined,
-            ),
-        "cell-selection.set": (state, { cellSelection }) => {
-            if (
-                cellSelection !== null &&
-                !CELL_SELECTIONS.includes(cellSelection)
-            ) {
-                return notOneOf("cellSelection", CELL_SELECTIONS);
-            }
-            const mode = cellSelection ?? undefined;
-            // off, no range survives
-            const next =
-                mode === state.cellSelection
-                    ? state
-                    : {
-                          ...state,
-                          cellSelection: mode,
-                          selectedRange: mode ? state.selectedRange : null,
-                      };
-            return done(next, next.cellSelection);
-        },
-        "selected-range.set": (state, { anchor, focus }) => {
-            if (!state.cellSelection) return cellsOff();
-            for (const corner of [anchor, focus]) {
-                if (!isBodyCell(state, corner)) return noBodyCell(corner);
-            }
-            return withRange(state, { anchor, focus });
-        },
-        "selected-range.extend": (state, payload) => {
-            if (!state.cellSelection) return cellsOff();
-            const range = state.selectedRange;
-            const active = isBodyCell(state, state.activePosition)
-                ? state.activePosition
-                : null;
-            if (payload.direction !== undefined) {
-                const { direction, pageSize } = payload;
-                if (!DIRECTIONS.includes(direction)) {
-                    return notOneOf("direction", DIRECTIONS);
-                }
-                if (pageSize !== undefined && !Number.isFinite(pageSize)) {
-                    return invalid("pageSize must be a number");
-                }
-                const from =
-                    range ?? (active && { anchor: active, focus: active });
-                if (!from) {
-                    return fail(
-                        "refused",
-                        "no range, nor an active body cell, to extend",
-                    );
-                }
-                // in the body: never into the header nor the summary rows
-                const focus = nextPosition(
-                    from.focus,
-                    direction,
-                    bodyBoundsOf(state),
-                    pageSize,
-                );
-                return withRange(state, { anchor: from.anchor, focus });
-            }
-            const cell = {
-                rowIndex: payload.rowIndex,
-                columnIndex: payload.columnIndex,
-            };
-            if (!isBodyCell(state, cell)) return noBodyCell(cell);
-            return withRange(state, {
-                anchor: range?.anchor ?? active ?? cell,
-                focus: cell,
-            });
-        },
-        "selected-range.select-all": (state) => {
-            if (!state.cellSelection) return cellsOff();
-            if (state.rowCount === 0 || state.columns.length === 0) {
-                return fail("refused", "the grid has no body cells");
-            }
-            return withRange(state, {
-                anchor: { rowIndex: 0, columnIndex: 0 },
-                focus: {
-                    rowIndex: state.rowCount - 1,
-                    columnIndex: state.columns.length - 1,
-                },
-            });
-        },
-        "selected-range.clear": (state) =>
-            done(
-                state.selectedRange ? { ...state, selectedRange: null } : state,
                 undefined,
             ),
         "column-widths.set": (state, { columnWidths }) => {
@@ -1532,61 +1001,6 @@ function createHandlers<TRow, TNode>(
             );
             return done(next, undefined);
         },
-        "active-position.set": (state, payload) => {
-            if (!isCell(state, payload)) {
-                return fail(
-                    "not_found",
-                    `no cell at row ${payload.rowIndex}, column ${payload.columnIndex}`,
-                );
-            }
-            const position = cellPosition(state, {
-                rowIndex: payload.rowIndex,
-                columnIndex: payload.columnIndex,
-            });
-            const current = state.activePosition;
-            const next =
-                current && sameCell(current, position)
-                    ? state
-                    : { ...state, activePosition: position };
-            return done(next, position);
-        },
-        "active-position.clear": (state) =>
-            done(
-                state.activePosition
-                    ? { ...state, activePosition: null }
-                    : state,
-                undefined,
-            ),
-        "active-position.move": (
-            state,
-            { direction, pageSize, visibleColumns },
-        ) => {
-            if (!DIRECTIONS.includes(direction)) {
-                return notOneOf("direction", DIRECTIONS);
-            }
-            if (pageSize !== undefined && !Number.isFinite(pageSize)) {
-                return invalid("pageSize must be a number");
-            }
-            if (
-                visibleColumns !== undefined &&
-                (!Number.isInteger(visibleColumns.start) ||
-                    !Number.isInteger(visibleColumns.end))
-            ) {
-                return invalid("visibleColumns must have whole-number bounds");
-            }
-            const current = state.activePosition;
-            if (!current) return fail("refused", "no cell is active");
-            const position = nextPosition(
-                current,
-                direction,
-                { ...boundsOf(state), visibleColumns },
-                pageSize,
-            );
-            const next = sameCell(position, current)
-                ? state
-                : { ...state, activePosition: position };
-            return done(next, position);
-        },
     };
 }
 
@@ -1651,14 +1065,6 @@ export function createDataGridModel<
         columnOrder,
         collapsedGroupKeys,
     );
-    const selectionMode =
-        options.rowSelection && ROW_SELECTIONS.includes(options.rowSelection)
-            ? options.rowSelection
-            : undefined;
-    const cellMode =
-        options.cellSelection && CELL_SELECTIONS.includes(options.cellSelection)
-            ? options.cellSelection
-            : undefined;
     const blank: DataGridState<TRow, TNode> = {
         columns,
         columnEntries: entries,
@@ -1678,7 +1084,8 @@ export function createDataGridModel<
             NO_SUMMARY_ROWS,
         summaryRowHeight: options.summaryRowHeight ?? DEFAULT_ROW_HEIGHT,
         summaryRevision: 0,
-        activePosition: options.activePosition ?? null,
+        // a feature's to set (navigation, Epic #144): none without it
+        activePosition: null,
         rowsChanged: { revision: 0, start: 0, end: 0 },
         expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
         expandedGroupKeys: uniqueRowKeys(options.expandedGroupKeys ?? []) ?? [],
@@ -1687,20 +1094,9 @@ export function createDataGridModel<
         estimatedDetailHeight: validEstimate(options.estimatedDetailHeight)
             ? options.estimatedDetailHeight
             : DEFAULT_DETAIL_HEIGHT,
-        rowSelection: selectionMode,
-        selectedRowKeys: keptRowKeys(
-            uniqueRowKeys(options.selectedRowKeys ?? []) ?? [],
-            selectionMode,
-        ),
-        isRowSelectable: options.isRowSelectable,
-        selectionAnchor: null,
         // kept once the rows are given (`withSource`): the active cell, an editable one
         editingCell: options.editingCell ?? null,
         editingKeys: null,
-        cellSelection: cellMode,
-        // kept inside the body once the rows are given (`withSource`)
-        selectedRange: options.selectedRange ?? null,
-        selectedRangeKeys: null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
         collapsedGroupKeys,
@@ -1709,12 +1105,13 @@ export function createDataGridModel<
                 ? options.direction
                 : undefined,
     };
+    // each feature's slice, from its options (the columns laid out)
+    const initial = features.initial(
+        blank as DataGridState<unknown, unknown>,
+        options as Readonly<Record<string, unknown>>,
+    ) as DataGridState<TRow, TNode>;
     let state = withSource(
-        // each feature's slice, from its options (the columns laid out)
-        features.initial(
-            blank as DataGridState<unknown, unknown>,
-            options as Readonly<Record<string, unknown>>,
-        ) as DataGridState<TRow, TNode>,
+        initial,
         sourceOf(
             options.rows !== undefined || options.getRow === undefined
                 ? { rows: options.rows ?? [], getRowMeta: options.getRowMeta }
@@ -1729,8 +1126,21 @@ export function createDataGridModel<
         // the position given is for these rows
         false,
     );
-    // a range and an edit given to start with take the keys they find
-    state = withKeptEditing(withRangeKeys(state, null));
+    // an edit given to start with takes the keys it finds; the features' state its rules, for
+    // the rows given (a range: Epic #144)
+    state = withKeptEditing(state);
+    const settle = features.stateChanged;
+    if (settle) {
+        // against the state as given, its active cell as the rows keep it (a position clamped or
+        // snapped at creation is no move)
+        state = settle(
+            state as FeatureState,
+            {
+                ...initial,
+                activePosition: state.activePosition,
+            } as FeatureState,
+        ) as DataGridState<TRow, TNode>;
+    }
     const middlewares: Middleware<TRow, TNode, []>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
     const queue: Queued[] = [];
@@ -1766,8 +1176,9 @@ export function createDataGridModel<
                 ) => Applied<TRow, TNode, unknown>;
                 try {
                     applied = handler(state, ctx.payload);
-                    // the range follows the active cell's rule, whatever moved it (Epic #88), and
-                    // the features keep their state to a new source, new columns or rows changed
+                    // the edit follows the active cell's rule, whatever moved it (Epic #88), and
+                    // the features keep their state to a new source, new columns or rows changed,
+                    // then to their own rules (a range's: Epic #144)
                     if (applied.ok) {
                         const kept = withFeatureState(
                             features,
@@ -1895,7 +1306,6 @@ export function createDataGridModel<
                 dataRowAt(state.source, rowIndex, meta),
             );
         },
-        "active-position": () => state.activePosition,
         "column-widths": () => state.columnWidths,
         "column-width-by": ({ columnKey }) => {
             const span = state.header.cellByKey(columnKey);
@@ -1920,35 +1330,12 @@ export function createDataGridModel<
         "row-meta-by": ({ rowIndex }) => rowMetaAt(state.source, rowIndex),
         "expanded-rows": () => state.expandedRows,
         "detail-height": () => state.detailHeight,
-        "row-selection": () => state.rowSelection,
-        "selected-row-keys": () => state.selectedRowKeys,
-        "selection-anchor": () => validAnchor(state),
         "editing-cell": () => state.editingCell,
-        "cell-selection": () => state.cellSelection,
-        "selected-range": () => state.selectedRange,
     };
 
     const questions: {
         [K in QuestionKey]: (payload: QuestionMap[K]) => boolean;
     } = {
-        // a header cell spanning rows or columns, a body cell spanning columns (E1.2): any
-        // position inside it
-        "cell-active": (position) => {
-            const active = state.activePosition;
-            if (!active) return false;
-            if (isHeaderRow(position.rowIndex, state.header)) {
-                return sameCell(active, position, state.header.cellAt);
-            }
-            const span = spanAt(state, position.rowIndex, position.columnIndex);
-            return activeInCell(
-                active,
-                position.rowIndex,
-                span.columnIndex,
-                span.columnSpan,
-            );
-        },
-        "row-active": ({ rowIndex }) =>
-            state.activePosition?.rowIndex === rowIndex,
         // a group row (Epic #87) has nothing to wait for
         "row-loaded": ({ rowIndex }) => rowLoaded(state.source, rowIndex),
         "group-collapsed": ({ groupKey }) => isGroupCollapsed(state, groupKey),
@@ -1956,9 +1343,6 @@ export function createDataGridModel<
             holdsRow(state.expandedRows, rowIndex),
         "row-group-expanded": ({ rowIndex }) =>
             isGroupExpanded(state, rowIndex),
-        "row-selected": ({ rowIndex }) => isRowSelected(state, rowIndex),
-        "row-selectable": ({ rowIndex }) => isRowSelectable(state, rowIndex),
-        "cell-selected": (position) => isCellSelected(state, position),
         "cell-editable": (position) => isCellEditable(state, position),
     };
 
@@ -2035,7 +1419,8 @@ export function createDataGridModel<
 
 /**
  * The state after a command, each feature's kept to a new source, new columns or rows changed
- * (`sourceChanged`): only after a command that changed one of them.
+ * (`sourceChanged`: only after a command that changed one of them), then to its rules
+ * (`stateChanged`: after every command).
  */
 function withFeatureState<TRow, TNode>(
     features: GridFeatures,
@@ -2043,18 +1428,23 @@ function withFeatureState<TRow, TNode>(
     after: DataGridState<TRow, TNode>,
 ): DataGridState<TRow, TNode> {
     const keep = features.sourceChanged;
-    if (
+    const kept =
         !keep ||
         (after.source === before.source &&
             after.columnEntries === before.columnEntries &&
             after.rowsChanged === before.rowsChanged)
-    ) {
-        return after;
-    }
-    return keep(after as FeatureState, before as FeatureState) as DataGridState<
-        TRow,
-        TNode
-    >;
+            ? after
+            : (keep(
+                  after as FeatureState,
+                  before as FeatureState,
+              ) as DataGridState<TRow, TNode>);
+    const settle = features.stateChanged;
+    return settle
+        ? (settle(
+              kept as FeatureState,
+              before as FeatureState,
+          ) as DataGridState<TRow, TNode>)
+        : kept;
 }
 
 /** The commands' names, for tools and guards (the naming test checks it lists every one). */
@@ -2066,19 +1456,8 @@ export const COMMANDS = [
     "expanded-rows.toggle",
     "row-groups.set",
     "row-groups.toggle",
-    "selected-rows.set",
-    "selected-rows.toggle",
-    "selected-rows.select-all",
-    "selection-anchor.set",
-    "selection-anchor.clear",
-    "row-selection.set",
     "editing-cell.set",
     "editing-cell.clear",
-    "cell-selection.set",
-    "selected-range.set",
-    "selected-range.extend",
-    "selected-range.select-all",
-    "selected-range.clear",
     "column-widths.set",
     "column-widths.resize",
     "column-widths.reset",
@@ -2091,7 +1470,4 @@ export const COMMANDS = [
     "summary-rows.set",
     "summary-rows.changed",
     "sizes.set",
-    "active-position.set",
-    "active-position.clear",
-    "active-position.move",
 ] satisfies (keyof CommandMap<unknown>)[];

@@ -11,7 +11,14 @@ import {
     type RootProps,
     useDataGrid,
 } from "../src";
-import { renderCounting, scrollRoot, stubViewportSize, tags } from "./helpers";
+import {
+    FEATURES,
+    type Features,
+    renderCounting,
+    scrollRoot,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // The primitive contract (AGENTS.md): render, never asChild; refs merged; props forwarded and
 // handlers composed; className/style as functions; structural inline style only; state through
@@ -62,7 +69,7 @@ const STRUCTURAL = new Set([
 ]);
 
 type DivGridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, Features>,
     | "headerRowHeight"
     | "activePosition"
     | "defaultActivePosition"
@@ -73,7 +80,13 @@ type DivGridProps = Pick<
 
 function DivGrid({ rows = people, ...props }: DivGridProps = {}) {
     return (
-        <DataGrid.Root columns={columns} rows={rows} rowHeight={20} {...props}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={columns}
+            rows={rows}
+            rowHeight={20}
+            {...props}
+        >
             <DataGrid.Grid aria-label="People">
                 <DataGrid.Header />
                 <DataGrid.Body />
@@ -84,7 +97,12 @@ function DivGrid({ rows = people, ...props }: DivGridProps = {}) {
 
 function TableGrid() {
     return (
-        <DataGrid.Root columns={columns} rows={people} rowHeight={20}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={columns}
+            rows={people}
+            rowHeight={20}
+        >
             <DataGrid.Grid aria-label="People" render={<table />}>
                 <DataGrid.Header render={<thead />}>
                     <DataGrid.HeaderRow render={<tr />}>
@@ -217,6 +235,7 @@ describe("the primitive contract", () => {
     it("applies only structural inline style with pinned columns: sticky cells, flex rows", () => {
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns.map((column, index) =>
                     index === 0 ? { ...column, pinned: "start" } : column,
                 )}
@@ -248,7 +267,7 @@ describe("the primitive contract", () => {
 
     it("sets no accessible name of its own", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={people}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={people}>
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -261,6 +280,7 @@ describe("the primitive contract", () => {
     it("resolves className and style functions against the state; structural keys win", () => {
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={people}
                 defaultActivePosition={{ rowIndex: 1, columnIndex: 1 }}
@@ -314,7 +334,7 @@ describe("the primitive contract", () => {
 
     it("renders through a render function with the props and the state", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={people}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={people}>
                 <DataGrid.Grid
                     render={(props, state) => (
                         <section {...props} data-count={state.rowCount} />
@@ -333,7 +353,7 @@ describe("the primitive contract", () => {
         const ref = createRef<HTMLElement>();
         const onClick = vi.fn();
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={people}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={people}>
                 <DataGrid.Grid ref={ref} id="people" onClick={onClick}>
                     <DataGrid.Body />
                 </DataGrid.Grid>
@@ -350,6 +370,7 @@ describe("the primitive contract", () => {
         const loaded = new Map([[0, people[0]]]);
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rowCount={100}
                 getRow={(index) => loaded.get(index)}
@@ -377,9 +398,9 @@ describe("the active cell", () => {
     function Probe({
         onReady,
     }: {
-        onReady: (value: DataGridContextValue<Person>) => void;
+        onReady: (value: DataGridContextValue<Person, Features>) => void;
     }) {
-        onReady(useDataGrid<Person>());
+        onReady(useDataGrid<Person, Features>());
         return null;
     }
 
@@ -434,11 +455,12 @@ describe("the active cell", () => {
     });
 
     it("follows the model: useDataGrid().model.run changes the same state, through onChange when controlled", () => {
-        let grid: DataGridContextValue<Person> | null = null;
+        let grid: DataGridContextValue<Person, Features> | null = null;
         function Controlled() {
             const [position, setPosition] = useState<CellPosition | null>(null);
             return (
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rows={people}
                     activePosition={position}
@@ -473,6 +495,7 @@ describe("the active cell", () => {
         const onChange = vi.fn();
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={people}
                 defaultActivePosition={{ rowIndex: 0, columnIndex: 0 }}
@@ -525,7 +548,12 @@ describe("the active cell", () => {
 describe("the empty state", () => {
     function EmptyGrid({ rows }: { rows: Person[] }) {
         return (
-            <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={columns}
+                rows={rows}
+                rowHeight={20}
+            >
                 <DataGrid.Grid aria-label="People">
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -584,7 +612,7 @@ describe("the empty state", () => {
         const ref = createRef<HTMLTableCellElement>();
         const onClick = vi.fn();
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid render={<table />}>
                     <DataGrid.Body render={<tbody />} />
                     <DataGrid.Empty
@@ -619,7 +647,7 @@ describe("the empty state", () => {
 
         const rendered = vi.fn((props: object) => <div {...props} />);
         render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid>
                     <DataGrid.Empty render={rendered} />
                 </DataGrid.Grid>
@@ -638,7 +666,7 @@ describe("the empty state", () => {
             { key: "age", width: 50 },
         ];
         const { container } = render(
-            <DataGrid.Root columns={narrow} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={narrow} rows={[]}>
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -651,7 +679,7 @@ describe("the empty state", () => {
         expect(parts(container, "grid")[0]?.style.width).toBe("400px");
         expect(parts(container, "empty-area")[0]?.style.width).toBe("150px");
         const none = render(
-            <DataGrid.Root columns={[]} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={[]} rows={[]}>
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -666,7 +694,7 @@ describe("the empty state", () => {
 
     it("finds a table's structure from a render function's `<td>` too", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid render={<table />}>
                     <DataGrid.Body render={<tbody />} />
                     <DataGrid.Empty
@@ -693,7 +721,7 @@ describe("the empty state", () => {
         // the app's own cell component, rendering a `<td>`
         const Td = (props: ComponentProps<"td">) => <td {...props} />;
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid render={<table />}>
                     <DataGrid.Body render={<tbody />} />
                     <DataGrid.Empty render={<Td />}>No people</DataGrid.Empty>
@@ -708,7 +736,7 @@ describe("the empty state", () => {
         expect(empty).not.toHaveAttribute("role");
         // without `render`, a table grid's empty state is a `<td>` too
         const plain = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid render={<table />}>
                     <DataGrid.Empty>No people</DataGrid.Empty>
                 </DataGrid.Grid>
@@ -721,7 +749,7 @@ describe("the empty state", () => {
 
     it("counts no empty line in ARIA without an empty state", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -738,6 +766,7 @@ describe("the empty state", () => {
     it("counts its row in ARIA, after the header rows and before the bottom summary rows", () => {
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={[]}
                 summaryRows={{ top: 1, bottom: 1 }}
@@ -770,7 +799,7 @@ describe("the empty state", () => {
 
     it("is a row and a cell spanning the columns, with no text or name of its own", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <DataGrid.Grid>
                     <DataGrid.Body />
                     <DataGrid.Empty />
@@ -807,6 +836,7 @@ describe("column groups", () => {
         const tag = tags(table);
         return (
             <DataGrid.Root
+                features={FEATURES}
                 columns={groupedColumns}
                 rows={people}
                 rowHeight={20}
@@ -910,7 +940,11 @@ describe("column groups", () => {
 
     it("keeps a nested grid's header rows its own", () => {
         const { container } = render(
-            <DataGrid.Root columns={groupedColumns} rows={people}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={groupedColumns}
+                rows={people}
+            >
                 <DataGrid.Grid>
                     <DataGrid.Header>
                         <DataGrid.HeaderRows<Person>>
@@ -921,6 +955,7 @@ describe("column groups", () => {
                                             <DataGrid.HeaderCell cell={cell}>
                                                 {cell.key === "id" ? (
                                                     <DataGrid.Root
+                                                        features={FEATURES}
                                                         columns={[
                                                             {
                                                                 key: "x",
@@ -962,7 +997,11 @@ describe("column groups", () => {
 
     it("renders by default a header row per level, and only structural inline style", () => {
         const { container } = render(
-            <DataGrid.Root columns={groupedColumns} rows={people}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={groupedColumns}
+                rows={people}
+            >
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -1022,7 +1061,7 @@ describe("column groups", () => {
             },
         ];
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={people}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={people}>
                 <DataGrid.Grid>
                     <DataGrid.Header>
                         <DataGrid.HeaderRows<Person>>
@@ -1081,17 +1120,21 @@ describe("column groups", () => {
     });
 
     it("keeps the columns as given: no columns.set on mount, nor for the same array", () => {
-        let model: DataGridContextValue<Person>["model"] | undefined;
+        let model: DataGridContextValue<Person, Features>["model"] | undefined;
         let firstHeader: unknown;
         function Grab() {
-            model = useDataGrid<Person>().model;
+            model = useDataGrid<Person, Features>().model;
             // read while rendering, before the root's effects run
             firstHeader ??= model.state.header;
             return null;
         }
         const commands: string[] = [];
         const { rerender } = render(
-            <DataGrid.Root columns={groupedColumns} rows={people}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={groupedColumns}
+                rows={people}
+            >
                 <Grab />
             </DataGrid.Root>,
         );
@@ -1099,7 +1142,11 @@ describe("column groups", () => {
         expect(model?.state.header).toBe(firstHeader);
         model?.subscribe(({ command }) => commands.push(command));
         rerender(
-            <DataGrid.Root columns={groupedColumns} rows={people}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={groupedColumns}
+                rows={people}
+            >
                 <Grab />
             </DataGrid.Root>,
         );
@@ -1111,7 +1158,12 @@ describe("column groups", () => {
 describe("regressions", () => {
     it("goes back to the default row height when the prop is removed", () => {
         const { container, rerender } = render(
-            <DataGrid.Root columns={columns} rows={people} rowHeight={50}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={columns}
+                rows={people}
+                rowHeight={50}
+            >
                 <DataGrid.Grid>
                     <DataGrid.Body />
                 </DataGrid.Grid>
@@ -1119,7 +1171,7 @@ describe("regressions", () => {
         );
         expect(parts(container, "row")[0]?.style.height).toBe("50px");
         rerender(
-            <DataGrid.Root columns={columns} rows={people}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={people}>
                 <DataGrid.Grid>
                     <DataGrid.Body />
                 </DataGrid.Grid>
@@ -1149,7 +1201,12 @@ describe("regressions", () => {
     it("keeps a row's elements when it loads in place", () => {
         const loaded = new Map<number, Person>();
         const tree = (getRow: (index: number) => Person | undefined) => (
-            <DataGrid.Root columns={columns} rowCount={100} getRow={getRow}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={columns}
+                rowCount={100}
+                getRow={getRow}
+            >
                 <DataGrid.Grid>
                     <DataGrid.Body />
                 </DataGrid.Grid>
@@ -1207,6 +1264,7 @@ describe("epic review regressions", () => {
         );
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={people}
                 defaultActivePosition={{ rowIndex: 0, columnIndex: 0 }}
@@ -1232,6 +1290,7 @@ describe("epic review regressions", () => {
         const onChange = vi.fn();
         render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={people}
                 defaultActivePosition={{ rowIndex: 0, columnIndex: 0 }}
@@ -1272,7 +1331,7 @@ describe("epic review regressions", () => {
 
     it("keeps the engine's transform on a layer whose style has one", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={people}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={people}>
                 <DataGrid.Grid>
                     <DataGrid.Body
                         style={{ transform: "translateZ(0)", color: "red" }}
@@ -1354,6 +1413,7 @@ describe("layering (Epic #89, E5.2)", () => {
     it("stacks the header above the summary rows above the body, inside the grid's own context", () => {
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={people}
                 summaryRows={{ top: 1, bottom: 1 }}

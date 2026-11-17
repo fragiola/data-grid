@@ -18,6 +18,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     fire,
     headerAt,
     keyDown,
@@ -38,7 +40,7 @@ interface Person {
     name: string;
 }
 
-const G = typedDataGrid<Person>();
+const G = typedDataGrid<Person, Features>();
 
 const people: Person[] = Array.from({ length: 10 }, (_, i) => ({
     id: i,
@@ -72,7 +74,7 @@ stubViewportSize(600, 300);
 const states = new Map<string, HeaderCellState>();
 
 type GridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, Features>,
     | "columnOrder"
     | "defaultColumnOrder"
     | "onColumnOrderChange"
@@ -162,7 +164,13 @@ function grid({ cells = columns, table = false, ...props }: GridProps = {}) {
         );
     return h(
         G.Root,
-        { columns: cells, rows: people, rowHeight: 20, ...props },
+        {
+            features: FEATURES,
+            columns: cells,
+            rows: people,
+            rowHeight: 20,
+            ...props,
+        },
         {
             default: () => [
                 h(
@@ -220,7 +228,10 @@ function bodyOrder(container: HTMLElement): string[] {
 
 /** A grid with a handle on it from outside, to run commands on. */
 async function withRef(initial: GridProps) {
-    const gridRef: DataGridRef<Person> = createDataGridRef<Person>();
+    const gridRef: DataGridRef<Person, Features> = createDataGridRef<
+        Person,
+        Features
+    >();
     const props = shallowRef(initial);
     const view = renderGrid(() => grid({ gridRef, ...props.value }));
     await settled();
@@ -326,7 +337,7 @@ describe("controlled", () => {
 
     it("works with a parent that follows, a group moving whole", async () => {
         const order = shallowRef<ColumnOrder>([]);
-        const gridRef = createDataGridRef<Person>();
+        const gridRef = createDataGridRef<Person, Features>();
         // a parent: the order in its state, set by the root's handler
         const { container } = renderGrid(() =>
             grid({
@@ -389,7 +400,7 @@ describe("the active cell", () => {
 
     it("follows its column with the order and the position both controlled, never back to its old place", async () => {
         const onActivePositionChange = vi.fn();
-        const gridRef = createDataGridRef<Person>();
+        const gridRef = createDataGridRef<Person, Features>();
         const columnOrder = shallowRef<ColumnOrder>([]);
         const activePosition = shallowRef<CellPosition | null>({
             rowIndex: -1,

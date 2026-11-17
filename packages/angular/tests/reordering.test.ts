@@ -7,6 +7,7 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
+import { DataGridNavigation } from "../src/navigation";
 import {
     type CellPosition,
     type Column,
@@ -19,7 +20,7 @@ import {
     type DataGridRef,
     type HeaderCellState,
 } from "../src/public-api";
-import { type TestProps, TestRootProps } from "./grid";
+import { type TestFeatures, type TestProps, TestRootProps } from "./grid";
 import {
     cellAt,
     fire,
@@ -79,12 +80,12 @@ const states = new Map<string, HeaderCellState>();
  */
 @Component({
     selector: "reorder-grid",
-    imports: [DATA_GRID, TestRootProps],
+    imports: [DATA_GRID, DataGridNavigation, TestRootProps],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()" [gridRef]="gridRef()"
             [columnOrder]="followOrder() ? order() : undefined" (columnOrderChange)="orderChanged($event)"
-            [activePosition]="followPosition() === undefined ? undefined : position()"
+            dataGridNavigation [activePosition]="followPosition() === undefined ? undefined : position()"
             (activePositionChange)="positionChanged($event)">
             @if (table()) {
                 <table dataGridGrid>
@@ -240,7 +241,7 @@ function bodyOrder(container: HTMLElement): string[] {
 
 /** A grid with a handle on it from outside, to run commands on. */
 async function withRef(initial: GridProps) {
-    const gridRef = createDataGridRef();
+    const gridRef = createDataGridRef<unknown, TestFeatures>();
     const view = await mountGrid({ gridRef, ...initial });
     const move = async (
         columnKey: string,

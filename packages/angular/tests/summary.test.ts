@@ -11,10 +11,11 @@ import { describe, expect, it } from "vitest";
 import {
     type Column,
     DATA_GRID,
+    type DataGridModel,
     type DataGridNode,
     DataGridRoot,
 } from "../src/public-api";
-import { renderTestGrid } from "./grid";
+import { renderTestGrid, TEST_FEATURES, type TestFeatures } from "./grid";
 import {
     cellAt,
     keyDown,
@@ -69,7 +70,13 @@ stubViewportSize(800, 300);
 const gridOf = (fixture: ComponentFixture<unknown>) =>
     fixture.debugElement
         .query(By.directive(DataGridRoot))
-        .injector.get(DataGridRoot);
+        .injector.get(DataGridRoot) as unknown as Omit<
+        DataGridRoot,
+        "model"
+    > & {
+        // the test grid installs the test features
+        readonly model: DataGridModel<unknown, DataGridNode, TestFeatures>;
+    };
 
 const summaryCell = (
     container: ParentNode,
@@ -411,7 +418,7 @@ describe("a summary cell's controls", () => {
         imports: [DATA_GRID],
         changeDetection: ChangeDetectionStrategy.OnPush,
         template: `
-            <div dataGridRoot [rows]="visible()" [columns]="columns" [rowHeight]="20"
+            <div dataGridRoot [features]="features" [rows]="visible()" [columns]="columns" [rowHeight]="20"
                 [summaryRows]="{ bottom: 1 }" [summaryRowHeight]="30">
                 <div dataGridGrid>
                     <div *dataGridHeader>
@@ -450,6 +457,7 @@ describe("a summary cell's controls", () => {
         `,
     })
     class Editable {
+        readonly features = TEST_FEATURES;
         readonly columns = columns;
         readonly count = input.required<number>();
         readonly visible = computed(() => rows.slice(0, this.count()));

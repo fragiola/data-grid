@@ -132,8 +132,9 @@ sortable) leaves the sort the same way.
 
 ## From the header
 
-A click on a sortable column's header cell, or Enter or Space while it is the active cell,
-toggles it: ascending, descending, not sorted. Alone, the column becomes the only sorted one;
+A click on a sortable column's header cell, or Enter or Space while it is the active cell (with
+[`navigation()`](/docs/concepts/keyboard) installed: without it no cell is active, and only the
+click sorts), toggles it: ascending, descending, not sorted. Alone, the column becomes the only sorted one;
 with Ctrl (⌘ on a Mac), it is added last, or cycles in place, and the others stay.
 
 The grid acts **after** your handlers, as for its keys: `preventDefault` in an `onClick` or

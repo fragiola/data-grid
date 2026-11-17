@@ -24,3 +24,21 @@ export function done<S, R>(
 ): { readonly ok: true; readonly value: { state: S; value: R } } {
     return ok({ state, value });
 }
+
+/** The refusal of a payload that is not what the command takes. */
+export function invalid(message: string): CommandFailure {
+    return fail("invalid_payload", message);
+}
+
+/** The refusal of a value that is none of `list`. */
+export function notOneOf(
+    name: string,
+    list: readonly string[],
+): CommandFailure {
+    return invalid(`${name} must be one of ${list.join(", ")}`);
+}
+
+/** The refusal of a row index with no row. */
+export function noRow(rowIndex: number): CommandFailure {
+    return fail("not_found", `no row ${rowIndex}`);
+}

@@ -8,15 +8,16 @@ import {
     cellPart,
     cellSpan,
     columnResizerPart,
-    createDataGridModel,
     headerCellBox,
     headerCellPart,
+    type ModelOptions,
     rowColumns,
 } from "../../src";
 import { activeColumn, elementPosition } from "../../src/engine/view";
 import { columnsError } from "../../src/header/header";
 import { spanAt } from "../../src/model/spans";
 import { sorting } from "../../src/sorting";
+import { type Features, gridModel } from "../features";
 import {
     cellElement,
     click,
@@ -64,7 +65,7 @@ const COLUMNS: Column<Row>[] = [
     column("c9", { pinned: "end" }),
 ];
 
-const spans = (options: Parameters<typeof stateOf>[0] = {}) =>
+const spans = (options: ModelOptions<Row, unknown, Features> = {}) =>
     stateOf({ columns: COLUMNS, ...options });
 
 describe("a body cell's span", () => {
@@ -105,7 +106,7 @@ describe("a body cell's span", () => {
     });
 
     it("is one column for a row not loaded, an answer below 2 or not a number", () => {
-        const loose = createDataGridModel<Row>({
+        const loose = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 10,
             getRow: (id) => (id === 0 ? undefined : { id }),
@@ -171,7 +172,7 @@ describe("a header cell's span", () => {
 
     it("stops at a group, its siblings' end and its part", () => {
         const wide = () => 9;
-        const { header } = createDataGridModel<Row>({
+        const { header } = gridModel<Row>({
             columns: [
                 column("p", { pinned: "start", colSpan: wide }),
                 column("a", { colSpan: wide }),
@@ -199,7 +200,7 @@ describe("a header cell's span", () => {
     });
 
     it("resizes its whole span, as a group, and a covered column by its own key", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: [
                 column("a", {
                     resizable: true,
@@ -235,7 +236,7 @@ describe("a header cell's span", () => {
     });
 
     it("makes a covered column resizable through the span", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: [
                 column("a", { colSpan: () => 2 }),
                 column("b", { resizable: true }),
@@ -246,7 +247,7 @@ describe("a header cell's span", () => {
     });
 
     it("keeps a covered column from moving: it has no cell among its siblings", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: [
                 column("a", { colSpan: () => 2, reorderable: true }),
                 column("b", { reorderable: true }),
@@ -368,7 +369,7 @@ describe("the view", () => {
 
 describe("the active position", () => {
     const model = () =>
-        createDataGridModel<Row>({
+        gridModel<Row>({
             columns: COLUMNS,
             rowCount: 100,
             getRow: (id) => ({ id }),
@@ -427,7 +428,7 @@ describe("the active position under spans that change", () => {
     /** row 0's "a" spans 2 once `wide` is set */
     function mutable() {
         const wide = { on: false };
-        const grid = createDataGridModel<Row>({
+        const grid = gridModel<Row>({
             columns: [
                 column("a", {
                     reorderable: true,
@@ -698,7 +699,7 @@ describe("a grid with groups and spans", () => {
                 ],
             },
         ];
-        const { header } = createDataGridModel<Row>({ columns }).state;
+        const { header } = gridModel<Row>({ columns }).state;
         expect(header.rows[1]?.map((cell) => cell.key)).toEqual(["a", "c"]);
         expect(header.cellAt(-2, 1)?.key).toBe("g");
     });

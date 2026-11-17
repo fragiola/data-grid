@@ -8,6 +8,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { FIELDS } from "#/components/atoms/fields";
@@ -127,8 +128,9 @@ export default class SummaryRows {
 
     // the rows in memory, searched and sorted by one injection function; the totals follow what
     // it leaves
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop)
+    readonly features = [sorting(), navigation()];
     readonly local = injectLocalRows(all, this.columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

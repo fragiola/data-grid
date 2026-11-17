@@ -54,6 +54,11 @@ export interface ControlledProp<TProps, TState, V>
     readonly start?: ((props: TProps) => V | undefined) | undefined;
     /** what a command makes it, from the command's value; without it, that value itself */
     readonly fromCommand?: ((command: string, value: unknown) => V) | undefined;
+    /**
+     * followed before the data props, with the layout inputs, and settled with them (the active
+     * position: valid before the rows change, it survives them); else after them
+     */
+    readonly first?: boolean | undefined;
 }
 
 /** A controlled piece over the root's latest props: its prop, its handler, its default. */

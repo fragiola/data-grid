@@ -39,7 +39,12 @@ examples/vue/src/
 - **Features are installed**: a grid that sorts installs `sorting()` from
   `@fragiola/data-grid-vue/sorting` (`const features = [sorting()] as const`, `:features="features"`
   on the root) and types its parts by them (`typedDataGrid<Task, typeof features>()`); without it a
-  sortable column never sorts. `useLocalRows(...).props` hands the root its sort: an example that
+  sortable column never sorts. Every grid navigated by the keys installs `navigation()` (without
+  it the grid is a plain table: no active cell, no tab stop), and a grid that selects rows, ranges,
+  copies or fills installs `rowSelection()`, `cellRange()`, `clipboard()`, `fillHandle()` from
+  their subpaths; their props (`:active-position`, `row-selection`, `cell-selection`, `@fill`)
+  are the root's only with them installed. A part reading a feature's keys types its model by
+  that feature (`useDataGrid<Task, [DataGridFeature<RowSelectionTypes>]>()`). `useLocalRows(...).props` hands the root its sort: an example that
   binds them installs sorting too. The sort a view shows is `sortColumnsOf(view)`.
 - **React's components are sibling SFCs**, its hooks composables or `setup` code: `useState` is a
   `ref`, `useMemo` a `computed`, an effect a `watch` or `onMounted`/`onBeforeUnmount`, a context a
@@ -54,8 +59,9 @@ examples/vue/src/
   frameworks look the same.
 - **State the grid keeps** is read through `useDataGrid()` (`{ model, engine }`) and re-read when
   the view changes: `useGridView()` inside a `computed`.
-- **Copyable imports only**: `vue`, `@fragiola/data-grid-vue` (and `/local`, `/selection`, `/sorting`),
-  `@fragiola/data-grid/(local|selection|fill)`, `@lucide/vue`, the kit (`#/components/ui/*`,
+- **Copyable imports only**: `vue`, `@fragiola/data-grid-vue` (and `/local` and the features'
+  `/sorting`, `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`),
+  `@fragiola/data-grid/local`, `@lucide/vue`, the kit (`#/components/ui/*`,
   `#/components/atoms/*`, `#/lib/cn`) and relative files.
 
 ## The kit

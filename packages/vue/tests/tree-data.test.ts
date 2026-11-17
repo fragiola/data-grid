@@ -18,6 +18,8 @@ import { type LocalRowsResult, useLocalRows } from "../src/local";
 import {
     cellAt,
     click,
+    FEATURES,
+    type Features,
     keyDown,
     renderGrid,
     root,
@@ -35,7 +37,7 @@ interface File {
     children?: File[];
 }
 
-const G = typedDataGrid<File>();
+const G = typedDataGrid<File, Features>();
 
 const files: File[] = [
     {
@@ -117,6 +119,7 @@ const Files = defineComponent({
             return h(
                 G.Root,
                 {
+                    features: FEATURES,
                     ...local.props,
                     columns,
                     rowHeight: 20,

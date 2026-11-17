@@ -7,13 +7,15 @@ import {
     useGridView,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sortColumnsOf, sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop)
+const FEATURES = [sorting(), navigation()];
 
 const all = people(200);
 

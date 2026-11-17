@@ -7,6 +7,7 @@ import {
     type DataGridNode,
     type HeaderCellInfo,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucideRotateCcw } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { formatMoney, type Person, people } from "../_kit/data";
@@ -136,6 +137,7 @@ const NAMES = namesOf(columns);
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
@@ -183,6 +185,8 @@ const NAMES = namesOf(columns);
     `,
 })
 export default class ColumnResizing {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly rows = rows;

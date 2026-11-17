@@ -12,7 +12,7 @@ import {
     type DataGridRef,
     type RangePaste,
 } from "../src/public-api";
-import { type TestProps, TestRootProps } from "./grid";
+import { type TestFeatures, type TestProps, TestRootProps } from "./grid";
 import {
     cellAt,
     keyDown,
@@ -333,7 +333,7 @@ describe("the selected range", () => {
     });
 
     it("goes when cellSelection is removed, and is read through a gridRef", async () => {
-        const gridRef = createDataGridRef<Item>();
+        const gridRef = createDataGridRef<Item, TestFeatures>();
         const grid = await renderGrid(
             { defaultSelectedRange: range([0, 0], [1, 1]) },
             {},

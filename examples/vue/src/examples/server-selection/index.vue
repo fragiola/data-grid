@@ -6,6 +6,8 @@ import {
     useDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "@lucide/vue";
 import {
     computed,
@@ -25,8 +27,13 @@ import SelectAll from "./select-all.vue";
 import SelectRow from "./select-row.vue";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), row
+// selection
+const features = [navigation(), rowSelection()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const TOTAL = 10_000;
 const PAGE_SIZE = 50;
@@ -77,7 +84,7 @@ const pageIndex = ref(0);
 const rows = shallowRef<readonly Person[]>([]);
 const selection = shallowRef<Selection>(NONE);
 const exported = ref("");
-const gridRef = useDataGridRef<Person>();
+const gridRef = useDataGridRef<Person, typeof features>();
 const grid = useDataGrid(gridRef);
 
 watch(
@@ -224,6 +231,7 @@ const rowKey = (row: Person) => row.id;
         </div>
         <div :class="styles.layout">
             <DataGrid.Root
+                :features="features"
                 :columns="columns"
                 :rows="rows"
                 :row-key="rowKey"

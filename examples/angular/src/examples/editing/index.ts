@@ -16,6 +16,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { Input, Numeric } from "#/components/atoms/fields";
 import {
     budgetedTasks,
@@ -68,6 +69,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows()"
                 [rowKey]="rowKey"
@@ -124,6 +126,8 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
     `,
 })
 export default class Editing {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Row>>();
     protected readonly editContext = contextOf<Edit>();

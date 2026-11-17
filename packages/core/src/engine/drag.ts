@@ -1,19 +1,15 @@
 import { landingIndex, type Siblings } from "../model/order";
 import type {
-    CellKeys,
-    CellPosition,
-    CellRange,
     ColumnWidths,
     HeaderLayout,
-    RangeKeys,
     ReorderSide,
     RowKey,
 } from "../model/types";
 import { keptIfSame } from "../utils/utils";
 
 // The engine's drags (Epics #70, #75, #86, #88): what each one keeps while the pointer moves, and
-// the pure geometry they share (the edge scroll's step, a drop's side, a fill's target). The
-// engine starts, follows and ends them.
+// the pure geometry they share (the edge scroll's step, a drop's side). The engine starts,
+// follows and ends them; a feature's drag (a range's, a fill's: Epic #144) through its own steps.
 
 /**
  * A drag the engine follows with the pointer: where it started, and where the pointer is. A
@@ -83,40 +79,25 @@ export interface RowDrag extends PointerDrag {
 }
 
 /**
- * A drag selecting a range of cells (Epic #88, E4.1): a press on a body cell that drags once it
- * moves past a click's slop, from its anchor to the cell under the pointer.
+ * A feature's drag (Epic #144: a range's, a fill handle's): a press it takes (`FeatureEngine.
+ * pointerdown`) that the engine follows as its own, past the slop and once a frame, both axes,
+ * telling it each step and how it ends.
  */
-export interface RangeDrag extends PointerDrag {
-    readonly kind: "range";
-    /** the range's anchor: the pressed cell, or with Shift the range's own */
-    readonly anchor: CellPosition;
-    /** the keys at the anchor at the press: other ones there end the drag */
-    readonly anchorKeys: CellKeys | undefined;
-    /** the cell the range reaches, as last set */
-    focus: CellPosition;
-}
-
-/**
- * A fill handle's drag (Epic #88, E4.4): from the press on, the source (the range or the active
- * cell when it started, widened to the spans it cuts) and the cell the selection is anchored at
- * then, the target following the cell under the pointer.
- */
-export interface FillHandleDrag extends PointerDrag {
-    readonly kind: "fill";
-    readonly source: CellRange;
-    /** the keys at the source's corners at the press: other ones there end the drag */
-    readonly sourceKeys: RangeKeys;
-    readonly anchor: CellPosition;
-    /** the body cell the pointer was last over, `null` before a move */
-    cell: CellPosition | null;
+export interface FeatureDrag extends PointerDrag {
+    readonly kind: "feature";
+    /** it moved past the slop (a press that did not drag from the start): it drags from now on */
+    readonly start?: (() => void) | undefined;
+    /** a frame of its drag: the pointer moved (`x`, `y`), or the edge scroll goes on */
+    readonly step: () => void;
+    /** it ended: released, cancelled or lost (a press that never dragged ends too) */
+    readonly end: (how: DragEnd) => void;
 }
 
 export type Drag<TRow, TNode> =
     | ResizeDrag
     | ReorderDrag<TRow, TNode>
     | RowDrag
-    | RangeDrag
-    | FillHandleDrag;
+    | FeatureDrag;
 
 /**
  * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
@@ -182,40 +163,4 @@ export function dropTargetOf<T extends object>(
         current,
         make(allowed && landingIndex(index, at, side) !== index ? side : null),
     );
-}
-
-/**
- * The cells a fill from `source` reaches with the pointer over `cell` (E4.4): below it, as
- * wide, down to the cell's row; or to its end, as tall, to the cell's column; whichever the
- * pointer went farther past (down on a tie); `null` over the source, above it or before it.
- */
-export function fillTargetOf(
-    source: CellRange,
-    cell: CellPosition,
-): CellRange | null {
-    const { anchor: first, focus: last } = source;
-    const down = cell.rowIndex - last.rowIndex;
-    const across = cell.columnIndex - last.columnIndex;
-    if (down <= 0 && across <= 0) return null;
-    return down >= across
-        ? {
-              anchor: {
-                  rowIndex: last.rowIndex + 1,
-                  columnIndex: first.columnIndex,
-              },
-              focus: {
-                  rowIndex: cell.rowIndex,
-                  columnIndex: last.columnIndex,
-              },
-          }
-        : {
-              anchor: {
-                  rowIndex: first.rowIndex,
-                  columnIndex: last.columnIndex + 1,
-              },
-              focus: {
-                  rowIndex: last.rowIndex,
-                  columnIndex: cell.columnIndex,
-              },
-          };
 }

@@ -1,7 +1,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { type Column, DataGrid, type HeaderCellState } from "../src";
-import { cellAt, settled, stubViewportSize, tags } from "./helpers";
+import { cellAt, FEATURES, settled, stubViewportSize, tags } from "./helpers";
 
 // Interactive cells (Epic #52, I5): the cell whose controls have the keys carries
 // `data-interacting`, its hooks report `interacting`, and the cells' controls stay out of the tab
@@ -45,7 +45,12 @@ function Grid({
 }) {
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={cells} rows={tasks} rowHeight={24}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={cells}
+            rows={tasks}
+            rowHeight={24}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRow render={tag.headerRow}>

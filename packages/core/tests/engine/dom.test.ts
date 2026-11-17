@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
     CELL_SELECTOR,
-    CTRL_KEYS,
     cellSelector,
     FOCUSABLE,
     hiddenWithin,
@@ -17,6 +16,7 @@ import {
     PAGE_KEYS,
     VIEWPORTS,
 } from "../../src/engine/dom";
+import { CTRL_KEYS } from "../../src/engine/shortcuts";
 
 // The engine's DOM predicates: stateless, over elements of any document.
 

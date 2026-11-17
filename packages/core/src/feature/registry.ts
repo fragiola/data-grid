@@ -1,15 +1,26 @@
 import type { ControlledProp } from "../adapter/controlled";
-import type { HeaderCellState } from "../engine/parts";
-import type { GridView } from "../engine/types";
+import type { CellShare, HeaderCellState, RowShare } from "../engine/parts";
+import type {
+    DataGridEngine,
+    DataGridEngineOptions,
+    GridView,
+} from "../engine/types";
 import type { DataGridModel } from "../model/model";
-import type { DataGridState, HeaderCellLayout } from "../model/types";
+import type {
+    CellPosition,
+    DataGridState,
+    HeaderCellLayout,
+    RowMeta,
+} from "../model/types";
 import type {
     DataGridFeature,
     FeatureEngine,
     FeatureEngineContext,
     FeatureHandler,
     FeaturePartContribution,
+    FeatureRoot,
     FeatureState,
+    PartAttributes,
 } from "./feature";
 
 // The registry (Epic #141): a grid's features composed once, when its model is created. Each
@@ -44,8 +55,36 @@ export interface GridFeatures {
     readonly sourceChanged:
         | ((after: FeatureState, before: FeatureState) => FeatureState)
         | undefined;
+    /** after every command: each feature's state kept to the core's rules */
+    readonly stateChanged:
+        | ((after: FeatureState, before: FeatureState) => FeatureState)
+        | undefined;
+    /** whether a feature navigates the cells by keys (the grid's roles, its tab stop) */
+    readonly navigable: boolean;
     /** the state keys an engine's view carries for the features */
     readonly viewKeys: readonly string[];
+    /** what the features add to a body row's part */
+    readonly row:
+        | ((
+              view: GridView<unknown, unknown>,
+              rowIndex: number,
+              meta: RowMeta | undefined,
+              share: RowShare,
+          ) => void)
+        | undefined;
+    /** what the features add to a body cell's part */
+    readonly cell:
+        | ((
+              view: GridView<unknown, unknown>,
+              cell: CellPosition,
+              span: number,
+              share: CellShare,
+          ) => void)
+        | undefined;
+    /** what the features add to the grid's element */
+    readonly grid:
+        | ((view: GridView<unknown, unknown>) => PartAttributes | undefined)
+        | undefined;
     /** whether a feature keeps the rows in an order of the app's (a row move would not stay) */
     readonly rowsOrdered: (state: FeatureState) => boolean;
     /** what the features add to a header cell's part */
@@ -59,10 +98,30 @@ export interface GridFeatures {
     readonly rootProps: readonly string[];
 }
 
+/** The handlers of one kind of every feature in an engine. */
+type Hooks<K extends keyof FeatureEngine> = readonly NonNullable<
+    FeatureEngine[K]
+>[];
+
 /** Every feature's own handlers in one engine: each list walked in the features' order. */
 export interface GridFeatureEngine {
-    readonly keydown: readonly NonNullable<FeatureEngine["keydown"]>[];
-    readonly click: readonly NonNullable<FeatureEngine["click"]>[];
+    readonly keydown: Hooks<"keydown">;
+    readonly click: Hooks<"click">;
+    readonly beforeKeydown: Hooks<"beforeKeydown">;
+    readonly laterKeydown: Hooks<"laterKeydown">;
+    readonly lastKeydown: Hooks<"lastKeydown">;
+    readonly pointerdown: Hooks<"pointerdown">;
+    readonly copy: Hooks<"copy">;
+    readonly paste: Hooks<"paste">;
+    readonly changed: Hooks<"changed">;
+    readonly followed: Hooks<"followed">;
+    readonly attach: Hooks<"attach">;
+    readonly optionsChanged: Hooks<"optionsChanged">;
+    readonly view: Hooks<"view">;
+    readonly queries: Readonly<Record<string, () => unknown>>;
+    /** the navigation's (the first feature having one): `undefined` without it */
+    readonly activate: FeatureEngine["activate"];
+    readonly move: FeatureEngine["move"];
 }
 
 /** The composed features of each model (`featuresOf`): the model's surface stays its verbs. */
@@ -122,6 +181,18 @@ export function composeFeatures(
     const headerCells = features.flatMap((feature) =>
         feature.headerCell ? [feature.headerCell] : [],
     );
+    const settlers = features.flatMap((feature) =>
+        feature.stateChanged ? [feature.stateChanged] : [],
+    );
+    const rows = features.flatMap((feature) =>
+        feature.row ? [feature.row] : [],
+    ) as readonly NonNullable<GridFeatures["row"]>[];
+    const cells = features.flatMap((feature) =>
+        feature.cell ? [feature.cell] : [],
+    ) as readonly NonNullable<GridFeatures["cell"]>[];
+    const grids = features.flatMap((feature) =>
+        feature.grid ? [feature.grid] : [],
+    ) as readonly NonNullable<GridFeatures["grid"]>[];
     return {
         // the app's array changing later changes nothing: the list is fixed
         list: Object.freeze([...features]),
@@ -137,13 +208,49 @@ export function composeFeatures(
         },
         sourceChanged:
             keepers.length > 0
-                ? (after, before) =>
-                      keepers.reduce(
-                          (state, keep) => keep(state, before),
-                          after,
-                      )
+                ? (after, before) => {
+                      let state = after;
+                      for (const keep of keepers) state = keep(state, before);
+                      return state;
+                  }
                 : undefined,
+        stateChanged:
+            settlers.length > 0
+                ? (after, before) => {
+                      let state = after;
+                      for (const settle of settlers) {
+                          state = settle(state, before);
+                      }
+                      return state;
+                  }
+                : undefined,
+        navigable: features.some((feature) => feature.navigable === true),
         viewKeys: features.flatMap((feature) => feature.view ?? []),
+        row:
+            rows.length === 0
+                ? undefined
+                : (view, rowIndex, meta, share) => {
+                      for (const row of rows) row(view, rowIndex, meta, share);
+                  },
+        cell:
+            cells.length === 0
+                ? undefined
+                : (view, cell, span, share) => {
+                      for (const contribute of cells) {
+                          contribute(view, cell, span, share);
+                      }
+                  },
+        grid:
+            grids.length === 0
+                ? undefined
+                : (view) => {
+                      let attributes: PartAttributes | undefined;
+                      for (const grid of grids) {
+                          const added = grid(view);
+                          if (added) attributes = { ...attributes, ...added };
+                      }
+                      return attributes;
+                  },
         rowsOrdered: (state) => {
             for (const ordered of ordering) if (ordered(state)) return true;
             return false;
@@ -208,22 +315,37 @@ export function featuresOf(model: object): GridFeatures {
 export function featureEngine(
     features: GridFeatures,
     model: DataGridModel<unknown, unknown>,
-    headerCellOf: FeatureEngineContext<never>["headerCellOf"],
+    lent: Omit<FeatureEngineContext<never>, "model">,
 ): GridFeatureEngine {
     const context = {
+        ...lent,
         model,
-        headerCellOf,
     } as unknown as FeatureEngineContext<never>;
     const engines = features.list.flatMap((feature) =>
         feature.engine ? [feature.engine(context)] : [],
     );
+    const hooks = <K extends keyof FeatureEngine>(key: K): Hooks<K> =>
+        engines.flatMap((engine) => {
+            const hook = engine[key];
+            return hook ? [hook as NonNullable<FeatureEngine[K]>] : [];
+        });
     return {
-        keydown: engines.flatMap((engine) =>
-            engine.keydown ? [engine.keydown] : [],
-        ),
-        click: engines.flatMap((engine) =>
-            engine.click ? [engine.click] : [],
-        ),
+        keydown: hooks("keydown"),
+        click: hooks("click"),
+        beforeKeydown: hooks("beforeKeydown"),
+        laterKeydown: hooks("laterKeydown"),
+        lastKeydown: hooks("lastKeydown"),
+        pointerdown: hooks("pointerdown"),
+        copy: hooks("copy"),
+        paste: hooks("paste"),
+        changed: hooks("changed"),
+        followed: hooks("followed"),
+        attach: hooks("attach"),
+        optionsChanged: hooks("optionsChanged"),
+        view: hooks("view"),
+        queries: engineQueries(features, engines),
+        activate: hooks("activate")[0],
+        move: hooks("move")[0],
     };
 }
 
@@ -255,4 +377,71 @@ export function featureOptions(
         if (given) options = { ...options, ...given };
     }
     return options;
+}
+
+/** Every feature's plain props followed onto a model (`FeatureRoot.follow`), in their order. */
+export function featureFollowers<TProps>(
+    features: GridFeatures,
+    model: DataGridModel<unknown, unknown>,
+): readonly {
+    readonly inputs: (props: TProps) => readonly unknown[];
+    readonly run: (props: TProps) => void;
+}[] {
+    return features.list.flatMap(
+        (feature) =>
+            (feature.root?.follow?.(
+                model as unknown as FeatureEngineContext<never>["model"],
+            ) ?? []) as readonly {
+                readonly inputs: (props: TProps) => readonly unknown[];
+                readonly run: (props: TProps) => void;
+            }[],
+    );
+}
+
+/** The engine's options a root's props give for its features (`FeatureRoot.engineOptions`). */
+export function featureEngineOptions(
+    features: GridFeatures,
+    props: object,
+): Partial<DataGridEngineOptions> {
+    let options: Partial<DataGridEngineOptions> = {};
+    for (const feature of features.list) {
+        const given = (
+            feature.root as FeatureRoot<never> | undefined
+        )?.engineOptions?.(props as never);
+        if (given) options = { ...options, ...given };
+    }
+    return options;
+}
+
+/** Subscribes every feature's props to the engine's events (`FeatureRoot.events`). */
+export function bindFeatureEvents(
+    features: GridFeatures,
+    engine: DataGridEngine<unknown, unknown>,
+    props: () => object,
+): void {
+    for (const feature of features.list) {
+        (feature.root as FeatureRoot<never> | undefined)?.events?.(
+            engine,
+            props as () => never,
+        );
+    }
+}
+
+/** The features' engine `get` keys, merged: a key two features add throws, as their other keys. */
+function engineQueries(
+    features: GridFeatures,
+    engines: readonly FeatureEngine[],
+): Readonly<Record<string, () => unknown>> {
+    const queries: Record<string, () => unknown> = {};
+    engines.forEach((engine, index) => {
+        for (const [key, query] of Object.entries(engine.queries ?? {})) {
+            if (Object.hasOwn(queries, key)) {
+                throw new TypeError(
+                    `feature "${features.list[index]?.name}" adds the engine key "${key}", which another feature adds`,
+                );
+            }
+            queries[key] = query;
+        }
+    });
+    return queries;
 }

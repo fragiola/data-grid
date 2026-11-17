@@ -6,9 +6,32 @@ import {
 } from "@testing-library/react";
 import { Profiler, type ReactElement } from "react";
 import { afterAll, beforeAll } from "vitest";
+import { clipboard } from "../src/clipboard";
+import { fillHandle } from "../src/fill";
+import { navigation } from "../src/navigation";
+import { cellRange } from "../src/range";
+import { rowSelection } from "../src/row-selection";
 
-// What the React tests share: a grid root's size (jsdom lays nothing out), the parts by their
-// `data-grid-part` and indexes, and the elements that render a grid as a table.
+// What the React tests share: the features of Epic #144, a grid root's size (jsdom lays nothing
+// out), the parts by their `data-grid-part` and indexes, and the elements that render a grid as a
+// table.
+
+/**
+ * Every feature of Epic #144, in their requirements' order: navigation, row selection, cell
+ * ranges, the clipboard and the fill handle, as the grid had them before they were features. A
+ * test of these behaviours installs them (`features={FEATURES}`); a test of a grid without them
+ * installs none.
+ */
+export const FEATURES = [
+    navigation(),
+    rowSelection(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+] as const;
+
+/** Their types (`useDataGridRef<Row, Features>()`, `RootProps<Row, Features>`). */
+export type Features = typeof FEATURES;
 
 /** Gives every grid root a `width` × `height` client size during the file's tests. */
 export function stubViewportSize(width: number, height: number) {

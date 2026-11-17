@@ -5,10 +5,85 @@ description: One row or many, selected with your own controls and the grid's key
 
 The grid keeps which rows are selected, as their keys, and shows it in ARIA and `data-*`. The
 controls are yours: the grid renders no checkbox, no text and no count. What answers questions
-about a list of rows ("are they all selected?") comes from an opt-in entry point, so a grid that
-never selects never ships it.
+about a list of rows ("are they all selected?") comes with it. Row selection is a
+[feature](/docs/concepts/features), `rowSelection()` from the `/row-selection` entry, so a grid
+that never selects never ships it.
 
 <Example id="row-selection" />
+
+## Install row selection
+
+Install `rowSelection()` on the grid, with `navigation()` for its keys. Without it, rows are
+never selectable and its props, commands and keys do not compile (at runtime the commands are
+`not_found`).
+
+<Framework name="react">
+
+```tsx title="tasks.tsx"
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { rowSelection } from "@fragiola/data-grid-react/row-selection";
+
+const features = [navigation(), rowSelection()];
+
+<DataGrid.Root features={features} columns={columns} rows={tasks} rowSelection="multiple">
+    {/* … */}
+</DataGrid.Root>
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="tasks.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
+
+const features = [navigation(), rowSelection()] as const;
+const DataGrid = typedDataGrid<Task, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="tasks" row-selection="multiple">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+Its props are attributes: `:row-selection`, `:is-row-selectable`, `:selected-row-keys`,
+`@selected-row-keys-change`.
+
+</Framework>
+
+<Framework name="angular">
+
+Its inputs are `DataGridRowSelection`'s, a directive on the root's element
+(`dataGridRowSelection`), from the same entry.
+
+```ts title="tasks.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import { DataGridRowSelection, rowSelection } from "@fragiola/data-grid-angular/row-selection";
+
+@Component({
+    selector: "app-tasks",
+    imports: [DATA_GRID, DataGridRowSelection],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="tasks()"
+            dataGridRowSelection rowSelection="multiple" [(selectedRowKeys)]="selected">
+            <!-- … -->
+        </div>
+    `,
+})
+export class Tasks {
+    readonly features = [navigation(), rowSelection()];
+    readonly selected = signal<readonly RowKey[]>([]);
+    // …
+}
+```
+
+</Framework>
 
 ## Turning it on
 
@@ -20,6 +95,7 @@ keys, and the selection commands refuse.
 const isOpen = (task: Task) => task.status !== "Completed";
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={tasks}
     rowKey={(task) => task.id}
@@ -51,6 +127,7 @@ The selected keys are controlled or not, like the [sort](/docs/concepts/sorting)
 const [selected, setSelected] = useState<readonly RowKey[]>([]);
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={companies}
     rowKey={(company) => company.id}
@@ -76,7 +153,7 @@ toggled, the **anchor**, to this one:
 
 ```tsx title="select-row.tsx"
 function SelectRow({ rowIndex }: { rowIndex: number }) {
-    const { model } = useDataGrid<Task>();
+    const { model } = useDataGrid<Task, typeof features>();
     useGridView(); // re-renders when the selection changes
     return (
         <input
@@ -98,13 +175,15 @@ Enter reaches the checkbox, and Space checks it.
 
 ## Selecting all
 
-`useSelectAll(rowKeys)` from `@fragiola/data-grid-react/selection` drives a "select all" control
+`useSelectAll(rowKeys)` from `@fragiola/data-grid-react/row-selection` (Vue: `useSelectAll`
+from `@fragiola/data-grid-vue/row-selection`; Angular: `injectSelectAll` from
+`@fragiola/data-grid-angular/row-selection`) drives a "select all" control
 over the rows you name: the rows on screen, a page, or every filtered row
 ([`useLocalRows`](/docs/concepts/rows-in-memory) returns them as `filteredRows`). Leave out the
 rows that cannot be selected: the keys you give are the ones it sets.
 
 ```tsx title="select-all.tsx"
-import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { useSelectAll } from "@fragiola/data-grid-react/row-selection";
 
 function SelectAll({ ids }: { ids: readonly RowKey[] }) {
     const all = useSelectAll(ids);
@@ -122,7 +201,7 @@ function SelectAll({ ids }: { ids: readonly RowKey[] }) {
 It reports `status` (`"all"`, `"some"` or `"none"`) and `count`; `toggle` selects every one of
 them, or clears them when every one is selected. In single mode, it only clears, and `canToggle`
 tells when it does something (to disable the control otherwise). The same
-answers, without React, are in `@fragiola/data-grid/selection`: `selectionStatus`,
+answers, without a framework, are in `@fragiola/data-grid/row-selection`: `selectionStatus`,
 `withRowKeys`, `withoutRowKeys`, `toggledRowKeys`.
 
 ## Keys
@@ -133,8 +212,8 @@ answers, without React, are in `@fragiola/data-grid/selection`: `selectionStatus
 | Shift+↓, Shift+↑ | moves to the next row and selects from the anchor (the row you started on, when there is none or it cleared) |
 | Ctrl+A, ⌘+A | selects every selectable row |
 
-They act on body cells, in navigation (in a cell's controls, they are the control's), and only
-with `rowSelection`: Shift+arrows and Ctrl+A only in `"multiple"` mode. Shift+arrows only select:
+They act on body cells, in navigation (in a cell's controls, they are the control's; without
+`navigation()` there is no active cell, and no keys), and only with `rowSelection`: Shift+arrows and Ctrl+A only in `"multiple"` mode. Shift+arrows only select:
 going back up selects nothing less. They run after your handlers, so `preventDefault` cancels
 them, and through commands a middleware can refuse. Each runs at most one `selected-rows.*`
 command (a Shift+arrow also moves the active cell, and may set the anchor first), so a controlled
@@ -159,7 +238,7 @@ thousand keys. A middleware turns the grid's own select-all (Ctrl+A, your header
 ```tsx title="server-selection.tsx"
 // the app's selection: every row but `keys` (all), or only `keys`
 const [selection, setSelection] = useState({ all: false, keys: new Set<RowKey>() });
-const grid = useDataGrid(gridRef);
+const grid = useDataGrid(gridRef); // gridRef = useDataGridRef<Row, typeof features>()
 
 useEffect(
     () =>
@@ -176,6 +255,7 @@ useEffect(
 );
 
 <DataGrid.Root
+    features={features}
     rows={page}
     gridRef={gridRef}
     rowSelection="multiple"

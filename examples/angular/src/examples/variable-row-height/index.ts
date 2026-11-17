@@ -13,6 +13,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { hash, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
@@ -39,6 +40,7 @@ const NOTES = [
         <div [class]="styles.frame">
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
@@ -77,6 +79,8 @@ const NOTES = [
     `,
 })
 export default class VariableRowHeight {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Person>>();
     @ViewChild("notesCell", { static: true })

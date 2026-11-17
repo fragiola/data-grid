@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import {
+    type DataGridFeature,
     type GroupRow,
     type RowKey,
     useDataGrid,
 } from "@fragiola/data-grid-vue";
-import { useSelectAll } from "@fragiola/data-grid-vue/selection";
+import {
+    type RowSelectionTypes,
+    useSelectAll,
+} from "@fragiola/data-grid-vue/row-selection";
 import { Checkbox } from "#/components/ui/checkbox";
 import type { Person } from "../_kit/data";
 
@@ -14,7 +18,8 @@ const props = defineProps<{ rowIndex: number; group: GroupRow }>();
 
 const NO_KEYS: readonly RowKey[] = [];
 
-const { model } = useDataGrid<Person>();
+// the grid's model, typed by the feature this part reads (row selection, installed by the grid)
+const { model } = useDataGrid<Person, [DataGridFeature<RowSelectionTypes>]>();
 const all = useSelectAll(() => props.group.rowKeys ?? NO_KEYS);
 
 // the grid selects the group's rows, or clears them all

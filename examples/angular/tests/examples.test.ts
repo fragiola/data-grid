@@ -23,9 +23,10 @@ const EXAMPLES_DIR = APP.examplesDir;
 /** What an example file may import, besides relative files inside examples/. */
 const ALLOWED = [
     /^@angular\/[a-z-]+$/,
-    // the core's extras only: its main entry's types and helpers come through the Angular package
-    /^@fragiola\/data-grid\/(local|selection|fill)$/,
-    /^@fragiola\/data-grid-angular(\/(local|selection|sorting))?$/,
+    // the core's extras only: its main entry's types and helpers come through the Angular package,
+    // and so do its features (each re-exported by the Angular package's own entry, Epic #144)
+    /^@fragiola\/data-grid\/local$/,
+    /^@fragiola\/data-grid-angular(\/(local|sorting|navigation|row-selection|range|clipboard|fill))?$/,
     /^@lucide\/angular$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,

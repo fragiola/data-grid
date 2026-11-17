@@ -10,7 +10,7 @@ import {
     type RowInfo,
     useRow,
 } from "../src";
-import { cellAt, rowAt, stubViewportSize, tags } from "./helpers";
+import { cellAt, FEATURES, rowAt, stubViewportSize, tags } from "./helpers";
 
 // Measured heights (Epic #86, E2.2): with `rowHeight="auto"` a loaded row has no height of its
 // own: a grid whose one area its cells share (each at its inline start margin, as tall as the
@@ -90,6 +90,7 @@ function Grid({
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             {...(loaded
                 ? { rows }
@@ -224,6 +225,7 @@ describe("measured rows", () => {
         for (const rowHeight of ["auto", 20] as const) {
             const { unmount } = render(
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rows={rows}
                     rowHeight={rowHeight}
@@ -266,6 +268,7 @@ describe("estimates", () => {
         const gridRef = createDataGridRef<Row>();
         const grid = (rowHeight: RowHeight, estimate: number) => (
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowHeight={rowHeight}
@@ -333,6 +336,7 @@ describe("the sizes a root sends", () => {
             estimatedRowHeight?: number;
         }) => (
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowHeight={rowHeight}

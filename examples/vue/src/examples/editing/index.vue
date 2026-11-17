@@ -4,6 +4,7 @@ import {
     type Column,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, ref, shallowRef, type VNodeChild } from "vue";
 import {
     budgetedTasks,
@@ -22,7 +23,10 @@ import TextEditor from "./text-editor.vue";
 // edit, its draft and the ways to change, commit and cancel it, its look by its caller's `class`)
 // and so is the data: each commit is told, and the app writes it into its rows.
 
-const DataGrid = typedDataGrid<Row>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+const DataGrid = typedDataGrid<Row, typeof features>();
 
 const initialRows = budgetedTasks(120);
 
@@ -102,6 +106,7 @@ function onCellEdit(edit: CellEditEvent<Row>) {
             <span role="status" :class="styles.status">{{ announcement }}</span>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rows"
             :row-key="rowKey"

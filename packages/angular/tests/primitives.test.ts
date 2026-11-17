@@ -12,6 +12,7 @@ import {
     viewChildren,
 } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
+import { DataGridNavigation } from "../src/navigation";
 import {
     type CellPosition,
     type CellTemplateProps,
@@ -27,7 +28,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "../src/public-api";
-import { renderTestGrid } from "./grid";
+import { renderTestGrid, TEST_FEATURES, type TestFeatures } from "./grid";
 import {
     click,
     keyDown,
@@ -362,10 +363,10 @@ describe("the active cell", () => {
     it("works controlled through an input and its output: a move asks, and only the input moves it", async () => {
         const asked: (CellPosition | null)[] = [];
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridNavigation],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns"
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns"
                     [activePosition]="position()" (activePositionChange)="asked.push($event)">
                     <div dataGridGrid>
                         <div dataGridBody>
@@ -382,6 +383,7 @@ describe("the active cell", () => {
             `,
         })
         class Controlled {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly asked = asked;
@@ -403,10 +405,10 @@ describe("the active cell", () => {
 
     it("binds both ways: [(activePosition)] follows the keys", async () => {
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridNavigation],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [(activePosition)]="position">
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns" [(activePosition)]="position">
                     <div dataGridGrid>
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -422,6 +424,7 @@ describe("the active cell", () => {
             `,
         })
         class TwoWay {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly position = signal<CellPosition | null>({
@@ -445,21 +448,21 @@ describe("the active cell", () => {
     });
 
     it("follows the model: injectDataGrid().model.run changes the same state", async () => {
-        let grid: DataGridContextValue<Person> | undefined;
+        let grid: DataGridContextValue<Person, TestFeatures> | undefined;
         @Component({
             selector: "test-probe",
             template: "",
         })
         class Probe {
             constructor() {
-                grid = injectDataGrid<Person>();
+                grid = injectDataGrid<Person, TestFeatures>();
             }
         }
         @Component({
             imports: [DATA_GRID, Probe],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns">
+                <div dataGridRoot [features]="features" [rows]="rows" [columns]="columns">
                     <test-probe />
                     <div dataGridGrid>
                         <div dataGridBody>
@@ -476,6 +479,7 @@ describe("the active cell", () => {
             `,
         })
         class WithProbe {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
         }
@@ -487,10 +491,10 @@ describe("the active cell", () => {
 
     it("lets a cell's own keydown and the root's cancel a key: the grid's runs after", async () => {
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridNavigation],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns"
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns"
                     [defaultActivePosition]="start" (keydown)="onRootKey($event)">
                     <div dataGridGrid>
                         <div dataGridBody>
@@ -507,6 +511,7 @@ describe("the active cell", () => {
             `,
         })
         class Cancelling {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly start = { rowIndex: 0, columnIndex: 0 };
@@ -675,10 +680,10 @@ describe("the primitive contract, the app's own element", () => {
     // state (`exportAs`); the app's plain class and style stay, the structural keys win
     it("resolves className and style functions against the state; structural keys win", async () => {
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridNavigation],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [defaultActivePosition]="start">
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns" [defaultActivePosition]="start">
                     <div dataGridGrid class="grid" style="color: red; width: 1px">
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -694,6 +699,7 @@ describe("the primitive contract, the app's own element", () => {
             `,
         })
         class Styled {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly start = { rowIndex: 1, columnIndex: 1 };
@@ -719,10 +725,10 @@ describe("the primitive contract, the app's own element", () => {
     // styling first): `state()` is `undefined` on that first pass, then the part's
     it("reads the part's state in a class binding on its own element", async () => {
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridNavigation],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [defaultActivePosition]="start">
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns" [defaultActivePosition]="start">
                     <div dataGridGrid>
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -734,6 +740,7 @@ describe("the primitive contract, the app's own element", () => {
             `,
         })
         class ClassBound {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly start = { rowIndex: 1, columnIndex: 1 };
@@ -749,7 +756,7 @@ describe("the primitive contract, the app's own element", () => {
             imports: [DATA_GRID],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns">
+                <div dataGridRoot [features]="features" [rows]="rows" [columns]="columns">
                     <section dataGridGrid #grid="dataGridGrid" [attr.data-count]="grid.state().rowCount">
                         <div dataGridBody></div>
                     </section>
@@ -757,6 +764,7 @@ describe("the primitive contract, the app's own element", () => {
             `,
         })
         class Section {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
         }
@@ -800,19 +808,19 @@ describe("the primitive contract, the app's own element", () => {
 
 describe("the active cell, controlled", () => {
     it("follows the model: injectDataGrid().model.run changes the same state, through the output when controlled", async () => {
-        let grid: DataGridContextValue<Person> | undefined;
+        let grid: DataGridContextValue<Person, TestFeatures> | undefined;
         @Component({ selector: "test-probe", template: "" })
         class Probe {
             constructor() {
-                grid = injectDataGrid<Person>();
+                grid = injectDataGrid<Person, TestFeatures>();
             }
         }
         const asked: (CellPosition | null)[] = [];
         @Component({
-            imports: [DATA_GRID, Probe],
+            imports: [DATA_GRID, DataGridNavigation, Probe],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns"
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns"
                     [activePosition]="position()" (activePositionChange)="ask($event)">
                     <test-probe />
                     <div dataGridGrid>
@@ -830,6 +838,7 @@ describe("the active cell, controlled", () => {
             `,
         })
         class Controlled {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly position = signal<CellPosition | null>(null);
@@ -1031,7 +1040,7 @@ describe("column groups", () => {
         imports: [DATA_GRID],
         changeDetection: ChangeDetectionStrategy.OnPush,
         template: `
-            <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20">
+            <div dataGridRoot [features]="features" [rows]="rows" [columns]="columns" [rowHeight]="20">
                 @if (table) {
                     <table dataGridGrid aria-label="People">
                         <thead *dataGridHeader>
@@ -1075,6 +1084,7 @@ describe("column groups", () => {
         `,
     })
     class GroupedGrid {
+        readonly features = TEST_FEATURES;
         readonly rows = people;
         readonly columns = groupedColumns;
         table = false;
@@ -1437,10 +1447,10 @@ describe("epic review regressions", () => {
     it("lets the root's render element cancel a key", async () => {
         const onChange = vi.fn();
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, DataGridNavigation],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <section dataGridRoot [rows]="rows" [columns]="columns" [defaultActivePosition]="start"
+                <section dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns" [defaultActivePosition]="start"
                     (activePositionChange)="onChange($event)" (keydown)="onKey($event)">
                     <div dataGridGrid>
                         <div dataGridBody>
@@ -1457,6 +1467,7 @@ describe("epic review regressions", () => {
             `,
         })
         class SectionRoot {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly start = { rowIndex: 0, columnIndex: 0 };
@@ -1482,10 +1493,10 @@ describe("epic review regressions", () => {
     it("ignores keys from a portal rendered by a cell", async () => {
         const onChange = vi.fn();
         @Component({
-            imports: [DATA_GRID, TestPortal],
+            imports: [DATA_GRID, DataGridNavigation, TestPortal],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [defaultActivePosition]="start"
+                <div dataGridRoot [features]="features" dataGridNavigation [rows]="rows" [columns]="columns" [defaultActivePosition]="start"
                     (activePositionChange)="onChange($event)">
                     <div dataGridGrid>
                         <div dataGridBody>
@@ -1506,6 +1517,7 @@ describe("epic review regressions", () => {
             `,
         })
         class WithPortal {
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly start = { rowIndex: 0, columnIndex: 0 };

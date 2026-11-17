@@ -7,7 +7,6 @@ import {
     cellPart,
     columnLeft,
     columnResizerPart,
-    createDataGridModel,
     headerCellPart,
     renderedWidth,
     rowDetailBox,
@@ -17,6 +16,7 @@ import {
 import { pinnedEndShift } from "../../src/engine/geometry";
 import { columnsError } from "../../src/header/header";
 import { siblingOrder } from "../../src/model/order";
+import { gridModel } from "../features";
 import {
     cellElement,
     fakeContentWidth,
@@ -154,7 +154,7 @@ describe("validation", () => {
                 },
             ]),
         ).toMatch(/mixes columns pinned at the start and at the end/);
-        const model = createDataGridModel<Row>({ columns: COLUMNS });
+        const model = gridModel<Row>({ columns: COLUMNS });
         const result = model.run("columns.set", {
             columns: [column("a", "end"), column("b")],
         });
@@ -429,7 +429,7 @@ describe("scrolling and keys", () => {
             ...entry,
             reorderable: true,
         }));
-        const model = createDataGridModel<Row>({ columns: reorderable });
+        const model = gridModel<Row>({ columns: reorderable });
         expect(
             model.run("column-order.move", {
                 columnKey: "c49",

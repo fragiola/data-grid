@@ -2,7 +2,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { type CellInfo, type Column, DataGrid, useGroupToggle } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
-import { cellAt, root, rowAt, stubViewportSize } from "./helpers";
+import { cellAt, FEATURES, root, rowAt, stubViewportSize } from "./helpers";
 
 // Tree data in React (Epic #87, E3.3): `useLocalRows` with `getSubRows` hands the root a tree whose
 // parents are data rows that expand by their key: the app's toggle, Space and the arrows open
@@ -53,6 +53,7 @@ function Files() {
     latest = local;
     return (
         <DataGrid.Root
+            features={FEATURES}
             {...local.props}
             columns={columns}
             rowHeight={20}

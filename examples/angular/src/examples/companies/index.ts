@@ -21,6 +21,11 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideAtSign,
@@ -96,6 +101,7 @@ type CompanyHeader = TemplateRef<
         LucideTags,
         LucideTrash2,
         LucideUsers,
+        DataGridRowSelection,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -139,6 +145,7 @@ type CompanyHeader = TemplateRef<
                 [rowKey]="rowKey"
                 [rowHeight]="44"
                 [headerRowHeight]="40"
+                dataGridRowSelection
                 rowSelection="multiple"
                 [(selectedRowKeys)]="selected"
                 [features]="features"
@@ -439,8 +446,9 @@ export default class Companies {
     readonly selected = signal<readonly RowKey[]>([]);
     // the rows in memory sorted by one injection function: the header and the toolbar's select
     // both set its sort (the first column first, the next ones breaking ties)
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop), row selection
+    readonly features = [sorting(), navigation(), rowSelection()];
     readonly local = injectLocalRows(this.all, this.columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

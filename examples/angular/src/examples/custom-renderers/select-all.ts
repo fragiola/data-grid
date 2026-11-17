@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 import type { RowKey } from "@fragiola/data-grid-angular";
-import { injectSelectAll } from "@fragiola/data-grid-angular/selection";
+import { injectSelectAll } from "@fragiola/data-grid-angular/row-selection";
 import { Checkbox } from "./checkbox";
 
 // The header's native checkbox: every row, some (indeterminate) or none.

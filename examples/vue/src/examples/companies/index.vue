@@ -7,6 +7,8 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import {
     AtSignIcon,
@@ -47,8 +49,9 @@ import SortLabel from "./sort-label.vue";
 import { COMPANY_IDS, isSortKey, type SortKey } from "./state";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const features = [sorting()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), row selection
+const features = [sorting(), navigation(), rowSelection()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

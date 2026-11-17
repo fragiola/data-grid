@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellEditEvent,
     type Column,
@@ -8,7 +7,11 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { clipboard } from "@fragiola/data-grid-vue/clipboard";
+import { fillHandle, repeatedFill } from "@fragiola/data-grid-vue/fill";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { cellRange } from "@fragiola/data-grid-vue/range";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDown, ArrowUp } from "@lucide/vue";
 import { h, ref, shallowRef, type VNodeChild } from "vue";
@@ -31,8 +34,16 @@ import * as styles from "./styles";
 // grid owns the keys, the pointer and the clipboard; every value is written by the app, through
 // one rule (`withField`), whether typed, pasted or filled.
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const features = [sorting()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), cell ranges, the clipboard (a range's copy
+// and paste), the fill handle
+const features = [
+    sorting(),
+    navigation(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+] as const;
 
 const DataGrid = typedDataGrid<BudgetedTask, typeof features>();
 

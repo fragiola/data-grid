@@ -11,6 +11,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatNumber, measurement } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
 import { RequestLog } from "./request-log";
@@ -55,6 +56,7 @@ function columnsFor(tiles: TileCache): Column<Row, DataGridNode>[] {
             <div [class]="styles.layout">
                 <div
                     dataGridRoot
+                    [features]="features"
                     [columns]="columns"
                     [rowCount]="ROWS"
                     [getRow]="getRow"
@@ -99,6 +101,8 @@ function columnsFor(tiles: TileCache): Column<Row, DataGridNode>[] {
     `,
 })
 export default class WindowedColumns {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly ROWS = ROWS;
 

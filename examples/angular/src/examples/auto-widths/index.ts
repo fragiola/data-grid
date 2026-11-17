@@ -12,6 +12,7 @@ import {
     type DataGridNode,
     type HeaderCellInfo,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucideRotateCcw, LucideWandSparkles } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { formatMoney, type Person, people } from "../_kit/data";
@@ -129,6 +130,7 @@ function describe(widths: ColumnWidths): string {
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
@@ -175,6 +177,8 @@ function describe(widths: ColumnWidths): string {
     `,
 })
 export default class AutoWidths {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly rows = rows;

@@ -17,6 +17,11 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import { SWITCH } from "#/components/ui/switch";
 import { type Task, tasks } from "../_kit/tasks";
 import { SelectAll } from "./select-all";
@@ -39,7 +44,7 @@ let ids = 0;
 
 @Component({
     selector: "example-row-selection",
-    imports: [DATA_GRID, SWITCH, SelectAll, SelectRow],
+    imports: [DATA_GRID, SWITCH, SelectAll, SelectRow, DataGridRowSelection],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -75,10 +80,12 @@ let ids = 0;
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
                 [rowHeight]="40"
+                dataGridRowSelection
                 [rowSelection]="mode()"
                 [isRowSelectable]="isSelectable"
                 [(selectedRowKeys)]="selected"
@@ -123,6 +130,9 @@ let ids = 0;
     `,
 })
 export default class RowSelectionExample {
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // row selection
+    readonly features = [navigation(), rowSelection()];
     protected readonly styles = styles;
 
     readonly rows = ROWS;

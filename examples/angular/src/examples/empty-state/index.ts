@@ -4,6 +4,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucidePlus, LucideTrash2, LucideUsersRound } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { type Person, people } from "../_kit/data";
@@ -38,6 +39,7 @@ const SAMPLE = people(50);
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows()"
                 [rowKey]="rowKey"
@@ -86,6 +88,8 @@ const SAMPLE = people(50);
     `,
 })
 export default class EmptyState {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly columns: Column<Person, DataGridNode>[] = [

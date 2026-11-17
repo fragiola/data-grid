@@ -14,7 +14,15 @@ import {
     useColumnResizer,
     useDataGridRef,
 } from "../src";
-import { cellAt, headerAt, root, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    headerAt,
+    root,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Column resizing (Epic #70): the widths controlled or not on `Root` (W1), a resizer's props and
 // state from `useColumnResizer` (W3), the header cells' `data-resizable`/`data-resizing` (W8).
@@ -66,7 +74,7 @@ function Resizer({ cell }: { cell: HeaderCellInfo<Person> }) {
 }
 
 type GridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, Features>,
     | "columnWidths"
     | "defaultColumnWidths"
     | "onColumnWidthsChange"
@@ -88,7 +96,13 @@ function Grid({
 }: GridProps) {
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={cells} rows={people} rowHeight={20} {...props}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={cells}
+            rows={people}
+            rowHeight={20}
+            {...props}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRows<Person>>
@@ -153,9 +167,9 @@ function widthsOf(container: HTMLElement, columnIndex: number) {
 
 /** A grid with a handle on it from outside, to run commands on. */
 function withRef(props: GridProps) {
-    let gridRef: DataGridRef<Person> | undefined;
+    let gridRef: DataGridRef<Person, Features> | undefined;
     function App(given: GridProps) {
-        const ref = useDataGridRef<Person>();
+        const ref = useDataGridRef<Person, Features>();
         gridRef = ref;
         return <Grid gridRef={ref} {...given} />;
     }
@@ -226,11 +240,11 @@ describe("controlled", () => {
 
     it("works with a parent that follows", () => {
         let widths: ColumnWidths = {};
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         function Parent({ cells }: { cells: ColumnOrGroup<Person>[] }) {
             const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
             widths = columnWidths;
-            gridRef = useDataGridRef<Person>();
+            gridRef = useDataGridRef<Person, Features>();
             return (
                 <Grid
                     cells={cells}
@@ -418,9 +432,9 @@ describe("the widths a root is given", () => {
             resizable: true,
         }));
         const onActivePositionChange = vi.fn();
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         function App(props: GridProps) {
-            gridRef = useDataGridRef<Person>();
+            gridRef = useDataGridRef<Person, Features>();
             return (
                 <Grid
                     cells={wide}

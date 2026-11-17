@@ -1,18 +1,27 @@
 "use client";
 
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellInfo,
     type CellRange,
     type Column,
     DataGrid,
     type RangeFill,
-    useFillHandle,
 } from "@fragiola/data-grid-react";
+import {
+    fillHandle,
+    repeatedFill,
+    useFillHandle,
+} from "@fragiola/data-grid-react/fill";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellRange } from "@fragiola/data-grid-react/range";
 import { useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { hash } from "../_kit/data";
 import * as styles from "./styles";
+
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), ranges
+// of cells, the fill handle
+const FEATURES = [navigation(), cellRange(), fillHandle()];
 
 // A shipping plan: units per product and week. A range's corner holds a handle; dragging it down
 // or across fills the cells it reaches. The grid tells the fill; the app makes the values: the
@@ -162,6 +171,7 @@ export default function Fill() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={plans}
                 rowKey={(plan) => plan.id}

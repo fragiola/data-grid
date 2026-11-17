@@ -4,13 +4,18 @@ import {
     type Column,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { computed, ref, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const rows = people(5_000);
 
@@ -93,6 +98,7 @@ const setActive = (position: CellPosition | null) => {
             </span>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rows"
             :row-key="rowKey"

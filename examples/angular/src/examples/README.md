@@ -61,9 +61,18 @@ examples/angular/src/
   `styles.cell(cell.state())`: `undefined` on the first pass, so the function takes it). A class
   string both `styles.ts` export is the same (`tests/examples.test.ts`), so every framework looks the
   same; a host element that must add no box of its own wears an Angular-only `contents` class.
-- **Copyable imports only**: `@angular/*`, `@fragiola/data-grid-angular` (and `/local`,
-  `/selection`), `@fragiola/data-grid/(local|selection|fill)`, `@lucide/angular`, the kit
-  (`#/components/ui/*`, `#/components/atoms/*`, `#/lib/cn`) and relative files.
+- **Copyable imports only**: `@angular/*`, `@fragiola/data-grid-angular` (and `/local` and the
+  features' entries: `/sorting`, `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`),
+  `@fragiola/data-grid/local`, `@lucide/angular`, the kit (`#/components/ui/*`,
+  `#/components/atoms/*`, `#/lib/cn`) and relative files.
+- **The features it uses, installed**: `[features]="features"` on the root (`[navigation()]` in
+  every grid navigated by keys, plus `rowSelection()`, `cellRange()`, `clipboard()`,
+  `fillHandle()`, `sorting()` where it uses them), and a feature's inputs and outputs on its
+  directive, imported from its entry (`dataGridNavigation [(activePosition)]`,
+  `dataGridRowSelection rowSelection="multiple"`, `dataGridCellRange cellSelection="range"`,
+  `dataGridClipboard (rangePaste)`, `dataGridFill (fill)`, `dataGridSorting`). A part that reads a
+  feature's keys types its injection by it:
+  `injectDataGrid<Task, [DataGridFeature<RowSelectionTypes>]>()`.
 
 ## The kit
 

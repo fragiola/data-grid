@@ -4,6 +4,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatMoney, formatNumber, type Person, person } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
 import * as styles from "./styles";
@@ -20,6 +21,7 @@ const PAGE = 50;
             <!-- the grid tells when the view's last row is within 15 rows of the end -->
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows()"
                 [rowKey]="rowKey"
@@ -65,6 +67,8 @@ const PAGE = 50;
     `,
 })
 export default class InfiniteLoading {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly formatNumber = formatNumber;
     protected readonly TOTAL = TOTAL;

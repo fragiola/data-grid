@@ -11,10 +11,14 @@ import {
     useGroupLabel,
     useHeaderCell,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { ChevronRight } from "lucide-react";
 import { Clickable } from "#/components/atoms/clickable";
 import { formatNumber, measurement, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const rows = people(500);
 
@@ -173,6 +177,7 @@ export default function CollapsibleGroups() {
                 </Clickable.Button>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}

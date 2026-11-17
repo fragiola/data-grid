@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { type Column, createDataGridModel, type RowMeta } from "../../src";
+import type { Column, RowMeta } from "../../src";
 import {
     createLocalRows,
     type GroupedRows,
     groupKeyOf,
     groupRows,
 } from "../../src/local";
+import { gridModel } from "../features";
 
 // Grouping rows in memory (Epic #87, E3.2): after the filters, the search and the sort, before
 // the page; group rows with a count and the app's aggregates, nested by the next column, ordered
@@ -275,7 +276,7 @@ describe("grouping in the local pipeline", () => {
             rowKey: (row) => row.id,
         });
         if (!groups) throw new Error("not grouped");
-        const model = createDataGridModel<Sale>({
+        const model = gridModel<Sale>({
             columns,
             rowCount: groups.rowCount,
             getRow: groups.getRow,

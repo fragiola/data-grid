@@ -13,6 +13,7 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
     renderCounting,
     root,
     scrollRoot,
@@ -101,6 +102,7 @@ function Grid({ table = false, ...props }: GridProps) {
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={COLUMNS}
             rows={rows}
             rowHeight={20}

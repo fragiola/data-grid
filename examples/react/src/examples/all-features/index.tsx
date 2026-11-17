@@ -1,6 +1,5 @@
 "use client";
 
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellInfo,
     type Column,
@@ -9,9 +8,16 @@ import {
     headerCellContent,
     useColumnResizer,
     useDataGridRef,
-    useFillHandle,
 } from "@fragiola/data-grid-react";
+import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import {
+    fillHandle,
+    repeatedFill,
+    useFillHandle,
+} from "@fragiola/data-grid-react/fill";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellRange } from "@fragiola/data-grid-react/range";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useState } from "react";
@@ -29,8 +35,16 @@ import {
 } from "../editing/editors";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), ranges of cells, the clipboard, the fill
+// handle
+const FEATURES = [
+    sorting(),
+    navigation(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+];
 
 // Everything a sheet does, together: cells edited in place, ranges selected, copied as TSV and
 // pasted, filled from a handle, rows sorted, the first column pinned and the others resized. The

@@ -6,6 +6,7 @@ import {
     type DataGridNode,
     injectColumnWindow,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatNumber, measurement } from "../_kit/data";
 import { ColumnReadout } from "./column-readout";
 import * as styles from "./styles";
@@ -40,6 +41,7 @@ const columns: Column<Row, DataGridNode>[] = Array.from(
             <example-column-readout [columnWindow]="columnWindow" [columns]="COLUMNS" />
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rowCount]="ROWS"
                 [getRow]="getRow"
@@ -75,6 +77,8 @@ const columns: Column<Row, DataGridNode>[] = Array.from(
     `,
 })
 export default class ManyColumns {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly ROWS = ROWS;
     protected readonly COLUMNS = COLUMNS;

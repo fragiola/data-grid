@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 import {
+    type DataGridFeature,
     type GroupRow,
     injectDataGrid,
     type RowKey,
 } from "@fragiola/data-grid-angular";
-import { injectSelectAll } from "@fragiola/data-grid-angular/selection";
+import type { RowSelectionTypes } from "@fragiola/data-grid-angular/row-selection";
+import { injectSelectAll } from "@fragiola/data-grid-angular/row-selection";
 import { CHECKBOX } from "#/components/ui/checkbox";
 import type { Person } from "../_kit/data";
 
@@ -32,7 +34,12 @@ export class SelectGroup {
     readonly rowIndex = input.required<number>();
     readonly group = input.required<GroupRow>();
 
-    private readonly grid = injectDataGrid<Person>();
+    // the grid's model, typed by the feature this part reads (row selection, installed by the grid)
+
+    private readonly grid = injectDataGrid<
+        Person,
+        [DataGridFeature<RowSelectionTypes>]
+    >();
     protected readonly all = injectSelectAll(
         () => this.group().rowKeys ?? NO_KEYS,
     );

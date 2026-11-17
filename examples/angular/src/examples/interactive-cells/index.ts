@@ -14,6 +14,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucideCopy, LucideTrash2 } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
@@ -59,6 +60,7 @@ type TaskCell = TemplateRef<TemplateContext<CellTemplateProps<Task>>>;
             </p>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows()"
                 [rowKey]="rowKey"
@@ -155,6 +157,8 @@ type TaskCell = TemplateRef<TemplateContext<CellTemplateProps<Task>>>;
     `,
 })
 export default class InteractiveCells {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly STATUSES = STATUSES;
     protected readonly STATUS_ITEMS = STATUS_ITEMS;

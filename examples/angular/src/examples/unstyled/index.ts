@@ -4,6 +4,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
@@ -16,7 +17,7 @@ import * as styles from "./styles";
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
-            <div dataGridRoot [columns]="columns" [rows]="rows" [class]="styles.root">
+            <div dataGridRoot [features]="features" [columns]="columns" [rows]="rows" [class]="styles.root">
                 <div dataGridGrid aria-label="People">
                     <div *dataGridHeader>
                         <div dataGridHeaderRow>
@@ -40,6 +41,8 @@ import * as styles from "./styles";
     `,
 })
 export default class Unstyled {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly rows = people(1_000);

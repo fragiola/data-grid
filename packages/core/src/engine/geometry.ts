@@ -1,7 +1,6 @@
 import type { Axis } from "../axis/axis";
 import { columnPart, pinnedEndFrom } from "../header/header";
 import { holdsRow } from "../model/expansion";
-import { isRowSelectable, isRowSelected } from "../model/selection";
 import type {
     GridDirection,
     HeaderCellLayout,
@@ -338,22 +337,6 @@ export function rowExpanded<TRow, TNode>(
     return holdsRow(view.expandedRows, rowIndex);
 }
 
-/** Whether a row is selected (R7): rows are selectable, it is loaded and its key selected. */
-export function rowSelected<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): boolean {
-    return isRowSelected(view, rowIndex);
-}
-
-/** Whether a row can be selected (R7): rows are selectable, it is loaded and not refused. */
-export function rowSelectable<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): boolean {
-    return isRowSelectable(view, rowIndex);
-}
-
 /**
  * Whether a body row takes its height from its cells (Epic #86, E2.2): rows are measured
  * (`rowHeight: "auto"`) and it is loaded (a row not loaded keeps its place's height, the
@@ -429,13 +412,25 @@ export function ariaRowDetail<TRow, TNode>(
 }
 
 /**
- * The grid's role: `treegrid` when its rows have kinds (Epic #87, `getRowMeta`: rows in a tree,
- * group rows), else `grid`.
+ * The grid's role: with navigation (Epic #144, the APG grid pattern), `treegrid` when its rows
+ * have kinds (Epic #87, `getRowMeta`: rows in a tree, group rows), else `grid`; without it, the
+ * APG table pattern's `table` (a `grid` promises keyboard navigation).
  */
 export function gridRole<TRow, TNode>(
     view: GridView<TRow, TNode>,
-): "grid" | "treegrid" {
+): "grid" | "treegrid" | "table" {
+    if (!view.features.navigable) return "table";
     return view.source.getRowMeta ? "treegrid" : "grid";
+}
+
+/**
+ * A body (or a summary row's, a detail's, the empty state's) cell's role: `gridcell` with
+ * navigation, the table pattern's `cell` without it (Epic #144).
+ */
+export function cellRole<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): "gridcell" | "cell" {
+    return view.features.navigable ? "gridcell" : "cell";
 }
 
 /**

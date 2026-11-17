@@ -16,6 +16,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { SWITCH } from "#/components/ui/switch";
 import { formatMoney } from "../_kit/data";
 import { Expander } from "./expander";
@@ -61,6 +62,7 @@ function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
             -->
             <div
                 dataGridRoot
+                [features]="features"
                 [gridRef]="gridRef"
                 [columns]="columns"
                 [rows]="orders"
@@ -124,6 +126,8 @@ function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
     `,
 })
 export default class MasterDetail {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly formatMoney = formatMoney;
     protected readonly total = total;

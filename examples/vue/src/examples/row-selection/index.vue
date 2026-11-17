@@ -5,6 +5,8 @@ import {
     type RowSelection,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { h, ref, useId, type VNodeChild } from "vue";
 import { Switch } from "#/components/ui/switch";
 import { type Task, tasks } from "../_kit/tasks";
@@ -12,8 +14,13 @@ import SelectAll from "./select-all.vue";
 import SelectRow from "./select-row.vue";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Task` as a type argument.
-const DataGrid = typedDataGrid<Task>();
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), row
+// selection
+const features = [navigation(), rowSelection()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 const ROWS = tasks(200);
 
@@ -92,6 +99,7 @@ const setSingle = (single: boolean) => {
             </span>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="ROWS"
             :row-key="rowKey"

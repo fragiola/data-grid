@@ -98,7 +98,7 @@ export type SpansState<TRow, TNode = unknown> = Pick<
 
 /**
  * Whether the active position is in a body cell (E1.2): on its row, its column one the cell's
- * span (from `columnIndex`, `columnSpan` columns) holds. What `is("cell-active")` and a cell's
+ * span (from `columnIndex`, `columnSpan` columns) holds. What the navigation's `cell-active` question and a cell's
  * part both ask.
  */
 export function activeInCell(

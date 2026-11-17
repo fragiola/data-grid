@@ -7,6 +7,7 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { RotateCcw } from "@lucide/vue";
 import { type FunctionalComponent, ref, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
@@ -15,8 +16,12 @@ import Resizer from "./resizer.vue";
 import * as styles from "./styles";
 import WidthsReadout from "./widths-readout.vue";
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const rows = people(1_000);
 
@@ -137,6 +142,7 @@ const setWidths = (next: ColumnWidths) => {
             </Clickable.Button>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rows"
             :row-key="rowKey"

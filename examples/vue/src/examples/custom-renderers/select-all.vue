@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RowKey } from "@fragiola/data-grid-vue";
-import { useSelectAll } from "@fragiola/data-grid-vue/selection";
+import { useSelectAll } from "@fragiola/data-grid-vue/row-selection";
 import Checkbox from "./checkbox.vue";
 
 const props = defineProps<{ rowKeys: readonly RowKey[] }>();

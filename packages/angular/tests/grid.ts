@@ -7,6 +7,9 @@ import {
     input,
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
+import { clipboard } from "../src/clipboard";
+import { fillHandle } from "../src/fill";
+import { navigation } from "../src/navigation";
 import {
     type ColumnOrGroup,
     DATA_GRID,
@@ -15,6 +18,8 @@ import {
     DataGridRoot,
     type GridRootProps,
 } from "../src/public-api";
+import { cellRange } from "../src/range";
+import { rowSelection } from "../src/row-selection";
 import { type Rendered, render, settled } from "./helpers";
 
 // The grid most tests render (the React and Vue suites' `divGrid`/`tableGrid`): every part, as
@@ -22,17 +27,37 @@ import { type Rendered, render, settled } from "./helpers";
 // through a test directive on the root, as `[dataGridLocalRows]` gives its own.
 
 /**
- * A test's root props: the core's root props and its features' (`features` among them), the
- * columns required.
+ * The features the tests' grids install unless a test gives its own (Epic #144): every behaviour
+ * the core had before it became a feature (navigation, row selection, cell ranges, the clipboard,
+ * the fill handle), so the tests of those behaviours pass unchanged.
+ */
+export const TEST_FEATURES = [
+    navigation(),
+    rowSelection(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+] as const;
+
+/** The test features' list type: what a test's props are typed by. */
+export type TestFeatures = typeof TEST_FEATURES;
+
+/**
+ * A test's root props: the core's root props and its features' (`TEST_FEATURES`' by default), the
+ * columns required; `features` any list (the test features unless given).
  */
 export type TestProps<
     TRow = unknown,
-    TFeatures extends DataGridFeatures = DataGridFeatures,
-> = Partial<GridRootProps<TRow, DataGridNode, TFeatures>> & {
+    TFeatures extends DataGridFeatures = TestFeatures,
+> = Omit<Partial<GridRootProps<TRow, DataGridNode, TFeatures>>, "features"> & {
     columns: readonly ColumnOrGroup<TRow, DataGridNode>[];
+    features?: DataGridFeatures | undefined;
 };
 
-/** Gives the root the props a test passes, over its inputs. */
+/**
+ * Gives the root the props a test passes, over its inputs; the test features when neither the
+ * props nor the root's `[features]` give a list.
+ */
 @Directive({ selector: "[dataGridRoot][testProps]" })
 export class TestRootProps<TRow = unknown> {
     readonly testProps = input.required<TestProps<TRow>>();
@@ -40,7 +65,16 @@ export class TestRootProps<TRow = unknown> {
     constructor() {
         const root = inject<DataGridRoot<TRow>>(DataGridRoot);
         inject(DestroyRef).onDestroy(
-            root.addPropsSource(() => this.testProps()),
+            root.addPropsSource(() => {
+                const props = this.testProps();
+                // any list the test gives (its type the test's): the core reads what it installs
+                return (
+                    props.features !== undefined ||
+                    root.features() !== undefined
+                        ? props
+                        : { ...props, features: TEST_FEATURES }
+                ) as Partial<GridRootProps<TRow, DataGridNode>>;
+            }),
         );
     }
 }

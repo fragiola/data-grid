@@ -290,13 +290,12 @@ export interface ViewInputs<TRow, TNode>
         | "columnReorder"
         | "reorderableRows"
         | "rowReorder"
-        | "fillable"
-        | "fill"
-        | "fillSource"
         | "direction"
         | "features"
     > {
     readonly state: DataGridState<TRow, TNode>;
+    /** the view's fields the features' engines hold (`FeatureEngine.view`: a fill's drag) */
+    readonly featureFields: Readonly<Record<string, unknown>> | null;
     readonly rowWindow: AxisWindow;
     /** the columns that scroll (`scrollingWindow`) */
     readonly columnWindow: AxisWindow;
@@ -310,6 +309,7 @@ export function buildView<TRow, TNode>({
     rowWindow,
     columnWindow,
     headerRowsFor,
+    featureFields,
     ...measures
 }: ViewInputs<TRow, TNode>): GridView<TRow, TNode> {
     const {
@@ -399,11 +399,6 @@ export function buildView<TRow, TNode>({
         rowsOrdered: measures.features.rowsOrdered(state as FeatureState),
         expandedRows: state.expandedRows,
         rowKey: state.rowKey,
-        rowSelection: state.rowSelection,
-        selectedRowKeys: state.selectedRowKeys,
-        isRowSelectable: state.isRowSelectable,
-        cellSelection: state.cellSelection,
-        selectedRange: state.selectedRange,
         editingCell: state.editingCell,
         collapsedGroupKeys: state.collapsedGroupKeys,
         expandedGroupKeys: state.expandedGroupKeys,
@@ -411,13 +406,14 @@ export function buildView<TRow, TNode>({
         measuredRows: state.rowHeight === "auto",
         measuredDetails: state.detailHeight === "auto",
     };
-    // the state keys the features read in their parts, on the view by name (Epic #141)
+    // the state keys the features read in their parts, on the view by name (Epic #141), and the
+    // fields their engines hold (Epic #144: a fill's drag)
     for (const key of measures.features.viewKeys) {
         (view as unknown as Record<string, unknown>)[key] = (
             state as unknown as Record<string, unknown>
         )[key];
     }
-    return view;
+    return featureFields ? Object.assign(view, featureFields) : view;
 }
 
 /**
@@ -443,15 +439,7 @@ const VIEW_KEYS = [
     "pinnedEndColumnCount",
     "expandedRows",
     "rowKey",
-    "rowSelection",
-    "selectedRowKeys",
-    "isRowSelectable",
-    "cellSelection",
-    "selectedRange",
     "editingCell",
-    "fillable",
-    "fill",
-    "fillSource",
     "collapsedGroupKeys",
     "expandedGroupKeys",
     "interaction",

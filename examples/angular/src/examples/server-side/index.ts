@@ -12,6 +12,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import {
     DataGridSorting,
     type SortColumn,
@@ -182,8 +183,9 @@ export default class ServerSide {
     protected readonly formatNumber = formatNumber;
 
     readonly columns = columns;
-    // the grid sorts only with sorting installed: the header toggles the sort the app keeps
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the header toggles the sort the app keeps), cell
+    // navigation (the keys, the active cell, the tab stop)
+    readonly features = [sorting(), navigation()];
 
     // the external mode: the app keeps the sort (grid state, the header toggles it), the filter,
     // the search and the page, and asks the server; the grid shows the page it gets back

@@ -5,6 +5,7 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { onBeforeUnmount, type VNodeChild } from "vue";
 import { formatMoney, type Person, person } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
@@ -12,8 +13,12 @@ import { createRangeCache } from "../_kit/range-cache";
 import RequestLog from "./request-log.vue";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const TOTAL = 1_000_000;
 const BLOCK = 100;
@@ -63,6 +68,7 @@ const rowKey = (row: Person) => row.id;
     <div :class="styles.frame">
         <div :class="styles.layout">
             <DataGrid.Root
+                :features="features"
                 :columns="columns"
                 :row-count="TOTAL"
                 :get-row="cache.get"

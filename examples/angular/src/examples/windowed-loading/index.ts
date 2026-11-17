@@ -11,6 +11,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { formatMoney, type Person, person } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
 import { createRangeCache } from "../_kit/range-cache";
@@ -42,6 +43,7 @@ const columns: Column<Person, DataGridNode>[] = [
             <div [class]="styles.layout">
                 <div
                     dataGridRoot
+                    [features]="features"
                     [columns]="columns"
                     [rowCount]="total"
                     [getRow]="cache.get"
@@ -85,6 +87,8 @@ const columns: Column<Person, DataGridNode>[] = [
     `,
 })
 export default class WindowedLoading {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
 
     readonly columns = columns;

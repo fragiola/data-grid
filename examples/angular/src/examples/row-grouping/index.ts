@@ -10,6 +10,11 @@ import {
     groupKeyOf,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowSelection,
+    rowSelection,
+} from "@fragiola/data-grid-angular/row-selection";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
@@ -50,6 +55,7 @@ const isSelectable = (person: Person) => person.joined >= "2012";
         GroupLabel,
         SelectGroup,
         SelectRow,
+        DataGridRowSelection,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -98,6 +104,7 @@ const isSelectable = (person: Person) => person.joined >= "2012";
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowHeight]="38"
+                dataGridRowSelection
                 rowSelection="multiple"
                 [isRowSelectable]="isSelectable"
                 [selectedRowKeys]="selected()"
@@ -193,8 +200,9 @@ export default class RowGrouping {
     protected readonly grouping = signal<Grouping>("team");
     protected readonly selected = signal<readonly RowKey[]>([]);
 
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop), row selection
+    readonly features = [sorting(), navigation(), rowSelection()];
     readonly local = injectLocalRows(ROWS, this.columns, () => ({
         groupBy: GROUP_BY[this.grouping()],
         aggregates: AGGREGATES,

@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import {
-    type DataGridModelOptions,
     GROUP_TOGGLE_ATTRIBUTE,
     type GroupRow,
     gridRole,
     groupTogglePart,
+    type ModelOptions,
     type RowMeta,
     rowDragHandlePart,
     rowPart,
     veto,
 } from "../../src";
+import type { Features } from "../features";
 import {
     cellElement,
     click,
@@ -49,7 +50,7 @@ const META: readonly (RowMeta | undefined)[] = [
 
 const getRowMeta = (index: number) => META[index];
 
-function setup(options: DataGridModelOptions<{ id: number }> = {}) {
+function setup(options: ModelOptions<{ id: number }, unknown, Features> = {}) {
     const mounted = mountEngine({
         columns: [
             { key: "c0", width: 100 },
@@ -385,7 +386,7 @@ describe("fitting columns", () => {
     /** Cells of column 0 for the header and the first rows, `widths` their contents' widths. */
     function measured(
         widths: readonly number[],
-        options: DataGridModelOptions<{ id: number }>,
+        options: ModelOptions<{ id: number }, unknown, Features>,
     ) {
         const grid = document.createElement("div");
         widths.forEach((content, index) => {

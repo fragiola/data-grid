@@ -1,4 +1,5 @@
 import { type ColumnOrGroup, createDataGridModel } from "@fragiola/data-grid";
+import { navigation } from "@fragiola/data-grid/navigation";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import {
@@ -41,7 +42,9 @@ function announced(
     side: "before" | "after",
     columnOrder: readonly string[] = [],
 ) {
-    const model = createDataGridModel<Row, ReactNode>({
+    // the example installs navigation: the active cell is its
+    const model = createDataGridModel({
+        features: [navigation()],
         columns: COLUMNS,
         rows: [],
         columnOrder,

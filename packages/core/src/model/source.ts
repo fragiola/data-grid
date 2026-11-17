@@ -1,8 +1,11 @@
 import { isIndex, keySet } from "../utils/utils";
+import { noRow, ok } from "./result";
 import type {
     CellKeys,
     CellPosition,
     Column,
+    CommandFailure,
+    CommandResult,
     DataGridState,
     GroupRow,
     RowKey,
@@ -255,4 +258,37 @@ export function isGroupExpanded<TRow>(
     rowIndex: number,
 ): boolean {
     return groupExpanded(state, groupKeyAt(state, rowIndex));
+}
+
+/**
+ * A value as text: a string as it is, a number, a big integer or a boolean written out; anything
+ * else (none, an object, a date) is empty. What a cell shows of its value without a renderer, and
+ * copies without `getCopyText`.
+ */
+export function valueText(value: unknown): string {
+    const type = typeof value;
+    return type === "string" ||
+        type === "number" ||
+        type === "bigint" ||
+        type === "boolean"
+        ? String(value)
+        : "";
+}
+
+/**
+ * The key of the loaded row at `rowIndex`, or why there is none: no such row, or what `unloaded`
+ * says while it is not loaded (its key is unknown).
+ */
+export function loadedKeyAt<TRow>(
+    state: RowsState<TRow>,
+    rowIndex: number,
+    unloaded: (rowIndex: number) => CommandFailure,
+    meta: RowMeta | undefined = rowMetaAt(state.source, rowIndex),
+): CommandResult<RowKey> {
+    if (!isIndex(rowIndex, state.rowCount)) {
+        return noRow(rowIndex);
+    }
+    const row = dataRowAt(state.source, rowIndex, meta);
+    const key = row === undefined ? undefined : keyOf(state, row, rowIndex);
+    return key === undefined ? unloaded(rowIndex) : ok(key);
 }

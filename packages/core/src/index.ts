@@ -23,7 +23,6 @@ export {
     EMPTY_FILL,
     emptyAreaPropsOf,
     emptyCellPropsOf,
-    fillHandlePartOf,
     type GridCellInfo,
     type GridRowInfo,
     type GridState,
@@ -70,12 +69,10 @@ export {
     type GridRootPropName,
     type GridRootProps,
     type GridRowsProps,
-    samePosition,
     sourceMatches,
     withoutRootProps,
 } from "./adapter/root";
 export type { Axis, Size } from "./axis/axis";
-export { parseTsv, toTsv } from "./clipboard/clipboard";
 export {
     COLUMN_RESIZER_ATTRIBUTE,
     EDITOR_ATTRIBUTE,
@@ -85,6 +82,7 @@ export {
     ROW_DRAG_HANDLE_ATTRIBUTE,
     TAB_STOP_ATTRIBUTE,
 } from "./engine/dom";
+export type { DragEnd, FeatureDrag, PointerDrag } from "./engine/drag";
 export { createDataGridEngine } from "./engine/engine";
 export {
     ariaEmptyRowIndex,
@@ -92,6 +90,7 @@ export {
     ariaRowCount,
     ariaRowDetail,
     ariaRowIndex,
+    cellRole,
     cellSpan,
     columnLeft,
     columnPinning,
@@ -106,8 +105,6 @@ export {
     rowDisplay,
     rowExpanded,
     rowLeft,
-    rowSelectable,
-    rowSelected,
     rowTop,
     rowWidth,
     summaryHeight,
@@ -115,15 +112,13 @@ export {
 export {
     type AriaTreeRow,
     type CellPart,
+    type CellShare,
     type CellState,
     type ColumnResizerPart,
     type ColumnResizerState,
     cellBox,
     cellPart,
     columnResizerPart,
-    type FillHandlePart,
-    type FillHandleState,
-    fillHandlePart,
     type GroupTogglePart,
     type GroupToggleState,
     groupTogglePart,
@@ -137,6 +132,7 @@ export {
     type RowDragHandleState,
     type RowPart,
     type RowRead,
+    type RowShare,
     type RowState,
     rowDetailPart,
     rowDragHandlePart,
@@ -175,6 +171,7 @@ export {
     type DataGridFeatures,
     defineControlled,
     defineFeature,
+    type EngineKit,
     type FeatureEngine,
     type FeatureEngineContext,
     type FeatureHandler,
@@ -196,7 +193,6 @@ export {
     type ModelOptions,
 } from "./model/model";
 export { keptOrder, sameOrder } from "./model/order";
-export { keptRange, sameCellRange, valueText } from "./model/range";
 export { done, fail, ok, veto } from "./model/result";
 export {
     cellValue,
@@ -209,6 +205,7 @@ export {
     rowKeyAt,
     rowKeyOf,
     rowMetaAt,
+    valueText,
 } from "./model/source";
 export {
     summaryRowAt,

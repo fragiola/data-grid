@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="TRow">
-import { type CellInfo, useFillHandle } from "@fragiola/data-grid-vue";
+import type { CellInfo } from "@fragiola/data-grid-vue";
+import { useFillHandle } from "@fragiola/data-grid-vue/fill";
 import * as styles from "./styles";
 
 // A cell's handle, as the app draws it: the composable's props on an element of its own.

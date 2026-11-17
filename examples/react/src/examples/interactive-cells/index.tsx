@@ -1,6 +1,7 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { Copy, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -9,6 +10,9 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { Select } from "#/components/ui/select";
 import { STATUSES, type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const STATUS_ITEMS = Object.fromEntries(
     STATUSES.map((status) => [status, status]),
@@ -184,6 +188,7 @@ export default function InteractiveCells() {
                 </span>
             </p>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}

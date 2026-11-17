@@ -9,6 +9,7 @@ import {
     veto,
 } from "../../src";
 import { sorting } from "../../src/sorting";
+import { FEATURES } from "../features";
 import {
     cellElement,
     keydown,
@@ -76,7 +77,7 @@ function setup(
         e: headerCell(-2, 6),
     };
     const mounted = mountEngine(
-        { columns, rowCount: 100, features: [sorting()] },
+        { columns, rowCount: 100, features: [...FEATURES, sorting()] },
         { grid, width: 600, ...options },
     );
     const { model, engine } = mounted;

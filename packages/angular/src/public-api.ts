@@ -33,10 +33,6 @@ export {
     DataGridColumnResizer,
 } from "./lib/directives/column-resizer.directive";
 export { DataGridEmpty } from "./lib/directives/empty.directive";
-export {
-    DataGridFillHandle,
-    type FillHandleContext,
-} from "./lib/directives/fill-handle.directive";
 export { DataGridGrid } from "./lib/directives/grid.directive";
 export { DataGridGroupLabel } from "./lib/directives/group-label.directive";
 export {
@@ -92,7 +88,6 @@ export { injectCells } from "./lib/inject/inject-cells";
 export { injectColumnResizer } from "./lib/inject/inject-column-resizer";
 export { injectColumnWindow } from "./lib/inject/inject-column-window";
 export { injectDataGrid, injectGridView } from "./lib/inject/inject-data-grid";
-export { injectFillHandle } from "./lib/inject/inject-fill-handle";
 export { injectGroupLabel } from "./lib/inject/inject-group-label";
 export { injectGroupToggle } from "./lib/inject/inject-group-toggle";
 export { injectHeaderCell } from "./lib/inject/inject-header-cell";
@@ -119,3 +114,7 @@ export {
     type TemplateContext,
     templateContent,
 } from "./lib/utils/content";
+// Private to the package's own entry points (the fill handle's element, `/fill`), as Angular's
+// `ɵ` names are: not the app's API, they may change in any release.
+export { bindPart as ɵbindPart } from "./lib/utils/helpers";
+export { structuralView as ɵstructuralView } from "./lib/utils/structural";

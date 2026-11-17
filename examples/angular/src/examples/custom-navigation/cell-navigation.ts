@@ -1,5 +1,10 @@
 import { Directive, input } from "@angular/core";
-import { injectDataGrid, injectGridView } from "@fragiola/data-grid-angular";
+import {
+    type DataGridFeature,
+    injectDataGrid,
+    injectGridView,
+} from "@fragiola/data-grid-angular";
+import type { NavigationTypes } from "@fragiola/data-grid-angular/navigation";
 import type { Person } from "../_kit/data";
 import { type Mode, target } from "./navigation";
 
@@ -16,7 +21,12 @@ export class CellNavigation {
     /** What Tab, and the arrows at a row's ends, do. */
     readonly mode = input.required<Mode>({ alias: "exampleCellNavigation" });
 
-    private readonly grid = injectDataGrid<Person>();
+    // the grid's model, typed by the feature this part reads (cell navigation, installed by the grid)
+
+    private readonly grid = injectDataGrid<
+        Person,
+        [DataGridFeature<NavigationTypes>]
+    >();
     private readonly view = injectGridView();
 
     protected onKeyDown(event: KeyboardEvent): void {

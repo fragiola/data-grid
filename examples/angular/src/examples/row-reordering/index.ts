@@ -14,6 +14,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideArrowDown,
@@ -182,8 +183,9 @@ export default class RowReordering {
     readonly rows = signal<readonly Task[]>(backlog);
     readonly announcement = signal("");
     // searched and sorted in memory; a move lands beside the row it was dropped on, searched too
-    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
-    readonly features = [sorting()];
+    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
+    // cell navigation (the keys, the active cell, the tab stop)
+    readonly features = [sorting(), navigation()];
     readonly local = injectLocalRows(this.rows, columns);
     protected readonly sorted = computed(
         () => this.local.sort.columns.length > 0,

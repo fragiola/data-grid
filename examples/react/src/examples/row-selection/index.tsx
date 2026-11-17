@@ -8,12 +8,20 @@ import {
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
-import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowSelection,
+    useSelectAll,
+} from "@fragiola/data-grid-react/row-selection";
 import { useId, useState } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Switch } from "#/components/ui/switch";
 import { type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
+
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), row
+// selection
+const FEATURES = [navigation(), rowSelection()];
 
 const ROWS = tasks(200);
 
@@ -25,7 +33,7 @@ const SELECTABLE_IDS = ROWS.filter(isSelectable).map((task) => task.id);
 
 /** A row's checkbox: the grid toggles the row, a Shift+click selects since the last one. */
 function SelectRow({ rowIndex, name }: { rowIndex: number; name: string }) {
-    const { model } = useDataGrid<Task>();
+    const { model } = useDataGrid<Task, typeof FEATURES>();
     // the view moves with the selection: the box follows
     useGridView();
     return (
@@ -122,6 +130,7 @@ export default function RowSelectionExample() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={ROWS}
                 rowKey={(row) => row.id}

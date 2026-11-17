@@ -8,8 +8,15 @@ import {
     DataGrid,
     type EditCellRenderProps,
     type EditingCell,
+    type RootProps,
 } from "../src";
-import { cellAt, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Cell editing (Epic #88, E4.3): `Root` maps the edited cell (controlled or not) onto the model and
 // tells commits through `onCellEdit` with their row; an edited cell carries `data-editing` and
@@ -49,7 +56,7 @@ stubViewportSize(400, 300);
 
 type GridProps = Partial<
     Pick<
-        React.ComponentProps<typeof DataGrid.Root<Item>>,
+        RootProps<Item, Features>,
         | "editingCell"
         | "defaultEditingCell"
         | "onEditingCellChange"
@@ -61,7 +68,13 @@ type GridProps = Partial<
 function Grid({ table = false, ...props }: GridProps) {
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={columns} rows={items} rowHeight={20} {...props}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={columns}
+            rows={items}
+            rowHeight={20}
+            {...props}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Item>>
@@ -198,6 +211,7 @@ describe("the edited cell", () => {
         ];
         const { container, getByLabelText } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={portalled}
                 rows={items}
                 rowHeight={20}

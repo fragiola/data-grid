@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, type VNodeChild } from "vue";
 import { formatMoney } from "../_kit/data";
 import {
@@ -15,7 +16,10 @@ import * as styles from "./styles";
 // nested in another is in the tab order only while the orders grid's active cell is in its row:
 // Tab goes from that row into its items, and Shift+Tab comes back.
 
-const DataGrid = typedDataGrid<Item>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+const DataGrid = typedDataGrid<Item, typeof features>();
 
 defineProps<{ order: Order }>();
 
@@ -46,6 +50,7 @@ const ITEMS_WIDTH = itemColumns.reduce((sum, column) => sum + column.width, 2);
 
 <template>
     <DataGrid.Root
+        :features="features"
         :columns="itemColumns"
         :rows="order.items"
         :row-height="ITEM_ROW"

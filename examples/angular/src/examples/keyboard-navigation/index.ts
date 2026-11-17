@@ -10,6 +10,10 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import {
+    DataGridNavigation,
+    navigation,
+} from "@fragiola/data-grid-angular/navigation";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
@@ -42,7 +46,7 @@ const KEYS = [
 
 @Component({
     selector: "example-keyboard-navigation",
-    imports: [DATA_GRID, ClickableButton],
+    imports: [DATA_GRID, ClickableButton, DataGridNavigation],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -71,10 +75,12 @@ const KEYS = [
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
                 [rowHeight]="36"
+                dataGridNavigation
                 [(activePosition)]="active"
                 [class]="styles.root"
             >
@@ -105,6 +111,8 @@ const KEYS = [
     `,
 })
 export default class KeyboardNavigation {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly keys = KEYS;
 

@@ -1,8 +1,5 @@
-import type {
-    CellState,
-    FillHandleState,
-    RowState,
-} from "@fragiola/data-grid-react";
+import type { CellState, RowState } from "@fragiola/data-grid-react";
+import type { FillHandleState } from "@fragiola/data-grid-react/fill";
 import { cn } from "#/lib/cn";
 
 export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";

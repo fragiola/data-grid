@@ -4,7 +4,12 @@ import {
     computed,
     input,
 } from "@angular/core";
-import { injectDataGrid, injectGridView } from "@fragiola/data-grid-angular";
+import {
+    type DataGridFeature,
+    injectDataGrid,
+    injectGridView,
+} from "@fragiola/data-grid-angular";
+import type { RowSelectionTypes } from "@fragiola/data-grid-angular/row-selection";
 import { CHECKBOX, type CheckedChange } from "#/components/ui/checkbox";
 
 // A row's checkbox: the grid toggles it, a Shift+click selects the rows since the last one.
@@ -28,7 +33,12 @@ export class SelectCell {
     readonly rowIndex = input.required<number>();
     readonly name = input.required<string>();
 
-    private readonly grid = injectDataGrid();
+    // the grid's model, typed by the feature this part reads (row selection, installed by the grid)
+
+    private readonly grid = injectDataGrid<
+        unknown,
+        [DataGridFeature<RowSelectionTypes>]
+    >();
     // the view moves with the selection: the box follows
     private readonly view = injectGridView();
     protected readonly checked = computed(() => {

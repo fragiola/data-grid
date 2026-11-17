@@ -22,7 +22,14 @@ import {
 } from "../src";
 import { useLocalRows } from "../src/local";
 import { type SortColumn, sorting } from "../src/sorting";
-import { cellAt, root, rowAt, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES as GRID_FEATURES,
+    root,
+    rowAt,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Row reordering (Epic #86, E2.3): `onRowMove` on `Root` makes the rows move, the app moving them
 // in its own rows; `useRowDragHandle`'s props on the app's handle, the rows'
@@ -60,14 +67,14 @@ function Handle({ cell }: { cell: CellInfo<Task> }) {
     );
 }
 
-const FEATURES = [sorting()] as const;
+const FEATURES = [sorting(), ...GRID_FEATURES] as const;
 
 interface GridProps {
     onRowMove?: ((move: RowMove) => void) | undefined;
     activePosition?: CellPosition | null;
     onActivePositionChange?: (position: CellPosition | null) => void;
     sortColumns?: readonly SortColumn[];
-    gridRef?: DataGridRef<Task>;
+    gridRef?: DataGridRef<Task, typeof FEATURES>;
     rows?: readonly Task[];
     table?: boolean;
 }
@@ -132,7 +139,7 @@ function App({
     onMove?: (move: RowMove) => void;
 }) {
     const [rows, setRows] = useState(tasks);
-    const gridRef = useDataGridRef<Task>();
+    const gridRef = useDataGridRef<Task, typeof FEATURES>();
     latestRef = gridRef;
     return (
         <Grid
@@ -157,7 +164,7 @@ function App({
 }
 
 /** the last `App`'s grid */
-let latestRef: DataGridRef<Task> | undefined;
+let latestRef: DataGridRef<Task, typeof FEATURES> | undefined;
 
 /** The ids of the first rows, in order. */
 function ids(container: HTMLElement, count = 5): string[] {

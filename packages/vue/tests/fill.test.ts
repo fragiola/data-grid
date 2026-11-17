@@ -12,9 +12,17 @@ import {
     type RangeFill,
     type RowInfo,
     typedDataGrid,
-    useFillHandle,
 } from "../src";
-import { cellAt, renderGrid, settled, stubViewportSize, tags } from "./helpers";
+import { useFillHandle } from "../src/fill";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    renderGrid,
+    settled,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // The fill handle (Epic #88, E4.4): `Root`'s `onFill` turns filling on; `useFillHandle` gives the
 // app's element its mark in the cell at the range's corner (else the active cell), none
@@ -25,7 +33,7 @@ interface Item {
     id: number;
 }
 
-const G = typedDataGrid<Item>();
+const G = typedDataGrid<Item, Features>();
 
 const items: Item[] = Array.from({ length: 20 }, (_, id) => ({ id }));
 
@@ -86,6 +94,7 @@ function grid({
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns,
             rows: items,
             rowHeight: 20,

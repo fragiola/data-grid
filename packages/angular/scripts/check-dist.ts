@@ -17,20 +17,30 @@ export function importsOf(source: string): string[] {
     ].map(([, specifier]) => specifier ?? "");
 }
 
-const ALLOWED =
-    /^(@angular\/core|@fragiola\/data-grid(\/(local|selection|sorting))?|@fragiola\/data-grid-angular)$/;
+/** The opt-in entries: ng-packagr's secondary entries, and the core's they re-export. */
+const ENTRIES = [
+    "local",
+    "navigation",
+    "row-selection",
+    "range",
+    "clipboard",
+    "fill",
+    "sorting",
+];
+
+const ALLOWED = new RegExp(
+    `^(@angular/core|@fragiola/data-grid(/(${ENTRIES.join("|")}))?|@fragiola/data-grid-angular)$`,
+);
 
 function main() {
     for (const file of [
         "package.json",
         ".npmignore",
-        "local/package.json",
-        "selection/package.json",
-        "sorting/package.json",
+        ...ENTRIES.map((entry) => `${entry}/package.json`),
     ]) {
         rmSync(join(dist, file), { force: true });
     }
-    for (const folder of ["local", "selection", "sorting"]) {
+    for (const folder of ENTRIES) {
         rmSync(join(dist, folder), { recursive: true, force: true });
     }
     const folder = join(dist, "fesm2022");

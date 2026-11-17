@@ -5,6 +5,7 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { ArrowDownToLine, ArrowUpToLine, Trash2 } from "@lucide/vue";
 import {
     type ComponentPublicInstance,
@@ -25,7 +26,10 @@ import { useTouchHold } from "./use-touch-hold";
 // touch itself: `use-touch-hold.ts`). The menu opens only for a body cell, never over the header,
 // and makes that cell active. Closing it focuses the grid, which hands focus to its active cell.
 
-const DataGrid = typedDataGrid<Task>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 const columns: Column<Task, VNodeChild>[] = [
     { key: "id", name: "#", width: 72 },
@@ -44,7 +48,7 @@ const target = shallowRef<CellPosition | null>(null);
 let pressed: CellPosition | null = null;
 const announcement = ref("");
 
-const gridRef = useDataGridRef<Task>();
+const gridRef = useDataGridRef<Task, typeof features>();
 const gridElement = ref<ComponentPublicInstance | null>(null);
 const touch = useTouchHold();
 
@@ -148,6 +152,7 @@ function focusGrid(event: Event) {
                 @touchcancel="touch.release"
             >
                 <DataGrid.Root
+                    :features="features"
                     :grid-ref="gridRef"
                     :columns="columns"
                     :rows="rows"

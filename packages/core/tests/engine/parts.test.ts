@@ -9,6 +9,7 @@ import {
     rowPart,
 } from "../../src";
 import { sorting } from "../../src/sorting";
+import { FEATURES } from "../features";
 import { COLUMNS, column, type Row, stateOf, viewOf } from "./views";
 
 // A part's state as a pure function of the view (Q4), with what ARIA says of it beyond the state:
@@ -185,7 +186,7 @@ describe("headerCellPart", () => {
         const view = viewOf(
             stateOf({
                 columns: COLUMNS.map((entry) => sortable(entry.key)),
-                features: [sorting()],
+                features: [...FEATURES, sorting()],
                 sortColumns: [
                     { columnKey: "c3", direction: "descending" },
                     { columnKey: "c2", direction: "ascending" },

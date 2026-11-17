@@ -4,7 +4,6 @@ import type {
     DataGridFeatures,
     FeatureKeys,
 } from "../feature/feature";
-import type { Direction } from "../navigation/navigation";
 import type { Range } from "../viewport/window";
 
 // The grid's model: its data and its rules (D3). One generic is the row type; the second is what a
@@ -561,17 +560,6 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly expandedGroupKeys: readonly RowKey[];
     /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
     readonly estimatedDetailHeight: number;
-    /** how rows are selected; `undefined`: they are not (R2) */
-    readonly rowSelection: RowSelection | undefined;
-    /**
-     * the keys of the selected rows, in the order they were selected (R1). A key whose row is
-     * not loaded, or not in the data, stays
-     */
-    readonly selectedRowKeys: readonly RowKey[];
-    /** whether a loaded row can be selected; `undefined`: every row can (R5) */
-    readonly isRowSelectable: RowSelectable<TRow> | undefined;
-    /** where a range starts: the row last toggled without `extend` (R3) */
-    readonly selectionAnchor: SelectionAnchor | null;
     /**
      * the cell being edited (Epic #88, E4.3), the active one; `null` for none. The draft is an
      * engine's (`edit-draft`)
@@ -579,15 +567,6 @@ export interface DataGridState<TRow, TNode = unknown> {
     readonly editingCell: EditingCell | null;
     /** the keys the edit started on (`null` without one): its row and column, kept by them */
     readonly editingKeys: CellKeys | null;
-    /** how cells are selected; `undefined`: they are not (Epic #88, E4.1) */
-    readonly cellSelection: CellSelection | undefined;
-    /**
-     * the selected range of body cells, inside the grid's rows and columns; `null` for none (the
-     * active cell alone is what a copy copies)
-     */
-    readonly selectedRange: CellRange | null;
-    /** the keys at the range's corners (`null` without one): new rows or columns there end it */
-    readonly selectedRangeKeys: RangeKeys | null;
     /** the resized columns' widths, over their `width` (a resizable column's only count) */
     readonly columnWidths: ColumnWidths;
     /** the order columns and groups take among their siblings (empty: as declared) */
@@ -627,7 +606,6 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     summaryRows?: { readonly top?: number; readonly bottom?: number };
     /** a summary row's height in pixels (default 35) */
     summaryRowHeight?: number;
-    activePosition?: CellPosition | null;
     /** the keys of the rows expanded to start with (a key given twice counts once) */
     expandedRowKeys?: readonly RowKey[];
     /** the keys of the row groups expanded to start with (a key given twice counts once) */
@@ -639,18 +617,8 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     detailHeight?: DetailHeight<TRow>;
     /** a measured detail's height until it is measured, in pixels (default 300) */
     estimatedDetailHeight?: number;
-    /** how rows are selected: one at a time, or many (default: not at all) */
-    rowSelection?: RowSelection | undefined;
-    /** the keys of the rows selected to start with (a key given twice counts once) */
-    selectedRowKeys?: readonly RowKey[];
-    /** whether a loaded row can be selected (default: every row can) */
-    isRowSelectable?: RowSelectable<TRow> | undefined;
     /** the cell being edited to start with: the active one, an editable cell (default none) */
     editingCell?: EditingCell | null | undefined;
-    /** how cells are selected: a range of them (default: not at all) */
-    cellSelection?: CellSelection | undefined;
-    /** the range of cells selected to start with (kept inside the grid's body; default none) */
-    selectedRange?: CellRange | null | undefined;
     /** the resized columns' widths to start with (an entry that is not a size is dropped) */
     columnWidths?: ColumnWidths;
     /** the column order to start with (an entry that is not a string is dropped) */
@@ -738,79 +706,6 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: readonly RowKey[];
     };
     /**
-     * replaces the selected rows' keys (each once; in single mode, the last one only): the app's
-     * keys, as given (`isRowSelectable` is not asked: a key's row may not be loaded). Returns them
-     */
-    "selected-rows.set": {
-        payload: { readonly rowKeys: readonly RowKey[] };
-        result: readonly RowKey[];
-    };
-    /**
-     * selects a row, or clears it when it is selected: by its index (a loaded row) or by its key.
-     * A group row (Epic #87, multiple mode) selects its rows' keys (`GroupRow.rowKeys`), or clears
-     * them all when every one is selected; with `extend`, a range from the anchor to it.
-     * By index, the row becomes the anchor; a row that cannot be selected is never added (it can
-     * be cleared). By key, the row is not looked for: the key is the app's, as with `set`. With
-     * `extend` (multiple mode; single mode toggles), every selectable row from the anchor to it
-     * takes the anchor's state instead, and the anchor stays (without one, a toggle); a row not
-     * loaded on the way
-     * refuses it all (`not_loaded`). In single mode, selecting a row clears the others. Returns
-     * the selected rows' keys and the anchor it leaves (what a controlled root keeps of a toggle
-     * its parent answers)
-     */
-    "selected-rows.toggle": {
-        payload:
-            | {
-                  readonly rowIndex: number;
-                  readonly extend?: boolean | undefined;
-                  readonly rowKey?: undefined;
-              }
-            | {
-                  readonly rowKey: RowKey;
-                  readonly rowIndex?: undefined;
-                  readonly extend?: undefined;
-              };
-        result: {
-            readonly rowKeys: readonly RowKey[];
-            readonly anchor: SelectionAnchor | null;
-        };
-    };
-    /**
-     * makes a loaded row the anchor, where the next range starts, changing no selection: a range
-     * from it selects its rows, or clears them with `selected: false`. Returns the anchor
-     */
-    "selection-anchor.set": {
-        payload: {
-            readonly rowIndex: number;
-            readonly selected?: boolean | undefined;
-        };
-        result: SelectionAnchor;
-    };
-    /** leaves no anchor: the next range is a toggle */
-    "selection-anchor.clear": {
-        payload: NoPayload;
-        result: undefined;
-    };
-    /**
-     * selects every selectable row (multiple mode), keeping the keys already selected; a row not
-     * loaded refuses it all (`not_loaded`): its key is unknown. Returns the selected rows' keys
-     */
-    "selected-rows.select-all": {
-        payload: NoPayload;
-        result: readonly RowKey[];
-    };
-    /**
-     * changes how rows are selected: the mode (`null`: not at all) and which rows can be. Single
-     * mode keeps the last selected key only
-     */
-    "row-selection.set": {
-        payload: {
-            readonly rowSelection?: RowSelection | null | undefined;
-            readonly isRowSelectable?: RowSelectable<TRow> | null | undefined;
-        };
-        result: undefined;
-    };
-    /**
      * edits a cell (Epic #88, E4.3): the active one, a loaded data row's cell whose column is
      * editable for it (`refused` otherwise, `not_loaded` for a row not loaded yet; a header, a
      * summary row's or a group row's cell never is), with the printable key that started it.
@@ -822,52 +717,6 @@ export interface CommandMap<TRow, TNode = unknown> {
     };
     /** ends the edit, if any (its draft is an engine's: `commit-edit` tells it first) */
     "editing-cell.clear": {
-        payload: NoPayload;
-        result: undefined;
-    };
-    /**
-     * changes how cells are selected (Epic #88): a range of them, or `null` for not at all (the
-     * range goes). Returns it
-     */
-    "cell-selection.set": {
-        payload: { readonly cellSelection: CellSelection | null };
-        result: CellSelection | undefined;
-    };
-    /**
-     * selects the body cells from `anchor` to `focus` (cells selectable, both body cells: rows 0
-     * to the last, columns of the grid). Returns the range
-     */
-    "selected-range.set": {
-        payload: CellRange;
-        result: CellRange;
-    };
-    /**
-     * moves the range's focus, its anchor staying: to a body cell, or a move from the focus
-     * (`direction`, as `active-position.move`'s, kept in the body; `pageSize` rows a page). Without
-     * a range, it starts at the active cell (a body cell), else at the cell given. Returns the range
-     */
-    "selected-range.extend": {
-        payload:
-            | {
-                  readonly rowIndex: number;
-                  readonly columnIndex: number;
-                  readonly direction?: undefined;
-              }
-            | {
-                  readonly direction: Direction;
-                  readonly pageSize?: number | undefined;
-                  readonly rowIndex?: undefined;
-                  readonly columnIndex?: undefined;
-              };
-        result: CellRange;
-    };
-    /** selects every body cell, from the first to the last. Returns the range */
-    "selected-range.select-all": {
-        payload: NoPayload;
-        result: CellRange;
-    };
-    /** leaves no range selected */
-    "selected-range.clear": {
         payload: NoPayload;
         result: undefined;
     };
@@ -992,32 +841,6 @@ export interface CommandMap<TRow, TNode = unknown> {
             readonly estimatedDetailHeight?: number | undefined;
         };
         result: undefined;
-    };
-    /**
-     * makes a cell the active one (rows -1 and above are the header, the top summary rows before
-     * it, the bottom ones from `rowCount` on); a position inside a cell's span activates that
-     * cell, at its own position
-     */
-    "active-position.set": {
-        payload: CellPosition;
-        result: CellPosition;
-    };
-    /** leaves no cell active */
-    "active-position.clear": {
-        payload: NoPayload;
-        result: undefined;
-    };
-    /**
-     * moves the active cell (the engine supplies `pageSize`, the rows in view, and
-     * `visibleColumns`, where a move down from a group lands)
-     */
-    "active-position.move": {
-        payload: {
-            readonly direction: Direction;
-            readonly pageSize?: number | undefined;
-            readonly visibleColumns?: Range | undefined;
-        };
-        result: CellPosition;
     };
 }
 
@@ -1235,7 +1058,6 @@ export interface QueryMap<TRow, TNode = unknown> {
         payload: CellPosition;
         result: unknown;
     };
-    "active-position": { payload: undefined; result: CellPosition | null };
     /** the resized columns' widths, by column key */
     "column-widths": { payload: undefined; result: ColumnWidths };
     /**
@@ -1276,31 +1098,14 @@ export interface QueryMap<TRow, TNode = unknown> {
     "expanded-rows": { payload: undefined; result: readonly number[] };
     /** an expanded row's detail height: a number, or a function of the row */
     "detail-height": { payload: undefined; result: DetailHeight<TRow> };
-    /** how rows are selected; `undefined` when they are not */
-    "row-selection": { payload: undefined; result: RowSelection | undefined };
-    /** the selected rows' keys, in the order they were selected */
-    "selected-row-keys": { payload: undefined; result: readonly RowKey[] };
-    /** where the next range starts: the anchor, while its key is still at its index */
-    "selection-anchor": { payload: undefined; result: SelectionAnchor | null };
     /** the cell being edited (Epic #88), or `null` */
     "editing-cell": { payload: undefined; result: EditingCell | null };
-    /** how cells are selected (Epic #88); `undefined` when they are not */
-    "cell-selection": { payload: undefined; result: CellSelection | undefined };
-    /** the selected range of cells, or `null` */
-    "selected-range": { payload: undefined; result: CellRange | null };
 }
 
 export type QueryKey = keyof QueryMap<unknown>;
 
 /** What `model.is` answers. */
 export interface QuestionMap {
-    /**
-     * whether the cell is the active one: for a header cell, any position inside its span (a
-     * group's columns, a column's rows)
-     */
-    "cell-active": CellPosition;
-    /** whether the row holds the active cell */
-    "row-active": { readonly rowIndex: number };
     /** whether the row is loaded (its getter answered a row), or a group row (Epic #87) */
     "row-loaded": { readonly rowIndex: number };
     /** whether a group is collapsed: a collapsible group, its key collapsed */
@@ -1312,15 +1117,6 @@ export interface QuestionMap {
      * its key among the expanded group keys
      */
     "row-group-expanded": { readonly rowIndex: number };
-    /** whether the row is selected: rows are selectable, it is loaded and its key selected */
-    "row-selected": { readonly rowIndex: number };
-    /** whether the row can be selected: rows are selectable, it is loaded and not refused */
-    "row-selectable": { readonly rowIndex: number };
-    /**
-     * whether a body cell is in the selected range (Epic #88): a cell spanning columns is while
-     * any of its columns is
-     */
-    "cell-selected": CellPosition;
     /**
      * whether a cell can be edited (Epic #88): a loaded data row's body cell whose column is
      * editable for it (the active one or not)

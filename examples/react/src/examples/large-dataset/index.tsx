@@ -9,8 +9,12 @@ import {
     useDataGridRef,
     useRowWindow,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { formatNumber, measurement } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const ROWS = 1_000_000;
 const COLUMNS = 1_000;
@@ -51,6 +55,7 @@ export default function LargeDataset() {
         <div className={styles.frame}>
             <Readout gridRef={gridRef} />
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rowCount={ROWS}
                 getRow={getRow}

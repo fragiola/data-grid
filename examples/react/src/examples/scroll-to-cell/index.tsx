@@ -6,11 +6,15 @@ import {
     type ScrollAlign,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
 import { formatNumber } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const ROWS = 10_000;
 const COLUMNS = 200;
@@ -59,7 +63,7 @@ function indexOf(text: string, count: number): number | undefined {
 
 export default function ScrollToCell() {
     // the grid's model and engine from outside its root
-    const gridRef = useDataGridRef<Row>();
+    const gridRef = useDataGridRef<Row, typeof FEATURES>();
     const [row, setRow] = useState("5000");
     const [column, setColumn] = useState("120");
     const [align, setAlign] = useState<ScrollAlign>("center");
@@ -155,6 +159,7 @@ export default function ScrollToCell() {
                 </Clickable.Button>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 gridRef={gridRef}
                 columns={columns}
                 rowCount={ROWS}

@@ -24,6 +24,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     fire,
     headerAt,
     keyDown,
@@ -48,7 +50,7 @@ interface Person {
     age: number;
 }
 
-const G = typedDataGrid<Person>();
+const G = typedDataGrid<Person, Features>();
 
 const people: Person[] = Array.from({ length: 20 }, (_, i) => ({
     id: i,
@@ -103,7 +105,7 @@ const Resizer = defineComponent({
 });
 
 type GridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, Features>,
     | "columnWidths"
     | "defaultColumnWidths"
     | "onColumnWidthsChange"
@@ -199,7 +201,13 @@ function grid({
         );
     return h(
         G.Root,
-        { columns: cells, rows: people, rowHeight: 20, ...props },
+        {
+            features: FEATURES,
+            columns: cells,
+            rows: people,
+            rowHeight: 20,
+            ...props,
+        },
         {
             default: () => [
                 h(
@@ -247,7 +255,10 @@ function widthsOf(container: HTMLElement, columnIndex: number) {
 
 /** A grid with a handle on it from outside, to run commands on. */
 async function withRef(initial: GridProps) {
-    const gridRef: DataGridRef<Person> = createDataGridRef<Person>();
+    const gridRef: DataGridRef<Person, Features> = createDataGridRef<
+        Person,
+        Features
+    >();
     const props = shallowRef(initial);
     const view = renderGrid(() => grid({ gridRef, ...props.value }));
     await settled();
@@ -320,7 +331,7 @@ describe("controlled", () => {
 
     it("works with a parent that follows", async () => {
         const columnWidths = shallowRef<ColumnWidths>({});
-        const gridRef = createDataGridRef<Person>();
+        const gridRef = createDataGridRef<Person, Features>();
         // a parent: the widths in its state, set by the root's handler
         const { container } = renderGrid(() =>
             grid({

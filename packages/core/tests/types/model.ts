@@ -7,6 +7,7 @@ import {
     createDataGridEngine,
     createDataGridModel,
 } from "../../src";
+import { navigation } from "../../src/navigation";
 
 interface Person {
     name: string;
@@ -28,6 +29,12 @@ const columns: Column<Person>[] = [
 ];
 
 const grid = createDataGridModel<Person>({ columns, rows: [] });
+// the active position's commands are navigation's (Epic #144)
+const navigated = createDataGridModel({
+    columns,
+    rows: [] as Person[],
+    features: [navigation()],
+});
 
 // a column's key is a string
 // @ts-expect-error
@@ -43,11 +50,14 @@ const wrongRow: Column<Person> = {
 
 // payloads are checked per command
 // @ts-expect-error
-grid.run("active-position.set", { rowIndex: 1 });
+navigated.run("active-position.set", { rowIndex: 1 });
 // @ts-expect-error
-grid.run("active-position.move", { direction: "sideways" });
+navigated.run("active-position.move", { direction: "sideways" });
 // @ts-expect-error
 grid.run("columns.set", { columns: [{ key: "x" }] });
+navigated.run("active-position.clear");
+// without navigation, its commands do not compile
+// @ts-expect-error
 grid.run("active-position.clear");
 grid.run("sizes.set", { rowHeight: (index) => 20 + (index % 3) });
 // rows.changed takes a range, or nothing for every row
@@ -59,7 +69,7 @@ grid.run("rows.changed", { start: "10" });
 // with a name typed as a union of commands, the payload is required
 declare const some: "columns.set" | "active-position.clear";
 // @ts-expect-error
-grid.run(some);
+navigated.run(some);
 
 // reads are typed by their key
 const row: Person | undefined = grid.get("row-by", { index: 0 });
@@ -72,7 +82,7 @@ grid.get("row-count", { index: 0 });
 const notARow: Order | undefined = grid.get("row-by", { index: 0 });
 
 // middleware narrows the payload by command
-grid.use((ctx, next) => {
+navigated.use((ctx, next) => {
     if (ctx.command === "active-position.move") {
         const direction: string = ctx.payload.direction;
         void direction;

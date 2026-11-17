@@ -29,11 +29,35 @@
             "import": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs",
             "default": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs"
         },
-        "./selection": {
-            "@fragiola/source": "./src/selection/index.ts",
-            "types": "./dist/types/fragiola-data-grid-angular-selection.d.ts",
-            "import": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs",
-            "default": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs"
+        "./navigation": {
+            "@fragiola/source": "./src/navigation/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-navigation.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-navigation.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-navigation.mjs"
+        },
+        "./row-selection": {
+            "@fragiola/source": "./src/row-selection/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-row-selection.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-row-selection.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-row-selection.mjs"
+        },
+        "./range": {
+            "@fragiola/source": "./src/range/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-range.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-range.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-range.mjs"
+        },
+        "./clipboard": {
+            "@fragiola/source": "./src/clipboard/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-clipboard.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-clipboard.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-clipboard.mjs"
+        },
+        "./fill": {
+            "@fragiola/source": "./src/fill/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-fill.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-fill.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-fill.mjs"
         },
         "./sorting": {
             "@fragiola/source": "./src/sorting/index.ts",
@@ -60,10 +84,30 @@
                 "import": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs",
                 "default": "./dist/fesm2022/fragiola-data-grid-angular-local.mjs"
             },
-            "./selection": {
-                "types": "./dist/types/fragiola-data-grid-angular-selection.d.ts",
-                "import": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs",
-                "default": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs"
+            "./navigation": {
+                "types": "./dist/types/fragiola-data-grid-angular-navigation.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-navigation.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-navigation.mjs"
+            },
+            "./row-selection": {
+                "types": "./dist/types/fragiola-data-grid-angular-row-selection.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-row-selection.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-row-selection.mjs"
+            },
+            "./range": {
+                "types": "./dist/types/fragiola-data-grid-angular-range.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-range.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-range.mjs"
+            },
+            "./clipboard": {
+                "types": "./dist/types/fragiola-data-grid-angular-clipboard.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-clipboard.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-clipboard.mjs"
+            },
+            "./fill": {
+                "types": "./dist/types/fragiola-data-grid-angular-fill.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-fill.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-fill.mjs"
             },
             "./sorting": {
                 "types": "./dist/types/fragiola-data-grid-angular-sorting.d.ts",

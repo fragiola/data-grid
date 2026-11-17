@@ -1,4 +1,3 @@
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import { moveRow } from "@fragiola/data-grid/local";
 import {
     type CellEditEvent,
@@ -22,14 +21,22 @@ import {
     useColumnResizer,
     useDataGrid,
     useDataGridRef,
-    useFillHandle,
     useGridView,
     useGroupLabel,
     useGroupToggle,
     useHeaderCell,
     useRowDragHandle,
 } from "@fragiola/data-grid-react";
+import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import {
+    fillHandle,
+    repeatedFill,
+    useFillHandle,
+} from "@fragiola/data-grid-react/fill";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellRange } from "@fragiola/data-grid-react/range";
+import { rowSelection } from "@fragiola/data-grid-react/row-selection";
 import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
 import {
     Profiler,
@@ -44,8 +51,21 @@ import {
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 
-/** the features the fixture installs: sorting (Epic #141) */
-const FEATURES = [sorting()];
+/**
+ * the features the fixture installs: sorting (Epic #141), cell navigation, row selection, cell
+ * ranges, the clipboard and the fill handle (Epic #144)
+ */
+export const FEATURES = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+];
+
+/** Their types: the model's keys and the root's props (`window.grid`'s too). */
+export type FixtureFeatures = typeof FEATURES;
 
 // The unstyled grid Playwright drives (D5): the same grid as real table elements (`table`) or as
 // divs (`div`), configured by the query string, so one spec runs against both.
@@ -153,7 +173,7 @@ export interface FixtureRow {
 
 declare global {
     interface Window {
-        grid?: DataGridContextValue<FixtureRow>;
+        grid?: DataGridContextValue<FixtureRow, FixtureFeatures>;
         commits: number;
         sortChanges: (readonly SortColumn[])[];
         selectionChanges: (readonly RowKey[])[];
@@ -176,7 +196,7 @@ function numberParam(params: URLSearchParams, name: string, fallback: number) {
 }
 
 export function Expose() {
-    window.grid = useDataGrid<FixtureRow>();
+    window.grid = useDataGrid<FixtureRow, FixtureFeatures>();
     return null;
 }
 
@@ -461,7 +481,7 @@ function controlColumn(columnIndex: number): Partial<Column<FixtureRow>> {
 
 /** A row's checkbox, as an app writes it: the grid's command, Shift+click extending. */
 export function SelectBox({ rowIndex }: { rowIndex: number }) {
-    const { model } = useDataGrid<FixtureRow>();
+    const { model } = useDataGrid<FixtureRow, FixtureFeatures>();
     // the view moves with the selection: this re-renders
     useGridView();
     return (
@@ -494,7 +514,7 @@ const INNER_COLUMNS: Column<FixtureRow>[] = Array.from(
 
 /** The expander of a row: a button in its first cell, as an app writes it (M3). */
 export function Expander({ rowIndex }: { rowIndex: number }) {
-    const { model } = useDataGrid<FixtureRow>();
+    const { model } = useDataGrid<FixtureRow, FixtureFeatures>();
     return (
         <button
             type="button"
@@ -529,17 +549,21 @@ export function tags(table: boolean): Partial<typeof TABLE> {
     return table ? TABLE : {};
 }
 
+/** What the inner grid installs: its cells navigated by keys (Epic #144). */
+const INNER_FEATURES = [navigation()] as const;
+
 /** A grid of its own inside a detail (E4): its keys and its active cell are its own. */
 function InnerGrid({ table, rowIndex }: { table: boolean; rowIndex: number }) {
     const tag = tags(table);
     return (
-        <DataGrid.Root<FixtureRow>
+        <DataGrid.Root<FixtureRow, typeof INNER_FEATURES>
             columns={INNER_COLUMNS}
             rowCount={30}
             getRow={getRow}
             rowHeight={24}
             headerRowHeight={24}
             data-testid={`inner-${rowIndex}`}
+            features={INNER_FEATURES}
             style={{ width: 500, height: 150 }}
         >
             <DataGrid.Grid aria-label="Items" render={tag.grid}>
@@ -625,7 +649,7 @@ function GroupContent({
     cell: HeaderCellInfo<FixtureRow>;
     sticky: boolean;
 }) {
-    const { model } = useDataGrid<FixtureRow>();
+    const { model } = useDataGrid<FixtureRow, FixtureFeatures>();
     const { state } = useHeaderCell(cell);
     const label = useGroupLabel(cell);
     const content = (
@@ -938,7 +962,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
     const resize = resizeParam === "1" || resizeParam === "controlled";
     const controlledWidths = resizeParam === "controlled";
     const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
-    const gridRef = useDataGridRef<FixtureRow>();
+    const gridRef = useDataGridRef<FixtureRow, FixtureFeatures>();
     const flex = params.get("flex") === "1";
     const autoSize = params.get("autosize") === "1";
     const span = params.get("span") === "1";
@@ -1122,7 +1146,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                     window.commits += 1;
                 }}
             >
-                <DataGrid.Root<FixtureRow, typeof FEATURES>
+                <DataGrid.Root<FixtureRow, FixtureFeatures>
                     features={FEATURES}
                     columns={columns}
                     {...(groupedProps ?? {

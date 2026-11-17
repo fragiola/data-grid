@@ -8,6 +8,7 @@ import {
     type GridView,
     type ModelOptions,
 } from "../../src";
+import { FEATURES as FEATURES_144, type Features } from "../features";
 import type { Row } from "./views";
 
 // The engine against a DOM jsdom cannot lay out: the viewport's client size and scroll offsets and
@@ -149,8 +150,13 @@ export interface MountOptions extends DataGridEngineOptions {
  * otherwise) and its engine, attached to a fake viewport in the page holding the grid layer, and
  * the first view committed.
  */
-export function mountEngine<const TFeatures extends DataGridFeatures = []>(
-    modelOptions: ModelOptions<Row, unknown, TFeatures>,
+export function mountEngine<
+    const TFeatures extends DataGridFeatures = Features,
+>(
+    // the features inferred from `features` alone (else every feature of Epic #144)
+    modelOptions: ModelOptions<Row, unknown, NoInfer<TFeatures>> & {
+        readonly features?: TFeatures | undefined;
+    },
     options: MountOptions = {},
 ) {
     const {
@@ -163,6 +169,8 @@ export function mountEngine<const TFeatures extends DataGridFeatures = []>(
     } = options;
     const resize = fakeResizeObserver();
     const model = createDataGridModel<Row, unknown, TFeatures>({
+        // every feature of Epic #144, unless the test names its own
+        features: FEATURES_144 as unknown as TFeatures,
         getRow: (id) => ({ id }),
         rowHeight: 20,
         headerRowHeight: 30,

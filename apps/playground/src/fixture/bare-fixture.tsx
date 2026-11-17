@@ -4,8 +4,10 @@ import { createRoot } from "react-dom/client";
 
 // The bare grid (Epic #141): the grid with no feature installed, nothing but the main entry. It
 // renders, scrolls (both axes, scaled: 1,000,000 rows and 1,000 columns past `maxScrollSize`) and
-// virtualizes as any grid; its sortable columns do not sort and carry no sort attribute. As a
-// table (`?kind=table`) or as divs (the default). `e2e/bare.spec.ts` drives both.
+// virtualizes as any grid; its sortable columns do not sort and carry no sort attribute. Without
+// navigation (Epic #144) it is the APG table pattern: `role="table"`, `cell`, no tab stop on the
+// grid nor its cells, and the arrow keys move nothing. As a table (`?kind=table`) or as divs (the
+// default). `e2e/bare.spec.ts` drives both.
 
 interface BareRow {
     id: number;

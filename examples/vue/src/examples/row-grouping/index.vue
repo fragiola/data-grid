@@ -5,6 +5,8 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-vue/local";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Search } from "@lucide/vue";
 import { h, ref, type VNodeChild } from "vue";
@@ -23,8 +25,9 @@ const searchInset = {
     start: h(Search, { "aria-hidden": "true", class: styles.icon }),
 };
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const features = [sorting()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), row selection
+const features = [sorting(), navigation(), rowSelection()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

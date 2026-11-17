@@ -6,18 +6,20 @@ import {
     type ModelOptions,
     veto,
 } from "../../src";
+import { pastedRange, rangeText } from "../../src/clipboard";
 import {
     inRange,
     keptRange,
-    pastedRange,
     rangeEdgesOf,
-    rangeText,
     sameCellRange,
-    valueText,
 } from "../../src/model/range";
+import { valueText } from "../../src/model/source";
 import { sorting } from "../../src/sorting";
+import { FEATURES, type Features, gridModel } from "../features";
 
 type Sorting = ReturnType<typeof sorting>;
+/** every feature of Epic #144, and sorting */
+type Sorted = [...Features, Sorting];
 
 // A range of cells (Epic #88, E4.1–E4.2): the model keeps one, between body cells, changed only
 // through commands while cells are selectable; it stays inside the body when the grid's shape
@@ -35,9 +37,9 @@ const COLUMNS: Column<Row>[] = [
     { key: "d", width: 100, getValue: () => ({ not: "text" }) },
 ];
 
-function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
-    return createDataGridModel<Row, unknown, [Sorting]>({
-        features: [sorting()],
+function grid(options: ModelOptions<Row, unknown, Sorted> = {}) {
+    return createDataGridModel<Row, unknown, Sorted>({
+        features: [...FEATURES, sorting()],
         columns: COLUMNS,
         rows: Array.from({ length: 10 }, (_, id) => ({ id })),
         cellSelection: "range",
@@ -405,7 +407,7 @@ describe("range helpers", () => {
     });
 
     it("copy a range as TSV, top to bottom, through getCopyText, rows not loaded empty", () => {
-        const { state } = createDataGridModel<Row>({
+        const { state } = gridModel<Row>({
             columns: [
                 ...COLUMNS,
                 {
@@ -429,7 +431,7 @@ describe("range helpers", () => {
     });
 
     it("copy a span's value at its first column in the range, the columns it covers empty", () => {
-        const { state } = createDataGridModel<Row>({
+        const { state } = gridModel<Row>({
             columns: [
                 { key: "a", width: 100, getValue: () => "A" },
                 {
@@ -449,7 +451,7 @@ describe("range helpers", () => {
     });
 
     it("copy a group row's cells as their values", () => {
-        const { state } = createDataGridModel<Row>({
+        const { state } = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 2,
             getRow: (index) => ({ id: index }),

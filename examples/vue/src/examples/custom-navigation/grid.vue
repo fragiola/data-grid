@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {
+    type DataGridFeature,
     typedDataGrid,
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-vue";
+import type { NavigationTypes } from "@fragiola/data-grid-vue/navigation";
 import type { Person } from "../_kit/data";
 import { type Mode, target } from "./navigation";
 import * as styles from "./styles";
@@ -14,7 +16,8 @@ const DataGrid = typedDataGrid<Person>();
 
 const props = defineProps<{ mode: Mode }>();
 
-const { model } = useDataGrid<Person>();
+// the grid's model, typed by the feature this part reads (navigation, installed by the grid)
+const { model } = useDataGrid<Person, [DataGridFeature<NavigationTypes>]>();
 const view = useGridView();
 
 function onKeyDown(event: KeyboardEvent) {

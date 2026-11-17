@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, ref, type VNodeChild, watch } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Task` as a type argument.
-const DataGrid = typedDataGrid<Task>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 const ROWS = tasks(500);
 
@@ -81,6 +86,7 @@ const rowKey = (row: Task) => row.id;
             </Clickable.Button>
         </fieldset>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="ROWS"
             :row-key="rowKey"

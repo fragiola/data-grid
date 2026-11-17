@@ -9,7 +9,9 @@ import {
 
 // The bare grid (Epic #141, fixtures/bare-grid): no feature installed. It renders, scrolls on both
 // axes past the scaling cap and virtualizes as before; its sortable columns neither sort nor carry
-// a sort attribute. As a table and as divs, in Chromium, Firefox and WebKit.
+// a sort attribute. Without navigation (Epic #144) it is the APG table pattern: `role="table"`,
+// `columnheader` and `cell`, no tab stop on the grid nor its cells, and the arrow keys move
+// nothing. As a table and as divs, in Chromium, Firefox and WebKit.
 
 const KINDS = ["table", "div"] as const;
 
@@ -87,6 +89,46 @@ for (const kind of KINDS) {
             expect(await renderedColumns(page)).toContain(999);
             await expect(cell(page, 999_999, 999)).toHaveText("999999:999");
             await expect(cell(page, 999_999, 999)).toBeInViewport();
+        });
+
+        test("is a table: role table, cells role cell, no tabindex on the grid nor its cells", async ({
+            page,
+        }) => {
+            await open(page, kind);
+            const grid = page.locator('[data-grid-part="grid"]');
+            await expect(grid).toHaveAttribute("role", "table");
+            await expect(grid).not.toHaveAttribute("tabindex");
+            await expect(
+                page.getByRole("columnheader", { name: "C0", exact: true }),
+            ).toBeVisible();
+            const cells = page.locator('[data-grid-part="cell"]');
+            expect(await cells.count()).toBeGreaterThan(0);
+            const roles = await cells.evaluateAll((elements) => [
+                ...new Set(
+                    elements.map((element) => element.getAttribute("role")),
+                ),
+            ]);
+            expect(roles).toEqual(["cell"]);
+            expect(
+                await page
+                    .locator(
+                        '[data-grid-part="cell"][tabindex], [data-grid-part="header-cell"][tabindex]',
+                    )
+                    .count(),
+            ).toBe(0);
+        });
+
+        test("moves nothing with the arrow keys: no cell is ever active", async ({
+            page,
+        }) => {
+            await open(page, kind);
+            await cell(page, 0, 0).click();
+            for (const key of ["ArrowDown", "ArrowRight"]) {
+                await page.keyboard.press(key);
+            }
+            await settle(page);
+            expect(await page.locator("[data-active]").count()).toBe(0);
+            expect(await page.locator('[tabindex="0"]').count()).toBe(0);
         });
 
         test("never sorts: no sort attribute, and a click or Enter on a header cell changes nothing", async ({

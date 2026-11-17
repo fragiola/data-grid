@@ -13,7 +13,14 @@ import {
     type RootProps,
     useDataGridRef,
 } from "../src";
-import { cellAt, headerAt, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    headerAt,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Column reordering (Epic #75): the order controlled or not on `Root` (O1), the header cells'
 // `data-reorderable`/`data-dragging`/`data-drop-target` and their state (O4), in both
@@ -55,7 +62,7 @@ stubViewportSize(600, 300);
 const states = new Map<string, HeaderCellState>();
 
 type GridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, Features>,
     | "columnOrder"
     | "defaultColumnOrder"
     | "onColumnOrderChange"
@@ -71,7 +78,13 @@ type GridProps = Pick<
 function Grid({ cells = columns, table = false, ...props }: GridProps) {
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={cells} rows={people} rowHeight={20} {...props}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={cells}
+            rows={people}
+            rowHeight={20}
+            {...props}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRows<Person>>
@@ -135,9 +148,9 @@ function bodyOrder(container: HTMLElement): string[] {
 
 /** A grid with a handle on it from outside, to run commands on. */
 function withRef(props: GridProps) {
-    let gridRef: DataGridRef<Person> | undefined;
+    let gridRef: DataGridRef<Person, Features> | undefined;
     function App(given: GridProps) {
-        const ref = useDataGridRef<Person>();
+        const ref = useDataGridRef<Person, Features>();
         gridRef = ref;
         return <Grid gridRef={ref} {...given} />;
     }
@@ -237,11 +250,11 @@ describe("controlled", () => {
 
     it("works with a parent that follows, a group moving whole", () => {
         let order: ColumnOrder = [];
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         function Parent() {
             const [columnOrder, setColumnOrder] = useState<ColumnOrder>([]);
             order = columnOrder;
-            gridRef = useDataGridRef<Person>();
+            gridRef = useDataGridRef<Person, Features>();
             return (
                 <Grid
                     cells={grouped}
@@ -302,12 +315,12 @@ describe("the active cell", () => {
 
     it("follows its column with the order and the position both controlled, never back to its old place", () => {
         const onActivePositionChange = vi.fn();
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         function Parent() {
             const [columnOrder, setColumnOrder] = useState<ColumnOrder>([]);
             const [activePosition, setActivePosition] =
                 useState<CellPosition | null>({ rowIndex: -1, columnIndex: 0 });
-            gridRef = useDataGridRef<Person>();
+            gridRef = useDataGridRef<Person, Features>();
             return (
                 <Grid
                     gridRef={gridRef}

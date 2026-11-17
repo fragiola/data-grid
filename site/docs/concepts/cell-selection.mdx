@@ -11,6 +11,84 @@ write the values into your rows. The range's look is yours too, from its cells' 
 
 <Example id="cell-selection" />
 
+## Install the features
+
+Ranges and the clipboard are two [features](/docs/concepts/features): `cellRange()` from the
+`/range` entry, which needs `navigation()` (the range starts at the active cell), and
+`clipboard()` from `/clipboard`, which needs `cellRange()`. A grid missing one it needs throws when
+it is created, naming it. Without them, the range's and the paste's props do not compile.
+
+<Framework name="react">
+
+```tsx title="budget.tsx"
+import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellRange } from "@fragiola/data-grid-react/range";
+
+const features = [navigation(), cellRange(), clipboard()];
+
+<DataGrid.Root features={features} columns={columns} rows={lines} cellSelection="range">
+    {/* … */}
+</DataGrid.Root>
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="budget.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { clipboard } from "@fragiola/data-grid-vue/clipboard";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { cellRange } from "@fragiola/data-grid-vue/range";
+
+const features = [navigation(), cellRange(), clipboard()] as const;
+const DataGrid = typedDataGrid<Line, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="lines" cell-selection="range"
+        :on-range-paste="paste">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+The range's inputs are `DataGridCellRange`'s (`dataGridCellRange`), the paste's
+`DataGridClipboard`'s (`dataGridClipboard`: the input `beforeRangePaste`, the output
+`rangePaste`), directives on the root's element from the same entries.
+
+```ts title="budget.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { clipboard, DataGridClipboard } from "@fragiola/data-grid-angular/clipboard";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+import { cellRange, DataGridCellRange } from "@fragiola/data-grid-angular/range";
+
+@Component({
+    selector: "app-budget",
+    imports: [DATA_GRID, DataGridCellRange, DataGridClipboard],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="lines()"
+            dataGridCellRange cellSelection="range" [(selectedRange)]="range"
+            dataGridClipboard (rangePaste)="paste($event)">
+            <!-- … -->
+        </div>
+    `,
+})
+export class Budget {
+    readonly features = [navigation(), cellRange(), clipboard()];
+    readonly range = signal<CellRange | null>(null);
+    // …
+}
+```
+
+</Framework>
+
 ## Turning it on
 
 Give `DataGrid.Root` `cellSelection="range"`. The range is `{ anchor, focus }`, two body cells:
@@ -22,6 +100,7 @@ yourself, as any other state of the grid, or let the grid keep it.
 const [range, setRange] = useState<CellRange | null>(null);
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={lines}
     cellSelection="range"
@@ -113,7 +192,7 @@ range while any of its columns is, and on its start or end edge when it reaches 
 
 ## Copying
 
-Ctrl+C on one of the grid's cells puts the range (or, without one, the active cell) on the
+With `clipboard()` installed, Ctrl+C on one of the grid's cells puts the range (or, without one, the active cell) on the
 clipboard as tab-separated text: a row per line, a tab between values, a value holding a tab, a
 line break or a double quote quoted. It uses the page's own copy event, so the browser asks for no
 permission, and it reaches the grid after your own `onCopy` on the root: `preventDefault` there
@@ -157,6 +236,7 @@ fires the paste where the page's selection is, not at the focused cell.
 
 ```tsx title="paste.tsx"
 <DataGrid.Root
+    features={features} // with clipboard()
     cellSelection="range"
     onBeforeRangePaste={({ range }) => !touchesTotals(range)}
     onRangePaste={({ range, values }) =>
@@ -172,5 +252,5 @@ fill the range with it, read the range (`selectedRange`) in `onRangePaste`. The 
 grid after your own `onPaste` on the root, and a field inside a cell keeps its own. Empty text
 pastes nothing.
 
-The parser and the writer are yours to use too: `parseTsv(text)` and `toTsv(rows)` from
-`@fragiola/data-grid`.
+The parser and the writer are yours to use too: `parseTsv(text)` and `toTsv(rows)` from the
+`/clipboard` entry (`@fragiola/data-grid/clipboard`, or any package's).

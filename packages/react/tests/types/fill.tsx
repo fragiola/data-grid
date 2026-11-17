@@ -1,14 +1,23 @@
 // Type fixtures: checked by `tsc`, never run. `@ts-expect-error` marks what must not compile.
 
-import { type FilledCell, repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellInfo,
     type Column,
     DataGrid,
     type RangeFill,
     useDataGrid,
-    useFillHandle,
 } from "../../src";
+import {
+    type FilledCell,
+    fillHandle,
+    repeatedFill,
+    useFillHandle,
+} from "../../src/fill";
+import { navigation } from "../../src/navigation";
+import { cellRange } from "../../src/range";
+
+// the fill handle is a feature (Epic #144), over ranges: installed, `onFill` compiles
+const features = [navigation(), cellRange(), fillHandle()] as const;
 
 interface Sale {
     id: string;
@@ -25,6 +34,7 @@ export function Sales() {
         <DataGrid.Root
             columns={columns}
             rows={sales}
+            features={features}
             onFill={(fill: RangeFill) => {
                 const first: number = fill.target.anchor.rowIndex;
                 void first;
@@ -51,6 +61,7 @@ export function Wrong() {
         <DataGrid.Root
             columns={columns}
             rows={sales}
+            features={features}
             // @ts-expect-error: a fill's ranges are cell ranges
             onFill={(fill: { source: number }) => fill.source}
         />

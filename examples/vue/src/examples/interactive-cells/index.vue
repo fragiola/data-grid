@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, shallowRef, type VNodeChild } from "vue";
 import { Input } from "#/components/atoms/fields";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -8,8 +9,12 @@ import RowActions from "./row-actions.vue";
 import StatusSelect from "./status-select.vue";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Task` as a type argument.
-const DataGrid = typedDataGrid<Task>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 /** What the app does to a task: rename it, change its status, copy it, delete it. */
 interface Actions {
@@ -148,6 +153,7 @@ const rowKey = (row: Task) => row.id;
             </span>
         </p>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rows"
             :row-key="rowKey"

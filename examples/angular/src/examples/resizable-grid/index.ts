@@ -7,6 +7,7 @@ import {
     injectColumnWindow,
     injectRowWindow,
 } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { Readout } from "./readout";
 import type { Row } from "./row";
 import * as styles from "./styles";
@@ -40,6 +41,7 @@ const columns: Column<Row, DataGridNode>[] = Array.from(
             <div [class]="styles.stage">
                 <div
                     dataGridRoot
+                    [features]="features"
                     [gridRef]="gridRef"
                     [columns]="columns"
                     [rowCount]="ROWS"
@@ -75,6 +77,8 @@ const columns: Column<Row, DataGridNode>[] = Array.from(
     `,
 })
 export default class ResizableGrid {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly ROWS = ROWS;
 

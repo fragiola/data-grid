@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 
 // `injectLocalRows` is opt-in (Epic #47, L2): nothing the primitives' entry imports, however deep,
 // reaches `src/local` or the core's `/local`, so an app that never imports `/local` never ships it.
-// The features are opt-in the same way (Epic #141): `/sorting`.
+// The features are opt-in the same way (Epic #141, #144): `/navigation`, `/row-selection`, `/range`,
+// `/clipboard`, `/fill`, `/sorting`.
 
 const src = join(import.meta.dirname, "../src");
 
@@ -42,7 +43,15 @@ describe("the primitives' entry", () => {
         const { files, packages } = reachable(join(src, "public-api.ts"));
         const names = [...files].map((file) => relative(src, file));
         expect(names.length).toBeGreaterThan(5);
-        for (const extra of ["local", "selection", "sorting"]) {
+        for (const extra of [
+            "local",
+            "navigation",
+            "row-selection",
+            "range",
+            "clipboard",
+            "fill",
+            "sorting",
+        ]) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(
                 [...packages].filter((name) => name.endsWith(`/${extra}`)),

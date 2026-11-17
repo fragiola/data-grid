@@ -29,17 +29,41 @@
             "import": "./dist/local.js",
             "default": "./dist/local.js"
         },
-        "./selection": {
-            "@fragiola/source": "./src/selection/index.ts",
-            "types": "./dist/selection.d.ts",
-            "import": "./dist/selection.js",
-            "default": "./dist/selection.js"
-        },
         "./sorting": {
             "@fragiola/source": "./src/sorting/index.ts",
             "types": "./dist/sorting.d.ts",
             "import": "./dist/sorting.js",
             "default": "./dist/sorting.js"
+        },
+        "./navigation": {
+            "@fragiola/source": "./src/navigation/index.ts",
+            "types": "./dist/navigation.d.ts",
+            "import": "./dist/navigation.js",
+            "default": "./dist/navigation.js"
+        },
+        "./row-selection": {
+            "@fragiola/source": "./src/row-selection/index.ts",
+            "types": "./dist/row-selection.d.ts",
+            "import": "./dist/row-selection.js",
+            "default": "./dist/row-selection.js"
+        },
+        "./range": {
+            "@fragiola/source": "./src/range/index.ts",
+            "types": "./dist/range.d.ts",
+            "import": "./dist/range.js",
+            "default": "./dist/range.js"
+        },
+        "./clipboard": {
+            "@fragiola/source": "./src/clipboard/index.ts",
+            "types": "./dist/clipboard.d.ts",
+            "import": "./dist/clipboard.js",
+            "default": "./dist/clipboard.js"
+        },
+        "./fill": {
+            "@fragiola/source": "./src/fill/index.ts",
+            "types": "./dist/fill.d.ts",
+            "import": "./dist/fill.js",
+            "default": "./dist/fill.js"
         },
         "./package.json": "./package.json"
     },
@@ -59,15 +83,35 @@
                 "import": "./dist/local.js",
                 "default": "./dist/local.js"
             },
-            "./selection": {
-                "types": "./dist/selection.d.ts",
-                "import": "./dist/selection.js",
-                "default": "./dist/selection.js"
-            },
             "./sorting": {
                 "types": "./dist/sorting.d.ts",
                 "import": "./dist/sorting.js",
                 "default": "./dist/sorting.js"
+            },
+            "./navigation": {
+                "types": "./dist/navigation.d.ts",
+                "import": "./dist/navigation.js",
+                "default": "./dist/navigation.js"
+            },
+            "./row-selection": {
+                "types": "./dist/row-selection.d.ts",
+                "import": "./dist/row-selection.js",
+                "default": "./dist/row-selection.js"
+            },
+            "./range": {
+                "types": "./dist/range.d.ts",
+                "import": "./dist/range.js",
+                "default": "./dist/range.js"
+            },
+            "./clipboard": {
+                "types": "./dist/clipboard.d.ts",
+                "import": "./dist/clipboard.js",
+                "default": "./dist/clipboard.js"
+            },
+            "./fill": {
+                "types": "./dist/fill.d.ts",
+                "import": "./dist/fill.js",
+                "default": "./dist/fill.js"
             },
             "./package.json": "./package.json"
         }

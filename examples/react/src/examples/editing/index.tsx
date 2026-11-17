@@ -1,6 +1,7 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useState } from "react";
 import {
     budgetedTasks,
@@ -10,6 +11,9 @@ import {
 import { formatMoney } from "../_kit/data";
 import { AmountEditor, DateEditor, StatusEditor, TextEditor } from "./editors";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 // Tasks edited in place: the grid edits a cell (the keys, the draft, the commit), the editors are
 // the app's (a text field, a number, a select, a date: `editors.tsx`) and so is the data: each
@@ -85,6 +89,7 @@ export default function Editing() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}

@@ -108,17 +108,28 @@ In Angular a column's renderers return a `DataGridNode` (text, or a template wit
 
 ## Render the grid
 
-`Root` takes the data; `Grid`, `Header` and `Body` are the structure. With no children, the header
-renders a cell per column and the body a row per row, each with its cells.
+`Root` takes the data and the [features](/docs/concepts/features) the grid installs;
+`navigation()` gives it the keys (the arrows, an active cell, one tab stop). `Grid`, `Header` and
+`Body` are the structure. With no children, the header renders a cell per column and the body a
+row per row, each with its cells.
 
 <Framework name="react">
 
 ```tsx title="people-grid.tsx"
 import { DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation()];
 
 export function PeopleGrid({ people }: { people: Person[] }) {
     return (
-        <DataGrid.Root columns={columns} rows={people} rowKey={(row) => row.id} style={{ height: 400 }}>
+        <DataGrid.Root
+            features={features}
+            columns={columns}
+            rows={people}
+            rowKey={(row) => row.id}
+            style={{ height: 400 }}
+        >
             <DataGrid.Grid aria-label="People">
                 <DataGrid.Header />
                 <DataGrid.Body />
@@ -135,15 +146,23 @@ export function PeopleGrid({ people }: { people: Person[] }) {
 ```vue title="people-grid.vue"
 <script setup lang="ts">
 import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { columns, type Person } from "./columns";
 
 defineProps<{ people: Person[] }>();
 
-const DataGrid = typedDataGrid<Person>();
+const features = [navigation()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
 </script>
 
 <template>
-    <DataGrid.Root :columns="columns" :rows="people" :row-key="(row) => row.id" style="height: 400px">
+    <DataGrid.Root
+        :features="features"
+        :columns="columns"
+        :rows="people"
+        :row-key="(row) => row.id"
+        style="height: 400px"
+    >
         <DataGrid.Grid aria-label="People">
             <DataGrid.Header />
             <DataGrid.Body />
@@ -152,8 +171,8 @@ const DataGrid = typedDataGrid<Person>();
 </template>
 ```
 
-A template cannot pass a type argument, so `typedDataGrid<Person>()` returns the same components
-typed by your row: the `row` of `rowKey` and of the slots below is a `Person`.
+A template cannot pass a type argument, so `typedDataGrid<Person, typeof features>()` returns the
+same components typed by your row and its features: the `row` of `rowKey` and of the slots below is a `Person`.
 
 </Framework>
 
@@ -167,6 +186,7 @@ body).
 ```ts title="people-grid.ts"
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { columns, type Person } from "./columns";
 
 @Component({
@@ -174,7 +194,7 @@ import { columns, type Person } from "./columns";
     imports: [DATA_GRID],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [columns]="columns" [rows]="people()" [rowKey]="rowKey" style="height: 400px">
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="people()" [rowKey]="rowKey" style="height: 400px">
             <div dataGridGrid aria-label="People">
                 <div *dataGridHeader>
                     <div dataGridHeaderRow>
@@ -198,6 +218,7 @@ import { columns, type Person } from "./columns";
 })
 export class PeopleGrid {
     readonly people = input.required<Person[]>();
+    readonly features = [navigation()];
     readonly columns = columns;
     readonly rowKey = (row: Person) => row.id;
 }
@@ -207,10 +228,10 @@ export class PeopleGrid {
 
 </Framework>
 
-It already scrolls, renders only the rows in view, and answers the arrow keys, with no
-[feature](/docs/concepts/features) installed: a first grid needs none. Sorting is one, `sorting()`
-from the `/sorting` entry, installed through the root's `features` when the columns should sort
-([Sorting](/docs/concepts/sorting)). It has no look: the next step gives it one.
+It already scrolls, renders only the rows in view, and answers the arrow keys. Without
+`navigation()` it is a plain table (`role="table"`): it scrolls and virtualizes the same, and the
+keys are the page's. Sorting is another feature, `sorting()` from the `/sorting` entry, added to
+the same list when the columns should sort ([Sorting](/docs/concepts/sorting)). It has no look: the next step gives it one.
 
 </Step>
 

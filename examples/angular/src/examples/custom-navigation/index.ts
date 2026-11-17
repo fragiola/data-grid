@@ -4,6 +4,10 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import {
+    DataGridNavigation,
+    navigation,
+} from "@fragiola/data-grid-angular/navigation";
 import { type Person, people } from "../_kit/data";
 import { CellNavigation } from "./cell-navigation";
 import type { Mode } from "./navigation";
@@ -33,7 +37,7 @@ const MODES: { mode: Mode; label: string }[] = [
 
 @Component({
     selector: "example-custom-navigation",
-    imports: [DATA_GRID, CellNavigation],
+    imports: [DATA_GRID, CellNavigation, DataGridNavigation],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -54,10 +58,12 @@ const MODES: { mode: Mode; label: string }[] = [
             </fieldset>
             <div
                 dataGridRoot
+                [features]="features"
                 [columns]="columns"
                 [rows]="rows"
                 [rowKey]="rowKey"
                 [rowHeight]="36"
+                dataGridNavigation
                 [defaultActivePosition]="{ rowIndex: 0, columnIndex: 0 }"
                 [class]="styles.root"
             >
@@ -96,6 +102,8 @@ const MODES: { mode: Mode; label: string }[] = [
     `,
 })
 export default class CustomNavigation {
+    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+    readonly features = [navigation()];
     protected readonly styles = styles;
     protected readonly modes = MODES;
 

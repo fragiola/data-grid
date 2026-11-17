@@ -1,10 +1,32 @@
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterAll, beforeAll } from "vitest";
 import { type Component, defineComponent, h, nextTick } from "vue";
+import { clipboard } from "../src/clipboard";
+import { fillHandle } from "../src/fill";
+import { navigation } from "../src/navigation";
+import { cellRange } from "../src/range";
+import { rowSelection } from "../src/row-selection";
 
 // What the Vue tests share (the React tests' helpers, for Vue): a grid root's size (jsdom lays
 // nothing out), mounting a grid, counting renders (D9), the parts by their `data-grid-part` and
-// indexes, and the tags that render a grid as a table.
+// indexes, and the tags that render a grid as a table, and the features the tests of the grid's
+// keys, selections, ranges, clipboard and fill install (Epic #144).
+
+/**
+ * Every feature these behaviours were before Epic #144 (navigation, row selection, cell ranges,
+ * the clipboard, the fill handle): a test of them installs them (`features: FEATURES` on `Root`,
+ * `typedDataGrid<TRow, Features>()`), and behaves as it did.
+ */
+export const FEATURES = [
+    navigation(),
+    rowSelection(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+] as const;
+
+/** The type of `FEATURES`, for `typedDataGrid`, `RootProps` and the refs. */
+export type Features = typeof FEATURES;
 
 /** Gives every grid root a `width` × `height` client size during the file's tests. */
 export function stubViewportSize(width: number, height: number) {

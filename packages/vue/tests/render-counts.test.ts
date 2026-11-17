@@ -10,11 +10,13 @@ import {
     type RowInfo,
     type RowKey,
     typedDataGrid,
-    useFillHandle,
     useGroupLabel,
 } from "../src";
+import { useFillHandle } from "../src/fill";
 import { groupKeyOf, useLocalRows } from "../src/local";
 import {
+    FEATURES,
+    type Features,
     renderGrid,
     root,
     scrollRoot,
@@ -41,7 +43,7 @@ interface Item {
     children?: Item[];
 }
 
-const G = typedDataGrid<Item>();
+const G = typedDataGrid<Item, Features>();
 
 const TEAMS = ["A", "B", "C", "D"];
 const items: Item[] = Array.from({ length: 2_000 }, (_, id) => ({
@@ -95,14 +97,21 @@ const Label = defineComponent({
 });
 
 type GridProps = Partial<
-    Omit<RootProps<Item, []>, "rows" | "rowCount" | "getRow">
+    Omit<RootProps<Item, Features>, "rows" | "rowCount" | "getRow">
 > & { rows?: readonly Item[]; fillHandle?: boolean };
 
 /** Every part rendered: the header with group labels, summary rows, cells, details. */
 function grid({ fillHandle = false, rows = items, ...props }: GridProps) {
     return h(
         G.Root,
-        { columns: COLUMNS, rowKey, rowHeight: 20, ...props, rows },
+        {
+            features: FEATURES,
+            columns: COLUMNS,
+            rowKey,
+            rowHeight: 20,
+            ...props,
+            rows,
+        },
         {
             default: () => [
                 h(G.Grid, null, {
