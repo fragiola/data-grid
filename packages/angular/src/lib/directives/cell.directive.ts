@@ -8,9 +8,8 @@ import {
 import {
     type CellState,
     cellContent,
+    cellEditOf,
     cellPartOf,
-    editActions,
-    editCellPropsOf,
 } from "@fragiola/data-grid";
 import {
     type CellContext,
@@ -59,16 +58,19 @@ export class DataGridCell<TRow = unknown> implements CellContext {
         () => this.dataGridCell() as CellInfo,
     );
 
-    /** @internal the default content: edited, its column's editor, given the draft */
+    /**
+     * @internal the default content: edited (`editing()` installed, Epic #146), its column's
+     * editor, given the draft
+     */
     readonly content: Signal<DataGridNode> = computed(() => {
         const cell = this.dataGridCell() as CellInfo;
         const { column } = cell;
         if (this.part().state.editing && column.renderEditCell) {
-            const props = editCellPropsOf(
+            const props = cellEditOf(
                 this.grid.view(),
                 cell,
                 this.grid.draft(),
-                editActions(this.grid.engine),
+                this.grid.engine,
             );
             return props ? column.renderEditCell(props) : null;
         }

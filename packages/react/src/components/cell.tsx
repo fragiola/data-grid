@@ -1,8 +1,13 @@
-import { type CellState, cellContent } from "@fragiola/data-grid";
+import {
+    type CellState,
+    cellContent,
+    cellEditOf,
+    type DataGridEngine,
+} from "@fragiola/data-grid";
 import type { ReactNode } from "react";
-import type { CellInfo } from "../context";
-import { useCellElement, useCellPart } from "../hooks/internal";
-import { useCellEdit } from "../hooks/use-cell-edit";
+import { type CellInfo, useRootGrid } from "../context";
+import { useCellElement, useCellPart, useEngineValue } from "../hooks/internal";
+import { useGridView } from "../hooks/use-grid-view";
 import type { DivPrimitiveProps } from "../utils/use-render";
 
 export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
@@ -31,7 +36,8 @@ export function Cell<TRow>(props: CellProps<TRow>) {
     if (children !== undefined) {
         content = children;
     } else if (own.state.editing && cell.column.renderEditCell) {
-        // the cell being edited (Epic #88): its column's editor, the draft its own
+        // the cell being edited (`editing()` installed, Epic #146): its column's editor, the
+        // draft its own
         content = <EditCell cell={cell} />;
     } else {
         // a group row's renderer or value, a loaded row's (the core's rule)
@@ -41,10 +47,19 @@ export function Cell<TRow>(props: CellProps<TRow>) {
 }
 
 /**
- * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft. The one
- * cell subscribing to the draft, so a keystroke renders it alone.
+ * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft (the editor
+ * props editing gives, `cellEditOf`: none without it). The one cell subscribing to the
+ * draft, so a keystroke renders it alone.
  */
 function EditCell<TRow>({ cell }: { cell: CellInfo<TRow> }) {
-    const props = useCellEdit(cell);
+    const { engine } = useRootGrid();
+    const draft = useEngineValue(engine, "edit-draft", null);
+    // the root that provides the engine was given the row type the cell has
+    const props = cellEditOf(
+        useGridView<TRow>(),
+        cell,
+        draft,
+        engine as DataGridEngine<TRow, ReactNode>,
+    );
     return props ? cell.column.renderEditCell?.(props) : null;
 }

@@ -17,7 +17,6 @@ import {
 import {
     type AxisWindow,
     bindGridRoot,
-    type CellEditEvent,
     type ColumnOrder,
     type ColumnOrGroup,
     type ColumnWidths,
@@ -26,7 +25,6 @@ import {
     type DataGridModel,
     type DetailHeight,
     type EditDraft,
-    type EditingCell,
     type GridDirection,
     type GridRoot,
     type GridRootProps,
@@ -87,7 +85,7 @@ export interface RootPropsSourceOptions {
  * its inputs onto the model's commands (controlled or not: the core's `bindGridRoot`, after every
  * render), tells what changed through its outputs, and runs the grid's keys, clicks, presses and
  * clipboard events after the consumer's own listeners on its element, so `preventDefault` cancels
- * one. Each `onXChange` of React is the output `xChange` (`[(editingCell)]` binds both ways);
+ * one. Each `onXChange` of React is the output `xChange` (`[(columnWidths)]` binds both ways);
  * the row moves are on while `reorderableRows` is. It installs its `features` (`[navigation(),
  * sorting()]`, fixed when it is created: a later list is told in the console, never taken); a
  * feature's inputs are another directive's on the same element, from the feature's entry point
@@ -141,10 +139,6 @@ export class DataGridRoot<TRow = unknown> {
     );
     readonly detailHeight = input<DetailHeight<TRow> | undefined>(undefined);
     readonly estimatedDetailHeight = input<number | undefined>(undefined);
-    readonly editingCell = input<EditingCell | null | undefined>(undefined);
-    readonly defaultEditingCell = input<EditingCell | null | undefined>(
-        undefined,
-    );
     readonly columnWidths = input<ColumnWidths | undefined>(undefined);
     readonly defaultColumnWidths = input<ColumnWidths | undefined>(undefined);
     readonly columnOrder = input<ColumnOrder | undefined>(undefined);
@@ -177,9 +171,6 @@ export class DataGridRoot<TRow = unknown> {
 
     readonly expandedRowKeysChange = output<readonly RowKey[]>();
     readonly expandedGroupKeysChange = output<readonly RowKey[]>();
-    readonly editingCellChange = output<EditingCell | null>();
-    /** an edit committed (Epic #88): the cell, its value and its row */
-    readonly cellEdit = output<CellEditEvent<TRow>>();
     readonly columnWidthsChange = output<ColumnWidths>();
     readonly columnOrderChange = output<ColumnOrder>();
     readonly collapsedGroupKeysChange = output<readonly string[]>();
@@ -226,10 +217,6 @@ export class DataGridRoot<TRow = unknown> {
             onExpandedGroupKeysChange: this.handlers.expandedGroupKeys,
             detailHeight: this.detailHeight(),
             estimatedDetailHeight: this.estimatedDetailHeight(),
-            editingCell: this.editingCell(),
-            defaultEditingCell: this.defaultEditingCell(),
-            onEditingCellChange: this.handlers.editingCell,
-            onCellEdit: this.handlers.cellEdit,
             columnWidths: this.columnWidths(),
             defaultColumnWidths: this.defaultColumnWidths(),
             onColumnWidthsChange: this.handlers.columnWidths,
@@ -309,8 +296,6 @@ export class DataGridRoot<TRow = unknown> {
     private readonly handlers = {
         expandedRowKeys: this.emitting(this.expandedRowKeysChange),
         expandedGroupKeys: this.emitting(this.expandedGroupKeysChange),
-        editingCell: this.emitting(this.editingCellChange),
-        cellEdit: this.emitting(this.cellEdit),
         columnWidths: this.emitting(this.columnWidthsChange),
         columnOrder: this.emitting(this.columnOrderChange),
         collapsedGroupKeys: this.emitting(this.collapsedGroupKeysChange),
@@ -387,10 +372,10 @@ export class DataGridRoot<TRow = unknown> {
         return this.engine.adapter.getView();
     });
 
-    /** The edit's draft (Epic #88). */
+    /** The edit's draft (Epic #88; editing's, `null` without it). */
     readonly draft: Signal<EditDraft | null> = computed(() => {
         this.draftTick();
-        return this.engine.get("edit-draft");
+        return this.engine.get("edit-draft") ?? null;
     });
 
     constructor() {

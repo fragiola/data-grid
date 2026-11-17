@@ -9,7 +9,6 @@ import {
     type VNodeChild,
 } from "vue";
 import {
-    type CellEditEvent,
     type CellInfo,
     type Column,
     type EditCellRenderProps,
@@ -18,6 +17,7 @@ import {
     type RowInfo,
     typedDataGrid,
 } from "../src";
+import type { CellEditEvent } from "../src/editing";
 import {
     cellAt,
     FEATURES,

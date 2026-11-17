@@ -31,10 +31,10 @@ deliberately does nothing.
   which rows are selected, which group is open) and your app renders the controls.
 - **The grid writes no data.** There is no `onRowsChange`: an edit, a paste, a fill and a row
   move are events, and your app writes its rows.
-- **What you need, you install.** The keys, sorting, row selection, ranges, the clipboard and the
-  fill handle are [features](/docs/concepts/features), each from its own entry: a grid gets them
-  through `features`, and what it does not install is not in your bundle. React Data Grid's
-  keyboard is `navigation()`; without it the grid is a plain table.
+- **What you need, you install.** The keys, sorting, row selection, ranges, the clipboard, the
+  fill handle and editing are [features](/docs/concepts/features), each from its own entry: a
+  grid gets them through `features`, and what it does not install is not in your bundle. React
+  Data Grid's keyboard is `navigation()`; without it the grid is a plain table.
 
 ```tsx title="people.tsx"
 // React Data Grid
@@ -93,7 +93,7 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 | React Data Grid | here | notes |
 | --- | --- | --- |
 | `onRowsChange(rows, data)` | `onCellEdit`, `onRangePaste`, `onFill`, `onRowMove` | each tells what happened; your app writes the rows. Rows behind `getRow` are told with `rows.changed` |
-| a column's edit committed | `onCellEdit({ row, rowIndex, columnIndex, columnKey, value })` | told only when the value changed. See [Editing cells](/docs/concepts/editing) |
+| a column's edit committed | `onCellEdit({ row, rowIndex, columnIndex, columnKey, value })`, with `editing()` installed (and `navigation()`) | from `@fragiola/data-grid-react/editing`; told only when the value changed. See [Editing cells](/docs/concepts/editing) |
 | `onCellCopy` | `clipboard()` installed (from `/clipboard`, with `cellRange()`), `cellSelection="range"` and a column's `getCopyText` | Ctrl+C copies the range (or the active cell) as tab-separated text; your `onCopy` on `Root` runs first, and `preventDefault` makes the copy yours |
 | `onCellPaste` (returns the row) | `onRangePaste({ range, values })`, `onBeforeRangePaste`, with `clipboard()` | the values parsed from the clipboard and the range they land in; `onBeforeRangePaste` returning `false` refuses one |
 | `onFill({ columnKey, sourceRow, targetRow })` (returns the row) | `onFill({ source, target })`, with `fillHandle()` (and `cellRange()`) | two ranges of cells; giving `onFill` turns the handle on, and the handle is your element (`useFillHandle`). Both, and `repeatedFill`, come from `@fragiola/data-grid-react/fill`; `repeatedFill` repeats the source's values. See [Fill handle](/docs/concepts/fill) |
@@ -163,8 +163,8 @@ Inside the root, `useDataGrid()` returns the same `{ model, engine }`. See
 | `renderCell(props)` | `renderCell({ row, rowIndex, column, columnIndex, value })` | no `onRowChange`: update your rows. A cell's children replace it entirely |
 | `renderHeaderCell(props)` | `renderHeaderCell({ column, columnIndex })` | `headerCellContent(cell)` is the default content, to place a resize handle beside |
 | `renderEditCell({ row, onRowChange, onClose })` | `renderEditCell({ row, value, initialValue, startKey, onChange, onCommit, onCancel, editorProps })` | the draft is a value, not a row; `editorProps` marks a portalled popover as part of the edit |
-| `editable` (a boolean, or a function of the row) | `editable` (a boolean, or a function of the row and its index) | there is no built-in text editor: give `renderEditCell` |
-| `editorOptions` | — | a press outside the cell commits; the edit ends when its row or column leaves its place (by key); `useCellEdit(cell)` puts an editor inside a cell's own children, beside its content |
+| `editable` (a boolean, or a function of the row) | `editable` (a boolean, or a function of the row and its index) | with `editing()` installed; there is no built-in text editor: give `renderEditCell` |
+| `editorOptions` | — | a press outside the cell commits; the edit ends when its row or column leaves its place (by key); `useCellEdit(cell)` (`/editing`) puts an editor inside a cell's own children, beside its content |
 | `colSpan({ type })` | `colSpan({ type, rowIndex, … })` | `type` is lowercase: `"header"`, `"row"` (with `row`), `"summary"`, `"group"`. See [Column spanning](/docs/concepts/column-spanning) |
 | `renderSummaryCell({ row })` | `renderSummaryCell({ position, summaryIndex, column, columnIndex })`, or `DataGrid.SummaryCell` children | there is no summary row object: your figures come from your component |
 | `renderGroupCell({ groupKey, childRows, isExpanded, toggleGroup })` | `renderGroupCell({ group, rowIndex, column, columnIndex, value })` | the toggle is your control with `useGroupToggle(row)` |

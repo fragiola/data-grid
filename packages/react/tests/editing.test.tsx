@@ -3,13 +3,13 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
-    type CellEditEvent,
     type Column,
     DataGrid,
     type EditCellRenderProps,
     type EditingCell,
     type RootProps,
 } from "../src";
+import type { CellEditEvent } from "../src/editing";
 import {
     cellAt,
     FEATURES,

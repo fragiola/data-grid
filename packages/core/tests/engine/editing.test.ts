@@ -4,11 +4,11 @@ import {
     type CellEdit,
     type Column,
     cellPart,
-    EDITOR_ATTRIBUTE,
     type EditDraft,
     type GridView,
     type ModelOptions,
 } from "../../src";
+import { EDITOR_ATTRIBUTE } from "../../src/editing";
 import type { CellRangeState } from "../../src/range";
 import type { Features } from "../features";
 import {
@@ -62,7 +62,9 @@ const at = (rowIndex: number, columnIndex: number) => ({
 });
 
 /** The name the edit open marks its editor's elements with (`editorProps`). */
-function editorName(engine: { get(key: "edit-draft"): EditDraft | null }) {
+function editorName(engine: {
+    get(key: "edit-draft"): EditDraft | null | undefined;
+}) {
     return engine.get("edit-draft")?.editorProps[EDITOR_ATTRIBUTE] ?? "";
 }
 

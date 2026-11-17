@@ -41,8 +41,9 @@ examples/vue/src/
   on the root) and types its parts by them (`typedDataGrid<Task, typeof features>()`); without it a
   sortable column never sorts. Every grid navigated by the keys installs `navigation()` (without
   it the grid is a plain table: no active cell, no tab stop), and a grid that selects rows, ranges,
-  copies or fills installs `rowSelection()`, `cellRange()`, `clipboard()`, `fillHandle()` from
-  their subpaths; their props (`:active-position`, `row-selection`, `cell-selection`, `@fill`)
+  copies, fills or edits installs `rowSelection()`, `cellRange()`, `clipboard()`, `fillHandle()`,
+  `editing()` from their subpaths; their props (`:active-position`, `row-selection`,
+  `cell-selection`, `@fill`, `:on-cell-edit`)
   are the root's only with them installed. A part reading a feature's keys types its model by
   that feature (`useDataGrid<Task, [DataGridFeature<RowSelectionTypes>]>()`). `useLocalRows(...).props` hands the root its sort: an example that
   binds them installs sorting too. The sort a view shows is `sortColumnsOf(view)`.
@@ -60,7 +61,7 @@ examples/vue/src/
 - **State the grid keeps** is read through `useDataGrid()` (`{ model, engine }`) and re-read when
   the view changes: `useGridView()` inside a `computed`.
 - **Copyable imports only**: `vue`, `@fragiola/data-grid-vue` (and `/local` and the features'
-  `/sorting`, `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`),
+  `/sorting`, `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`, `/editing`),
   `@fragiola/data-grid/local`, `@lucide/vue`, the kit (`#/components/ui/*`,
   `#/components/atoms/*`, `#/lib/cn`) and relative files.
 

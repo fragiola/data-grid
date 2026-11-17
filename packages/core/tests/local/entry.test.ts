@@ -43,7 +43,8 @@ describe("the grid's own entry", () => {
             [],
         );
         expect(files.filter((file) => file.startsWith("fill"))).toEqual([]);
-        // the features (Epic #141): sorting
+        // the features (Epic #141): sorting; cell editing (Epic #146)
         expect(files.filter((file) => file.startsWith("sorting"))).toEqual([]);
+        expect(files.filter((file) => file.startsWith("editing"))).toEqual([]);
     });
 });

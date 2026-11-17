@@ -1,7 +1,7 @@
 {
     "name": "@fragiola/data-grid",
     "version": "0.0.0",
-    "description": "Headless data grid core: a typed model with commands, axis math and scroll scaling for millions of cells, windows, the engine that binds a grid to the DOM, and opt-in features (sorting, navigation, row selection, cell ranges, the clipboard, the fill handle).",
+    "description": "Headless data grid core: a typed model with commands, axis math and scroll scaling for millions of cells, windows, the engine that binds a grid to the DOM, and opt-in features (sorting, navigation, row selection, cell ranges, the clipboard, the fill handle, cell editing).",
     "license": "MIT",
     "type": "module",
     "author": {
@@ -65,6 +65,12 @@
             "import": "./dist/fill.js",
             "default": "./dist/fill.js"
         },
+        "./editing": {
+            "@fragiola/source": "./src/editing/index.ts",
+            "types": "./dist/editing.d.ts",
+            "import": "./dist/editing.js",
+            "default": "./dist/editing.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -112,6 +118,11 @@
                 "types": "./dist/fill.d.ts",
                 "import": "./dist/fill.js",
                 "default": "./dist/fill.js"
+            },
+            "./editing": {
+                "types": "./dist/editing.d.ts",
+                "import": "./dist/editing.js",
+                "default": "./dist/editing.js"
             },
             "./package.json": "./package.json"
         }

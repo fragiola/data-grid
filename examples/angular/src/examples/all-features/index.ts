@@ -6,7 +6,6 @@ import {
     ViewChild,
 } from "@angular/core";
 import {
-    type CellEditEvent,
     type Column,
     contextOf,
     createDataGridRef,
@@ -23,6 +22,11 @@ import {
     clipboard,
     DataGridClipboard,
 } from "@fragiola/data-grid-angular/clipboard";
+import {
+    type CellEditEvent,
+    DataGridEditing,
+    editing,
+} from "@fragiola/data-grid-angular/editing";
 import {
     DataGridFill,
     DataGridFillHandle,
@@ -73,6 +77,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
     selector: "example-all-features",
     imports: [
         DATA_GRID,
+        DataGridEditing,
         DataGridLocalRows,
         LucideArrowUp,
         LucideArrowDown,
@@ -112,6 +117,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
                 [rowHeight]="38"
                 dataGridCellRange
                 cellSelection="range"
+                [dataGridEditing]="columns"
                 (cellEdit)="edited($event)"
                 dataGridClipboard
                 (rangePaste)="pasted($event)"
@@ -264,13 +270,14 @@ export default class AllFeatures {
     // sorted in memory: the grid's indexes are the rows shown
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), ranges of cells, the clipboard,
-    // the fill handle
+    // the fill handle, cell editing
     readonly features = [
         sorting(),
         navigation(),
         cellRange(),
         clipboard(),
         fillHandle(),
+        editing(),
     ];
     readonly local = injectLocalRows(this.tasks, this.columns);
     // the grid's model from outside its root: a fill repeats the values it reads

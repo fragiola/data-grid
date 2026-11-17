@@ -15,15 +15,18 @@ export type {
     SummaryRowInfo,
     TypedBy,
 } from "./lib/context";
+// Private to the package's own entry points (the fill handle's element, `/fill`; an editor's
+// template, `/editing`), as Angular's `ɵ` names are: not the app's API, they may change in any
+// release.
+export {
+    DATA_GRID_CELL as ɵDATA_GRID_CELL,
+    injectGrid as ɵinjectGrid,
+} from "./lib/context";
 export { DATA_GRID } from "./lib/data-grid";
 export { DataGridBind } from "./lib/directives/bind.directive";
 export { DataGridBody } from "./lib/directives/body.directive";
 export { DataGridCell } from "./lib/directives/cell.directive";
 export { DataGridCellContent } from "./lib/directives/cell-content.directive";
-export {
-    type CellEditContext,
-    DataGridCellEdit,
-} from "./lib/directives/cell-edit.directive";
 export {
     type CellsContext,
     DataGridCells,
@@ -83,7 +86,6 @@ export {
 export { DataGridTemplate } from "./lib/directives/template.directive";
 export { createDataGridRef } from "./lib/inject/create-data-grid-ref";
 export { injectCell } from "./lib/inject/inject-cell";
-export { injectCellEdit } from "./lib/inject/inject-cell-edit";
 export { injectCells } from "./lib/inject/inject-cells";
 export { injectColumnResizer } from "./lib/inject/inject-column-resizer";
 export { injectColumnWindow } from "./lib/inject/inject-column-window";
@@ -114,7 +116,5 @@ export {
     type TemplateContext,
     templateContent,
 } from "./lib/utils/content";
-// Private to the package's own entry points (the fill handle's element, `/fill`), as Angular's
-// `ɵ` names are: not the app's API, they may change in any release.
 export { bindPart as ɵbindPart } from "./lib/utils/helpers";
 export { structuralView as ɵstructuralView } from "./lib/utils/structural";

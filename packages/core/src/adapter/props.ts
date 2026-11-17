@@ -47,7 +47,7 @@ import {
     summaryCellPart,
     summaryRowPart,
 } from "../engine/parts";
-import type { GridView } from "../engine/types";
+import type { DataGridEngine, EditDraft, GridView } from "../engine/types";
 import {
     dataRowAt,
     depthOf,
@@ -58,6 +58,7 @@ import {
 } from "../model/source";
 import type {
     Column,
+    EditCellRenderProps,
     GridDirection,
     GroupRow,
     HeaderCellLayout,
@@ -1028,6 +1029,27 @@ export function cellContent<TRow, TNode>(
             : plainCellText(cell.value);
     }
     return null;
+}
+
+/**
+ * What a body cell's column's `renderEditCell` gets while the cell is edited: its editor props
+ * (the draft, the edit's actions), from the editing feature (`editing()`, Epic #146); `null` for
+ * any other cell, and without it. A cell part renders its column's editor only with them.
+ */
+export function cellEditOf<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: GridCellInfo<TRow, TNode>,
+    draft: EditDraft | null | undefined,
+    engine: DataGridEngine<TRow, TNode>,
+): EditCellRenderProps<TRow, TNode> | null {
+    return (
+        (view.features.editCell?.(
+            view as GridView<unknown, unknown>,
+            cell as GridCellInfo<unknown, unknown>,
+            draft,
+            engine as DataGridEngine<unknown, unknown>,
+        ) as EditCellRenderProps<TRow, TNode> | null | undefined) ?? null
+    );
 }
 
 /** What a summary row's cell shows by default: its column's `renderSummaryCell`, else nothing. */

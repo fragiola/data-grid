@@ -50,16 +50,18 @@ const ANGULAR_ONLY = [
     "DataGridRowDragHandle",
     "DataGridGroupToggle",
     "DataGridGroupLabel",
-    "DataGridCellEdit",
     // an injection function's props on an element of the app's
     "DataGridBind",
     // a column renderer's template, typed, and its context
     "DataGridTemplate",
     "templateContent",
     "contextOf",
-    // private to the package's own entry points (the fill handle's element), as Angular's `ɵ` names
+    // private to the package's own entry points (the fill handle's element, an editor's
+    // template), as Angular's `ɵ` names
     "ɵbindPart",
     "ɵstructuralView",
+    "ɵDATA_GRID_CELL",
+    "ɵinjectGrid",
 ];
 
 /**
@@ -74,6 +76,7 @@ const ENTRIES: Readonly<Record<string, readonly string[]>> = {
     range: ["DataGridCellRange"],
     clipboard: ["DataGridClipboard"],
     fill: ["DataGridFill", "DataGridFillHandle"],
+    editing: ["DataGridEditing", "DataGridCellEdit"],
     sorting: ["DataGridSorting"],
 };
 

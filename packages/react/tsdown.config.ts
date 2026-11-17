@@ -14,6 +14,7 @@ export default defineConfig({
         range: "src/range/index.ts",
         clipboard: "src/clipboard/index.ts",
         fill: "src/fill/index.ts",
+        editing: "src/editing/index.ts",
     },
     format: "esm",
     platform: "browser",

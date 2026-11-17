@@ -7,7 +7,6 @@ import {
     ViewChild,
 } from "@angular/core";
 import {
-    type CellEditEvent,
     type CellTemplateProps,
     type Column,
     contextOf,
@@ -18,6 +17,11 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import {
+    type CellEditEvent,
+    DataGridEditing,
+    editing,
+} from "@fragiola/data-grid-angular/editing";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -126,6 +130,7 @@ function download(text: string, name: string) {
     selector: "example-common-features",
     imports: [
         DATA_GRID,
+        DataGridEditing,
         DataGridLocalRows,
         ClickableButton,
         CHECKBOX,
@@ -165,6 +170,7 @@ function download(text: string, name: string) {
                 (selectedRowKeysChange)="selected.set($event)"
                 [summaryRows]="SUMMARY_ROWS"
                 [summaryRowHeight]="38"
+                [dataGridEditing]="columns"
                 (cellEdit)="edited($event)"
                 [class]="styles.root"
             >
@@ -367,8 +373,8 @@ export default class CommonFeatures {
     ];
 
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection
-    readonly features = [sorting(), navigation(), rowSelection()];
+    // cell navigation (the keys, the active cell, the tab stop), row selection, cell editing
+    readonly features = [sorting(), navigation(), rowSelection(), editing()];
     readonly local = injectLocalRows(this.jobs, this.columns);
     /**
      * The rows "select all" covers: the ones that can be selected, worked out again as the jobs

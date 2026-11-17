@@ -171,14 +171,6 @@ export const GROUP_TOGGLE_ATTRIBUTE = "data-grid-group-toggle";
  */
 export const FILL_HANDLE_ATTRIBUTE = "data-grid-fill-handle";
 
-/**
- * What belongs to an edit outside its cell (Epic #88, E4.3): an element the app marks with the
- * edit's `editorProps` (a select's or a date picker's popover, portalled out of the grid), its
- * value naming that edit of that grid. A press or focus there keeps the edit open; anywhere else
- * outside the edited cell, it commits.
- */
-export const EDITOR_ATTRIBUTE = "data-grid-editor";
-
 /** The grid's own controls an app renders in cells: a group's toggle, a row's drag handle, a fill handle, a resizer. */
 const GRID_CONTROLS = [
     GROUP_TOGGLE_ATTRIBUTE,

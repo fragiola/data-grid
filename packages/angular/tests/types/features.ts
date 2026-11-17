@@ -8,6 +8,13 @@
 import { Component, signal } from "@angular/core";
 import { clipboard, DataGridClipboard } from "../../src/clipboard";
 import {
+    type CellEditEvent,
+    DataGridCellEdit,
+    DataGridEditing,
+    editing,
+    injectCellEdit,
+} from "../../src/editing";
+import {
     DataGridFill,
     DataGridFillHandle,
     type FillHandleState,
@@ -26,6 +33,7 @@ import {
     type DataGridNode,
     type DataGridRef,
     type DataGridRoot,
+    type EditingCell,
     injectDataGrid,
     injectRowWindow,
     type RangeFill,
@@ -150,6 +158,13 @@ void root.rangePaste;
 void root.fillable;
 // @ts-expect-error
 void root.fill;
+// Epic #146: cell editing too
+// @ts-expect-error
+void root.editingCell;
+// @ts-expect-error
+void root.editingCellChange;
+// @ts-expect-error
+void root.cellEdit;
 
 const everything = [
     navigation(),
@@ -157,6 +172,7 @@ const everything = [
     cellRange(),
     clipboard(),
     fillHandle(),
+    editing(),
 ] as const;
 
 // the features' keys, with them named only
@@ -176,6 +192,8 @@ export function featureKeys() {
     plain.model.run("selected-range.select-all");
     // @ts-expect-error
     plain.model.get("selected-range");
+    // @ts-expect-error
+    plain.model.run("editing-cell.clear", {});
     const typed = injectDataGrid<Person, typeof everything>();
     typed.model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
     const active = typed.model.get("active-position");
@@ -184,6 +202,7 @@ export function featureKeys() {
     typed.model.is("row-selected", { rowIndex: 0 });
     typed.model.run("selected-range.select-all");
     const range = typed.model.get("selected-range");
+    typed.model.run("editing-cell.clear", {});
     // a feature's state, with it installed
     const keys: readonly RowKey[] = typed.model.state.selectedRowKeys;
     // @ts-expect-error
@@ -193,7 +212,11 @@ export function featureKeys() {
         rowIndex: 0,
         columnIndex: 0,
     }).state();
-    return [active, range, keys, all, handle];
+    const edit = injectCellEdit<Person>({
+        rowIndex: 0,
+        columnIndex: 0,
+    } as never)();
+    return [active, range, keys, all, handle, edit?.row.name];
 }
 
 // every feature's inputs and outputs on the root's element, with their directives
@@ -206,6 +229,8 @@ export function featureKeys() {
         DataGridClipboard,
         DataGridFill,
         DataGridFillHandle,
+        DataGridEditing,
+        DataGridCellEdit,
     ],
     template: `
         <div dataGridRoot [columns]="columns" [rows]="rows" [features]="features"
@@ -214,13 +239,14 @@ export function featureKeys() {
             [(selectedRowKeys)]="selected" [defaultSelectedRowKeys]="[]"
             dataGridCellRange cellSelection="range" [(selectedRange)]="range" [defaultSelectedRange]="null"
             dataGridClipboard [beforeRangePaste]="allow" (rangePaste)="pasted($event)"
-            dataGridFill (fill)="filled($event)">
+            dataGridFill (fill)="filled($event)"
+            [dataGridEditing]="columns" [(editingCell)]="editingCell" (cellEdit)="edited($event)">
             <div dataGridGrid>
                 <div dataGridBody>
                     <ng-template dataGridRows let-row>
                         <div [dataGridRow]="row">
                             <ng-template dataGridCells let-cell>
-                                <div [dataGridCell]="cell"><span *dataGridFillHandle="cell; let state">{{ state.filling }}</span></div>
+                                <div [dataGridCell]="cell"><span *dataGridFillHandle="cell; let state">{{ state.filling }}</span><input *dataGridCellEdit="let edit" [value]="edit.value" /></div>
                             </ng-template>
                         </div>
                     </ng-template>
@@ -244,5 +270,9 @@ export class EveryFeature {
     }
     filled(fill: RangeFill) {
         return fill;
+    }
+    readonly editingCell = signal<EditingCell | null>(null);
+    edited(edit: CellEditEvent<Person>) {
+        return edit.row.name;
     }
 }

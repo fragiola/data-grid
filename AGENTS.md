@@ -23,10 +23,10 @@ Vue follows React (Epic #123), then Angular (Epic #129), and other adapters may 
 
 | package | name | contains | depends on |
 |---|---|---|---|
-| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, the engine that binds one grid to the DOM, the feature registry (below); opt-in entry points: `/local` (the pipeline for rows in memory); the features: `/sorting` (`sorting()`), `/navigation` (`navigation()`), `/row-selection` (`rowSelection()` and its helpers), `/range` (`cellRange()`), `/clipboard` (`clipboard()`, `parseTsv`/`toTsv`), `/fill` (`fillHandle()`, `repeatedFill`) | DOM only |
-| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle` | peer `react`, `react-dom` (^19) |
-| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow, TFeatures>()`) and composables over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle` | peer `vue` (^3.5) |
-| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; each feature's secondary entry re-exports the core's with a root directive for its inputs: `/sorting` (`[dataGridSorting]`), `/navigation` (`[dataGridNavigation]`), `/row-selection` (`[dataGridRowSelection]`, `injectSelectAll`), `/range` (`[dataGridCellRange]`), `/clipboard` (`[dataGridClipboard]`), `/fill` (`[dataGridFill]`, `*dataGridFillHandle`, `injectFillHandle`) | peer `@angular/core` (^22) |
+| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, the engine that binds one grid to the DOM, the feature registry (below); opt-in entry points: `/local` (the pipeline for rows in memory); the features: `/sorting` (`sorting()`), `/navigation` (`navigation()`), `/row-selection` (`rowSelection()` and its helpers), `/range` (`cellRange()`), `/clipboard` (`clipboard()`, `parseTsv`/`toTsv`), `/fill` (`fillHandle()`, `repeatedFill`), `/editing` (`editing()`, `editActions`, `editCellPropsOf`) | DOM only |
+| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle`, `/editing` with `useCellEdit` | peer `react`, `react-dom` (^19) |
+| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow, TFeatures>()`) and composables over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle`, `/editing` with `useCellEdit` | peer `vue` (^3.5) |
+| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; each feature's secondary entry re-exports the core's with a root directive for its inputs: `/sorting` (`[dataGridSorting]`), `/navigation` (`[dataGridNavigation]`), `/row-selection` (`[dataGridRowSelection]`, `injectSelectAll`), `/range` (`[dataGridCellRange]`), `/clipboard` (`[dataGridClipboard]`), `/fill` (`[dataGridFill]`, `*dataGridFillHandle`, `injectFillHandle`), `/editing` (`[dataGridEditing]`, `*dataGridCellEdit`, `injectCellEdit`) | peer `@angular/core` (^22) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react`, `examples/shared` |
 
 ## Non-negotiable rules
@@ -610,24 +610,34 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    no attribute, part state `undefined`, the keys, presses and clipboard as before. Several ranges,
    selecting a column or a row by its header, and fill (#100) are not this one's.
    **Cell editing (Epic #88, E4.3):** the grid owns the edit (which cell, its keys, its draft, its
-   end), the editors and the data are the app's (D6: a commit is an event). `Column.editable?:
+   end), the editors and the data are the app's (D6: a commit is an event). A feature since Epic
+   #146: `editing()` (`/editing`, requires `navigation()`: the edited cell is the active one); its
+   state (`editingCell`, `editingKeys`), commands, keys, engine block (`editing/feature.ts`) and
+   root props (`editingCell`/`defaultEditingCell`/`onEditingCellChange`/`onCellEdit`, typed only
+   with it). **Without it** no edit ever starts: Enter, F2, typing and a double click are not the
+   grid's (they reach the interaction and the moves as on a column not editable),
+   `editing-cell.*` is `not_found`, `engine.get("edit-draft")` is `undefined`, the engine's edit
+   actions do nothing, `CellState.editing` is `undefined` and no cell part renders
+   `renderEditCell`. `Column.editable` and `renderEditCell` stay on `Column` (one generic), read
+   only by the feature. `Column.editable?:
    boolean | (row, rowIndex) => boolean` and `renderEditCell?(EditCellRenderProps)` (`{ row,
    rowIndex, column, columnIndex, value (the draft), initialValue, startKey, onChange, onCommit,
-   onCancel, editorProps }`; a group has neither: its type's `never`s). `model/editing.ts`: a cell can be
+   onCancel, editorProps }`; a group has neither: its type's `never`s). `editing/editing.ts`: a cell can be
    edited (`editRefusal`, `isCellEditable`, `is("cell-editable")`) when it is a loaded data row's
    body cell whose column is editable for it: `not_found` past the grid, `refused` for a header or
    a summary row's cell, a group row's or a column not editable for it, `not_loaded` for a row not
    loaded yet; `hasEditable(columns)` (internal) keeps a grid without one from asking anything,
-   the engine caching it per `state.columns` (`editsCells`). The model keeps `editingCell:
+   its engine caching it per `state.columns` (`editsCells`). The model keeps `editingCell:
    EditingCell | null` (`{ rowIndex, columnIndex, startKey? }`, option, `get("editing-cell")`),
    always the active cell, and `editingKeys` (`CellKeys { rowKey, columnKey }`: the row's key,
    `rowKey` else its index, and the column's, taken when it starts, `cellKeysAt`, the range's
    rule too):
    `editing-cell.set` (snapped to a span's first column; `refused` for any cell but the active
    one) and `editing-cell.clear`; controlled or not on `Root` through the controlled factory
-   (`editingCell`/`defaultEditingCell`/`onEditingCellChange`, prefix `editing-cell.`, settled
-   after the position). One rule after a handler (`withActiveRules` in `execute`; the range's is
-   its feature's `stateChanged`; at creation, for an edit given to start with: `withKeptEditing`), only when the
+   (`editingCell`/`defaultEditingCell`/`onEditingCellChange`, prefix `editing-cell.`, its
+   `FeatureRoot.controlled`, settled with the features' pieces). One rule after a handler (its
+   `stateChanged`, `withEditingRules`, after every command and once at creation: an edit given to
+   start with, without keys yet, takes the ones it finds: `withKeptEditing`), only when the
    source, the columns, the active cell or the edit changed, or `rows.changed` reached its row (the
    app's `editable` never asked after an unrelated command): the edit stays only while it is the
    active cell, can still be edited and has its keys at its place (another row there: a new order
@@ -637,9 +647,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the position and `startKey` are `editingCell`'s; `editorProps` (`EditorProps`) is
    `{ "data-grid-editor": "<engine>-<edit>" }`, the engine's name among the page's (a module
    counter) and the edit's, the same for the edit): made from the cell's value (`cell-value-by`)
-   when the model's `editingKeys` change (`followEdit`, `draftFor`: at the top of the model subscription
-   and once at creation, for an edit given to start with), replaced by `change-edit { value }`,
-   dropped when the edit ends. Engine actions: `edit-cell` (refused, a cell that cannot be edited
+   when the model's `editingKeys` change (`followEdit`, `draftFor`: its engine's `changed`, and
+   once when its engine is made, for an edit given to start with, telling no one), replaced by
+   `change-edit { value }`, dropped when the edit ends. Engine actions (its `actions`): `edit-cell` (refused, a cell that cannot be edited
    changes nothing; another edit open is committed first, told; then activate and
    `editing-cell.set`, its editor focused wherever focus is), `change-edit`, `commit-edit { value?
    }` (a value given replaces the draft first) and `cancel-edit`. A commit (`commitEdit`) emits
@@ -649,8 +659,9 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    would fall to the page), with a move one `active-position.move` (focus following), which ends
    it by the model's rule, and `editing-cell.clear` only while it is still open (no move, an edge,
    a parent keeping the cell): a controlled parent is asked once per gesture. `Root`'s
-   `onCellEdit(CellEditEvent<TRow>)` adds the row (`row-by`; none told for a row gone). Starting
-   (`editStartKey`, after `rowGroupKey`, before the interaction's Enter/F2): on a body cell in
+   `onCellEdit(CellEditEvent<TRow>)` adds the row (`row-by`, its root's `events` given the model;
+   none told for a row gone). Starting
+   (`editStartKey`, its `startKeydown`: after `rowGroupKey`, before the interaction's Enter/F2): on a body cell in
    navigation that can be edited, Enter and F2 (once per press) or a printable key (one
    character, its `startKey`; a character typed with AltGr, Ctrl and Alt, or Option, Alt alone,
    too: `isAltCharacter`, Space aside, the one Alt path past the keydown's modifier guard, which
@@ -658,7 +669,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    Shift+Enter, nor a key of a composition: `isComposing`, `isComposing` or key code 229, which
    Safari's confirming Enter carries), each one `editing-cell.set`, prevented; a cell that cannot be edited lets them through (its controls'
    interaction, unchanged); a double click (`click`, `detail` 2) on such a cell, not on a control
-   inside it (`pressedBodyCellOf`), edits it. In an edit, every key from inside the edited cell
+   inside it (`pressedBodyCellOf`), edits it (its `click`). In an edit (its `guardKeydown`, after a
+   drag's Escape and before the interaction's guard), every key from inside the edited cell
    (`partOfEdit`: the cell, or an element the app marks with this edit's `editorProps`,
    `EDITOR_ATTRIBUTE` = its name, for a portalled popover: another grid's or an earlier edit's is
    not it) is its editor's but Enter (commit, move down; Shift: up), Tab (commit, the next column;
@@ -668,10 +680,10 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    focuses the editor first, and the page keys (and Space without an editor) are prevented:
    nothing scrolls natively. A press anywhere but the edit and the viewport itself (its
    scrollbars), heard on the document's capture phase while an edit is open (`onEditPress`),
-   commits, staying where it is; focus in the edit then, once the press ends (`onPointerEnd`,
+   commits, staying where it is; focus in the edit then, once the press ends (its `pointerEnd`,
    `refocusAfterEdit`) focus left on the page's body or the viewport goes back to the active cell.
-   Focus leaving for an element outside the edit commits too (`onFocusOut`; focus going nowhere
-   is the press's). At the commit rendering an edit (`focusEditor`, for the view that renders it),
+   Focus leaving for an element outside the edit commits too (its `focusout`; focus going nowhere
+   is the press's). At the commit rendering an edit (`focusEditor`, its `rendered`, for the view that renders it),
    the edited cell's editor takes focus while focus is in the grid (started by `edit-cell`,
    wherever it is) unless the editor holds it already (its own, its marked popover):
    `editorControlsIn`, its own controls (a nested grid's are that grid's) but the grid's own
@@ -680,15 +692,18 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    (an `editable` column without an editor) has its edit cancelled in the next task
    (`cancelWithoutEditor`, the view's `setTimeout`, cleared on detach), unless the same edit's
    editor took focus by then (an effect, a frame: focus in the cell's controls or its marked
-   popover), so it never traps the keys. Focus in the edited cell never starts an interaction (`onFocusIn`). An edit
+   popover), so it never traps the keys. Focus in the edited cell never starts an interaction (its
+   `focusin`). An edit
    starting ends a range's drag and an interaction; the range stays. The edited cell, the active
-   one, stays rendered through any scroll. Parts: `CellState.editing` through `isHeldCell(held,
-   cell)` (`engine/parts.ts`: the one comparison of a held cell, the interaction's too,
-   `useCellEdit`'s and `edit-cell`'s); the view's `editingCell` (`VIEW_KEYS`). React:
+   one, stays rendered through any scroll. Parts: `CellState.editing` through its `cell`
+   (`CellShare.editing`, `isHeldCell(held, cell)`: `engine/parts.ts`, the one comparison of a held
+   cell, the interaction's too, `useCellEdit`'s and `edit-cell`'s); the view's `editingCell` (its
+   `view` key; `EditingView`). React:
    `data-editing` on the cell; a `Cell` without children, edited, renders its column's
    `renderEditCell` through an `EditCell` of its own, the one component subscribing to the draft
-   (a keystroke renders it alone); `useCellEdit(cell)` gives the same props (else `null`) to an
-   editor in a cell's children. Copy and paste in an editor are its field's (the clipboard is
+   (a keystroke renders it alone), its props from the core's `cellEditOf` (the feature's
+   `editCell` contribution: `null` without it); `useCellEdit(cell)` (`/editing`) gives the same
+   props (else `null`) to an editor in a cell's children. Copy and paste in an editor are its field's (the clipboard is
    the grid's only from a cell itself). Validation, editors and what a value means are the
    app's; fill (#100) is not this one's.
    **Fill handle (Epic #88, E4.4):** the grid owns the handle's drag, its target and the event;
@@ -970,7 +985,7 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     by middleware, the active cell kept);
     a plain move to another cell leaves no range (the model's anchor rule, rule 10; one command:
     `active-position.move`). The page size of PageUp/PageDown is one helper (`pageSize`). With
-    an editable column (Epic #88, E4.3): Enter, F2 or a printable key on a body cell in
+    `editing()` and an editable column (Epic #88, E4.3; a feature since Epic #146): Enter, F2 or a printable key on a body cell in
     navigation that can be edited edit it (before the interaction's Enter and F2, which stay a
     cell's without an edit); in an edit, Enter commits and moves down (Shift: up), Tab commits and
     moves to the next column (Shift: the previous one), Escape cancels, and every other key is the
@@ -1046,11 +1061,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 A **minimal core plus opt-in features** (the ecosystem's pattern,
 `../guidelines/architecture/features.md`; this repo is its reference): a feature the app does
 not import is not in its bundle. Epics #144–#153 move every other optional behaviour onto it
-(editing, column and row features, filtering, search, paging come next). Six are features now:
+(column and row features, filtering, search, paging come next). Seven are features now:
 `sorting()` (`/sorting`, Epic #141), and since Epic #144 `navigation()` (`/navigation`),
 `rowSelection()` (`/row-selection`), `cellRange()` (`/range`, requires `navigation`),
 `clipboard()` (`/clipboard`, requires `cellRange`) and `fillHandle()` (`/fill`, requires
-`cellRange`).
+`cellRange`), and since Epic #146 `editing()` (`/editing`, requires `navigation`).
 
 - **The contract** (`src/feature/feature.ts`): a feature is a plain object a factory makes,
   exported from its own entry point (`sorting()` from `@fragiola/data-grid/sorting`; the
@@ -1077,11 +1092,15 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   `headerCellOf` and `engine: EngineKit`, the engine's own means read at the event: its DOM
   questions (`cellOf`, `bodyCellOf`, `pressedBodyCellOf`, `cellElement`, `inViewport`,
   `markedOf`), scroll (`scrollToCell`, `pageSize`, `visibleColumns`), focus (`followFocus`,
-  `focusFirstVisibleCell`), `emit`, `refresh`, and the drags (`press`, `capture`, `askFrame`,
-  `endDrag`, `stopDrag`, `drag`, `cellDragStep`, `cellUnder`)). The keys go one chain, each hook
-  walked in install order, `true` taking the key: `beforeKeydown` (never takes: the clipboard) →
-  the guards (an edit, a control's `ownsKeysOf`, Alt) → `keydown` (sorting) → the row groups'
-  keys → an edit's start → the interaction's Enter/F2 → the column and row moves' keys →
+  `focusFirstVisibleCell`), `emit`, `refresh`, the drags (`press`, `capture`, `askFrame`,
+  `endDrag`, `stopDrag`, `drag`, `cellDragStep`, `cellUnder`), and since Epic #146 `activate`
+  and `move` (the navigation's, through the engine) and `leaveInteraction`). The keys go one
+  chain, each hook walked in install order, `true` taking the key: `beforeKeydown` (never takes:
+  the clipboard) → a drag's Escape → `guardKeydown` (an element a feature holds: an edit's
+  editor and cell; `true` takes, `false` ends the chain untaken, `undefined` lets it through) →
+  the guards (a control's `ownsKeysOf`, Alt: a character typed with Alt walks `startKeydown`
+  only) → `keydown` (sorting) → the row groups' keys → `startKeydown` (an edit's start) → the
+  interaction's Enter/F2 → the column and row moves' keys →
   `laterKeydown` (the range's, the row selection's: it defers Shift+↑/↓ and Ctrl/⌘+A to the
   range while `get("cell-selection")` is set) → Escape's release → the scaled Space →
   `lastKeydown` (navigation's arrows). Also `click`, `pointerdown` (after a resizer's, before a
@@ -1089,10 +1108,16 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   cell's range leaves a row's handle to it), `copy`, `paste`, `changed(before, after)` (run before
   the engine's own follow, so the view built for the change shows the feature's fields),
   `followed(before, after)` (after it, the engine laid out: a drag whose cells are gone ends),
-  `attach(viewport) => detach`, `optionsChanged`,
-  `view()` (its engine-held view fields), `queries` (`engine.get` keys: `fill`), and navigation's
+  `attach(viewport) => detach`, `optionsChanged`, and since Epic #146 `pointerEnd` (a press's
+  end, before a drag's), `focusout` (before the engine's own), `focusin(cell)` (`true`: focus the
+  feature holds, never an interaction), `rendered(view)` (the adapter's commit, focus moved) and
+  `actions` (`engine.run` actions: editing's `edit-cell`, `change-edit`, `commit-edit`,
+  `cancel-edit`; a clash throws, an action no feature has does nothing),
+  `view()` (its engine-held view fields), `queries` (`engine.get` keys: `fill`, `edit-draft`), and navigation's
   `activate(position)` and `move(direction)` (without them no cell is ever active and an edit's
-  Enter/Tab move nothing). A feature's drag is a `FeatureDrag` (`kind: "feature"`, `start?`,
+  Enter/Tab move nothing). A feature's `editCell(view, cell, draft, engine)` (editing's) gives an
+  edited cell's editor props, which the adapters' cell parts read through the core's
+  `cellEditOf`. A feature's drag is a `FeatureDrag` (`kind: "feature"`, `start?`,
   `step`, `end(how)`) on the shared `PointerDrag` machinery (`engine/drag.ts`): one drag at a
   time, whoever owns it.
 - **The registry** (`src/feature/registry.ts`): `createDataGridModel({ features })` composes
@@ -1108,11 +1133,12 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   pieces (`defineControlled`, the same `bindControlled`; `ControlledProp.first`: followed and
   settled with the layout inputs, the active position), `follow` (plain props followed after the
   core's data props: `rowSelection`, `cellSelection`), `engineOptions` (`fillable` while
-  `onFill`) and `events(engine, props)` (`onFill`, `onRangePaste`). `bindGridRoot` takes
+  `onFill`) and `events(engine, props, model)` (`onFill`, `onRangePaste`, `onCellEdit`). `bindGridRoot` takes
   `features` from the first props: fixed for the root's life, a later list (by its items) is
   told once with `console.warn` and not taken. Settle order: the layout inputs and the active
-  position, the edit, the expanded rows, the row groups, then the features' pieces in install
-  order (only the order of `on…Change` calls in one commit can differ from before Epic #144).
+  position, the expanded rows, the row groups, then the features' pieces in install order (the
+  edit's since Epic #146; only the order of `on…Change` calls in one commit can differ from
+  before Epics #144 and #146).
   `GRID_ROOT_PROPS` lists only the core's; `withoutRootProps(props, features)` leaves the
   installed features' props off the element too.
 - **Typed keys**: `DataGridModel<TRow, TNode, TFeatures>`' key maps are the core's merged with
@@ -1141,8 +1167,10 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
 - **The bare grid**: `apps/playground/fixtures/bare-grid` (no feature, both structures, both
   axes scaled: a table, no tab stop, arrows do nothing) and `e2e/bare.spec.ts`. Every example
   and fixture installs what it uses (`navigation()` wherever keys move: practically all;
-  `useLocalRows`' props carry the sort: install `sorting()` with them); the stress fixture
-  installs every migrated feature (sorting and the five), its commit counts unchanged (D9).
+  `useLocalRows`' props carry the sort: install `sorting()` with them; `editing()` wherever a
+  column is `editable`); the stress fixture
+  installs every migrated feature (sorting, Epic #144's five and editing), its commit counts
+  unchanged (D9).
 
 ## Commands
 
@@ -1168,7 +1196,8 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
 packages/core/      @fragiola/data-grid        src/<domain>/ (axis, engine, model, …, feature,
                                                utils), local/, the features (sorting/,
                                                navigation/, row-selection/, range/, clipboard/,
-                                               fill/: each feature.ts and index.ts, its entry);
+                                               fill/, editing/: each feature.ts and index.ts,
+                                               its entry);
                                                tests/ mirrors src/
 packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid.*`), context.ts
                     src/components/            one primitive per file (root.tsx, grid.tsx, cell.tsx, …)
@@ -1176,7 +1205,8 @@ packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid
                                                use-data-grid-ref.ts); internal.ts: the primitives' own
                     src/utils/                 pure helpers (cells-of.ts, row-style.ts, use-render.ts, …)
                     src/local/, src/<feature>/ the opt-in entries (sorting/, navigation/,
-                                               row-selection/, range/, clipboard/, fill/);
+                                               row-selection/, range/, clipboard/, fill/,
+                                               editing/);
                                                tests/ named after behaviour
 packages/vue/       @fragiola/data-grid-vue    the same layout: src/components/ (root.ts, …),
                                                src/composables/ (use-cell.ts, …), src/utils/,
@@ -1188,7 +1218,8 @@ packages/angular/   @fragiola/data-grid-angular src/public-api.ts (the entry), s
                                                utils/; src/local/, src/<feature>/ (ng-packagr's
                                                secondary entries: local/, sorting/,
                                                navigation/, row-selection/, range/, clipboard/,
-                                               fill/ ng-package.json); scripts/check-dist.ts
+                                               fill/, editing/ ng-package.json);
+                                               scripts/check-dist.ts
 apps/playground/    src/main.tsx, app.tsx      the entries
                     src/shell/                 the shell: catalog, sidebar, toolbar, stage, source
                     src/fixture/               the fixtures' grids
@@ -1290,7 +1321,7 @@ Every change keeps the packages small, simple and fast (Epic #62). Before writin
   D9) and `examples/shared/e2e/helpers.ts`, `examples/shared/e2e/examples/helpers.ts` (the
   playground's spec imports it too).
 - **The engine's modules** (`packages/core/src/engine/`): `engine.ts` (the closure binding one
-  grid to the DOM: scroll, windows, layers, focus, keys, drags, edits), `types`, `view` (pure: a
+  grid to the DOM: scroll, windows, layers, focus, keys, drags; the edits are `editing/feature.ts`'s), `types`, `view` (pure: a
   view from its inputs), `geometry` (pure per-view and per-cell math, axis anchors), `parts`
   (part state and ARIA), `interaction` (a cell's controls), `heights` (measured rows and details:
   observing, reading, forgetting), `measure` (their store and axis), `drag` (the drags' state,
@@ -1368,8 +1399,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   that does not expand; its element (a `button`), name, look and place are the app's. The engine
   runs `row-groups.toggle` on its click, after the app's `onClick`.
 - **An edited cell renders its column's `renderEditCell` (Epic #88, E4.3)** in place of its
-  content (a `Cell` given children renders only them: `useCellEdit(cell)` is for an editor
-  there); the editor, its look and its validation are the app's; its `editorProps`
+  content, with `editing()` installed (Epic #146; a `Cell` given children renders only them:
+  `useCellEdit(cell)`, from `/editing`, is for an editor there); the editor, its look and its validation are the app's; its `editorProps`
   (`data-grid-editor`, the edit's name) mark what of it is portalled out of the grid.
 - **A fill handle is the app's element (Epic #88, E4.4).** `useFillHandle(cell)` (from `/fill`,
   with `fillHandle()` installed) returns
@@ -1481,8 +1512,9 @@ React prop.
   structural style gets its `px` (Vue adds no unit).
 - **Listeners in Vue casing compose as in React**: internal first, then the consumer's, then the
   engine's (`after`: `keydown`, `click`, `pointerdown`, `copy`, `paste` on `Root`), so a
-  `preventDefault` cancels the grid's. `Root`'s own callbacks are props (`onEditingCellChange`,
-  or `@editing-cell-change`); a feature's are attributes (below: `@active-position-change`).
+  `preventDefault` cancels the grid's. `Root`'s own callbacks are props (`onColumnWidthsChange`,
+  or `@column-widths-change`); a feature's are attributes (below: `@active-position-change`,
+  editing's `@editing-cell-change` and `@cell-edit`).
 - **A feature's props are fallthrough attributes** (Epic #141): `Root` declares its own props
   once, so `sort-columns`/`sortColumns`, `@sort-columns-change` reach it as attrs; it hands them
   to the core through getters of the latest values (`gridPropsOf`, only with features) and keeps
@@ -1514,7 +1546,8 @@ React prop.
   on its element (the template's first root element is the part's): `*dataGridHeader`,
   `*dataGridEmpty` (it makes the area and the row around the app's cell), `*dataGridRowDetail`,
   `*dataGridSummary="'top'"`, and the app's elements React gives through hooks:
-  `*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle` (`/fill`), `*dataGridCellEdit`;
+  `*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle` (`/fill`),
+  `*dataGridCellEdit` (`/editing`, Epic #146);
   `[dataGridRowDragHandle]` and `[dataGridGroupLabel]` always render. Selectors
   `dataGrid<Part>`, classes `DataGrid<Part>`, `exportAs` the selector; `DATA_GRID` is every
   directive (React's `DataGrid` namespace).
@@ -1524,8 +1557,8 @@ React prop.
   kept while its key stays, its context a `SignalContext` updated in place), typed by their input
   (the columns or the root: `TypedBy<TRow>`) through `ngTemplateContextGuard`. No default content:
   `*dataGridCellContent` renders a cell's, a header cell's or a summary cell's (the core's
-  `cellContent`, `headerCellContent`, `summaryCellContent`; edited, `renderEditCell` given the
-  draft).
+  `cellContent`, `headerCellContent`, `summaryCellContent`; edited, with `editing()`,
+  `renderEditCell` given the draft: `cellEditOf`).
 - **Column renderers return `DataGridNode`** (`Column<TRow, DataGridNode>`): text, nothing, or
   `templateContent(template, context)` (`TemplateContent`), rendered with the context as its
   fields and its `$implicit`; `[dataGridTemplate]="contextOf<C>()"` types the template.
@@ -1538,7 +1571,7 @@ React prop.
   engine's inset before the structural one is written).
 - **Signals, `input()`, `output()`, `inject()`; zoneless and `OnPush`-safe.** The root's inputs
   are `GridRootProps`' names; each `onXChange` is the output `xChange` (`[(x)]` binds both ways),
-  `onCellEdit` `cellEdit`, …; `onRowMove` (on by presence in React) is the input
+  …; `onRowMove` (on by presence in React) is the input
   `reorderableRows` with the output `rowMove`. Another directive on
   the root's element may add props over its inputs (`addPropsSource`: `[dataGridLocalRows]`;
   with `{ inputs: true }` they rank as the root's own inputs: `[dataGridSorting]`). A feature's
@@ -1548,9 +1581,12 @@ React prop.
   `isRowSelectable`, `[(selectedRowKeys)]`; `[dataGridCellRange]`: `cellSelection`,
   `[(selectedRange)]`; `[dataGridClipboard]`: the input `beforeRangePaste`, the output
   `rangePaste`; `[dataGridFill]`: on by presence (`[dataGridFill]="false"` off, React's `onFill`
-  given), the output `fill`, replacing the root's `fillable` and `fill`), so they compile only
+  given), the output `fill`, replacing the root's `fillable` and `fill`; `[dataGridEditing]`
+  (Epic #146): `[(editingCell)]`, `[defaultEditingCell]`, the output `cellEdit`, its row typed by
+  `[dataGridEditing]="columns"`), so they compile only
   where the app imports it; the root takes `[features]`. `*dataGridFillHandle` and
-  `injectFillHandle` are `/fill`'s, `injectSelectAll` `/row-selection`'s. The
+  `injectFillHandle` are `/fill`'s, `*dataGridCellEdit` and `injectCellEdit` `/editing`'s (through
+  the private `ɵinjectGrid` and `ɵDATA_GRID_CELL`), `injectSelectAll` `/row-selection`'s. The
   model and the engine are made from the inputs the first time a part reads them (after the
   inputs are set: `injectDataGrid()`'s are read when used). The view is a signal fed by the
   engine's subscription; a scroll within the rendered window changes no signal (D9,
@@ -1593,10 +1629,12 @@ an adapter, look here; if two adapters would write it, it moves here.
   `summaryCellPartOf`, `columnResizerPartOf`, `rowDragHandlePartOf`, `groupTogglePartOf`,
   `groupLabelPartOf`, the empty state's; `fillHandlePartOf` is `/fill`'s), the lists the collection parts
   render (`rowsOf`, `rowCellsOf`, `summaryCellsOf`), and a part's default content:
-  `cellContent`, `headerCellContent`, `summaryCellContent`.
+  `cellContent`, `headerCellContent`, `summaryCellContent`; an edited cell's editor props,
+  `cellEditOf` (editing's `editCell`, `null` without it).
 - `grid-ref.ts`: `createGridHandle()` and `attachGridHandle(handle, grid, where)`, the `gridRef`
   every adapter types and makes.
-- `edit.ts`: `editActions(engine)` and `editCellPropsOf`, an editor's props.
+- `@fragiola/data-grid/editing` (Epic #146): `editActions(engine)` (one set per engine) and
+  `editCellPropsOf`, an editor's props (each `useCellEdit`'s).
 - `@fragiola/data-grid/local`: `localRowsResult`, `plainRowKey`, `moveShownRowAt`, what each
   `useLocalRows` returns and keeps; `@fragiola/data-grid/row-selection`: `selectAllState`,
   `selectAllToggled`, what each `useSelectAll` shows and sets.

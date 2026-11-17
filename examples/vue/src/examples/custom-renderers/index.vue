@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
-    type CellEditEvent,
     type CellInfo,
     type Column,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
@@ -22,8 +22,8 @@ import * as styles from "./styles";
 // cell's and a row's look are the app's markup and classes, from the parts' state and the row.
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-const features = [sorting(), navigation(), rowSelection()] as const;
+// navigation (the keys, the active cell, the tab stop), row selection, cell editing
+const features = [sorting(), navigation(), rowSelection(), editing()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

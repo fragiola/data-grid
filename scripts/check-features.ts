@@ -22,6 +22,7 @@ export const FEATURES = [
     { subpath: "range", factory: "cellRange" },
     { subpath: "clipboard", factory: "clipboard" },
     { subpath: "fill", factory: "fillHandle" },
+    { subpath: "editing", factory: "editing" },
 ] as const;
 
 /** A feature as the guard reads it: its subpath and the markers its code holds. */

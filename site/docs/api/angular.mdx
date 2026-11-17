@@ -82,7 +82,7 @@ A part that renders only sometimes is a **structural directive** on its element:
 `*dataGridRowDetail` (only while its row is expanded), `*dataGridSummary="'top'"` (only while
 there are summary rows there), and the elements of yours React gives through a hook:
 `*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle` (from `/fill`),
-`*dataGridCellEdit`.
+`*dataGridCellEdit` (from `/editing`).
 
 ## Typing by your row
 
@@ -140,7 +140,8 @@ The template renders with the props the renderer was given, as its `$implicit` t
 | `onKeyDown`, `onClick`, `onPointerDown`, `onCopy`, `onPaste`, … | your listeners (`(keydown)`, `(click)`, …): yours first, then the grid's keys, clicks, presses and clipboard on the root, so `preventDefault` in yours cancels the grid's |
 | `features={features}` | the input `[features]="features"` on the root, fixed when the grid is created |
 | a feature's props (`sortColumns`, `activePosition`, `selectedRowKeys`, `selectedRange`, `onRangePaste`, `onFill`, …) | its own directive's inputs and outputs, on the root's element (the table below): `dataGridSorting` with `[(sortColumns)]`, `dataGridNavigation` with `[(activePosition)]`, … |
-| `Root`'s `onXChange` and the other callbacks | outputs without `on`: `(expandedRowKeysChange)`, `(editingCellChange)`, `(cellEdit)`, `(rowWindowChange)`, `(rowsEndReached)`, …; `[(expandedRowKeys)]` binds both ways |
+| `Root`'s `onXChange` and the other callbacks | outputs without `on`: `(expandedRowKeysChange)`, `(rowWindowChange)`, `(rowsEndReached)`, …; `[(expandedRowKeys)]` binds both ways |
+| `editingCell`, `onEditingCellChange`, `onCellEdit` | `dataGridEditing`'s `[(editingCell)]`, `[defaultEditingCell]` and `(cellEdit)` (`[dataGridEditing]="columns"` types its row); from `/editing` |
 | `onRowMove` (given, rows move) | the input `reorderableRows` turns it on; the output `(rowMove)` tells |
 | `onFill` (given, cells fill) | `dataGridFill` on the root (`[dataGridFill]="false"` off), its output `(fill)`; from `/fill` |
 | `onBeforeRangePaste`, `onRangePaste` | `dataGridClipboard`'s input `[beforeRangePaste]` (a function: `false` refuses) and output `(rangePaste)`; from `/clipboard` |
@@ -163,6 +164,7 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 | `[dataGridRoot][dataGridCellRange]` | `cellSelection`, `selectedRange` (`[(selectedRange)]`), `defaultSelectedRange`; from `/range`, with `cellRange()` | |
 | `[dataGridRoot][dataGridClipboard]` | `beforeRangePaste`; the output `rangePaste`; from `/clipboard`, with `clipboard()` | |
 | `[dataGridRoot][dataGridFill]` | `dataGridFill` (on by presence, `false` off); the output `fill`; from `/fill`, with `fillHandle()` | |
+| `[dataGridRoot][dataGridEditing]` | what types `cellEdit`'s row (optional), `editingCell` (`[(editingCell)]`), `defaultEditingCell`; the output `cellEdit`; from `/editing`, with `editing()` | |
 | `[dataGridGrid]` | none | |
 | `*dataGridHeader` | none | |
 | `ng-template[dataGridHeaderRows]` | what types it (optional) | `{ $implicit: row, row }` |
@@ -210,7 +212,7 @@ returns `{ state, props }` as signals (`PartInjectResult`); put `props()` on you
 | `injectSummaryRows(position?)`, `injectSummaryCells(row?)` | the summary rows, a summary row's cells |
 | `injectRow(row)`, `injectCell(cell)`, `injectHeaderCell(cell)`, `injectSummaryRow(row)`, `injectSummaryCell(cell)`, `injectRowDetail(row)` | a part's `{ state, props }` |
 | `injectColumnResizer(cell)`, `injectRowDragHandle(row)`, `injectGroupToggle(row)`, `injectGroupLabel(cell)`, `/fill`'s `injectFillHandle(cell)` | the `{ state, props }` of an element of yours (the directives above are the shorter form; a measured row and a group label need theirs: the engine reads their element) |
-| `injectCellEdit(cell)` | the editor props of the cell being edited (`EditCellRenderProps`), `null` otherwise |
+| `/editing`'s `injectCellEdit(cell)` | the editor props of the cell being edited (`EditCellRenderProps`), `null` otherwise |
 
 The opt-in entry points:
 
@@ -223,6 +225,7 @@ The opt-in entry points:
 | `@fragiola/data-grid-angular/range` | `cellRange()`, [ranges of cells](/docs/concepts/cell-selection) (with `navigation()`); `DataGridCellRange`; `keptRange`, `sameCellRange` |
 | `@fragiola/data-grid-angular/clipboard` | `clipboard()` (with `cellRange()`); `DataGridClipboard`; `parseTsv`, `toTsv`, `pastedRange`, `rangeText` |
 | `@fragiola/data-grid-angular/fill` | `fillHandle()`, the [fill handle](/docs/concepts/fill) (with `cellRange()`); `DataGridFill`; `*dataGridFillHandle` (`DataGridFillHandle`, `FillHandleContext`), `injectFillHandle(cell)`; `repeatedFill` |
+| `@fragiola/data-grid-angular/editing` | `editing()`, [cells edited in place](/docs/concepts/editing) (with `navigation()`); `DataGridEditing`; `*dataGridCellEdit` (`DataGridCellEdit`, `CellEditContext`), `injectCellEdit(cell)`; `CellEditEvent`, `editActions`, `editCellPropsOf`, `EDITOR_ATTRIBUTE` |
 
 ## Features
 
@@ -271,7 +274,7 @@ feature's directive does.
 | `ContextOf<C>` | a context type for `[dataGridTemplate]` (`contextOf<C>()`) |
 | `CellTemplateProps<TRow>` | a body cell's render props (`renderCell`'s) |
 | `RowsContext`, `CellsContext`, `HeaderRowsContext`, `HeaderCellsContext`, `SummaryRowsContext`, `SummaryCellsContext` | the collection templates' contexts |
-| `RowDetailContext`, `SummaryTemplateContext`, `ColumnResizerContext`, `GroupToggleContext`, `FillHandleContext` (`/fill`'s), `CellEditContext` | the structural parts' contexts |
+| `RowDetailContext`, `SummaryTemplateContext`, `ColumnResizerContext`, `GroupToggleContext`, `FillHandleContext` (`/fill`'s), `CellEditContext` (`/editing`'s) | the structural parts' contexts |
 | `RowInfo`, `CellInfo`, `HeaderRowInfo`, `HeaderCellInfo`, `SummaryRowInfo`, `SummaryCellInfo` | what the templates hand you, as in React |
 | `DataGridContextValue`, `DataGridRef` | the model and the engine; the handle on a grid |
 | `PartInjectResult<State>`, `ValueOrSignal<T>` | what a part's injection function returns; what it takes |

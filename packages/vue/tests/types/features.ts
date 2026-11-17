@@ -13,6 +13,7 @@ import {
     useRowWindow,
 } from "../../src";
 import { clipboard } from "../../src/clipboard";
+import { editing } from "../../src/editing";
 import { fillHandle } from "../../src/fill";
 import { navigation } from "../../src/navigation";
 import { cellRange } from "../../src/range";
@@ -205,6 +206,24 @@ h(Filling.Root, {
     onFill: (fill) => fill.target,
 });
 
+// editing's props (Epic #146): only with it installed, the event typed by the row
+export const bareEdit: PropsOf<typeof Bare.Root> = {
+    columns,
+    rows: people,
+    // @ts-expect-error
+    editingCell: null,
+};
+const editable = [navigation(), editing()] as const;
+const Editing = typedDataGrid<Person, typeof editable>();
+h(Editing.Root, {
+    columns,
+    rows: people,
+    features: editable,
+    editingCell: null,
+    onEditingCellChange: (cell) => cell?.startKey,
+    onCellEdit: (edit) => edit.row.name,
+});
+
 // their keys, through the composables' model
 export const FeatureKeys = defineComponent(() => {
     const plain = useDataGrid<Person>();
@@ -216,6 +235,9 @@ export const FeatureKeys = defineComponent(() => {
     plain.model.get("selected-range");
     // @ts-expect-error
     plain.model.is("row-selected", { rowIndex: 0 });
+    // @ts-expect-error
+    plain.model.run("editing-cell.clear", {});
+    useDataGrid<Person, typeof editable>().model.run("editing-cell.clear", {});
     useDataGrid<Person, typeof navigated>().model.run("active-position.set", {
         rowIndex: 0,
         columnIndex: 0,

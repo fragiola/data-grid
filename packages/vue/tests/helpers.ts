@@ -2,6 +2,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterAll, beforeAll } from "vitest";
 import { type Component, defineComponent, h, nextTick } from "vue";
 import { clipboard } from "../src/clipboard";
+import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
 import { cellRange } from "../src/range";
@@ -13,8 +14,8 @@ import { rowSelection } from "../src/row-selection";
 // keys, selections, ranges, clipboard and fill install (Epic #144).
 
 /**
- * Every feature these behaviours were before Epic #144 (navigation, row selection, cell ranges,
- * the clipboard, the fill handle): a test of them installs them (`features: FEATURES` on `Root`,
+ * Every feature these behaviours were before Epics #144 and #146 (navigation, row selection, cell
+ * ranges, the clipboard, the fill handle, cell editing): a test of them installs them (`features: FEATURES` on `Root`,
  * `typedDataGrid<TRow, Features>()`), and behaves as it did.
  */
 export const FEATURES = [
@@ -23,6 +24,7 @@ export const FEATURES = [
     cellRange(),
     clipboard(),
     fillHandle(),
+    editing(),
 ] as const;
 
 /** The type of `FEATURES`, for `typedDataGrid`, `RootProps` and the refs. */

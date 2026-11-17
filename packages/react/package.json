@@ -65,6 +65,12 @@
             "import": "./dist/fill.js",
             "default": "./dist/fill.js"
         },
+        "./editing": {
+            "@fragiola/source": "./src/editing/index.ts",
+            "types": "./dist/editing.d.ts",
+            "import": "./dist/editing.js",
+            "default": "./dist/editing.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -112,6 +118,11 @@
                 "types": "./dist/fill.d.ts",
                 "import": "./dist/fill.js",
                 "default": "./dist/fill.js"
+            },
+            "./editing": {
+                "types": "./dist/editing.d.ts",
+                "import": "./dist/editing.js",
+                "default": "./dist/editing.js"
             },
             "./package.json": "./package.json"
         }

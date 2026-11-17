@@ -1,9 +1,11 @@
 import type { ControlledProp } from "../adapter/controlled";
+import type { GridCellInfo } from "../adapter/props";
 import type { DragEnd, FeatureDrag } from "../engine/drag";
 import type { CellShare, HeaderCellState, RowShare } from "../engine/parts";
 import type {
     DataGridEngine,
     DataGridEngineOptions,
+    EditDraft,
     GridView,
 } from "../engine/types";
 import type { DataGridModel } from "../model/model";
@@ -12,6 +14,7 @@ import type {
     CellPosition,
     CommandResult,
     DataGridState,
+    EditCellRenderProps,
     GridDirection,
     HeaderCellLayout,
     RowMeta,
@@ -154,6 +157,15 @@ export interface EngineKit {
      * once rendered (a move refused, or landing where it was: focus stays)
      */
     readonly followFocus: (move: () => void) => void;
+    /**
+     * makes a cell active, unless it is already (the navigation's `activate`; without it, no
+     * cell is ever active): whether it is
+     */
+    readonly activate: (position: CellPosition) => boolean;
+    /** moves the active cell a step (the navigation's `move`; without it, nothing) */
+    readonly move: (direction: Direction) => void;
+    /** gives the keys of a cell in interaction back to the grid, focus staying where it is */
+    readonly leaveInteraction: () => void;
     /** tells the engine's listeners of an event (`fill`, `range-fill`, `range-paste`, …) */
     readonly emit: (event: string, value: unknown) => void;
     /** something a feature's view fields show changed (`FeatureEngine.view`): a new view */
@@ -191,6 +203,22 @@ export interface EngineKit {
  * engine's own handler, before what the engine does there itself; `true` takes the event.
  */
 export interface FeatureEngine {
+    /**
+     * a key on an element a feature holds, after a drag's Escape and before the engine's other
+     * guards (Epic #146: an edit's editor and its cell): `true` takes it, `false` ends the chain
+     * without taking it (the element's own), `undefined` lets it through
+     */
+    readonly guardKeydown?:
+        | ((event: KeyboardEvent, target: Element) => boolean | undefined)
+        | undefined;
+    /**
+     * a key on one of the grid's cells after the row groups' keys and before the interaction's
+     * Enter and F2 (Epic #146: an edit's start); with Alt (a character typed with AltGr or
+     * Option), the only hooks walked
+     */
+    readonly startKeydown?:
+        | ((event: KeyboardEvent, target: Element) => boolean)
+        | undefined;
     /**
      * a key on one of the grid's cells (not an edit's, not a control's in interaction, not a
      * field's): before the row groups', the edit's and the interaction's keys
@@ -231,6 +259,28 @@ export interface FeatureEngine {
      * drag). A body cell's press leaves a row's handle to it
      */
     readonly pointerdown?: ((event: PointerEvent) => boolean) | undefined;
+    /**
+     * a press's end (a release anywhere, or a pointer the browser took over), before a drag's
+     * (Epic #146: focus left nowhere by an edit's commit goes back to the active cell)
+     */
+    readonly pointerEnd?: ((event: PointerEvent) => void) | undefined;
+    /**
+     * focus leaving an element of the grid, before the engine's own handling (Epic #146: an
+     * edit commits when focus leaves it)
+     */
+    readonly focusout?: ((event: FocusEvent) => void) | undefined;
+    /**
+     * focus came to a cell (or inside it), the cell made active: `true` when that focus is the
+     * feature's (Epic #146: the edited cell's editor), never an interaction
+     */
+    readonly focusin?: ((cell: CellPosition) => boolean) | undefined;
+    /**
+     * a view is on screen (the adapter's commit), focus moved: what follows the elements it
+     * rendered (Epic #146: an edit's editor takes focus)
+     */
+    readonly rendered?:
+        | ((view: GridView<unknown, unknown>) => void)
+        | undefined;
     /** the root element's `copy` event, after the consumer's handlers: `true` takes it */
     readonly copy?: ((event: ClipboardEvent) => boolean) | undefined;
     /** the root element's `paste` event, after the consumer's handlers: `true` takes it */
@@ -268,6 +318,10 @@ export interface FeatureEngine {
     readonly view?: (() => Readonly<Record<string, unknown>>) | undefined;
     /** its `engine.get` keys */
     readonly queries?: Readonly<Record<string, () => unknown>> | undefined;
+    /** its `engine.run` actions (Epic #146: `edit-cell`, `commit-edit`, …) */
+    readonly actions?:
+        | Readonly<Record<string, (payload: never) => void>>
+        | undefined;
     /**
      * the active cell made active (a click, a Tab, a control taking focus, an edit), the
      * navigation's: `false` when refused. Without a feature having it, no cell is ever active
@@ -322,11 +376,12 @@ export interface FeatureRoot<TTypes extends FeatureTypes> {
     readonly engineOptions?:
         | ((props: TTypes["props"]) => Partial<DataGridEngineOptions>)
         | undefined;
-    /** what its props are told of the engine's events (`onFill`), subscribed once */
+    /** what its props are told of the engine's events (`onFill`, `onCellEdit`), subscribed once */
     readonly events?:
         | ((
               engine: DataGridEngine<unknown, unknown>,
               props: () => TTypes["props"],
+              model: FeatureEngineContext<TTypes>["model"],
           ) => void)
         | undefined;
 }
@@ -452,6 +507,19 @@ export interface FeatureSpec<TTypes extends FeatureTypes> {
               view: GridView<unknown, unknown> & TTypes["state"],
               cell: HeaderCellLayout<unknown, unknown>,
           ) => FeaturePartContribution<HeaderCellState>)
+        | undefined;
+    /**
+     * the editor props of a body cell while it is the one edited (what its column's
+     * `renderEditCell` gets), from the engine's draft (`edit-draft`); `null` for any other cell
+     * (Epic #146, editing's: the cell parts render a column's editor only with it)
+     */
+    readonly editCell?:
+        | ((
+              view: GridView<unknown, unknown>,
+              cell: GridCellInfo<unknown, unknown>,
+              draft: EditDraft | null | undefined,
+              engine: DataGridEngine<unknown, unknown>,
+          ) => EditCellRenderProps<unknown, unknown> | null)
         | undefined;
     /** its keys and presses in an engine, made once per engine */
     readonly engine?:

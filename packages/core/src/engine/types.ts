@@ -192,8 +192,6 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     readonly expandedRows: readonly number[];
     /** a row's key: `rowKey`, else its index */
     readonly rowKey: RowKeyGetter<TRow> | undefined;
-    /** the cell being edited (Epic #88, E4.3): its part is `editing`, its editor rendered */
-    readonly editingCell: EditingCell | null;
     /** the collapsed groups' keys (a collapsible group's header cell is `collapsed`, E1.3) */
     readonly collapsedGroupKeys: readonly string[];
     /**
@@ -290,7 +288,7 @@ export interface RowMove {
  * An edit's draft (Epic #88, E4.3): what its editor shows (`value`, the cell's value until the
  * editor changes it) and the value it started from (the value a commit last told). The engine's:
  * an editor reads it, `change-edit` replaces it, `commit-edit` tells it. The cell is the model's
- * `editingCell`.
+ * `editingCell` (editing's, `editing()`).
  */
 export interface EditDraft {
     readonly value: unknown;
@@ -359,8 +357,11 @@ export interface EngineQueryMap {
      * reported to the model: a reset gives a column its one back
      */
     "column-auto-widths": ColumnWidths;
-    /** the edit's draft (Epic #88), or `null` while no cell is edited */
-    "edit-draft": EditDraft | null;
+    /**
+     * the edit's draft (Epic #88), or `null` while no cell is edited: editing's (`editing()`),
+     * `undefined` without it
+     */
+    "edit-draft": EditDraft | null | undefined;
     /**
      * the fill a handle's drag is making (Epic #88, E4.4), or `null`: the fill handle's
      * (`fillHandle()`), `undefined` without it
@@ -369,6 +370,9 @@ export interface EngineQueryMap {
 }
 
 export type EngineQueryKey = keyof EngineQueryMap;
+
+/** The `engine.get` keys a feature answers (`FeatureEngine.queries`), not the engine itself. */
+export type FeatureQueryKey = "fill" | "edit-draft";
 
 /** What `engine.run` does: screen actions (no dot: they are not model commands). */
 export interface EngineActionMap {
@@ -399,7 +403,8 @@ export interface EngineActionMap {
     "fit-columns": { readonly columnKeys?: readonly string[] | undefined };
     /**
      * makes a cell active and edits it (Epic #88, E4.3: `editing-cell.set`), its editor taking
-     * focus once rendered; refused for a cell that cannot be edited
+     * focus once rendered; refused for a cell that cannot be edited. This one and the three
+     * below are editing's (`editing()`): without it, they do nothing
      */
     "edit-cell": EditingCell;
     /** replaces the edit's draft (an editor's `onChange`) */
@@ -414,6 +419,13 @@ export interface EngineActionMap {
 }
 
 export type EngineActionKey = keyof EngineActionMap;
+
+/** The `engine.run` actions a feature does (`FeatureEngine.actions`), not the engine itself. */
+export type FeatureActionKey =
+    | "edit-cell"
+    | "change-edit"
+    | "commit-edit"
+    | "cancel-edit";
 
 /** What `engine.subscribe` listens to. */
 export interface EngineEventMap {

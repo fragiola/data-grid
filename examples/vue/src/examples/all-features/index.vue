@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-    type CellEditEvent,
     type Column,
     type RangeFill,
     type RangePaste,
@@ -8,6 +7,7 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
 import { clipboard } from "@fragiola/data-grid-vue/clipboard";
+import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
 import { fillHandle, repeatedFill } from "@fragiola/data-grid-vue/fill";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
@@ -36,13 +36,14 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), cell ranges, the clipboard (a range's copy
-// and paste), the fill handle
+// and paste), the fill handle, cell editing
 const features = [
     sorting(),
     navigation(),
     cellRange(),
     clipboard(),
     fillHandle(),
+    editing(),
 ] as const;
 
 const DataGrid = typedDataGrid<BudgetedTask, typeof features>();

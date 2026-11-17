@@ -31,7 +31,6 @@ import {
     groupByKey,
     isGroupCollapsed,
 } from "./collapse";
-import { editRefusal, isCellEditable, sameEditingCell } from "./editing";
 import {
     DEFAULT_DETAIL_HEIGHT,
     expandedRowsOf,
@@ -55,7 +54,6 @@ import {
 } from "./order";
 import { done, fail, invalid, noRow, notOneOf, ok, veto } from "./result";
 import {
-    cellKeysAt,
     dataRowAt,
     groupAt,
     groupKeyAt,
@@ -68,7 +66,6 @@ import {
     rowKeyAt,
     rowLoaded,
     rowMetaAt,
-    sameCellKeys,
 } from "./source";
 import {
     NO_SUMMARY_ROWS,
@@ -88,7 +85,6 @@ import type {
     CommandResult,
     DataGridModelOptions,
     DataGridState,
-    EditingCell,
     GridCommandName,
     GridCommands,
     GridDirection,
@@ -222,57 +218,6 @@ const PART_NAMES = {
 const GRID_DIRECTIONS: readonly GridDirection[] = ["ltr", "rtl"];
 
 /**
- * The state after a command, its edit kept to its rule (E4.3): it stays on the cell it was set on,
- * by key (`withKeptEditing`), looked at only when what it depends on changed (the rows, or
- * `rows.changed` over its row, the columns, the active cell or the edit), never after an
- * unrelated command. (A range's rule is cell ranges', Epic #144: their `stateChanged`.)
- */
-function withActiveRules<TRow, TNode>(
-    before: DataGridState<TRow, TNode>,
-    after: DataGridState<TRow, TNode>,
-): DataGridState<TRow, TNode> {
-    const editing = after.editingCell;
-    if (!editing) return after;
-    const shaped =
-        after.source !== before.source || after.columns !== before.columns;
-    const reread =
-        after.rowsChanged !== before.rowsChanged &&
-        overlaps(after.rowsChanged, editing.rowIndex, editing.rowIndex + 1);
-    return shaped ||
-        reread ||
-        after.activePosition !== before.activePosition ||
-        editing !== before.editingCell
-        ? withKeptEditing(after)
-        : after;
-}
-
-/**
- * The state with its edit kept to its rule (E4.3): the edited cell is the active one and stays
- * editable (its row loaded, a data row, its column editable for it); else no edit (its draft
- * dropped by the engine: nothing is told). The same object when it holds.
- */
-function withKeptEditing<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-): DataGridState<TRow, TNode> {
-    const editing = state.editingCell;
-    if (!editing) return state;
-    const active = state.activePosition;
-    // the keys at its position: another row or column there (a new order of the rows, rows
-    // inserted above, new columns) ends it
-    const keys =
-        active !== null &&
-        sameCell(active, editing) &&
-        isCellEditable(state, editing)
-            ? cellKeysAt(state, editing)
-            : undefined;
-    if (keys && (!state.editingKeys || sameCellKeys(keys, state.editingKeys))) {
-        // an edit given to start with takes the keys it finds
-        return state.editingKeys ? state : { ...state, editingKeys: keys };
-    }
-    return { ...state, editingCell: null, editingKeys: null };
-}
-
-/**
  * The active row kept in the grid after its shape changed from `before`'s (Epic #86, E2.1): a
  * summary row as the same row of its position (the last one left there), its index following
  * the header's depth, the counts and the rows; with none left there, the nearest row on its side.
@@ -309,8 +254,8 @@ function keptActiveRow<TRow, TNode>(
 
 /**
  * The active position kept inside the grid after its shape changed from `before`'s (or none
- * left): on the same row where it can be (`keptActiveRow`), and column. The edit's keys are the
- * command's rules' (`withActiveRules`); a feature's state, its own (`stateChanged`).
+ * left): on the same row where it can be (`keptActiveRow`), and column. A feature's state keeps
+ * to its own rules (`stateChanged`: a range's, an edit's).
  */
 function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
@@ -718,50 +663,6 @@ function createHandlers<TRow, TNode>(
                 toggledKey(state.expandedGroupKeys, key),
             );
         },
-        "editing-cell.set": (state, payload) => {
-            if (
-                !Number.isInteger(payload?.rowIndex) ||
-                !Number.isInteger(payload?.columnIndex)
-            ) {
-                return invalid(
-                    "rowIndex and columnIndex must be whole numbers",
-                );
-            }
-            const { startKey } = payload;
-            if (startKey !== undefined && typeof startKey !== "string") {
-                return invalid("startKey must be a string");
-            }
-            // a position inside a span edits that cell (E1.2)
-            const position = isIndex(payload.columnIndex, state.columns.length)
-                ? cellPosition(state, payload)
-                : payload;
-            const refusal = editRefusal(state, position);
-            if (refusal) return refusal;
-            const active = state.activePosition;
-            if (!active || !sameCell(active, position)) {
-                return fail("refused", "only the active cell is edited");
-            }
-            const editing: EditingCell = {
-                rowIndex: position.rowIndex,
-                columnIndex: position.columnIndex,
-                ...(startKey === undefined ? {} : { startKey }),
-            };
-            const next = sameEditingCell(editing, state.editingCell)
-                ? state
-                : {
-                      ...state,
-                      editingCell: editing,
-                      editingKeys: cellKeysAt(state, position) ?? null,
-                  };
-            return done(next, next.editingCell ?? editing);
-        },
-        "editing-cell.clear": (state) =>
-            done(
-                state.editingCell
-                    ? { ...state, editingCell: null, editingKeys: null }
-                    : state,
-                undefined,
-            ),
         "column-widths.set": (state, { columnWidths }) => {
             const kept = keptWidths(columnWidths);
             if (
@@ -1094,9 +995,6 @@ export function createDataGridModel<
         estimatedDetailHeight: validEstimate(options.estimatedDetailHeight)
             ? options.estimatedDetailHeight
             : DEFAULT_DETAIL_HEIGHT,
-        // kept once the rows are given (`withSource`): the active cell, an editable one
-        editingCell: options.editingCell ?? null,
-        editingKeys: null,
         columnWidths: keptWidths(options.columnWidths),
         columnOrder,
         collapsedGroupKeys,
@@ -1126,9 +1024,8 @@ export function createDataGridModel<
         // the position given is for these rows
         false,
     );
-    // an edit given to start with takes the keys it finds; the features' state its rules, for
-    // the rows given (a range: Epic #144)
-    state = withKeptEditing(state);
+    // the features' state its rules, for the rows given (a range: Epic #144; an edit given to
+    // start with takes the keys it finds: Epic #146)
     const settle = features.stateChanged;
     if (settle) {
         // against the state as given, its active cell as the rows keep it (a position clamped or
@@ -1176,14 +1073,14 @@ export function createDataGridModel<
                 ) => Applied<TRow, TNode, unknown>;
                 try {
                     applied = handler(state, ctx.payload);
-                    // the edit follows the active cell's rule, whatever moved it (Epic #88), and
                     // the features keep their state to a new source, new columns or rows changed,
-                    // then to their own rules (a range's: Epic #144)
+                    // then to their own rules (a range's: Epic #144; an edit's, following the
+                    // active cell whatever moved it: Epic #146)
                     if (applied.ok) {
                         const kept = withFeatureState(
                             features,
                             state,
-                            withActiveRules(state, applied.value.state),
+                            applied.value.state,
                         );
                         if (kept !== applied.value.state) {
                             applied = done(kept, applied.value.value);
@@ -1330,7 +1227,6 @@ export function createDataGridModel<
         "row-meta-by": ({ rowIndex }) => rowMetaAt(state.source, rowIndex),
         "expanded-rows": () => state.expandedRows,
         "detail-height": () => state.detailHeight,
-        "editing-cell": () => state.editingCell,
     };
 
     const questions: {
@@ -1343,7 +1239,6 @@ export function createDataGridModel<
             holdsRow(state.expandedRows, rowIndex),
         "row-group-expanded": ({ rowIndex }) =>
             isGroupExpanded(state, rowIndex),
-        "cell-editable": (position) => isCellEditable(state, position),
     };
 
     for (const [kind, own, added] of [
@@ -1456,8 +1351,6 @@ export const COMMANDS = [
     "expanded-rows.toggle",
     "row-groups.set",
     "row-groups.toggle",
-    "editing-cell.set",
-    "editing-cell.clear",
     "column-widths.set",
     "column-widths.resize",
     "column-widths.reset",

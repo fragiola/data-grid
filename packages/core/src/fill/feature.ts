@@ -1,3 +1,4 @@
+import type { EditingState } from "../editing/types";
 import { FILL_HANDLE_ATTRIBUTE } from "../engine/dom";
 import type { FeatureDrag } from "../engine/drag";
 import type { FillDrag, RangeFill } from "../engine/types";
@@ -26,8 +27,11 @@ import type { FillHandleTypes } from "./types";
 // writes (`repeatedFill` repeats the source's values); the range becomes the source and the
 // target together. The grid writes no data.
 
-/** The state as the fill reads it: the range's and the navigation's (the features it needs). */
-type State = FeatureState<CellRangeTypes>;
+/**
+ * The state as the fill reads it: the range's and the navigation's (the features it needs), and
+ * the edit's when editing is installed (`undefined` without it).
+ */
+type State = FeatureState<CellRangeTypes> & Partial<EditingState>;
 
 /**
  * A fill handle's drag (E4.4): from the press on, the source (the range or the active cell when it
@@ -224,7 +228,7 @@ const FILL_HANDLE = defineFeature<FillHandleTypes>({
                 if (
                     now.selectedRange !== was.selectedRange ||
                     after.activePosition !== before.activePosition ||
-                    after.editingCell !== before.editingCell ||
+                    now.editingCell !== was.editingCell ||
                     after.source !== before.source ||
                     after.columns !== before.columns ||
                     after.rowsChanged !== before.rowsChanged
@@ -235,8 +239,8 @@ const FILL_HANDLE = defineFeature<FillHandleTypes>({
                 if (
                     fillDrag &&
                     engine.drag() === fillDrag &&
-                    after.editingCell &&
-                    after.editingCell !== before.editingCell
+                    now.editingCell &&
+                    now.editingCell !== was.editingCell
                 ) {
                     engine.endDrag("lost");
                 }

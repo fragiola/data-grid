@@ -53,6 +53,7 @@ describe("the primitives' entry", () => {
             "range",
             "clipboard",
             "fill",
+            "editing",
         ]) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(

@@ -1,13 +1,13 @@
 // @fragiola/data-grid-react: composable, unstyled React primitives over @fragiola/data-grid.
 // The opt-in extras are entries of their own, never imported from here: rows in memory (`/local`)
 // and the features, each re-exporting the core's of the same name: `/sorting`, `/navigation`,
-// `/row-selection` (with `useSelectAll`), `/range`, `/clipboard` and `/fill` (with
-// `useFillHandle`). A grid without `navigation()` is a table: no keys, no active cell, no tab stop.
+// `/row-selection` (with `useSelectAll`), `/range`, `/clipboard`, `/fill` (with `useFillHandle`)
+// and `/editing` (with `useCellEdit`). A grid without `navigation()` is a table: no keys, no
+// active cell, no tab stop; without `editing()`, no cell is ever edited.
 
 export type {
     AxisWindow,
     CellEdit,
-    CellEditEvent,
     CellPosition,
     CellRange,
     CellSelection,
@@ -77,7 +77,6 @@ export {
     useDataGrid,
 } from "./context";
 export { useCell } from "./hooks/use-cell";
-export { useCellEdit } from "./hooks/use-cell-edit";
 export { useCells } from "./hooks/use-cells";
 export { useColumnResizer } from "./hooks/use-column-resizer";
 export { useColumnWindow } from "./hooks/use-column-window";

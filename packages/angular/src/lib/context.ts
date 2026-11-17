@@ -149,7 +149,7 @@ export interface CellContext {
     readonly bodyCell: Signal<CellInfo | null>;
 }
 
-/** @internal */
+/** The cell around a part (private to the package's entries: `ɵDATA_GRID_CELL`, `/editing`). */
 export const DATA_GRID_CELL = new InjectionToken<CellContext>("DataGridCell");
 
 /** Whether the grid is a `<table>`: its empty state takes a table's structure. */
@@ -162,7 +162,10 @@ export const DATA_GRID_TABLE = new InjectionToken<TableContext>(
     "DataGridTable",
 );
 
-/** @internal The root around a part; throws outside one (`part` names it). */
+/**
+ * The root around a part; throws outside one (`part` names it). Private to the package's entries
+ * (`ɵinjectGrid`, `/editing`).
+ */
 export function injectGrid(part: string): GridContext {
     const grid = inject(GRID_CONTEXT, { optional: true });
     if (!grid) {

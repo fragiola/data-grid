@@ -8,6 +8,7 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { clipboard } from "../src/clipboard";
+import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
 import {
@@ -27,9 +28,9 @@ import { type Rendered, render, settled } from "./helpers";
 // through a test directive on the root, as `[dataGridLocalRows]` gives its own.
 
 /**
- * The features the tests' grids install unless a test gives its own (Epic #144): every behaviour
- * the core had before it became a feature (navigation, row selection, cell ranges, the clipboard,
- * the fill handle), so the tests of those behaviours pass unchanged.
+ * The features the tests' grids install unless a test gives its own (Epics #144, #146): every
+ * behaviour the core had before it became a feature (navigation, row selection, cell ranges, the
+ * clipboard, the fill handle, cell editing), so the tests of those behaviours pass unchanged.
  */
 export const TEST_FEATURES = [
     navigation(),
@@ -37,6 +38,7 @@ export const TEST_FEATURES = [
     cellRange(),
     clipboard(),
     fillHandle(),
+    editing(),
 ] as const;
 
 /** The test features' list type: what a test's props are typed by. */
