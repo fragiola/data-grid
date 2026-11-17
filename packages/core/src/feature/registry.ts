@@ -13,6 +13,7 @@ import type {
     RowMeta,
 } from "../model/types";
 import type {
+    ColumnArrangement,
     DataGridFeature,
     FeatureEngine,
     FeatureEngineContext,
@@ -94,6 +95,24 @@ export interface GridFeatures {
               cell: HeaderCellLayout<unknown, unknown>,
           ) => FeaturePartContribution<HeaderCellState>)
         | undefined;
+    /**
+     * the features' say in the columns' layout (Epic #148: an order, a collapse): whether a
+     * command's state lays them out otherwise, and each sibling list laid out by a state;
+     * `undefined` without any
+     */
+    readonly columnLayout:
+        | {
+              readonly changed: (
+                  after: FeatureState,
+                  before: FeatureState,
+              ) => boolean;
+              readonly arrangement: (state: FeatureState) => ColumnArrangement;
+          }
+        | undefined;
+    /** the widths a feature gives columns over their declared sizing (a resize's), or none */
+    readonly columnWidths: DataGridFeature["columnWidths"];
+    /** the columns pinned in effect (pinning's), or none: every column scrolls */
+    readonly pinnedColumns: DataGridFeature["pinnedColumns"];
     /** the root props the features add */
     readonly rootProps: readonly string[];
     /** a cell's editor props while it is edited (the first feature having them: editing's) */
@@ -108,6 +127,7 @@ type Hooks<K extends keyof FeatureEngine> = readonly NonNullable<
 /** Every feature's own handlers in one engine: each list walked in the features' order. */
 export interface GridFeatureEngine {
     readonly guardKeydown: Hooks<"guardKeydown">;
+    readonly interactionKeydown: Hooks<"interactionKeydown">;
     readonly startKeydown: Hooks<"startKeydown">;
     readonly keydown: Hooks<"keydown">;
     readonly click: Hooks<"click">;
@@ -123,6 +143,9 @@ export interface GridFeatureEngine {
     readonly paste: Hooks<"paste">;
     readonly changed: Hooks<"changed">;
     readonly followed: Hooks<"followed">;
+    readonly columnsFollowed: Hooks<"columnsFollowed">;
+    readonly columnAnchored: Hooks<"columnAnchored">;
+    readonly destroy: Hooks<"destroy">;
     readonly attach: Hooks<"attach">;
     readonly optionsChanged: Hooks<"optionsChanged">;
     readonly view: Hooks<"view">;
@@ -202,6 +225,9 @@ export function composeFeatures(
     const grids = features.flatMap((feature) =>
         feature.grid ? [feature.grid] : [],
     ) as readonly NonNullable<GridFeatures["grid"]>[];
+    const layouts = features.flatMap((feature) =>
+        feature.columnLayout ? [feature.columnLayout] : [],
+    );
     return {
         // the app's array changing later changes nothing: the list is fixed
         list: Object.freeze([...features]),
@@ -270,6 +296,46 @@ export function composeFeatures(
                 : headerCells.length === 1
                   ? headerCells[0]
                   : (view, cell) => mergedParts(headerCells, view, cell),
+        columnLayout:
+            layouts.length === 0
+                ? undefined
+                : layouts.length === 1 && layouts[0]
+                  ? layouts[0]
+                  : {
+                        changed: (after, before) =>
+                            layouts.some((layout) =>
+                                layout.changed(after, before),
+                            ),
+                        arrangement: (state) => {
+                            const all = layouts.map((layout) =>
+                                layout.arrangement(state),
+                            );
+                            const arranges = all.flatMap((one) =>
+                                one.arrange ? [one.arrange] : [],
+                            );
+                            return {
+                                arrange:
+                                    arranges.length === 0
+                                        ? undefined
+                                        : (list, group) => {
+                                              let arranged = list;
+                                              for (const arrange of arranges) {
+                                                  arranged = arrange(
+                                                      arranged,
+                                                      group,
+                                                  );
+                                              }
+                                              return arranged;
+                                          },
+                                collapsed: all.find((one) => one.collapsed)
+                                    ?.collapsed,
+                            };
+                        },
+                    },
+        columnWidths: features.find((feature) => feature.columnWidths)
+            ?.columnWidths,
+        pinnedColumns: features.find((feature) => feature.pinnedColumns)
+            ?.pinnedColumns,
         rootProps: features.flatMap((feature) => feature.root?.props ?? []),
         editCell: features.find((feature) => feature.editCell)?.editCell,
     };
@@ -302,11 +368,14 @@ function mergedParts<V, C>(
     cell: C,
 ): FeaturePartContribution<HeaderCellState> {
     let state: Partial<HeaderCellState> = {};
-    let attributes = {};
+    // no feature adding attributes, none: the part's element gets nothing of theirs
+    let attributes: PartAttributes | undefined;
     for (const part of parts) {
         const share = part(view, cell);
         state = { ...state, ...share.state };
-        attributes = { ...attributes, ...share.attributes };
+        if (share.attributes) {
+            attributes = { ...attributes, ...share.attributes };
+        }
     }
     return { state, attributes };
 }
@@ -345,6 +414,7 @@ export function featureEngine(
         });
     return {
         guardKeydown: hooks("guardKeydown"),
+        interactionKeydown: hooks("interactionKeydown"),
         startKeydown: hooks("startKeydown"),
         keydown: hooks("keydown"),
         click: hooks("click"),
@@ -360,6 +430,9 @@ export function featureEngine(
         paste: hooks("paste"),
         changed: hooks("changed"),
         followed: hooks("followed"),
+        columnsFollowed: hooks("columnsFollowed"),
+        columnAnchored: hooks("columnAnchored"),
+        destroy: hooks("destroy"),
         attach: hooks("attach"),
         optionsChanged: hooks("optionsChanged"),
         view: hooks("view"),

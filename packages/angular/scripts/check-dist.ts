@@ -27,6 +27,10 @@ const ENTRIES = [
     "fill",
     "sorting",
     "editing",
+    "column-resize",
+    "column-reorder",
+    "column-pinning",
+    "column-group-collapse",
 ];
 
 const ALLOWED = new RegExp(

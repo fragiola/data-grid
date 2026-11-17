@@ -18,6 +18,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     h,
     renderGrid,
     rowAt,
@@ -48,7 +50,7 @@ const columns: Column<Row, VNodeChild>[] = Array.from(
     }),
 );
 
-const G = typedDataGrid<Row>();
+const G = typedDataGrid<Row, Features>();
 
 /** A row's content height in these tests: 20 to 50 by index. */
 const heightOf = (rowIndex: number) => 20 + (rowIndex % 4) * 10;
@@ -110,6 +112,7 @@ function grid({
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns,
             ...(loaded
                 ? { rows }
@@ -307,7 +310,7 @@ describe("measured rows", () => {
             const { unmount } = renderGrid(() =>
                 h(
                     G.Root,
-                    { columns, rows, rowHeight },
+                    { features: FEATURES, columns, rows, rowHeight },
                     {
                         default: () => [
                             h(G.Grid, null, {
@@ -365,6 +368,7 @@ describe("estimates", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rows,
                     rowHeight: sizes.value.rowHeight,
@@ -429,7 +433,15 @@ describe("the sizes a root sends", () => {
             summaryRowHeight?: number;
             estimatedRowHeight?: number;
         }>({ rowHeight: 20 });
-        renderGrid(() => h(G.Root, { columns, rows, ...sizes.value, gridRef }));
+        renderGrid(() =>
+            h(G.Root, {
+                features: FEATURES,
+                columns,
+                rows,
+                ...sizes.value,
+                gridRef,
+            }),
+        );
         await settled();
         const sent: unknown[] = [];
         gridRef.current?.model.use((ctx, next) => {

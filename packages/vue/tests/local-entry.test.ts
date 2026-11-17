@@ -54,6 +54,10 @@ describe("the primitives' entry", () => {
             "clipboard",
             "fill",
             "editing",
+            "column-resize",
+            "column-reorder",
+            "column-pinning",
+            "column-group-collapse",
         ]) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(

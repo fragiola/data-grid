@@ -46,5 +46,18 @@ describe("the grid's own entry", () => {
         // the features (Epic #141): sorting; cell editing (Epic #146)
         expect(files.filter((file) => file.startsWith("sorting"))).toEqual([]);
         expect(files.filter((file) => file.startsWith("editing"))).toEqual([]);
+        // the column features (Epic #148), and the key lists only they share
+        for (const feature of [
+            "column-resize",
+            "column-reorder",
+            "column-pinning",
+            "column-group-collapse",
+            "model/key-lists",
+        ]) {
+            expect(
+                files.filter((file) => file.startsWith(feature)),
+                feature,
+            ).toEqual([]);
+        }
     });
 });

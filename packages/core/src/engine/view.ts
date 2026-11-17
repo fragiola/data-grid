@@ -78,14 +78,16 @@ export function withDetails<TRow, TNode>(
 }
 
 /**
- * The columns' axis: each one's width on screen, its resized width, else the engine's for it
- * (`autoWidths`: an automatic width, a flex share), else its own, within its limits (W1, A1).
+ * The columns' axis: each one's width on screen, its override (`columnWidths`: a resize's), else
+ * the engine's for it (`autoWidths`: an automatic width, a flex share), else its own, within its
+ * limits (W1, A1).
  */
 export function columnAxisOf<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
+    columnWidths: ColumnWidths = NO_WIDTHS,
     autoWidths: ColumnWidths = NO_WIDTHS,
 ): Axis {
-    const { columns, columnWidths } = state;
+    const { columns } = state;
     return createAxis(columns.length, (index) => {
         const column = columns[index];
         return column ? columnWidth(column, columnWidths, autoWidths) : 0;
@@ -286,8 +288,6 @@ export interface ViewInputs<TRow, TNode>
         | "interaction"
         | "tabbable"
         | "emptyShown"
-        | "columnResize"
-        | "columnReorder"
         | "reorderableRows"
         | "rowReorder"
         | "direction"
@@ -399,7 +399,6 @@ export function buildView<TRow, TNode>({
         rowsOrdered: measures.features.rowsOrdered(state as FeatureState),
         expandedRows: state.expandedRows,
         rowKey: state.rowKey,
-        collapsedGroupKeys: state.collapsedGroupKeys,
         expandedGroupKeys: state.expandedGroupKeys,
         givenDirection: state.direction,
         measuredRows: state.rowHeight === "auto",
@@ -438,13 +437,10 @@ const VIEW_KEYS = [
     "pinnedEndColumnCount",
     "expandedRows",
     "rowKey",
-    "collapsedGroupKeys",
     "expandedGroupKeys",
     "interaction",
     "tabbable",
     "emptyShown",
-    "columnResize",
-    "columnReorder",
     "reorderableRows",
     "rowReorder",
     "direction",

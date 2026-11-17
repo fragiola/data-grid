@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { type ColumnOrGroup, type ModelOptions, veto } from "../../src";
+import { keptWidthsOf } from "../../src/column-resize/widths";
 import { columnsError } from "../../src/header/header";
-import {
-    autoWidthsOf,
-    keptWidthsOf,
-    sharedWidths,
-} from "../../src/model/widths";
+import { autoWidthsOf, sharedWidths } from "../../src/model/widths";
 import { type Features, gridModel } from "../features";
 
 // Column widths (Epic #70, W1, W2, W5, W7): the model keeps the resized columns' widths over their

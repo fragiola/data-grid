@@ -1,6 +1,6 @@
 ---
 title: Features
-description: A small core and the features your app installs on a grid (the keys, sorting, selections, the clipboard, the fill handle), each typed and opt-in.
+description: A small core and the features your app installs on a grid (the keys, sorting, selections, ranges, editing, the columns' features), each typed and opt-in.
 ---
 
 The grid's core renders, scrolls and virtualizes. What an app may not need is a **feature**: a
@@ -16,6 +16,10 @@ creates it.
 | `clipboard()` | `/clipboard` | `cellRange()` | copying and pasting the range |
 | `fillHandle()` | `/fill` | `cellRange()` | the fill handle ([Fill handle](/docs/concepts/fill)) |
 | `editing()` | `/editing` | `navigation()` | cells edited in place ([Editing cells](/docs/concepts/editing)) |
+| `columnResize()` | `/column-resize` | | resizable columns, their handles and fits ([Column resizing](/docs/concepts/column-resizing)) |
+| `columnReorder()` | `/column-reorder` | | columns and groups moved by a drag or the keys ([Column reordering](/docs/concepts/column-reordering)) |
+| `columnPinning()` | `/column-pinning` | | columns pinned at the start or the end ([Pinned columns](/docs/concepts/pinned-columns)) |
+| `columnGroupCollapse()` | `/column-group-collapse` | | collapsible column groups ([Collapsible groups](/docs/concepts/collapsible-groups)) |
 
 A feature another one needs is installed with it: a grid missing one throws when it is created,
 naming it (`feature "cellRange" requires feature "navigation": install it too`). Their order in
@@ -100,8 +104,9 @@ A feature's inputs are a directive of its own, on the root's element: `DataGridS
 `DataGridNavigation` `[(activePosition)]`, `DataGridRowSelection` the row selection's,
 `DataGridCellRange` the range's, `DataGridClipboard` `[beforeRangePaste]` and `(rangePaste)`,
 `DataGridFill` the fill (`dataGridFill (fill)="…"`), `DataGridEditing` the edit
-(`[dataGridEditing]="columns" [(editingCell)]="…" (cellEdit)="…"`). A feature you give no input
-needs no directive.
+(`[dataGridEditing]="columns" [(editingCell)]="…" (cellEdit)="…"`), `DataGridColumnResize`
+`[(columnWidths)]`, `DataGridColumnReorder` `[(columnOrder)]`, `DataGridColumnGroupCollapse`
+`[(collapsedGroupKeys)]`. A feature you give no input (`columnPinning()`) needs no directive.
 
 </Framework>
 
@@ -109,9 +114,9 @@ Each package re-exports the core's features from an entry of the same name
 (`@fragiola/data-grid-react/sorting`, `@fragiola/data-grid-vue/sorting`,
 `@fragiola/data-grid-angular/sorting`), so an app installs one package. The core's own is
 `@fragiola/data-grid/sorting`. A feature's hooks are in its entry too: `useSelectAll` in
-`/row-selection`, `useFillHandle` in `/fill`, `useCellEdit` in `/editing` (Angular:
-`injectSelectAll`, `injectFillHandle` and `*dataGridFillHandle`, `injectCellEdit` and
-`*dataGridCellEdit`).
+`/row-selection`, `useFillHandle` in `/fill`, `useCellEdit` in `/editing`, `useColumnResizer` in
+`/column-resize` (Angular: `injectSelectAll`, `injectFillHandle` and `*dataGridFillHandle`,
+`injectCellEdit` and `*dataGridCellEdit`, `injectColumnResizer` and `*dataGridColumnResizer`).
 
 ## Fixed when the grid is created
 
@@ -137,6 +142,16 @@ It never sorts either. A column keeps `sortable` and `compare`, but without `sor
 - a click, Enter or Space on a header cell is not the grid's;
 - the sort props do not compile (in Angular, `[sortColumns]` is not a known input without
   `DataGridSorting`).
+
+Nor does it resize, move, pin or collapse a column. The column model stays: columns and groups
+as declared (their header rows, spans and sticky labels), their `width`, `flex` and `autoSize`.
+But a column's `resizable`, `reorderable` and `pinned`, and a group's `collapsible`, do nothing:
+
+- a resize handle has no behaviour and `fit-columns` fits nothing; a header cell's drag is a
+  plain press, Ctrl/⌘+Shift+←/→ moves nothing;
+- every column scrolls (`pinned` is ignored: no sticky cell, no `data-pinned`);
+- a collapsible group shows its expanded children, and stays so;
+- their props and commands do not compile.
 
 Rows in memory hand the root their sort (`useLocalRows`, `injectLocalRows`,
 `[dataGridLocalRows]`), so [install `sorting()`](/docs/concepts/rows-in-memory) with them.
@@ -247,15 +262,33 @@ part optional:
 | `navigable` | the grid's roles and tab stop are the APG grid's (`navigation()` has it) |
 | `engine(context)` | its keys, presses, clicks, focus, copies and pastes, drags and engine actions, in the engine |
 | `editCell(view, cell, draft, engine)` | an edited cell's editor props, what its column's `renderEditCell` gets (`editing()` has it) |
+| `columnLayout` | its say in the columns' layout: `arrangement(state)` gives each sibling list an order (`arrange`) and the collapsed groups (`collapsed`), and `changed(after, before)` tells a state that lays them out otherwise (the columns laid out again, the active cell following its column: `columnReorder()`, `columnGroupCollapse()`) |
+| `columnWidths(state)` | the widths it gives columns over their declared sizing (`columnResize()`'s) |
+| `pinnedColumns(columns, axis, viewportWidth)` | the columns pinned in effect and the strips' widths (`columnPinning()`'s): without it, none |
 | `root` | the props a root takes for it, controlled or not (`defineControlled`) |
 
 In an engine, a feature's keys run at a place of their own in the grid's: `beforeKeydown` before
 any (never taking one), `guardKeydown` for the elements it holds (an edit's editor), `keydown`
 before the grid's own cell keys (a header's sort), `startKeydown` among them (an edit's start),
-`laterKeydown` after them (the selections'), `lastKeydown` last (the arrows). Each place runs the features in
-the list's order; the first to take a key ends it. Its `engine` context lends it the grid's own
-means (`engine`: which cell an event is in, scrolling to a cell, focus following a move, events,
-drags on the grid's own drag machinery), so its keys and presses act as the grid's do.
+`laterKeydown` after them (the selections'), `lastKeydown` last (the arrows); a column's move
+(Ctrl/⌘+Shift+←/→) is reordering's `keydown`. `interactionKeydown` takes a key on a control of the
+cell in interaction, after the grid's Escape and Tab there (a resize handle's arrows, Home, End,
+Enter). Each place runs the features in the list's order; the first to take a key ends it. Its
+`engine` context lends it the grid's own means (`engine`: which cell an event is in, scrolling to a
+cell, focus following a move, events, drags on the grid's own drag machinery, the columns' layout:
+`columnAxis`, `viewportWidth`, `pinned`, `scrollLeft`, `viewX`, `columnOffsetAt`,
+`columnEdgeStep`, `edgeScroll`, `committed`, `measureColumns`, `autoWidths(overrides?)`), so its
+keys and presses act as the grid's do. A drag (`FeatureDrag`) may follow one axis (`axis`), ignore
+a scroll (`fixed`, a resize) and take the click that ends it (`click`, a handle's double click). A
+feature's engine also hears the columns laid out again before the view is built for it
+(`columnsFollowed`: a drag follows its column), says when a new layout of the same columns keeps
+the view on its first column by key (`columnAnchored`: a collapse), and is told when the engine is
+destroyed (`destroy`). Its `engine.get` keys and `engine.run` actions are its own:
+`column-resize`, `column-reorder` and `fit-columns` are the column features'.
+
+A root's controlled piece (`defineControlled`) may be a layout input (`first: "layout"`: a
+column's widths, order or collapsed groups): it settles first of all, then the active position,
+so a position a layout moved settles in the same pass.
 
 Features read each other only through keys (`model.get("cell-selection")`), never each other's
 code. Two features of one name, a feature it `requires` missing, or a key another one already has

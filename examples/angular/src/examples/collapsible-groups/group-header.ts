@@ -6,9 +6,11 @@ import {
 } from "@angular/core";
 import {
     DATA_GRID,
+    type DataGridFeature,
     DataGridHeaderCell,
     injectDataGrid,
 } from "@fragiola/data-grid-angular";
+import type { ColumnGroupCollapseTypes } from "@fragiola/data-grid-angular/column-group-collapse";
 import { LucideChevronRight } from "@lucide/angular";
 import type { Person } from "../_kit/data";
 import * as styles from "./styles";
@@ -42,7 +44,11 @@ export class GroupHeader {
     protected readonly styles = styles;
     private readonly headerCell =
         inject<DataGridHeaderCell<Person>>(DataGridHeaderCell);
-    private readonly grid = injectDataGrid<Person>();
+    // the grid collapses its groups (`columnGroupCollapse()`): its commands are typed by it
+    private readonly grid = injectDataGrid<
+        Person,
+        readonly [DataGridFeature<ColumnGroupCollapseTypes>]
+    >();
     protected readonly state = computed(() => this.headerCell.state());
     protected readonly name = computed(
         () => this.headerCell.dataGridHeaderCell().group?.name,

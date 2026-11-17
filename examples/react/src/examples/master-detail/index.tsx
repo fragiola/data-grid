@@ -6,6 +6,7 @@ import {
     DataGrid,
     useDataGrid,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { ChevronRight } from "lucide-react";
 import type * as React from "react";
@@ -14,8 +15,9 @@ import { Switch } from "#/components/ui/switch";
 import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const FEATURES = [navigation(), columnPinning()];
 
 interface Item {
     product: string;

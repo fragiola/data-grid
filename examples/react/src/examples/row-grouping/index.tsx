@@ -10,6 +10,7 @@ import {
     useGridView,
     useGroupToggle,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import {
@@ -27,8 +28,9 @@ import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-const FEATURES = [sorting(), navigation(), rowSelection()];
+// navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
+// every column scrolls)
+const FEATURES = [sorting(), navigation(), rowSelection(), columnPinning()];
 
 const ROWS = people(500);
 

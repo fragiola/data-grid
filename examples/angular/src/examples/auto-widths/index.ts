@@ -12,6 +12,11 @@ import {
     type DataGridNode,
     type HeaderCellInfo,
 } from "@fragiola/data-grid-angular";
+import {
+    columnResize,
+    DataGridColumnResize,
+    DataGridColumnResizer,
+} from "@fragiola/data-grid-angular/column-resize";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { LucideRotateCcw, LucideWandSparkles } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
@@ -82,7 +87,14 @@ function describe(widths: ColumnWidths): string {
 
 @Component({
     selector: "example-auto-widths",
-    imports: [DATA_GRID, ClickableButton, LucideRotateCcw, LucideWandSparkles],
+    imports: [
+        DATA_GRID,
+        DataGridColumnResizer,
+        DataGridColumnResize,
+        ClickableButton,
+        LucideRotateCcw,
+        LucideWandSparkles,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -130,6 +142,7 @@ function describe(widths: ColumnWidths): string {
             </div>
             <div
                 dataGridRoot
+                dataGridColumnResize
                 [features]="features"
                 [columns]="columns"
                 [rows]="rows"
@@ -177,8 +190,9 @@ function describe(widths: ColumnWidths): string {
     `,
 })
 export default class AutoWidths {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // column resizing (its handles, keys and fits)
+    readonly features = [navigation(), columnResize()];
     protected readonly styles = styles;
 
     readonly rows = rows;

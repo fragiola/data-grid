@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
 import { DATA_GRID, type RowKey } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { DataGridLocalRows } from "@fragiola/data-grid-angular/local";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import {
@@ -129,10 +130,16 @@ export default class TreeData {
     protected readonly columns = columns;
     protected readonly NONE = NONE;
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection
-    readonly features = [sorting(), navigation(), rowSelection()];
-    // the server's tree sorts nothing: navigation and row selection only
-    readonly lazyFeatures = [navigation(), rowSelection()];
+    // cell navigation (the keys, the active cell, the tab stop), row selection, pinned columns
+    // (without it, every column scrolls)
+    readonly features = [
+        sorting(),
+        navigation(),
+        rowSelection(),
+        columnPinning(),
+    ];
+    // the server's tree sorts nothing: navigation, row selection and the pinned columns only
+    readonly lazyFeatures = [navigation(), rowSelection(), columnPinning()];
 
     readonly lazy = signal(false);
     readonly lazyLabel = `tree-data-lazy-${++ids}`;

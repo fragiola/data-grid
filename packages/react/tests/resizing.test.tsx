@@ -11,9 +11,9 @@ import {
     type DataGridRef,
     type HeaderCellInfo,
     type RootProps,
-    useColumnResizer,
     useDataGridRef,
 } from "../src";
+import { useColumnResizer } from "../src/column-resize";
 import {
     cellAt,
     FEATURES,

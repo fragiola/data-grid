@@ -3,6 +3,7 @@ import {
     createDataGridModel,
     type DataGridFeatures,
     type DataGridState,
+    type FeatureState,
     type GridView,
     type ModelOptions,
 } from "../../src";
@@ -76,12 +77,17 @@ export function inputsOf(
     state: DataGridState<Row, unknown> = stateOf(),
     overrides: Partial<ViewInputs<Row, unknown>> = {},
 ): ViewInputs<Row, unknown> {
+    const features = overrides.features ?? featuresFor(state);
     return {
         state,
         rowWindow: windowOf(10, 20),
         columnWindow: windowOf(2, 5),
         rowAxis: withDetails(rowAxisOf(state), state),
-        columnAxis: columnAxisOf(state),
+        // a resize's widths over the declared ones (Epic #148: `columnResize()`'s)
+        columnAxis: columnAxisOf(
+            state,
+            features.columnWidths?.(state as FeatureState),
+        ),
         width: 1_000,
         height: 2_000,
         headerHeight: 30,
@@ -95,14 +101,12 @@ export function inputsOf(
         interaction: null,
         tabbable: true,
         emptyShown: false,
-        columnResize: null,
-        columnReorder: null,
         reorderableRows: false,
         rowReorder: null,
         featureFields: null,
         direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),
-        features: featuresFor(state),
+        features,
         ...overrides,
     };
 }

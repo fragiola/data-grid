@@ -7,6 +7,8 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
+import { columnResize } from "@fragiola/data-grid-vue/column-resize";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { RotateCcw } from "@lucide/vue";
 import { type FunctionalComponent, ref, type VNodeChild } from "vue";
@@ -16,8 +18,9 @@ import Resizer from "./resizer.vue";
 import * as styles from "./styles";
 import WidthsReadout from "./widths-readout.vue";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const features = [navigation()] as const;
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), column
+// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls)
+const features = [navigation(), columnResize(), columnPinning()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

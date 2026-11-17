@@ -9,12 +9,14 @@ import {
     useDataGridRef,
     useRowWindow,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { formatNumber, measurement } from "../_kit/data";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const FEATURES = [navigation(), columnPinning()];
 
 const ROWS = 1_000_000;
 const COLUMNS = 1_000;

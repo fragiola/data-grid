@@ -9,6 +9,10 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-react";
 import { clipboard } from "@fragiola/data-grid-react/clipboard";
+import { columnGroupCollapse } from "@fragiola/data-grid-react/column-group-collapse";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
+import { columnReorder } from "@fragiola/data-grid-react/column-reorder";
+import { columnResize } from "@fragiola/data-grid-react/column-resize";
 import { editing } from "@fragiola/data-grid-react/editing";
 import { fillHandle, repeatedFill } from "@fragiola/data-grid-react/fill";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
@@ -41,7 +45,7 @@ import {
 /**
  * the features the fixture installs: every migrated one, sorting (Epic #141), cell navigation,
  * row selection, cell ranges, the clipboard and the fill handle (Epic #144), cell editing (Epic
- * #146)
+ * #146), column resizing, reordering, pinning and collapsible groups (Epic #148)
  */
 const FEATURES: FixtureFeatures = [
     sorting(),
@@ -51,6 +55,10 @@ const FEATURES: FixtureFeatures = [
     clipboard(),
     fillHandle(),
     editing(),
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+    columnGroupCollapse(),
 ];
 
 // The combined stress fixture (Epic #89, E5.3): every feature on at once, over 1,000,000 rows and

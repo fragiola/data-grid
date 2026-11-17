@@ -50,6 +50,10 @@ const EXTRAS = [
     "clipboard",
     "fill",
     "editing",
+    "column-resize",
+    "column-reorder",
+    "column-pinning",
+    "column-group-collapse",
 ];
 
 describe("the primitives' entry", () => {

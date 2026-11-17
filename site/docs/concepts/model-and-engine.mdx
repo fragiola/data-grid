@@ -25,7 +25,8 @@ Everything has the same verbs, each taking a key and a payload:
 | `subscribe` | listens to every committed command |
 
 Commands are named by the state they change, a dot, then the change: `columns.set`,
-`sort-columns.toggle`, `selected-rows.toggle`, `column-widths.resize`, `active-position.move`
+`sort-columns.toggle`, `selected-rows.toggle`, `column-widths.resize` (resizing's),
+`active-position.move`
 and the rest of the `CommandMap` type, which lists every one with its payload and result. A command never
 throws on bad input: it returns `{ ok: false, error }`. A command the grid does not know (one of
 a feature that is not installed, say) returns the error `not_found`.

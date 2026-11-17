@@ -1,15 +1,10 @@
-import { landingIndex, type Siblings } from "../model/order";
-import type {
-    ColumnWidths,
-    HeaderLayout,
-    ReorderSide,
-    RowKey,
-} from "../model/types";
+import type { ReorderSide, RowKey } from "../model/types";
 import { keptIfSame } from "../utils/utils";
 
-// The engine's drags (Epics #70, #75, #86, #88): what each one keeps while the pointer moves, and
-// the pure geometry they share (the edge scroll's step, a drop's side). The engine starts,
-// follows and ends them; a feature's drag (a range's, a fill's: Epic #144) through its own steps.
+// The engine's drags (Epics #86, #88): what each one keeps while the pointer moves, and the pure
+// geometry they share (the edge scroll's step, a drop's side). The engine starts, follows and
+// ends them; a feature's drag (a range's, a fill's: Epic #144; a column's resize and move: Epic
+// #148) through its own steps.
 
 /**
  * A drag the engine follows with the pointer: where it started, and where the pointer is. A
@@ -32,35 +27,6 @@ export interface PointerDrag {
     y: number;
     /** the animation frame the next step waits for, if any */
     frame: number | null;
-}
-
-/** A drag on a column resizer (W4). */
-export interface ResizeDrag extends PointerDrag {
-    readonly kind: "resize";
-    /** the column's or the group's key */
-    readonly columnKey: string;
-    /** the column's (or the group's) width when it started */
-    readonly startWidth: number;
-    /** which way it grows on screen (`resizeSign`) */
-    readonly sign: number;
-    /** the engine's widths when it started: its columns resized back to them need none of theirs */
-    readonly autoWidths: ColumnWidths;
-    /** the x the last resize was for */
-    appliedX: number;
-}
-
-/**
- * A drag of a reorderable header cell (Epic #75, O3): a press that drags once it moves past a
- * click's slop (until then, it may be a click), and its siblings, found again when the header
- * changes.
- */
-export interface ReorderDrag<TRow, TNode> extends PointerDrag {
-    readonly kind: "reorder";
-    /** the column's or the group's key */
-    readonly columnKey: string;
-    /** the header its siblings were found in, and them */
-    header: HeaderLayout<TRow, TNode> | null;
-    siblings: Siblings<TRow, TNode> | null;
 }
 
 /**
@@ -91,18 +57,26 @@ export interface FeatureDrag extends PointerDrag {
     readonly step: () => void;
     /** it ended: released, cancelled or lost (a press that never dragged ends too) */
     readonly end: (how: DragEnd) => void;
+    /**
+     * the axis its steps follow (Epic #148: a column's drags follow the pointer's x); both
+     * without one
+     */
+    readonly axis?: "x" | "y" | undefined;
+    /**
+     * its step follows the pointer alone, never a scroll (Epic #148: a resizer's): a scroll during
+     * the drag asks no frame of it
+     */
+    readonly fixed?: boolean | undefined;
+    /** the click ending it, once it dragged (Epic #148: a resizer's double click fits) */
+    readonly click?: ((event: MouseEvent) => void) | undefined;
 }
 
-export type Drag<TRow, TNode> =
-    | ResizeDrag
-    | ReorderDrag<TRow, TNode>
-    | RowDrag
-    | FeatureDrag;
+export type Drag = RowDrag | FeatureDrag;
 
 /**
  * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a
- * move with no button, the viewport detached). A resize keeps its width but on a cancel; a
- * reorder (a column's, a row's) moves only on a release.
+ * move with no button, the viewport detached). A column's resize keeps its width but on a
+ * cancel; a move (a column's, a row's) moves only on a release.
  */
 export type DragEnd = "release" | "cancel" | "lost";
 
@@ -113,18 +87,6 @@ export type DragEnd = "release" | "cancel" | "lost";
 const EDGE_ZONE = 40;
 /** The edge scroll's pixels per frame at the edge or past it; fewer farther from it. */
 const EDGE_STEP = 20;
-
-/** The keys a focused resizer resizes with (W6). */
-export const RESIZE_KEYS: ReadonlySet<string> = new Set([
-    "ArrowLeft",
-    "ArrowRight",
-    "Home",
-    "End",
-]);
-
-/** The resizer keys' steps in pixels (W6): an arrow, and Shift with it. */
-export const RESIZE_STEP = 10;
-export const RESIZE_SHIFT_STEP = 50;
 
 /**
  * The edge scroll's step (signed, 0 for none) for a pointer at `at` over a part of the view
@@ -163,4 +125,17 @@ export function dropTargetOf<T extends object>(
         current,
         make(allowed && landingIndex(index, at, side) !== index ? side : null),
     );
+}
+
+/**
+ * Where an entry at `index` among its siblings lands, dropped on `side` of the one at
+ * `targetIndex` (itself included): its index once moved.
+ */
+export function landingIndex(
+    index: number,
+    targetIndex: number,
+    side: ReorderSide,
+): number {
+    const to = side === "before" ? targetIndex : targetIndex + 1;
+    return to > index ? to - 1 : to;
 }

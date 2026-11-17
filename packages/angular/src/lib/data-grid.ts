@@ -3,7 +3,6 @@ import { DataGridBody } from "./directives/body.directive";
 import { DataGridCell } from "./directives/cell.directive";
 import { DataGridCellContent } from "./directives/cell-content.directive";
 import { DataGridCells } from "./directives/cells.directive";
-import { DataGridColumnResizer } from "./directives/column-resizer.directive";
 import { DataGridEmpty } from "./directives/empty.directive";
 import { DataGridGrid } from "./directives/grid.directive";
 import { DataGridGroupLabel } from "./directives/group-label.directive";
@@ -50,7 +49,6 @@ export const DATA_GRID = [
     DataGridSummaryRow,
     DataGridSummaryCells,
     DataGridSummaryCell,
-    DataGridColumnResizer,
     DataGridRowDragHandle,
     DataGridGroupToggle,
     DataGridGroupLabel,

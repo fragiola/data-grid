@@ -7,13 +7,14 @@ import {
     cellBox,
     cellPart,
     cellSpan,
-    columnResizerPart,
     headerCellBox,
     headerCellPart,
     type ModelOptions,
     rowColumns,
 } from "../../src";
+import { columnResizerPart } from "../../src/column-resize";
 import { activeColumn, elementPosition } from "../../src/engine/view";
+import { featuresOf } from "../../src/feature/registry";
 import { columnsError } from "../../src/header/header";
 import { spanAt } from "../../src/model/spans";
 import { sorting } from "../../src/sorting";
@@ -212,7 +213,10 @@ describe("a header cell's span", () => {
             rows: [{ id: 0 }],
         });
         const resizer = () => {
-            const view = viewOf(model.state, { columnWindow: windowOf(0, 3) });
+            const view = viewOf(model.state, {
+                columnWindow: windowOf(0, 3),
+                features: featuresOf(model),
+            });
             const cell = view.headerRows[0]?.cells[0];
             if (!cell) throw new Error("no header cell");
             return { view, cell, part: columnResizerPart(view, cell) };

@@ -7,10 +7,13 @@ import {
     type DataGridRef,
     type HeaderCellInfo,
     headerCellContent,
-    useColumnResizer,
     useDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import {
+    columnResize,
+    useColumnResizer,
+} from "@fragiola/data-grid-react/column-resize";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { RotateCcw, WandSparkles } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
@@ -18,8 +21,9 @@ import { Clickable } from "#/components/atoms/clickable";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), column
+// resizing (its handles, keys and fits)
+const FEATURES = [navigation(), columnResize()];
 
 const rows = people(1_000);
 

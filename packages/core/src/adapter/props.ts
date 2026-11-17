@@ -26,10 +26,8 @@ import {
 import {
     type CellPart,
     type CellState,
-    type ColumnResizerState,
     cellBox,
     cellPart,
-    columnResizerPart,
     type GroupToggleState,
     groupTogglePart,
     type HeaderCellPart,
@@ -648,11 +646,6 @@ export function controlPart<S>(
     };
 }
 
-const resizerData = (state: ColumnResizerState) => ({
-    "grid-part": "column-resizer",
-    resizing: state.resizing,
-});
-
 const dragHandleData = (state: RowDragHandleState) => ({
     "grid-part": "row-drag-handle",
     reorderable: state.reorderable,
@@ -663,19 +656,6 @@ const groupToggleData = (state: GroupToggleState) => ({
     "grid-part": "group-toggle",
     expanded: state.expanded,
 });
-
-/** A column resizer's state and props (`useColumnResizer`): none under a cell that does not resize. */
-export function columnResizerPartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-): PartResult<ColumnResizerState> {
-    const { state, tabIndex, attributes } = columnResizerPart(view, cell);
-    return controlPart(
-        state,
-        state.resizable ? { ...attributes, tabIndex } : undefined,
-        resizerData,
-    );
-}
 
 /** A row's drag handle's state and props (`useRowDragHandle`). */
 export function rowDragHandlePartOf<TRow, TNode>(

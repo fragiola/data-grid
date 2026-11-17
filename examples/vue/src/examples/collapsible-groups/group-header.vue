@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {
+    type DataGridFeature,
     type HeaderCellInfo,
     headerCellContent,
     useDataGrid,
     useGroupLabel,
     useHeaderCell,
 } from "@fragiola/data-grid-vue";
+import type { ColumnGroupCollapseTypes } from "@fragiola/data-grid-vue/column-group-collapse";
 import { ChevronRight } from "@lucide/vue";
 import type { Person } from "../_kit/data";
 import * as styles from "./styles";
@@ -15,7 +17,11 @@ import * as styles from "./styles";
 
 const props = defineProps<{ cell: HeaderCellInfo<Person> }>();
 
-const { model } = useDataGrid<Person>();
+// the grid collapses its groups (`columnGroupCollapse()`): its commands are typed by it
+const { model } = useDataGrid<
+    Person,
+    readonly [DataGridFeature<ColumnGroupCollapseTypes>]
+>();
 const { state } = useHeaderCell(() => props.cell);
 const { props: label } = useGroupLabel(() => props.cell);
 

@@ -9,6 +9,7 @@ import {
     type ReorderSide,
     useHeaderCell,
 } from "../../src";
+import { columnReorder } from "../../src/column-reorder";
 
 interface Person {
     id: string;
@@ -22,6 +23,8 @@ const columns: Column<Person>[] = [
 ];
 declare const people: Person[];
 
+const features = [columnReorder()] as const;
+
 export const group: ColumnGroup<Person> = {
     key: "g",
     children: columns,
@@ -31,6 +34,7 @@ export const group: ColumnGroup<Person> = {
 export function People({ order }: { order: ColumnOrder }) {
     return (
         <DataGrid.Root
+            features={features}
             columns={columns}
             rows={people}
             columnOrder={order}
@@ -47,6 +51,7 @@ export function People({ order }: { order: ColumnOrder }) {
 export function Wrong() {
     return (
         <DataGrid.Root
+            features={features}
             columns={columns}
             rows={people}
             // @ts-expect-error: an order lists keys
@@ -57,9 +62,10 @@ export function Wrong() {
 
 export function Cell({ cell }: { cell: HeaderCellInfo<Person> }) {
     const { state } = useHeaderCell(cell);
-    const reorderable: boolean = state.reorderable;
-    const dragging: boolean = state.dragging;
-    const side: ReorderSide | null = state.dropTarget;
+    // reordering's fields: `undefined` without it installed
+    const reorderable: boolean | undefined = state.reorderable;
+    const dragging: boolean | undefined = state.dragging;
+    const side: ReorderSide | null | undefined = state.dropTarget;
     void [reorderable, dragging, side];
     // @ts-expect-error: a drop target is a side, or none
     const wrong: "left" | null = state.dropTarget;

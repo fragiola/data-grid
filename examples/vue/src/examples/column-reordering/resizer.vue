@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="TRow">
-import { type HeaderCellInfo, useColumnResizer } from "@fragiola/data-grid-vue";
+import type { HeaderCellInfo } from "@fragiola/data-grid-vue";
+import { useColumnResizer } from "@fragiola/data-grid-vue/column-resize";
 import { computed } from "vue";
 import * as styles from "./styles";
 

@@ -17,9 +17,7 @@ import {
 import {
     type AxisWindow,
     bindGridRoot,
-    type ColumnOrder,
     type ColumnOrGroup,
-    type ColumnWidths,
     type DataGridEngine,
     type DataGridFeatures,
     type DataGridModel,
@@ -85,7 +83,7 @@ export interface RootPropsSourceOptions {
  * its inputs onto the model's commands (controlled or not: the core's `bindGridRoot`, after every
  * render), tells what changed through its outputs, and runs the grid's keys, clicks, presses and
  * clipboard events after the consumer's own listeners on its element, so `preventDefault` cancels
- * one. Each `onXChange` of React is the output `xChange` (`[(columnWidths)]` binds both ways);
+ * one. Each `onXChange` of React is the output `xChange` (`[(expandedRowKeys)]` binds both ways);
  * the row moves are on while `reorderableRows` is. It installs its `features` (`[navigation(),
  * sorting()]`, fixed when it is created: a later list is told in the console, never taken); a
  * feature's inputs are another directive's on the same element, from the feature's entry point
@@ -139,16 +137,6 @@ export class DataGridRoot<TRow = unknown> {
     );
     readonly detailHeight = input<DetailHeight<TRow> | undefined>(undefined);
     readonly estimatedDetailHeight = input<number | undefined>(undefined);
-    readonly columnWidths = input<ColumnWidths | undefined>(undefined);
-    readonly defaultColumnWidths = input<ColumnWidths | undefined>(undefined);
-    readonly columnOrder = input<ColumnOrder | undefined>(undefined);
-    readonly defaultColumnOrder = input<ColumnOrder | undefined>(undefined);
-    readonly collapsedGroupKeys = input<readonly string[] | undefined>(
-        undefined,
-    );
-    readonly defaultCollapsedGroupKeys = input<readonly string[] | undefined>(
-        undefined,
-    );
     /** the rows move by drag and keys (React: `onRowMove` given): told by `rowMove` */
     readonly reorderableRows = input(undefined, { transform: optionalBoolean });
     readonly endReachedThreshold = input<number | undefined>(undefined);
@@ -171,9 +159,6 @@ export class DataGridRoot<TRow = unknown> {
 
     readonly expandedRowKeysChange = output<readonly RowKey[]>();
     readonly expandedGroupKeysChange = output<readonly RowKey[]>();
-    readonly columnWidthsChange = output<ColumnWidths>();
-    readonly columnOrderChange = output<ColumnOrder>();
-    readonly collapsedGroupKeysChange = output<readonly string[]>();
     /** a row moved (Epic #86), while `reorderableRows`: the app moves its rows */
     readonly rowMove = output<RowMove>();
     readonly rowWindowChange = output<AxisWindow>();
@@ -217,15 +202,6 @@ export class DataGridRoot<TRow = unknown> {
             onExpandedGroupKeysChange: this.handlers.expandedGroupKeys,
             detailHeight: this.detailHeight(),
             estimatedDetailHeight: this.estimatedDetailHeight(),
-            columnWidths: this.columnWidths(),
-            defaultColumnWidths: this.defaultColumnWidths(),
-            onColumnWidthsChange: this.handlers.columnWidths,
-            columnOrder: this.columnOrder(),
-            defaultColumnOrder: this.defaultColumnOrder(),
-            onColumnOrderChange: this.handlers.columnOrder,
-            collapsedGroupKeys: this.collapsedGroupKeys(),
-            defaultCollapsedGroupKeys: this.defaultCollapsedGroupKeys(),
-            onCollapsedGroupKeysChange: this.handlers.collapsedGroupKeys,
             onRowMove: this.reorderableRows()
                 ? this.handlers.rowMove
                 : undefined,
@@ -296,9 +272,6 @@ export class DataGridRoot<TRow = unknown> {
     private readonly handlers = {
         expandedRowKeys: this.emitting(this.expandedRowKeysChange),
         expandedGroupKeys: this.emitting(this.expandedGroupKeysChange),
-        columnWidths: this.emitting(this.columnWidthsChange),
-        columnOrder: this.emitting(this.columnOrderChange),
-        collapsedGroupKeys: this.emitting(this.collapsedGroupKeysChange),
         rowMove: this.emitting(this.rowMove),
         rowWindow: (value: AxisWindow) => this.rowWindowChange.emit(value),
         columnWindow: (value: AxisWindow) =>

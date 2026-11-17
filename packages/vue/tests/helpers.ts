@@ -2,6 +2,10 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterAll, beforeAll } from "vitest";
 import { type Component, defineComponent, h, nextTick } from "vue";
 import { clipboard } from "../src/clipboard";
+import { columnGroupCollapse } from "../src/column-group-collapse";
+import { columnPinning } from "../src/column-pinning";
+import { columnReorder } from "../src/column-reorder";
+import { columnResize } from "../src/column-resize";
 import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
@@ -14,9 +18,10 @@ import { rowSelection } from "../src/row-selection";
 // keys, selections, ranges, clipboard and fill install (Epic #144).
 
 /**
- * Every feature these behaviours were before Epics #144 and #146 (navigation, row selection, cell
- * ranges, the clipboard, the fill handle, cell editing): a test of them installs them (`features: FEATURES` on `Root`,
- * `typedDataGrid<TRow, Features>()`), and behaves as it did.
+ * Every feature these behaviours were before Epics #144, #146 and #148 (navigation, row
+ * selection, cell ranges, the clipboard, the fill handle, cell editing, column resizing,
+ * reordering, pinning and collapsible groups): a test of them installs them (`features: FEATURES`
+ * on `Root`, `typedDataGrid<TRow, Features>()`), and behaves as it did.
  */
 export const FEATURES = [
     navigation(),
@@ -25,6 +30,10 @@ export const FEATURES = [
     clipboard(),
     fillHandle(),
     editing(),
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+    columnGroupCollapse(),
 ] as const;
 
 /** The type of `FEATURES`, for `typedDataGrid`, `RootProps` and the refs. */

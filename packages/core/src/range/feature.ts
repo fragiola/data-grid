@@ -84,8 +84,8 @@ function withRange(state: State, range: CellRange): Applied<CellRange> {
 }
 
 /**
- * The state after any command, its range kept to its rules (Epic #88): a new layout of the columns
- * (an order, a collapse) leaves none (its columns are others), new rows or columns keep it inside
+ * The state after any command, its range kept to its rules (Epic #88): a new layout of the same
+ * columns (an order, a collapse) leaves none (its columns are others), new rows or columns keep it inside
  * the body (`keptRange`), and the active cell moving elsewhere (a click, a Tab, a control taking
  * focus, the keys, the app's `active-position.set`) leaves none: a range's anchor is the active
  * cell where it started (one the active cell did not start, select-all's, stays until it moves).
@@ -96,12 +96,12 @@ function withRange(state: State, range: CellRange): Applied<CellRange> {
 function withRangeRules(after: State, before: State): State {
     let next = after;
     let range = next.selectedRange;
-    // a new order or a new collapse laid the columns out again: a range's columns are others
+    // the same columns laid out again (a feature's order or collapse, Epic #148): a range's
+    // columns are others
     if (
         range &&
         after.header !== before.header &&
-        (after.columnOrder !== before.columnOrder ||
-            after.collapsedGroupKeys !== before.collapsedGroupKeys)
+        after.columnEntries === before.columnEntries
     ) {
         range = null;
     }

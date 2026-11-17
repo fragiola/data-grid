@@ -46,7 +46,6 @@ export type {
 export type { PartComposableResult } from "./composables/internal";
 export { useCell } from "./composables/use-cell";
 export { useCells } from "./composables/use-cells";
-export { useColumnResizer } from "./composables/use-column-resizer";
 export { useColumnWindow } from "./composables/use-column-window";
 export {
     createDataGridRef,

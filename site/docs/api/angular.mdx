@@ -81,7 +81,8 @@ A part that renders only sometimes is a **structural directive** on its element:
 `*dataGridHeader` (none without a header row), `*dataGridEmpty` (only while there are no rows),
 `*dataGridRowDetail` (only while its row is expanded), `*dataGridSummary="'top'"` (only while
 there are summary rows there), and the elements of yours React gives through a hook:
-`*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle` (from `/fill`),
+`*dataGridGroupToggle`, `*dataGridColumnResizer` (from `/column-resize`), `*dataGridFillHandle`
+(from `/fill`),
 `*dataGridCellEdit` (from `/editing`).
 
 ## Typing by your row
@@ -165,6 +166,9 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 | `[dataGridRoot][dataGridClipboard]` | `beforeRangePaste`; the output `rangePaste`; from `/clipboard`, with `clipboard()` | |
 | `[dataGridRoot][dataGridFill]` | `dataGridFill` (on by presence, `false` off); the output `fill`; from `/fill`, with `fillHandle()` | |
 | `[dataGridRoot][dataGridEditing]` | what types `cellEdit`'s row (optional), `editingCell` (`[(editingCell)]`), `defaultEditingCell`; the output `cellEdit`; from `/editing`, with `editing()` | |
+| `[dataGridRoot][dataGridColumnResize]` | `columnWidths` (`[(columnWidths)]`, the output `columnWidthsChange`), `defaultColumnWidths`; from `/column-resize`, with `columnResize()` | |
+| `[dataGridRoot][dataGridColumnReorder]` | `columnOrder` (`[(columnOrder)]`, the output `columnOrderChange`), `defaultColumnOrder`; from `/column-reorder`, with `columnReorder()` | |
+| `[dataGridRoot][dataGridColumnGroupCollapse]` | `collapsedGroupKeys` (`[(collapsedGroupKeys)]`, the output `collapsedGroupKeysChange`), `defaultCollapsedGroupKeys`; from `/column-group-collapse`, with `columnGroupCollapse()` (`columnPinning()`, from `/column-pinning`, has no input) | |
 | `[dataGridGrid]` | none | |
 | `*dataGridHeader` | none | |
 | `ng-template[dataGridHeaderRows]` | what types it (optional) | `{ $implicit: row, row }` |
@@ -184,7 +188,7 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 | `[dataGridSummaryRow]` | its row | |
 | `ng-template[dataGridSummaryCells]` | what types it (optional) | `{ $implicit: cell, cell }` |
 | `[dataGridSummaryCell]` | its cell | |
-| `*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle` | a header cell, a row (or cell), a cell | `{ $implicit: state, state }` |
+| `*dataGridColumnResizer` (`/column-resize`), `*dataGridGroupToggle`, `*dataGridFillHandle` (`/fill`) | a header cell, a row (or cell), a cell | `{ $implicit: state, state }` |
 | `[dataGridRowDragHandle]`, `[dataGridGroupLabel]` | a row (or cell), a group's header cell | |
 | `*dataGridCellEdit` | its cell (optional: the cell it is in) | `{ $implicit: edit, edit }` |
 | `[dataGridTemplate]` | a context type (`contextOf<…>()`) | that context |
@@ -211,7 +215,7 @@ returns `{ state, props }` as signals (`PartInjectResult`); put `props()` on you
 | `injectHeaderRows()`, `injectHeaderCells(row?)` | the header rows, a header row's cells |
 | `injectSummaryRows(position?)`, `injectSummaryCells(row?)` | the summary rows, a summary row's cells |
 | `injectRow(row)`, `injectCell(cell)`, `injectHeaderCell(cell)`, `injectSummaryRow(row)`, `injectSummaryCell(cell)`, `injectRowDetail(row)` | a part's `{ state, props }` |
-| `injectColumnResizer(cell)`, `injectRowDragHandle(row)`, `injectGroupToggle(row)`, `injectGroupLabel(cell)`, `/fill`'s `injectFillHandle(cell)` | the `{ state, props }` of an element of yours (the directives above are the shorter form; a measured row and a group label need theirs: the engine reads their element) |
+| `injectRowDragHandle(row)`, `injectGroupToggle(row)`, `injectGroupLabel(cell)`, `/column-resize`'s `injectColumnResizer(cell)`, `/fill`'s `injectFillHandle(cell)` | the `{ state, props }` of an element of yours (the directives above are the shorter form; a measured row and a group label need theirs: the engine reads their element) |
 | `/editing`'s `injectCellEdit(cell)` | the editor props of the cell being edited (`EditCellRenderProps`), `null` otherwise |
 
 The opt-in entry points:

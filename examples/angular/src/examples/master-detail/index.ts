@@ -16,6 +16,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { SWITCH } from "#/components/ui/switch";
 import { formatMoney } from "../_kit/data";
@@ -126,8 +127,9 @@ function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
     `,
 })
 export default class MasterDetail {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // pinned columns (without it, every column scrolls)
+    readonly features = [navigation(), columnPinning()];
     protected readonly styles = styles;
     protected readonly formatMoney = formatMoney;
     protected readonly total = total;

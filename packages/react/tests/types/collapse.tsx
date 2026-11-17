@@ -8,6 +8,7 @@ import {
     useGroupLabel,
     useHeaderCell,
 } from "../../src";
+import { columnGroupCollapse } from "../../src/column-group-collapse";
 
 interface Person {
     id: string;
@@ -26,9 +27,12 @@ export const group: ColumnGroup<Person> = {
 };
 declare const people: Person[];
 
+const features = [columnGroupCollapse()] as const;
+
 export function People({ keys }: { keys: readonly string[] }) {
     return (
         <DataGrid.Root
+            features={features}
             columns={[group]}
             rows={people}
             collapsedGroupKeys={keys}
@@ -45,6 +49,7 @@ export function People({ keys }: { keys: readonly string[] }) {
 export function Wrong() {
     return (
         <DataGrid.Root
+            features={features}
             columns={[group]}
             rows={people}
             // @ts-expect-error: collapsed groups are keys

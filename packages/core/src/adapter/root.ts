@@ -26,11 +26,8 @@ import {
     DEFAULT_HEADER_ROW_HEIGHT,
     DEFAULT_ROW_HEIGHT,
 } from "../model/model";
-import { keptOrder, sameOrder } from "../model/order";
 import type {
-    ColumnOrder,
     ColumnOrGroup,
-    ColumnWidths,
     DataGridState,
     DetailHeight,
     GridDirection,
@@ -39,7 +36,6 @@ import type {
     RowKeyGetter,
     RowMetaGetter,
 } from "../model/types";
-import { keptWidths, sameWidths } from "../model/widths";
 import { sameKeys } from "../utils/utils";
 import type { AxisWindow } from "../viewport/window";
 import {
@@ -144,44 +140,6 @@ export interface GridRootOptions<TRow, TNode> {
     /** a measured detail's height until it is measured, in pixels (default 300) */
     estimatedDetailHeight?: number | undefined;
     /**
-     * the resized columns' widths in pixels, by column key, controlled; pair it with
-     * `onColumnWidthsChange`. On screen a column is the first of: its width here (when it is
-     * resizable, within its limits), its automatic width (`autoSize`), its flex share
-     * (`flex`), its own `width`
-     */
-    columnWidths?: ColumnWidths | undefined;
-    /** the resized columns' widths to start with, uncontrolled */
-    defaultColumnWidths?: ColumnWidths | undefined;
-    /**
-     * the widths changed (or, controlled, ask to): a resizer was dragged (once per frame),
-     * moved with the keys, fitted (a double click, Enter, `fit-columns`), or a command ran
-     */
-    onColumnWidthsChange?: ((columnWidths: ColumnWidths) => void) | undefined;
-    /**
-     * the order columns and groups take among their siblings, by key, controlled; pair it
-     * with `onColumnOrderChange`. The ones not listed keep their place
-     */
-    columnOrder?: ColumnOrder | undefined;
-    /** the column order to start with, uncontrolled */
-    defaultColumnOrder?: ColumnOrder | undefined;
-    /**
-     * the order changed (or, controlled, asks to): a header cell was dropped or moved with
-     * the keys, or a command ran
-     */
-    onColumnOrderChange?: ((columnOrder: ColumnOrder) => void) | undefined;
-    /**
-     * the collapsed groups' keys (groups with `collapsible`), controlled; pair it with
-     * `onCollapsedGroupKeysChange`. A collapsed group shows only its children for that state
-     * (`groupShow`)
-     */
-    collapsedGroupKeys?: readonly string[] | undefined;
-    /** the collapsed groups' keys to start with, uncontrolled */
-    defaultCollapsedGroupKeys?: readonly string[] | undefined;
-    /** the collapsed groups changed (or, controlled, ask to): a group was toggled, or a command ran */
-    onCollapsedGroupKeysChange?:
-        | ((collapsedGroupKeys: readonly string[]) => void)
-        | undefined;
-    /**
      * a row was moved (Epic #86): dropped elsewhere by its drag handle (`useRowDragHandle`),
      * or by Ctrl/⌘+Shift+↑/↓ on one of its cells. Given, the rows move: the app moves the row
      * in its own rows, from `fromIndex` to `toIndex` (its index once moved: `moveRow` in
@@ -256,15 +214,6 @@ export const GRID_ROOT_PROPS = [
     "onExpandedGroupKeysChange",
     "detailHeight",
     "estimatedDetailHeight",
-    "columnWidths",
-    "defaultColumnWidths",
-    "onColumnWidthsChange",
-    "columnOrder",
-    "defaultColumnOrder",
-    "onColumnOrderChange",
-    "collapsedGroupKeys",
-    "defaultCollapsedGroupKeys",
-    "onCollapsedGroupKeysChange",
     "onRowMove",
     "onRowWindowChange",
     "onColumnWindowChange",
@@ -395,10 +344,6 @@ export function bindGridRoot<
             initial.expandedGroupKeys ?? initial.defaultExpandedGroupKeys,
         detailHeight: initial.detailHeight,
         estimatedDetailHeight: initial.estimatedDetailHeight,
-        columnWidths: initial.columnWidths ?? initial.defaultColumnWidths,
-        columnOrder: initial.columnOrder ?? initial.defaultColumnOrder,
-        collapsedGroupKeys:
-            initial.collapsedGroupKeys ?? initial.defaultCollapsedGroupKeys,
         direction: initial.direction,
     });
     const flags: ControlledFlags = { syncing: false, applying: false };
@@ -432,56 +377,6 @@ export function bindGridRoot<
             model.run("row-groups.set", { groupKeys });
         },
     });
-    const widths = bind<ColumnWidths>({
-        prefix: "column-widths.",
-        prop: (props) => props.columnWidths,
-        onChange: (props) => props.onColumnWidthsChange,
-        // uncontrolled widths to start with that were not all widths start without those: the
-        // app is told the ones the grid holds
-        start: (props) => props.defaultColumnWidths,
-        read: (state) => state.columnWidths,
-        same: sameWidths,
-        // an entry that is not a width is left out, as at mount, and the parent is told the
-        // widths as they settled
-        apply: (columnWidths) => {
-            model.run("column-widths.set", {
-                columnWidths: keptWidths(columnWidths),
-            });
-        },
-    });
-    const order = bind<ColumnOrder>({
-        prefix: "column-order.",
-        prop: (props) => props.columnOrder,
-        onChange: (props) => props.onColumnOrderChange,
-        // an uncontrolled order to start with that listed a key twice (or a value that is no
-        // key) starts without those: the app is told the order the grid holds
-        start: (props) => props.defaultColumnOrder,
-        read: (state) => state.columnOrder,
-        same: sameOrder,
-        // kept as at mount, and the parent told the order as it settled
-        apply: (columnOrder) => {
-            model.run("column-order.set", {
-                columnOrder: keptOrder(columnOrder),
-            });
-        },
-    });
-    const collapsed = bind<readonly string[]>({
-        prefix: "column-groups.",
-        prop: (props) => props.collapsedGroupKeys,
-        onChange: (props) => props.onCollapsedGroupKeysChange,
-        // keys to start with that were not all strings (or listed one twice) start without
-        // those: the app is told the keys the grid holds
-        start: (props) => props.defaultCollapsedGroupKeys,
-        read: (state) => state.collapsedGroupKeys,
-        // a set: the same keys in another order are no change
-        same: sameKeys,
-        // kept as at mount, and the parent told the keys as they settled
-        apply: (groupKeys) => {
-            model.run("column-groups.set", {
-                groupKeys: keptOrder(groupKeys),
-            });
-        },
-    });
     const installedFeatures = featuresOf(model);
     const engine = createDataGridEngine<TRow, TNode>(
         model,
@@ -505,7 +400,8 @@ export function bindGridRoot<
         model as unknown as DataGridModel<unknown, unknown>,
     );
     // the features' controlled props (Epic #141), bound after the core's, in their order; the
-    // ones followed first (the active position, Epic #144) with the layout inputs
+    // ones followed first: the layout inputs (Epic #148: the widths, the order, the collapsed
+    // groups), then the active position (Epic #144)
     const featureSpecs = featureControlledProps<GridRootProps<TRow, TNode>>(
         installedFeatures,
         model as unknown as DataGridModel<unknown, unknown>,
@@ -519,15 +415,17 @@ export function bindGridRoot<
             >,
         ),
     );
-    const firstPieces = featurePieces.filter(
-        (_, index) => featureSpecs[index]?.first === true,
-    );
+    const piecesWhere = (
+        first: (spec: ControlledProp<never, never, unknown>) => boolean,
+    ) =>
+        featurePieces.filter((_, index) => {
+            const spec = featureSpecs[index];
+            return spec !== undefined && first(spec);
+        });
     // followed before the data props, in this order: the layout inputs, then the active position
     const layout: readonly Controlled[] = [
-        widths,
-        order,
-        collapsed,
-        ...firstPieces,
+        ...piecesWhere((spec) => spec.first === "layout"),
+        ...piecesWhere((spec) => spec.first === true),
     ];
     // settled (and started) in this order: the layout inputs first, so a position the order or a
     // collapse moved settles in the same pass; the features' last (the selections, the sort)
@@ -535,7 +433,7 @@ export function bindGridRoot<
         ...layout,
         expanded,
         groups,
-        ...featurePieces.filter((piece) => !firstPieces.includes(piece)),
+        ...featurePieces.filter((piece) => !layout.includes(piece)),
     ];
     // the core's data props, then the features' (a selection's mode, Epic #144)
     const data: readonly PropsGroup<TRow, TNode>[] = [

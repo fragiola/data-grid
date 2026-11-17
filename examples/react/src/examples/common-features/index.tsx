@@ -6,10 +6,14 @@ import {
     type HeaderCellInfo,
     headerCellContent,
     type SummaryPosition,
-    useColumnResizer,
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
+import {
+    columnResize,
+    useColumnResizer,
+} from "@fragiola/data-grid-react/column-resize";
 import { editing } from "@fragiola/data-grid-react/editing";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
@@ -37,8 +41,16 @@ import {
 import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection, cell editing
-const FEATURES = [sorting(), navigation(), rowSelection(), editing()];
+// navigation (the keys, the active cell, the tab stop), row selection, cell editing, column
+// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls)
+const FEATURES = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    editing(),
+    columnResize(),
+    columnPinning(),
+];
 
 // React Data Grid's "common features" in one grid: a selection column, columns pinned at the
 // start and at the end, every column sortable and resizable, cells edited in place, a summary

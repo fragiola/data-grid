@@ -5,6 +5,7 @@ import {
     inject,
 } from "@angular/core";
 import { DATA_GRID, DataGridHeaderCell } from "@fragiola/data-grid-angular";
+import { DataGridColumnResizer } from "@fragiola/data-grid-angular/column-resize";
 import { LucideArrowDown, LucideArrowUp } from "@lucide/angular";
 import * as styles from "./styles";
 
@@ -14,7 +15,7 @@ import * as styles from "./styles";
 
 @Component({
     selector: "[exampleHeaderCell]",
-    imports: [DATA_GRID, LucideArrowUp, LucideArrowDown],
+    imports: [DATA_GRID, DataGridColumnResizer, LucideArrowUp, LucideArrowDown],
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: { "[class]": "styles.headerCell(state())" },
     template: `

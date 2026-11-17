@@ -7,7 +7,7 @@ import type {
     HeaderLayout,
     PinnedSide,
 } from "../model/types";
-import { isWidth, keySet, lowerBound, spanValue } from "../utils/utils";
+import { isWidth, lowerBound, spanValue } from "../utils/utils";
 
 // Column groups (Epic #13, G1–G3): the entries of `columns` are columns or groups of them. The
 // leaves, in order, are the grid's columns; the header has as many rows as the deepest leaf needs,
@@ -426,27 +426,40 @@ function cellsByKey<TRow, TNode>(
 }
 
 /**
+ * How the features lay the columns out (Epic #148, their `columnLayout`): each sibling list in an
+ * order (`arrange`, `group`: the list's group, `undefined` at the top; a column order's), and
+ * which collapsible groups are collapsed (`collapsed`; none without it: every group expanded).
+ */
+export interface ColumnArrangement<TRow, TNode> {
+    readonly arrange?:
+        | (<E extends ColumnOrGroup<TRow, TNode>>(
+              list: readonly E[],
+              group: ColumnGroup<TRow, TNode> | undefined,
+          ) => readonly E[])
+        | undefined;
+    readonly collapsed?: ((groupKey: string) => boolean) | undefined;
+}
+
+/**
  * Lays the entries of `columns` out: their leaves, and the header's rows and cells, each sibling
- * list in the order `order` gives it (the column order, Epic #75), and a collapsible group's
- * children shown by its state (`collapsed`, the collapsed groups' keys, E1.3: the ones it hides
- * are no columns, but keep their places in the order; the header keeps the rows every entry
- * needs, so a toggle never changes its height). Without a group, a `colSpan` and an order, the
- * columns are the entries themselves (the same array). It never throws: a group inside itself is
- * not entered again, and a group without columns has no cell (`columnsError` refuses both).
+ * list as the features arrange it (`arrangement`: a column order, Epic #75), and a collapsible
+ * group's children shown by its state (expanded, unless the features collapse it: E1.3; the ones
+ * it hides are no columns, but keep their places in the order; the header keeps the rows every
+ * entry needs, so a toggle never changes its height). Without a group, a `colSpan` and an order,
+ * the columns are the entries themselves (the same array). It never throws: a group inside itself
+ * is not entered again, and a group without columns has no cell (`columnsError` refuses both).
  */
 export function layoutColumns<TRow, TNode>(
     entries: readonly ColumnOrGroup<TRow, TNode>[],
-    order?: <E extends ColumnOrGroup<TRow, TNode>>(
-        list: readonly E[],
-    ) => readonly E[],
-    collapsed: readonly string[] = [],
+    arrangement: ColumnArrangement<TRow, TNode> = {},
 ): ColumnLayout<TRow, TNode> {
+    const { arrange, collapsed } = arrangement;
     // a header span (E1.2) is laid out as a group is
     if (
         entries.every((entry) => !isColumnGroup(entry)) &&
         !entries.some((entry) => entry.colSpan)
     ) {
-        const columns = order ? order(entries) : entries;
+        const columns = arrange ? arrange(entries, undefined) : entries;
         return { columns, header: flatHeader(columns) };
     }
     // the depth first: a cell's row counts from the top
@@ -473,14 +486,17 @@ export function layoutColumns<TRow, TNode>(
     const columns: Column<TRow, TNode>[] = [];
     /** the columns' cells a header span covers: no cell on screen, kept for `cellByKey` */
     const covered: HeaderCellLayout<TRow, TNode>[] = [];
-    const collapsedKeys = keySet(collapsed);
-    /** places `list`, the children of a collapsible group in `state` showing only that state's */
+    /**
+     * places `list`, the children of `group` (none at the top) in its order, a collapsible
+     * group's showing only its state's (`state`)
+     */
     const place = (
         list: readonly ColumnOrGroup<TRow, TNode>[],
         level: number,
+        group?: ColumnGroup<TRow, TNode>,
         state?: GroupShow,
     ) => {
-        const ordered = order ? order(list) : list;
+        const ordered = arrange ? arrange(list, group) : list;
         const siblings = state
             ? ordered.filter((entry) => showsIn(entry, state))
             : ordered;
@@ -517,9 +533,10 @@ export function layoutColumns<TRow, TNode>(
             place(
                 childrenOf(entry),
                 level + 1,
+                entry,
                 entry.collapsible !== true
                     ? undefined
-                    : collapsedKeys.has(entry.key)
+                    : collapsed?.(entry.key) === true
                       ? "collapsed"
                       : "expanded",
             );

@@ -6,8 +6,10 @@ import { createRoot } from "react-dom/client";
 // renders, scrolls (both axes, scaled: 1,000,000 rows and 1,000 columns past `maxScrollSize`) and
 // virtualizes as any grid; its sortable columns do not sort and carry no sort attribute. Without
 // navigation (Epic #144) it is the APG table pattern: `role="table"`, `cell`, no tab stop on the
-// grid nor its cells, and the arrow keys move nothing. As a table (`?kind=table`) or as divs (the
-// default). `e2e/bare.spec.ts` drives both.
+// grid nor its cells, and the arrow keys move nothing. Without the column features (Epic #148)
+// its first column, pinned, resizable and reorderable, scrolls with the others and neither moves
+// nor resizes. As a table (`?kind=table`) or as divs (the default). `e2e/bare.spec.ts` drives
+// both.
 
 interface BareRow {
     id: number;
@@ -24,6 +26,14 @@ const columns: Column<BareRow>[] = Array.from(
         width: 100,
         // without sorting installed, a sortable column is a column
         sortable: true,
+        // and without the column features, so is a pinned, resizable, reorderable one
+        ...(columnIndex === 0
+            ? {
+                  pinned: "start" as const,
+                  resizable: true,
+                  reorderable: true,
+              }
+            : {}),
         getValue: (row: BareRow) => `${row.id}:${columnIndex}`,
     }),
 );

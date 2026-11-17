@@ -31,10 +31,6 @@ export {
     type CellsContext,
     DataGridCells,
 } from "./lib/directives/cells.directive";
-export {
-    type ColumnResizerContext,
-    DataGridColumnResizer,
-} from "./lib/directives/column-resizer.directive";
 export { DataGridEmpty } from "./lib/directives/empty.directive";
 export { DataGridGrid } from "./lib/directives/grid.directive";
 export { DataGridGroupLabel } from "./lib/directives/group-label.directive";
@@ -87,7 +83,6 @@ export { DataGridTemplate } from "./lib/directives/template.directive";
 export { createDataGridRef } from "./lib/inject/create-data-grid-ref";
 export { injectCell } from "./lib/inject/inject-cell";
 export { injectCells } from "./lib/inject/inject-cells";
-export { injectColumnResizer } from "./lib/inject/inject-column-resizer";
 export { injectColumnWindow } from "./lib/inject/inject-column-window";
 export { injectDataGrid, injectGridView } from "./lib/inject/inject-data-grid";
 export { injectGroupLabel } from "./lib/inject/inject-group-label";

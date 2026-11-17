@@ -2,8 +2,8 @@ import type { DataGridModel } from "../model/model";
 import { veto } from "../model/result";
 import type { DataGridState } from "../model/types";
 
-// A piece of the model's state a root prop can control (D3): the column widths and order, the
-// active position, the selection, the sort, the expanded rows. One way for all of them:
+// A piece of the model's state a root prop can control (D3): the expanded rows, and the features'
+// (the column widths and order, the active position, the selection, the sort). One way for all of them:
 // controlled, a change is asked for (`on…Change`) and applied only when the prop follows;
 // uncontrolled, the grid applies it and tells.
 //
@@ -55,10 +55,12 @@ export interface ControlledProp<TProps, TState, V>
     /** what a command makes it, from the command's value; without it, that value itself */
     readonly fromCommand?: ((command: string, value: unknown) => V) | undefined;
     /**
-     * followed before the data props, with the layout inputs, and settled with them (the active
-     * position: valid before the rows change, it survives them); else after them
+     * followed before the data props, and settled with them: `"layout"`, a layout input, first
+     * of all (Epic #148: a column's widths, order or collapse, so a position they move settles in
+     * the same pass); `true`, right after them (the active position: valid before the rows change,
+     * it survives them); else after the data props
      */
-    readonly first?: boolean | undefined;
+    readonly first?: boolean | "layout" | undefined;
 }
 
 /** A controlled piece over the root's latest props: its prop, its handler, its default. */

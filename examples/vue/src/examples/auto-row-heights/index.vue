@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
@@ -14,8 +15,9 @@ interface Profile extends Person {
 }
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop)
-const features = [sorting(), navigation()] as const;
+// navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
+// scrolls)
+const features = [sorting(), navigation(), columnPinning()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

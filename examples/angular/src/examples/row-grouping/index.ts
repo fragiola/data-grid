@@ -5,6 +5,7 @@ import {
     type DataGridNode,
     type RowKey,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import {
     DataGridLocalRows,
     groupKeyOf,
@@ -201,8 +202,14 @@ export default class RowGrouping {
     protected readonly selected = signal<readonly RowKey[]>([]);
 
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection
-    readonly features = [sorting(), navigation(), rowSelection()];
+    // cell navigation (the keys, the active cell, the tab stop), row selection, pinned columns
+    // (without it, every column scrolls)
+    readonly features = [
+        sorting(),
+        navigation(),
+        rowSelection(),
+        columnPinning(),
+    ];
     readonly local = injectLocalRows(ROWS, this.columns, () => ({
         groupBy: GROUP_BY[this.grouping()],
         aggregates: AGGREGATES,

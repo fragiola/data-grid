@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GridView } from "../../src";
 import {
     COLUMN_RESIZER_ATTRIBUTE,
     type Column,
@@ -8,6 +9,7 @@ import {
     headerCellPart,
     veto,
 } from "../../src";
+import type { ColumnReorderView } from "../../src/column-reorder";
 import { sorting } from "../../src/sorting";
 import { FEATURES } from "../features";
 import {
@@ -185,8 +187,12 @@ describe("a drag on a header cell", () => {
             side: "after",
         };
         expect(target()).toEqual(over);
-        expect(view().columnReorder).toEqual(over);
-        expect(engine.get("column-reorder")).toBe(view().columnReorder);
+        expect(
+            (view() as GridView<Row> & ColumnReorderView).columnReorder,
+        ).toEqual(over);
+        expect(engine.get("column-reorder")).toBe(
+            (view() as GridView<Row> & ColumnReorderView).columnReorder,
+        );
         // the columns do not move meanwhile
         expect(leaves().slice(0, 4)).toEqual(["p", "q", "a", "b"]);
         press(cells.a, "pointerup", 370);
@@ -195,7 +201,9 @@ describe("a drag on a header cell", () => {
         ]);
         expect(leaves().slice(0, 4)).toEqual(["p", "q", "b", "a"]);
         expect(target()).toBeNull();
-        expect(view().columnReorder).toBeNull();
+        expect(
+            (view() as GridView<Row> & ColumnReorderView).columnReorder,
+        ).toBeNull();
         expect(reorders).toEqual([
             { columnKey: "a", targetKey: null, side: null },
             over,
@@ -650,7 +658,9 @@ describe("a drag's pointer and the page", () => {
     it("reports no drop target while a drop would move nothing", () => {
         const state = stateOf({ columns: COLUMNS });
         const view = viewOf(state, {
-            columnReorder: { columnKey: "a", targetKey: null, side: null },
+            featureFields: {
+                columnReorder: { columnKey: "a", targetKey: null, side: null },
+            },
         });
         for (const key of ["a", "b", "q"]) {
             const cell = state.header.cellByKey(key);
@@ -816,10 +826,12 @@ describe("the parts", () => {
     it("tell a header cell reorderable, dragged, or where a drop lands beside it", () => {
         const state = stateOf({ columns: COLUMNS });
         const view = viewOf(state, {
-            columnReorder: {
-                columnKey: "a",
-                targetKey: "g",
-                side: "after",
+            featureFields: {
+                columnReorder: {
+                    columnKey: "a",
+                    targetKey: "g",
+                    side: "after",
+                },
             },
         });
         const stateOfCell = (key: string) => {

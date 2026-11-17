@@ -22,6 +22,11 @@ import {
     clipboard,
     DataGridClipboard,
 } from "@fragiola/data-grid-angular/clipboard";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
+import {
+    columnResize,
+    DataGridColumnResizer,
+} from "@fragiola/data-grid-angular/column-resize";
 import {
     type CellEditEvent,
     DataGridEditing,
@@ -77,6 +82,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
     selector: "example-all-features",
     imports: [
         DATA_GRID,
+        DataGridColumnResizer,
         DataGridEditing,
         DataGridLocalRows,
         LucideArrowUp,
@@ -267,10 +273,11 @@ export default class AllFeatures {
         budgetedTasks(300),
     );
     readonly announcement = signal("");
-    // sorted in memory: the grid's indexes are the rows shown
-    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), ranges of cells, the clipboard,
-    // the fill handle, cell editing
+    // sorted in memory: the grid's indexes are the rows shown the features the grid installs:
+    // sorting (the local rows' sort needs it, or no column sorts), cell navigation (the keys, the
+    // active cell, the tab stop), ranges of cells, the clipboard, the fill handle, cell editing,
+    // column resizing (its handles, keys and fits), pinned columns (without it, every column
+    // scrolls)
     readonly features = [
         sorting(),
         navigation(),
@@ -278,6 +285,8 @@ export default class AllFeatures {
         clipboard(),
         fillHandle(),
         editing(),
+        columnResize(),
+        columnPinning(),
     ];
     readonly local = injectLocalRows(this.tasks, this.columns);
     // the grid's model from outside its root: a fill repeats the values it reads

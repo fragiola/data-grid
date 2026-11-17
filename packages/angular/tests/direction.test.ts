@@ -7,6 +7,7 @@ import {
     type GridDirection,
     injectDataGrid,
 } from "../src/public-api";
+import { TEST_FEATURES } from "./grid";
 import {
     cellAt,
     click,
@@ -55,7 +56,7 @@ stubViewportSize(500, 235);
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [style.direction]="page() ?? null">
-            <div dataGridRoot [columns]="cells()" [rows]="rows" [rowHeight]="20"
+            <div dataGridRoot [features]="testFeatures" [columns]="cells()" [rows]="rows" [rowHeight]="20"
                 [direction]="direction()" [defaultExpandedRowKeys]="expanded() ? [0] : undefined">
                 @if (table()) {
                     <table dataGridGrid>
@@ -109,6 +110,7 @@ stubViewportSize(500, 235);
     `,
 })
 class DirectionGrid {
+    readonly testFeatures = TEST_FEATURES;
     readonly rows = rows;
     readonly cells = input<readonly Column<Row, DataGridNode>[]>(columns);
     readonly table = input(false);
@@ -250,7 +252,7 @@ describe("right to left", () => {
             imports: [DATA_GRID],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [columns]="columns" [rows]="[]" direction="rtl">
+                <div dataGridRoot [features]="testFeatures" [columns]="columns" [rows]="[]" direction="rtl">
                     <div dataGridGrid>
                         <div *dataGridHeader>
                             <ng-template dataGridHeaderRows let-row>
@@ -268,6 +270,7 @@ describe("right to left", () => {
             `,
         })
         class Empty {
+            readonly testFeatures = TEST_FEATURES;
             readonly columns = columns;
         }
         const { container } = await render(Empty);
@@ -319,12 +322,13 @@ describe("the root's dir (the epic review)", () => {
             imports: [DATA_GRID, Commands],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [columns]="columns" [rows]="[]">
+                <div dataGridRoot [features]="testFeatures" [columns]="columns" [rows]="[]">
                     <test-commands />
                 </div>
             `,
         })
         class WithCommands {
+            readonly testFeatures = TEST_FEATURES;
             readonly columns = columns;
         }
         const { container } = await render(WithCommands);

@@ -11,6 +11,8 @@ import {
 import {
     cellAt,
     click,
+    FEATURES,
+    type Features,
     renderGrid,
     root,
     rowAt,
@@ -28,7 +30,7 @@ interface Row {
     id: number;
 }
 
-const G = typedDataGrid<Row>();
+const G = typedDataGrid<Row, Features>();
 
 const rows: Row[] = Array.from({ length: 100 }, (_, id) => ({ id }));
 
@@ -85,6 +87,7 @@ function grid({
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns: cells,
             rows,
             rowHeight: 20,
@@ -249,7 +252,7 @@ describe("right to left", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows: [], direction: "rtl" },
+                { features: FEATURES, columns, rows: [], direction: "rtl" },
                 {
                     default: () => [
                         h(G.Grid, null, {
@@ -314,7 +317,11 @@ describe("the root's dir (the epic review)", () => {
             },
         });
         const { container } = renderGrid(() =>
-            h(G.Root, { columns, rows: [] }, { default: () => [h(Commands)] }),
+            h(
+                G.Root,
+                { features: FEATURES, columns, rows: [] },
+                { default: () => [h(Commands)] },
+            ),
         );
         await settled();
         const button = (id: string) => {

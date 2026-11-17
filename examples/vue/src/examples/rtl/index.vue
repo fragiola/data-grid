@@ -6,6 +6,9 @@ import {
     headerCellContent,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
+import { columnReorder } from "@fragiola/data-grid-vue/column-reorder";
+import { columnResize } from "@fragiola/data-grid-vue/column-resize";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import {
     computed,
@@ -19,8 +22,15 @@ import { formatMoney, type Person, people } from "../_kit/data";
 import Resizer from "./resizer.vue";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const features = [navigation()] as const;
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), column
+// resizing (its handles, keys and fits), column reordering (a header cell's drag and keys), pinned
+// columns (without it, every column scrolls)
+const features = [
+    navigation(),
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

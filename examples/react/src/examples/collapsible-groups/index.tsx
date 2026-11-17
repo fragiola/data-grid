@@ -11,14 +11,18 @@ import {
     useGroupLabel,
     useHeaderCell,
 } from "@fragiola/data-grid-react";
+import { columnGroupCollapse } from "@fragiola/data-grid-react/column-group-collapse";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { ChevronRight } from "lucide-react";
 import { Clickable } from "#/components/atoms/clickable";
 import { formatNumber, measurement, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const FEATURES = [navigation()];
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls), collapsible groups (without it, a group stays
+// expanded)
+const FEATURES = [navigation(), columnPinning(), columnGroupCollapse()];
 
 const rows = people(500);
 
@@ -126,7 +130,7 @@ const ALL_GROUPS = YEARS.flatMap((value) => [
  * holding the toggle that opens and closes it (the app's own button, the grid's command).
  */
 function GroupHeader({ cell }: { cell: HeaderCellInfo<Person> }) {
-    const { model } = useDataGrid<Person>();
+    const { model } = useDataGrid<Person, typeof FEATURES>();
     const { state } = useHeaderCell(cell);
     const label = useGroupLabel(cell);
     return (
@@ -152,7 +156,7 @@ function GroupHeader({ cell }: { cell: HeaderCellInfo<Person> }) {
 }
 
 export default function CollapsibleGroups() {
-    const gridRef = useDataGridRef<Person>();
+    const gridRef = useDataGridRef<Person, typeof FEATURES>();
     const setCollapsed = (groupKeys: readonly string[]) =>
         gridRef.current?.model.run("column-groups.set", { groupKeys });
 

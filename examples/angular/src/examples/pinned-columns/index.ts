@@ -5,6 +5,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { measurement, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
@@ -149,8 +150,9 @@ const columns: ColumnOrGroup<Person, DataGridNode>[] = [
     `,
 })
 export default class PinnedColumns {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
+    // pinned columns (without it, every column scrolls)
+    readonly features = [navigation(), columnPinning()];
     protected readonly styles = styles;
 
     readonly rows = rows;

@@ -5,6 +5,7 @@ import {
     type RangeFill,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { fillHandle, repeatedFill } from "@fragiola/data-grid-vue/fill";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { cellRange } from "@fragiola/data-grid-vue/range";
@@ -119,8 +120,13 @@ function unitsFill({ source, target }: RangeFill): RangeFill | null {
 }
 
 // the features the grid installs: cell navigation (the keys, the active cell, the tab stop), cell
-// ranges, the fill handle
-const features = [navigation(), cellRange(), fillHandle()] as const;
+// ranges, the fill handle, pinned columns (without it, every column scrolls)
+const features = [
+    navigation(),
+    cellRange(),
+    fillHandle(),
+    columnPinning(),
+] as const;
 
 // the parts typed by the row type: a template cannot pass `Plan` as a type argument
 const DataGrid = typedDataGrid<Plan, typeof features>();

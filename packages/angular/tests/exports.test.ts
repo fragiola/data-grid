@@ -46,7 +46,6 @@ const ANGULAR_ONLY = [
     // a cell's default content (React renders it without children)
     "DataGridCellContent",
     // the parts React gives through a hook's props (Angular cannot spread props)
-    "DataGridColumnResizer",
     "DataGridRowDragHandle",
     "DataGridGroupToggle",
     "DataGridGroupLabel",
@@ -78,6 +77,10 @@ const ENTRIES: Readonly<Record<string, readonly string[]>> = {
     fill: ["DataGridFill", "DataGridFillHandle"],
     editing: ["DataGridEditing", "DataGridCellEdit"],
     sorting: ["DataGridSorting"],
+    "column-resize": ["DataGridColumnResize", "DataGridColumnResizer"],
+    "column-reorder": ["DataGridColumnReorder"],
+    "column-pinning": [],
+    "column-group-collapse": ["DataGridColumnGroupCollapse"],
 };
 
 /** The features' entries: each re-exports the core's of the same name. */

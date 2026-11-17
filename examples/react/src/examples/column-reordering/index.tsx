@@ -7,9 +7,14 @@ import {
     type DataGridRef,
     type HeaderCellInfo,
     headerCellContent,
-    useColumnResizer,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
+import { columnReorder } from "@fragiola/data-grid-react/column-reorder";
+import {
+    columnResize,
+    useColumnResizer,
+} from "@fragiola/data-grid-react/column-resize";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
@@ -21,8 +26,16 @@ import { activeHeaderKey, describeMove } from "./announce";
 import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop)
-const FEATURES = [sorting(), navigation()];
+// navigation (the keys, the active cell, the tab stop), column resizing (its handles, keys and
+// fits), column reordering (a header cell's drag and keys), pinned columns (without it, every
+// column scrolls)
+const FEATURES = [
+    sorting(),
+    navigation(),
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+];
 
 const all = people(1_000);
 

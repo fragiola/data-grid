@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, type VNodeChild } from "vue";
 import { formatMoney } from "../_kit/data";
@@ -16,8 +17,9 @@ import * as styles from "./styles";
 // nested in another is in the tab order only while the orders grid's active cell is in its row:
 // Tab goes from that row into its items, and Shift+Tab comes back.
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const features = [navigation()] as const;
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const features = [navigation(), columnPinning()] as const;
 
 const DataGrid = typedDataGrid<Item, typeof features>();
 

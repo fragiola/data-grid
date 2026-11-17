@@ -2,10 +2,14 @@
 
 import {
     type HeaderCellInfo,
-    useColumnResizer,
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
+import { columnReorder } from "@fragiola/data-grid-react/column-reorder";
+import {
+    columnResize,
+    useColumnResizer,
+} from "@fragiola/data-grid-react/column-resize";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import {
     rowSelection,
@@ -22,8 +26,15 @@ import * as styles from "./styles";
 // answers), the sort too. The columns stay the same objects: only these cells re-render.
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-export const FEATURES = [sorting(), navigation(), rowSelection()];
+// navigation (the keys, the active cell, the tab stop), row selection, column resizing (its
+// handles, keys and fits), column reordering (a header cell's drag and keys)
+export const FEATURES = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    columnResize(),
+    columnReorder(),
+];
 
 export type SortKey = "name" | "domain" | "employees" | "arr" | "country";
 

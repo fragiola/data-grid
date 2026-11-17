@@ -6,16 +6,16 @@ import {
     type ColumnOrGroup,
     cellPart,
     columnLeft,
-    columnResizerPart,
     headerCellPart,
     renderedWidth,
     rowDetailBox,
     rowDisplay,
     rowLeft,
 } from "../../src";
+import { siblingOrder } from "../../src/column-reorder/order";
+import { columnResizerPart } from "../../src/column-resize";
 import { pinnedEndShift } from "../../src/engine/geometry";
 import { columnsError } from "../../src/header/header";
-import { siblingOrder } from "../../src/model/order";
 import { gridModel } from "../features";
 import {
     cellElement,

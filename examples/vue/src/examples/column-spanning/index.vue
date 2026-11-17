@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, type VNodeChild } from "vue";
 import {
@@ -12,8 +13,9 @@ import {
 } from "./bookings";
 import * as styles from "./styles";
 
-// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-const features = [navigation()] as const;
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
+// columns (without it, every column scrolls)
+const features = [navigation(), columnPinning()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

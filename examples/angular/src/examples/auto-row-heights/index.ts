@@ -13,6 +13,7 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -150,11 +151,11 @@ export default class AutoRowHeights {
         { key: "city", name: "City", width: 130, sortable: true },
     ];
 
-    // a sort moves the rows: the ones on screen keep their heights, the others are measured
-    // again when they render (counted at the estimate until then)
-    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop)
-    readonly features = [sorting(), navigation()];
+    // a sort moves the rows: the ones on screen keep their heights, the others are measured again
+    // when they render (counted at the estimate until then) the features the grid installs: sorting
+    // (the local rows' sort needs it, or no column sorts), cell navigation (the keys, the active
+    // cell, the tab stop), pinned columns (without it, every column scrolls)
+    readonly features = [sorting(), navigation(), columnPinning()];
     readonly local = injectLocalRows(rows, this.columns);
 
     readonly rowKey = (row: Profile) => row.id;

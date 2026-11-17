@@ -7,22 +7,26 @@ import {
 import { Profiler, type ReactElement } from "react";
 import { afterAll, beforeAll } from "vitest";
 import { clipboard } from "../src/clipboard";
+import { columnGroupCollapse } from "../src/column-group-collapse";
+import { columnPinning } from "../src/column-pinning";
+import { columnReorder } from "../src/column-reorder";
+import { columnResize } from "../src/column-resize";
 import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
 import { cellRange } from "../src/range";
 import { rowSelection } from "../src/row-selection";
 
-// What the React tests share: the features of Epics #144 and #146, a grid root's size (jsdom lays nothing
-// out), the parts by their `data-grid-part` and indexes, and the elements that render a grid as a
+// What the React tests share: the features of Epics #144, #146 and #148, a grid root's size (jsdom
+// lays nothing out), the parts by their `data-grid-part` and indexes, and the elements that render a grid as a
 // table.
 
 /**
- * Every feature of Epics #144 and #146, in their requirements' order: navigation, row selection,
- * cell ranges, the clipboard, the fill handle and cell editing, as the grid had them before they
- * were features. A
- * test of these behaviours installs them (`features={FEATURES}`); a test of a grid without them
- * installs none.
+ * Every feature of Epics #144, #146 and #148, in their requirements' order: navigation, row
+ * selection, cell ranges, the clipboard, the fill handle, cell editing and the column features
+ * (resizing, reordering, pinning, collapsible groups), as the grid had them before they were
+ * features. A test of these behaviours installs them (`features={FEATURES}`); a test of a grid
+ * without them installs none.
  */
 export const FEATURES = [
     navigation(),
@@ -31,6 +35,10 @@ export const FEATURES = [
     clipboard(),
     fillHandle(),
     editing(),
+    columnResize(),
+    columnReorder(),
+    columnPinning(),
+    columnGroupCollapse(),
 ] as const;
 
 /** Their types (`useDataGridRef<Row, Features>()`, `RootProps<Row, Features>`). */

@@ -150,5 +150,41 @@ for (const kind of KINDS) {
             expect(sorted).toBe(0);
             await expect(cell(page, 0, 0)).toHaveText("0:0");
         });
+
+        test("ignores the column features' fields: a pinned column scrolls, its header cell neither moves nor resizes", async ({
+            page,
+        }) => {
+            await open(page, kind);
+            const marked = await page
+                .locator(
+                    "[data-pinned], [data-resizable], [data-reorderable], [data-collapsible]",
+                )
+                .count();
+            expect(marked).toBe(0);
+            const first = page.getByRole("columnheader", {
+                name: "C0",
+                exact: true,
+            });
+            const box = await first.boundingBox();
+            if (!box) throw new Error("no header cell C0");
+            // a drag that would move a reorderable column, with reordering installed
+            await page.mouse.move(box.x + 20, box.y + box.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(box.x + 280, box.y + box.height / 2, {
+                steps: 5,
+            });
+            await page.mouse.up();
+            await settle(page);
+            await expect(page.getByRole("columnheader").first()).toHaveText(
+                "C0",
+            );
+            expect((await first.boundingBox())?.width).toBe(100);
+            // the pinned column scrolls away with the others
+            await page.getByTestId("viewport").evaluate((viewport) => {
+                viewport.scrollLeft = 1_000;
+            });
+            await settle(page);
+            await expect(first).toHaveCount(0);
+        });
     });
 }

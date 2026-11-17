@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GridView } from "../../src";
 import {
     COLUMN_RESIZER_ATTRIBUTE,
     type ColumnOrGroup,
     type ColumnResize,
-    columnResizerPart,
     createDataGridEngine,
     headerCellPart,
     veto,
 } from "../../src";
+import type { ColumnResizeView } from "../../src/column-resize";
+import { columnResizerPart } from "../../src/column-resize";
 import { columnAxisOf } from "../../src/engine/view";
 import { sorting } from "../../src/sorting";
 import { FEATURES, gridModel } from "../features";
@@ -175,7 +177,7 @@ describe("the column axis", () => {
             columns: COLUMNS,
             columnWidths: { a: 999, b: 130, e: 10 },
         });
-        const axis = columnAxisOf(state);
+        const axis = columnAxisOf(state, state.columnWidths);
         expect([0, 1, 2, 3, 4].map((i) => axis.sizeOf(i))).toEqual([
             200, 130, 100, 100, 100,
         ]);
@@ -213,7 +215,9 @@ describe("a drag on a resizer", () => {
             columnKey: "a",
             width: 100,
         });
-        expect(view().columnResize).toEqual({ columnKey: "a", width: 100 });
+        expect(
+            (view() as GridView<Row> & ColumnResizeView).columnResize,
+        ).toEqual({ columnKey: "a", width: 100 });
         pointer(a.resizer, "pointermove", 310);
         pointer(a.resizer, "pointermove", 320);
         pointer(a.resizer, "pointermove", 340);
@@ -237,7 +241,9 @@ describe("a drag on a resizer", () => {
         expect(frames.size).toBe(0);
         expect(widthOf("a")).toBe(170);
         expect(engine.get("column-resize")).toBeNull();
-        expect(view().columnResize).toBeNull();
+        expect(
+            (view() as GridView<Row> & ColumnResizeView).columnResize,
+        ).toBeNull();
         expect(resizes.at(-1)).toBeNull();
         expect(resizes[0]).toEqual({ columnKey: "a", width: 100 });
         // moves after it are nobody's
@@ -444,7 +450,9 @@ describe("a drag on a resizer", () => {
         const fixed = setup([{ key: "a", width: 100 }]);
         pointer(fixed.a.resizer, "pointerdown", 300);
         expect(fixed.engine.get("column-resize")).toBeNull();
-        expect(fixed.view().columnResize).toBeNull();
+        expect(
+            (fixed.view() as GridView<Row> & ColumnResizeView).columnResize,
+        ).toBeNull();
     });
 
     it("ends at a detach, its frame cancelled", () => {
@@ -596,7 +604,7 @@ describe("the parts", () => {
     it("tell a resizer's state and its separator ARIA", () => {
         const state = stateOf({ columns: COLUMNS });
         const view = viewOf(state, {
-            columnResize: { columnKey: "a", width: 100 },
+            featureFields: { columnResize: { columnKey: "a", width: 100 } },
         });
         const cellOf = (key: string) => {
             const cell = state.header.rows
