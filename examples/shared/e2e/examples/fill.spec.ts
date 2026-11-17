@@ -14,6 +14,8 @@ const units = async (page: Page, rowIndex: number, columnIndex: number) =>
 
 /** Drags the fill handle to a cell's centre and releases it. */
 async function fillTo(page: Page, target: Locator) {
+    // the render the last key caused is done: the handle is at the range's new corner
+    await settle(page);
     const from = await boxOf(handle(page));
     const to = await boxOf(target);
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
