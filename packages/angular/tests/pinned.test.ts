@@ -7,6 +7,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "../src/public-api";
+import { TEST_FEATURES } from "./grid";
 import {
     cellAt,
     render,
@@ -67,7 +68,7 @@ const pinnedClass = (
     imports: [DATA_GRID, NgClass],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [columns]="cells()" [rows]="rows" [rowHeight]="20">
+        <div dataGridRoot [features]="testFeatures" [columns]="cells()" [rows]="rows" [rowHeight]="20">
             @if (table()) {
                 <table dataGridGrid>
                     <thead *dataGridHeader>
@@ -123,6 +124,7 @@ const pinnedClass = (
     `,
 })
 class PinnedGrid {
+    readonly testFeatures = TEST_FEATURES;
     readonly rows = rows;
     readonly pinnedClass = pinnedClass;
     readonly cells =
@@ -236,7 +238,7 @@ describe("pinned cells", () => {
             imports: [DATA_GRID],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [columns]="columns" [rows]="rows" [rowHeight]="20">
+                <div dataGridRoot [features]="testFeatures" [columns]="columns" [rows]="rows" [rowHeight]="20">
                     <div dataGridGrid>
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -253,6 +255,7 @@ describe("pinned cells", () => {
             `,
         })
         class Bound {
+            readonly testFeatures = TEST_FEATURES;
             readonly columns = columns;
             readonly rows = rows;
         }

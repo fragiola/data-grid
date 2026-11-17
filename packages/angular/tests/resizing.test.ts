@@ -8,6 +8,11 @@ import {
 import type { ComponentFixture } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+    DataGridColumnResize,
+    DataGridColumnResizer,
+    injectColumnResizer,
+} from "../src/column-resize";
+import {
     type Column,
     type ColumnOrGroup,
     type ColumnResizerState,
@@ -17,9 +22,8 @@ import {
     type DataGridNode,
     type DataGridRef,
     type HeaderCellInfo,
-    injectColumnResizer,
 } from "../src/public-api";
-import { type TestProps, TestRootProps } from "./grid";
+import { type TestFeatures, type TestProps, TestRootProps } from "./grid";
 import {
     cellAt,
     fire,
@@ -105,11 +109,18 @@ type ResizerForm = "inject" | "directive" | "none";
  */
 @Component({
     selector: "resize-grid",
-    imports: [DATA_GRID, NgTemplateOutlet, TestRootProps, Resizer],
+    imports: [
+        DATA_GRID,
+        DataGridColumnResize,
+        DataGridColumnResizer,
+        NgTemplateOutlet,
+        TestRootProps,
+        Resizer,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()" [gridRef]="gridRef()"
-            [columnWidths]="follow() ? widths() : undefined" (columnWidthsChange)="followed($event)"
+            dataGridColumnResize [columnWidths]="follow() ? widths() : undefined" (columnWidthsChange)="followed($event)"
             (pointerdown)="pressed($event)">
             <ng-template #content let-cell>{{ cell.key }}@switch (resizers()) {
                 @case ('inject') {<test-resizer [cell]="cell" />}
@@ -254,7 +265,7 @@ function widthsOf(container: HTMLElement, columnIndex: number) {
 
 /** A grid with a handle on it from outside, to run commands on. */
 async function withRef(initial: GridProps) {
-    const gridRef = createDataGridRef();
+    const gridRef = createDataGridRef<unknown, TestFeatures>();
     const view = await mountGrid({ gridRef, ...initial });
     /** The model and the engine of the root on screen. */
     const handle = () => {
@@ -324,7 +335,7 @@ describe("controlled", () => {
     });
 
     it("works with a parent that follows", async () => {
-        const gridRef = createDataGridRef();
+        const gridRef = createDataGridRef<unknown, TestFeatures>();
         // a parent: the widths in its state, set by the root's output
         const { container, component } = await mountGrid({
             columns: grouped,

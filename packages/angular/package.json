@@ -71,6 +71,30 @@
             "import": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs",
             "default": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs"
         },
+        "./column-resize": {
+            "@fragiola/source": "./src/column-resize/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-column-resize.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-column-resize.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-column-resize.mjs"
+        },
+        "./column-reorder": {
+            "@fragiola/source": "./src/column-reorder/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-column-reorder.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-column-reorder.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-column-reorder.mjs"
+        },
+        "./column-pinning": {
+            "@fragiola/source": "./src/column-pinning/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-column-pinning.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-column-pinning.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-column-pinning.mjs"
+        },
+        "./column-group-collapse": {
+            "@fragiola/source": "./src/column-group-collapse/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-column-group-collapse.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -124,6 +148,26 @@
                 "types": "./dist/types/fragiola-data-grid-angular-sorting.d.ts",
                 "import": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs",
                 "default": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs"
+            },
+            "./column-resize": {
+                "types": "./dist/types/fragiola-data-grid-angular-column-resize.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-column-resize.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-column-resize.mjs"
+            },
+            "./column-reorder": {
+                "types": "./dist/types/fragiola-data-grid-angular-column-reorder.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-column-reorder.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-column-reorder.mjs"
+            },
+            "./column-pinning": {
+                "types": "./dist/types/fragiola-data-grid-angular-column-pinning.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-column-pinning.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-column-pinning.mjs"
+            },
+            "./column-group-collapse": {
+                "types": "./dist/types/fragiola-data-grid-angular-column-group-collapse.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs"
             },
             "./package.json": "./package.json"
         }

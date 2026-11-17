@@ -7,6 +7,7 @@ import {
 } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
+import { DataGridColumnReorder } from "../src/column-reorder";
 import { DataGridNavigation } from "../src/navigation";
 import {
     type CellPosition,
@@ -80,11 +81,16 @@ const states = new Map<string, HeaderCellState>();
  */
 @Component({
     selector: "reorder-grid",
-    imports: [DATA_GRID, DataGridNavigation, TestRootProps],
+    imports: [
+        DATA_GRID,
+        DataGridColumnReorder,
+        DataGridNavigation,
+        TestRootProps,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()" [gridRef]="gridRef()"
-            [columnOrder]="followOrder() ? order() : undefined" (columnOrderChange)="orderChanged($event)"
+            dataGridColumnReorder [columnOrder]="followOrder() ? order() : undefined" (columnOrderChange)="orderChanged($event)"
             dataGridNavigation [activePosition]="followPosition() === undefined ? undefined : position()"
             (activePositionChange)="positionChanged($event)">
             @if (table()) {
@@ -344,7 +350,7 @@ describe("controlled", () => {
     });
 
     it("works with a parent that follows, a group moving whole", async () => {
-        const gridRef = createDataGridRef();
+        const gridRef = createDataGridRef<unknown, TestFeatures>();
         // a parent: the order in its state, set by the root's output
         const { container, component } = await mountGrid({
             columns: grouped,
@@ -399,7 +405,7 @@ describe("the active cell", () => {
 
     it("follows its column with the order and the position both controlled, never back to its old place", async () => {
         const onActivePositionChange = vi.fn();
-        const gridRef = createDataGridRef();
+        const gridRef = createDataGridRef<unknown, TestFeatures>();
         // a parent: both in its state, set by the root's outputs
         const { container } = await mountGrid({
             gridRef,

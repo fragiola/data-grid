@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
+import { DataGridColumnGroupCollapse } from "../src/column-group-collapse";
 import {
     type Column,
     type ColumnOrGroup,
@@ -8,6 +9,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "../src/public-api";
+import { TEST_FEATURES, type TestFeatures } from "./grid";
 import {
     cellAt,
     click,
@@ -77,11 +79,11 @@ interface GridProps {
 // through the grid's ref; every part counts its renders (D9).
 @Component({
     selector: "test-collapse-grid",
-    imports: [DATA_GRID],
+    imports: [DATA_GRID, DataGridColumnGroupCollapse],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [columns]="columns" [rows]="rows" [rowHeight]="20" [overscan]="{ columns: 1 }"
-            [collapsedGroupKeys]="props().collapsedGroupKeys" [defaultCollapsedGroupKeys]="props().defaultCollapsedGroupKeys"
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="rows" [rowHeight]="20" [overscan]="{ columns: 1 }"
+            dataGridColumnGroupCollapse [collapsedGroupKeys]="props().collapsedGroupKeys" [defaultCollapsedGroupKeys]="props().defaultCollapsedGroupKeys"
             (collapsedGroupKeysChange)="props().onCollapsedGroupKeysChange?.($event)"
             [maxScrollSize]="props().maxScrollSize" [gridRef]="gridRef">
             @if (table()) {
@@ -134,7 +136,8 @@ class CollapseGrid {
     readonly columns = COLUMNS;
     readonly rows = rows;
     readonly rendered = rendered;
-    readonly gridRef = createDataGridRef<Row>();
+    readonly features = TEST_FEATURES;
+    readonly gridRef = createDataGridRef<Row, TestFeatures>();
     readonly props = input<GridProps>({});
     readonly table = input(false);
 
