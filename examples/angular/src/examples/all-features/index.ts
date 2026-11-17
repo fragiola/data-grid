@@ -24,6 +24,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideArrowDown, LucideArrowUp } from "@lucide/angular";
 import { Input, Numeric } from "#/components/atoms/fields";
 import {
@@ -85,6 +86,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [gridRef]="gridRef"
                 [columns]="columns"
@@ -240,6 +242,8 @@ export default class AllFeatures {
     );
     readonly announcement = signal("");
     // sorted in memory: the grid's indexes are the rows shown
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(this.tasks, this.columns);
     // the grid's model from outside its root: a fill repeats the values it reads
     readonly gridRef = createDataGridRef<BudgetedTask>();

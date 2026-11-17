@@ -25,7 +25,7 @@ const ALLOWED = [
     /^@angular\/[a-z-]+$/,
     // the core's extras only: its main entry's types and helpers come through the Angular package
     /^@fragiola\/data-grid\/(local|selection|fill)$/,
-    /^@fragiola\/data-grid-angular(\/(local|selection))?$/,
+    /^@fragiola\/data-grid-angular(\/(local|selection|sorting))?$/,
     /^@lucide\/angular$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,

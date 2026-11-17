@@ -9,6 +9,7 @@ import {
     DataGridHeaderCell,
     injectGridView,
 } from "@fragiola/data-grid-angular";
+import { sortColumnsOf } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideArrowDown,
     LucideArrowUp,
@@ -51,6 +52,6 @@ export class SortHeader {
     private readonly view = injectGridView();
     protected readonly state = computed(() => this.cell.state());
     protected readonly sortedColumns = computed(
-        () => this.view().sortColumns.length,
+        () => sortColumnsOf(this.view()).length,
     );
 }

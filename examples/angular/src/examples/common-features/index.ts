@@ -22,6 +22,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideDownload } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { Input, Numeric } from "#/components/atoms/fields";
@@ -147,6 +148,7 @@ function download(text: string, name: string) {
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowKey]="rowKey"
@@ -357,6 +359,8 @@ export default class CommonFeatures {
         },
     ];
 
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(this.jobs, this.columns);
     /**
      * The rows "select all" covers: the ones that can be selected, worked out again as the jobs

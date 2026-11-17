@@ -5,6 +5,7 @@ import {
     input,
 } from "@angular/core";
 import { injectGridView } from "@fragiola/data-grid-angular";
+import { sortColumnsOf } from "@fragiola/data-grid-angular/sorting";
 import { LucideArrowDown, LucideArrowUp } from "@lucide/angular";
 import type { SortKey } from "./state";
 import * as styles from "./styles";
@@ -35,7 +36,7 @@ export class SortLabel {
 
     private readonly view = injectGridView();
     protected readonly sorted = computed(() =>
-        this.view().sortColumns.find(
+        sortColumnsOf(this.view()).find(
             (entry) => entry.columnKey === this.columnKey(),
         ),
     );

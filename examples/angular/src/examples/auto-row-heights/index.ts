@@ -17,6 +17,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { hash, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
@@ -79,6 +80,7 @@ const rows: Profile[] = people(100_000).map((person) => ({
             <!-- as tall as their content, measured once rendered; until then, about this tall -->
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowKey]="rowKey"
@@ -149,6 +151,8 @@ export default class AutoRowHeights {
 
     // a sort moves the rows: the ones on screen keep their heights, the others are measured
     // again when they render (counted at the estimate until then)
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(rows, this.columns);
 
     readonly rowKey = (row: Profile) => row.id;

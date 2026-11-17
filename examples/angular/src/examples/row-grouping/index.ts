@@ -10,6 +10,7 @@ import {
     groupKeyOf,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { FIELDS } from "#/components/atoms/fields";
@@ -93,6 +94,7 @@ const isSelectable = (person: Person) => person.joined >= "2012";
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowHeight]="38"
@@ -191,6 +193,8 @@ export default class RowGrouping {
     protected readonly grouping = signal<Grouping>("team");
     protected readonly selected = signal<readonly RowKey[]>([]);
 
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(ROWS, this.columns, () => ({
         groupBy: GROUP_BY[this.grouping()],
         aggregates: AGGREGATES,

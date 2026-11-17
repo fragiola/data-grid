@@ -10,6 +10,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideRotateCcw } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { formatMoney, type Person, people } from "../_kit/data";
@@ -136,6 +137,7 @@ const columns: ColumnOrGroup<Person, DataGridNode>[] = [
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowKey]="rowKey"
@@ -192,6 +194,8 @@ export default class ColumnReordering {
     // a move the person asked for: told once the grid shows it
     private readonly moving = { current: false };
     // a click on a sortable header still sorts: the rows in memory, ordered by the app
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(all, columns);
 
     constructor() {

@@ -8,6 +8,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { formatMoney, type Person, people } from "../_kit/data";
 import { SortHeader } from "./header-cell";
 import * as styles from "./styles";
@@ -30,6 +31,7 @@ function lastName(person: Person): string {
         <div [class]="styles.frame">
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowKey]="rowKey"
@@ -88,6 +90,8 @@ export default class Sorting {
         },
     ];
 
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(all, this.columns, {
         defaultSortColumns: [{ columnKey: "team", direction: "ascending" }],
     });

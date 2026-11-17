@@ -4,7 +4,7 @@ import {
     searchRows,
     sortRows,
 } from "@fragiola/data-grid/local";
-import type { SortColumn } from "@fragiola/data-grid-angular";
+import type { SortColumn } from "@fragiola/data-grid-angular/sorting";
 import { type Person, people } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
 

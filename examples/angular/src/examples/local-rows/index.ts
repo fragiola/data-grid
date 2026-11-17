@@ -8,6 +8,7 @@ import {
     DataGridLocalRows,
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
+import { sorting } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideChevronLeft,
     LucideChevronRight,
@@ -148,6 +149,7 @@ const columns: Column<Person, DataGridNode>[] = [
             </div>
             <div
                 dataGridRoot
+                [features]="features"
                 [dataGridLocalRows]="local"
                 [columns]="columns"
                 [rowKey]="rowKey"
@@ -260,6 +262,8 @@ export default class LocalRows {
     // every row is in memory: one injection function filters, searches, sorts and pages them, and
     // keeps that state itself. Given to the root, it hands the grid its rows and its sort; its
     // controls go to the toolbar and the pager
+    // sorting is a feature the grid installs: the local rows' sort needs it, or no column sorts
+    readonly features = [sorting()];
     readonly local = injectLocalRows(all, columns, {
         pageSize: 25,
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
