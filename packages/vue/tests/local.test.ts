@@ -11,10 +11,10 @@ import {
     type Column,
     type HeaderCellInfo,
     type RowInfo,
-    type SortColumn,
     typedDataGrid,
 } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { type SortColumn, sorting } from "../src/sorting";
 import {
     click,
     headerAt,
@@ -34,7 +34,9 @@ interface Person {
     team: string;
 }
 
-const G = typedDataGrid<Person>();
+const FEATURES = [sorting()] as const;
+
+const G = typedDataGrid<Person, typeof FEATURES>();
 
 const people: Person[] = [
     { id: 1, name: "Carla", age: 41, team: "Core" },
@@ -109,7 +111,7 @@ const People = defineComponent({
                 );
             return h(
                 G.Root,
-                { columns, rowHeight: 20, ...local.props },
+                { columns, rowHeight: 20, features: FEATURES, ...local.props },
                 {
                     default: () => [
                         h(
@@ -268,7 +270,7 @@ describe("useLocalRows across renders", () => {
                     ),
                     h(
                         G.Root,
-                        { columns, ...local.props },
+                        { columns, features: FEATURES, ...local.props },
                         {
                             default: () => [
                                 h(G.Grid, null, {
@@ -321,7 +323,7 @@ describe("useLocalRows across renders", () => {
                     seen.add(local.props.onSortColumnsChange);
                     return h(
                         G.Root,
-                        { columns, ...local.props },
+                        { columns, features: FEATURES, ...local.props },
                         {
                             default: () => [
                                 h(G.Grid, null, {
