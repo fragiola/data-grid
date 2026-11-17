@@ -325,7 +325,9 @@ describe("summary rows", () => {
             readonly rows = rows;
             readonly columns = plain;
         }
-        await expect(render(Outside)).rejects.toThrow(/SummaryRow/);
+        // the error read as text: a rejection's matcher sees another realm's Error from the root
+        const error = await render(Outside).catch((thrown: unknown) => thrown);
+        expect(String(error)).toMatch(/SummaryRow/);
     });
 
     it("tell a controlled parent where its active summary row went when the rows change", async () => {
