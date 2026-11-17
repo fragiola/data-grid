@@ -43,17 +43,22 @@ packages.
 
 ## Features and entry points
 
-The main entry is a small core: it renders, scrolls, virtualizes and answers the keys. The rest
-comes from entry points of the same package, imported only when used:
+The main entry is a small core: it renders, scrolls and virtualizes, as a plain table. The rest
+comes from entry points of the same package, imported only when used. Most are
+[features](/docs/concepts/features), installed on a grid through the root's `features`:
 
 | entry | holds |
 | --- | --- |
-| `/sorting` | `sorting()`, a [feature](/docs/concepts/features) the grid installs for its columns to sort |
+| `/navigation` | `navigation()`: the keys, the active cell and one tab stop ([Keyboard](/docs/concepts/keyboard)) |
+| `/sorting` | `sorting()`: columns that sort ([Sorting](/docs/concepts/sorting)) |
+| `/row-selection` | `rowSelection()` and a "select all" control ([Row selection](/docs/concepts/row-selection)) |
+| `/range` | `cellRange()`: a range of cells, with `navigation()` ([Cell selection](/docs/concepts/cell-selection)) |
+| `/clipboard` | `clipboard()`: copy and paste a range, with `cellRange()` |
+| `/fill` | `fillHandle()` and the handle's element, with `cellRange()` ([Fill](/docs/concepts/fill)) |
 | `/local` | rows in memory, sorted, filtered, grouped and paged ([Rows in memory](/docs/concepts/rows-in-memory)) |
-| `/selection` | a "select all" control ([Row selection](/docs/concepts/row-selection)) |
 
-So `@fragiola/data-grid-react/sorting` (or `-vue/sorting`, `-angular/sorting`) needs no other
-package. What an app never imports is not in its bundle.
+So `@fragiola/data-grid-react/navigation` (or `-vue/navigation`, `-angular/navigation`) needs no
+other package. What an app never imports is not in its bundle.
 
 ## Peer dependencies
 

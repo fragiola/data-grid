@@ -151,7 +151,7 @@ data rows'.
 
 ## Keys
 
-The keys are the APG treegrid's, on a body cell in navigation:
+The keys are the APG treegrid's, on a body cell in navigation (`navigation()` installed):
 
 | key | on |
 | --- | --- |
@@ -170,10 +170,10 @@ Right to left, ← and → swap, as everywhere. Each key runs one command, after
 
 ## Selection
 
-With `rowSelection="multiple"`, a group row selects its rows' keys (`rowKeys`): Shift+Space, or
+With [`rowSelection()`](/docs/concepts/row-selection) installed and `rowSelection="multiple"`, a group row selects its rows' keys (`rowKeys`): Shift+Space, or
 `model.run("selected-rows.toggle", { rowIndex })` from your checkbox, selects every one of them,
 or clears them all when every one is selected. A group row is `aria-selected` while every one of
-its rows is: `useSelectAll(group.rowKeys)` tells "some" for a checkbox's indeterminate state. A
+its rows is: `useSelectAll(group.rowKeys)` (`/row-selection`) tells "some" for a checkbox's indeterminate state. A
 range (Shift+↑/↓, a Shift+click) and select-all (Ctrl+A) take a collapsed group row's `rowKeys`,
 so its rows, not on screen, are selected with the others; an expanded group's rows are taken as
 the rows they are (a range never reaches past its ends); a Shift+click on a group row with no

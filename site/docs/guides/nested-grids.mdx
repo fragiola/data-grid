@@ -33,7 +33,8 @@ const columns: Column<Order>[] = [
 
 ## Tab
 
-A grid on its own is one tab stop: its active cell, or the grid itself before one is active. A
+A grid on its own, with `navigation()` installed (on each grid, the outer and the inner), is one
+tab stop: its active cell, or the grid itself before one is active. A
 grid nested in another one is reachable through the cell that holds it: its tab stop is in the
 page's tab order only while the outer grid's active cell holds it (for a grid in a row's
 [detail](/docs/guides/master-detail), while the active cell is in that row), or while focus is

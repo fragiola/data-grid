@@ -3,9 +3,83 @@ title: Keyboard and accessibility
 description: The active cell, the APG grid keys, a roving tab stop and ARIA, and how to replace any key without leaving the grid behind.
 ---
 
+## Install navigation
+
+The keys are a [feature](/docs/concepts/features): `navigation()`, from the `/navigation` entry.
+It gives the grid an active cell, the keys below, one tab stop and the APG grid's roles.
+
+<Framework name="react">
+
+```tsx title="people.tsx"
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation()];
+
+<DataGrid.Root features={features} columns={columns} rows={people}>
+    {/* … */}
+</DataGrid.Root>
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+
+const features = [navigation()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="people">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+The active cell's inputs are `DataGridNavigation`'s (`dataGridNavigation`), a directive on the
+root's element from the same entry; `[features]` alone is enough for the keys.
+
+```ts title="people.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { DataGridNavigation, navigation } from "@fragiola/data-grid-angular/navigation";
+
+@Component({
+    selector: "app-people",
+    imports: [DATA_GRID, DataGridNavigation],
+    template: `
+        <div dataGridRoot [features]="features" dataGridNavigation [(activePosition)]="active" [columns]="columns" [rows]="people()">
+            <!-- … -->
+        </div>
+    `,
+})
+export class People {
+    readonly features = [navigation()];
+    readonly active = signal<CellPosition | null>(null);
+    // …
+}
+```
+
+</Framework>
+
+Without it, the grid is a table, the APG table pattern: `role="table"`, its rows `row`, its
+header cells `columnheader` and its cells `cell`. No cell is ever active, neither the grid nor its
+cells are tab stops (the controls inside cells keep their own tab order), and the arrows are the
+page's. It still renders, scrolls and virtualizes the same. The selections, the clipboard and the
+fill handle build on the active cell: [cell ranges](/docs/concepts/cell-selection) need
+`navigation()` installed.
+
 ## The active cell
 
-One cell at a time is **active**: it has `data-active` and is the grid's tab stop. The keys move
+One cell at a time is **active**: it has `data-active` and is the grid's tab stop. Its props
+are navigation's: `activePosition` with `onActivePositionChange`, or `defaultActivePosition`. The keys move
 it, the grid scrolls it into view and focuses it.
 
 The active cell stays active when focus leaves the grid, so Tab comes back to it. To draw it only
@@ -19,15 +93,15 @@ while it has focus, as the examples do, pair the two: `[data-active]:focus-withi
 | Ctrl+Home, Ctrl+End | the grid's first or last cell (a bottom summary row's, with some) |
 | PageUp, PageDown | a page of rows up or down, in the body |
 | Tab | leaves the grid |
-| Shift+Space | selects the active row, or clears it ([row selection](/docs/concepts/row-selection) on) |
+| Shift+Space | selects the active row, or clears it ([row selection](/docs/concepts/row-selection) installed and on) |
 | Shift+↑, Shift+↓ | the next row, selecting from the anchor (many rows selectable) |
 | Ctrl+A, ⌘+A | selects every row (many rows selectable) |
-| Shift+arrows, Shift+Home, Shift+End, Shift+PageUp, Shift+PageDown | move the selected range's focus, the active cell staying its anchor ([cell selection](/docs/concepts/cell-selection) on; then Shift+↑, Shift+↓ and Ctrl+A are the cells', Shift+Space stays the row's) |
+| Shift+arrows, Shift+Home, Shift+End, Shift+PageUp, Shift+PageDown | move the selected range's focus, the active cell staying its anchor ([cell selection](/docs/concepts/cell-selection) installed and on; then Shift+↑, Shift+↓ and Ctrl+A are the cells', Shift+Space stays the row's) |
 | Ctrl+Shift+Home, Ctrl+Shift+End | take the range's focus to the first or the last cell (cell selection on) |
 | Ctrl+A, ⌘+A | selects every body cell (cell selection on) |
 | Escape | clears the selected range; a plain move clears it too |
 | Escape | with nothing else to end (no range, edit, drag or controls), focus leaves the grid: the active cell stays, and Tab comes back to it. In a grid nested in a cell, focus goes to that cell. The key is not prevented, so a dialog around the grid still closes |
-| Ctrl+C, Ctrl+V | copy the range (or the active cell) as tab-separated text, paste into it (cell selection on; ⌘ on a Mac) |
+| Ctrl+C, Ctrl+V | copy the range (or the active cell) as tab-separated text, paste into it (`clipboard()` installed, cell selection on; ⌘ on a Mac) |
 | Enter, F2, a printable key | on an [editable](/docs/concepts/editing) cell, edit it (the printable key starts the editor; a character typed with AltGr or Option too) |
 | Enter, Shift+Enter, Tab, Shift+Tab | in an edit, commit it and move down, up, to the next or the previous column |
 | Escape | in an edit, cancel it, focus back on the cell; during a [fill](/docs/concepts/fill)'s drag, cancel it |
@@ -67,10 +141,10 @@ selects its rows.
 
 ## One tab stop
 
-While no cell is active, the grid is the tab stop; focusing it activates the first cell in view.
+With navigation installed: while no cell is active, the grid is the tab stop; focusing it activates the first cell in view.
 Then the active cell is (`tabIndex` 0, the others -1), so Tab moves past the grid in one step.
 The controls inside cells (buttons, links, fields, a select, a box to check) are no stops of their
-own: the grid keeps them at `tabIndex` -1, the ones your cells render later included, so a grid
+own (without navigation, they are: the grid leaves them alone): the grid keeps them at `tabIndex` -1, the ones your cells render later included, so a grid
 full of controls is still one stop. A grid nested in another one's cell is reachable through
 that cell: its stop is in the tab order only while the outer active cell holds it
 ([Nested grids](/docs/guides/nested-grids)).
@@ -126,7 +200,8 @@ that content. The arrows move between rows' cells and never land in a detail.
 ## Replacing a key
 
 A cell's `onKeyDown` runs before the grid's: `preventDefault` cancels the grid's handling, and
-`useDataGrid().model.run("active-position.set", …)` moves the cell where you want. The
+`useDataGrid<Person, typeof features>().model.run("active-position.set", …)` (a key of
+navigation's, typed with it) moves the cell where you want. The
 [`custom-navigation`](/examples/custom-navigation) example makes Tab move across rows this way.
 
 A middleware can refuse or rewrite any move:
@@ -146,6 +221,6 @@ model.use((ctx, next) =>
 
 ## ARIA
 
-The grid is `role="grid"` with `aria-rowcount` and `aria-colcount` counting every row and column,
+With navigation, the grid is `role="grid"` (`treegrid` with row groups; without it `table`) with `aria-rowcount` and `aria-colcount` counting every row and column,
 rendered or not; rows and cells carry `aria-rowindex` and `aria-colindex`. Name the grid with
 `aria-label`: the package sets no names. See [State attributes](/docs/concepts/state-attributes).

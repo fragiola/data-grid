@@ -54,9 +54,9 @@ the verbs: `engine.get("row-window")`, `engine.run("scroll-to-cell", { rowIndex:
 ## From props to commands
 
 `DataGrid.Root` creates both and maps its props onto commands: `columns` becomes `columns.set`,
-`rows` (or `rowCount` and `getRow`) becomes `data.set`, `activePosition` becomes
-`active-position.set`, and an installed feature maps its own (`sortColumns` becomes
-`sort-columns.set`). `useDataGrid()` returns `{ model, engine }` to any part inside it, so an
+`rows` (or `rowCount` and `getRow`) becomes `data.set`, and an installed feature maps its own
+(`activePosition` becomes `active-position.set` with [navigation](/docs/concepts/keyboard),
+`sortColumns` becomes `sort-columns.set` with sorting). `useDataGrid()` returns `{ model, engine }` to any part inside it, so an
 app can read and drive the same grid from code. Its keys are typed by the core's alone, unless
 it is given the features: `useDataGrid<Person, typeof features>()`.
 
@@ -116,7 +116,8 @@ The [`large-dataset`](/examples/large-dataset) example shows its windows this wa
 
 ## Controlled or not
 
-`defaultActivePosition` starts the active cell and lets the grid move it.
+With `navigation()` installed, `defaultActivePosition` starts the active cell and lets the grid
+move it.
 `activePosition` controls it: a key press asks, through `onActivePositionChange`, and only the
 prop moves it. See the [`keyboard-navigation`](/examples/keyboard-navigation) example. The sort
 (`sortColumns`, with [sorting](/docs/concepts/sorting) installed) and the expanded rows

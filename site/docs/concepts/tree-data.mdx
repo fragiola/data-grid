@@ -21,6 +21,11 @@ keys (`rowKey`) and the expanded parents.
 ```tsx title="files.tsx"
 import { type Column, DataGrid, useGroupToggle } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { sorting } from "@fragiola/data-grid-react/sorting";
+
+// the keys (the treegrid's), and the sort `useLocalRows` hands the root
+const features = [navigation(), sorting()];
 
 // keep both the same functions between renders (outside the component, or memoised)
 const getSubRows = (file: File) => file.children;
@@ -33,7 +38,7 @@ function Files({ files }: { files: File[] }) {
         defaultExpandedGroupKeys: ["src"],
     });
     return (
-        <DataGrid.Root {...local.props} columns={columns}>
+        <DataGrid.Root features={features} {...local.props} columns={columns}>
             <DataGrid.Grid aria-label="Files">
                 <DataGrid.Header />
                 <DataGrid.Body>
@@ -126,7 +131,7 @@ A parent is a data row: Shift+Space, a click on its checkbox, a range and select
 alone. `useLocalRows`'s `isRowSelectable` (a function of the row only, so the same one works for
 the root's) leaves the rows it refuses out of `subRowKeysOf`. Selecting what it holds is yours: `local.group.subRowKeysOf(rowIndex)` gives every key under
 it (as the filters leave the tree, collapsed rows included), and `useSelectAll([key, ...keys])`
-from `@fragiola/data-grid-react/selection` makes a checkbox for all of them, with "some" for its
+from `@fragiola/data-grid-react/row-selection` (with `rowSelection()` installed) makes a checkbox for all of them, with "some" for its
 indeterminate state, as the example does.
 
 ## Children from a server
@@ -167,6 +172,7 @@ const shown = useMemo(() => {
 }, [listings, expanded]);
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rowCount={shown.length}
     getRow={(index) => shown[index]?.entry}

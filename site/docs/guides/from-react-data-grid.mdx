@@ -31,13 +31,27 @@ deliberately does nothing.
   which rows are selected, which group is open) and your app renders the controls.
 - **The grid writes no data.** There is no `onRowsChange`: an edit, a paste, a fill and a row
   move are events, and your app writes its rows.
+- **What you need, you install.** The keys, sorting, row selection, ranges, the clipboard and the
+  fill handle are [features](/docs/concepts/features), each from its own entry: a grid gets them
+  through `features`, and what it does not install is not in your bundle. React Data Grid's
+  keyboard is `navigation()`; without it the grid is a plain table.
 
 ```tsx title="people.tsx"
 // React Data Grid
 <DataGrid columns={columns} rows={people} rowKeyGetter={(person) => person.id} />
 
 // this grid
-<DataGrid.Root columns={columns} rows={people} rowKey={(person) => person.id} className="h-96">
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation()];
+
+<DataGrid.Root
+    features={features}
+    columns={columns}
+    rows={people}
+    rowKey={(person) => person.id}
+    className="h-96"
+>
     <DataGrid.Grid aria-label="People">
         <DataGrid.Header />
         <DataGrid.Body />
@@ -61,7 +75,7 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 | `headerRowHeight` | `headerRowHeight` | default 35 (not the row height); 0 for no header |
 | `summaryRowHeight` | `summaryRowHeight` | default 35 |
 | `topSummaryRows`, `bottomSummaryRows` (arrays of summary rows) | `summaryRows={{ top, bottom }}` (counts) | the figures are yours, read where the summary cells render. See [Summary rows](/docs/concepts/summary-rows) |
-| `enableVirtualization` | — | always virtualized on both axes. To print or export, use the rows your app holds (`rows`, or `useLocalRows`'s `filteredRows`); `toTsv` from `@fragiola/data-grid` makes tab-separated text of rows of strings, so map each row to its columns' texts first |
+| `enableVirtualization` | — | always virtualized on both axes. To print or export, use the rows your app holds (`rows`, or `useLocalRows`'s `filteredRows`); `toTsv` from `@fragiola/data-grid-react/clipboard` makes tab-separated text of rows of strings, so map each row to its columns' texts first |
 | `direction` | `direction` | `"ltr"` or `"rtl"`; without it, the page's direction, as the browser computes it. See [Right to left](/docs/concepts/right-to-left) |
 
 ### Sorting and selection
@@ -69,10 +83,10 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 | React Data Grid | here | notes |
 | --- | --- | --- |
 | `sortColumns`, `onSortColumnsChange` | the same, plus `defaultSortColumns`, with `features={[sorting()]}` | sorting is a [feature](/docs/concepts/features), from `@fragiola/data-grid-react/sorting`: install it, or no column sorts. `direction` is `"ascending"` or `"descending"` (not `"ASC"`/`"DESC"`). The grid never orders the rows: `useLocalRows` from `@fragiola/data-grid-react/local` does in memory, a server otherwise. See [Sorting](/docs/concepts/sorting) |
-| `selectedRows` (a `Set`), `onSelectedRowsChange` | `selectedRowKeys` (an array), `onSelectedRowKeysChange`, `defaultSelectedRowKeys` | turned on by `rowSelection="single"` or `"multiple"`. See [Row selection](/docs/concepts/row-selection) |
+| `selectedRows` (a `Set`), `onSelectedRowsChange` | `selectedRowKeys` (an array), `onSelectedRowKeysChange`, `defaultSelectedRowKeys`, with `rowSelection()` installed | from `@fragiola/data-grid-react/row-selection`; turned on by `rowSelection="single"` or `"multiple"`. See [Row selection](/docs/concepts/row-selection) |
 | `isRowSelectionDisabled(row)` | `isRowSelectable(row, rowIndex)` | the opposite question |
-| `onActivePositionChange` | `activePosition`, `defaultActivePosition`, `onActivePositionChange` | the position is `{ rowIndex, columnIndex }` (header rows are -1 and above), or `null` |
-| — | `cellSelection="range"`, `selectedRange`, `onSelectedRangeChange` | a range of cells by the keys, a drag or Shift+click. See [Cell selection](/docs/concepts/cell-selection) |
+| `onActivePositionChange` | `activePosition`, `defaultActivePosition`, `onActivePositionChange`, with `navigation()` installed | from `@fragiola/data-grid-react/navigation`; the position is `{ rowIndex, columnIndex }` (header rows are -1 and above), or `null` |
+| — | `cellSelection="range"`, `selectedRange`, `onSelectedRangeChange`, with `cellRange()` installed (and `navigation()`) | from `@fragiola/data-grid-react/range`; a range of cells by the keys, a drag or Shift+click. See [Cell selection](/docs/concepts/cell-selection) |
 
 ### Editing, the clipboard and the fill handle
 
@@ -80,9 +94,9 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 | --- | --- | --- |
 | `onRowsChange(rows, data)` | `onCellEdit`, `onRangePaste`, `onFill`, `onRowMove` | each tells what happened; your app writes the rows. Rows behind `getRow` are told with `rows.changed` |
 | a column's edit committed | `onCellEdit({ row, rowIndex, columnIndex, columnKey, value })` | told only when the value changed. See [Editing cells](/docs/concepts/editing) |
-| `onCellCopy` | `cellSelection="range"` and a column's `getCopyText` | Ctrl+C copies the range (or the active cell) as tab-separated text; your `onCopy` on `Root` runs first, and `preventDefault` makes the copy yours |
-| `onCellPaste` (returns the row) | `onRangePaste({ range, values })`, `onBeforeRangePaste` | the values parsed from the clipboard and the range they land in; `onBeforeRangePaste` returning `false` refuses one |
-| `onFill({ columnKey, sourceRow, targetRow })` (returns the row) | `onFill({ source, target })` | two ranges of cells; giving `onFill` turns the handle on, and the handle is your element (`useFillHandle`). `repeatedFill` from `@fragiola/data-grid/fill` repeats the source's values. See [Fill handle](/docs/concepts/fill) |
+| `onCellCopy` | `clipboard()` installed (from `/clipboard`, with `cellRange()`), `cellSelection="range"` and a column's `getCopyText` | Ctrl+C copies the range (or the active cell) as tab-separated text; your `onCopy` on `Root` runs first, and `preventDefault` makes the copy yours |
+| `onCellPaste` (returns the row) | `onRangePaste({ range, values })`, `onBeforeRangePaste`, with `clipboard()` | the values parsed from the clipboard and the range they land in; `onBeforeRangePaste` returning `false` refuses one |
+| `onFill({ columnKey, sourceRow, targetRow })` (returns the row) | `onFill({ source, target })`, with `fillHandle()` (and `cellRange()`) | two ranges of cells; giving `onFill` turns the handle on, and the handle is your element (`useFillHandle`). Both, and `repeatedFill`, come from `@fragiola/data-grid-react/fill`; `repeatedFill` repeats the source's values. See [Fill handle](/docs/concepts/fill) |
 
 ### Columns from the outside
 
@@ -243,7 +257,7 @@ rows. See [Master-detail](/docs/guides/master-detail).
 | --- | --- |
 | `SelectColumn`, `SELECT_COLUMN_KEY` | a column of yours whose cells render a checkbox: `model.is("row-selected", { rowIndex })`, `model.run("selected-rows.toggle", { rowIndex, extend })` |
 | `useRowSelection` | `useRow(row).state.selected`, or the model's `row-selected` question, as above |
-| `useHeaderRowSelection` | `useSelectAll(rowKeys)` from `@fragiola/data-grid-react/selection`: `status` (`"all"`, `"some"`, `"none"`), `toggle` |
+| `useHeaderRowSelection` | `useSelectAll(rowKeys)` from `@fragiola/data-grid-react/row-selection`: `status` (`"all"`, `"some"`, `"none"`), `toggle` |
 | `renderTextEditor` | your field in `renderEditCell`, from `value` and `onChange` |
 | `renderToggleGroup`, `ToggleGroup` | your control with `useGroupToggle(row)` |
 | `renderHeaderCell`, `renderSortIcon`, `renderSortPriority` | `headerCellContent(cell)`, and your own marks from `data-sort` and `data-sort-priority` |

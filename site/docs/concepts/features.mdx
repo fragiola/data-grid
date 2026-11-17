@@ -1,12 +1,24 @@
 ---
 title: Features
-description: A small core and the features your app installs on a grid, sorting the first, each typed, opt-in and left out of a bundle that never imports it.
+description: A small core and the features your app installs on a grid (the keys, sorting, selections, the clipboard, the fill handle), each typed and opt-in.
 ---
 
-The grid's core renders, scrolls, virtualizes, moves the active cell and answers the keys. What
-an app may not need is a **feature**: a plain object, made by a factory from its own entry point,
-that the app installs on a grid when it creates it. [Sorting](/docs/concepts/sorting) is the
-first: `sorting()`, from the `/sorting` entry.
+The grid's core renders, scrolls and virtualizes. What an app may not need is a **feature**: a
+plain object, made by a factory from its own entry point, that the app installs on a grid when it
+creates it.
+
+| feature | entry | needs | gives |
+| --- | --- | --- | --- |
+| `navigation()` | `/navigation` | | the keys, the active cell, one tab stop, the grid's roles ([Keyboard](/docs/concepts/keyboard)) |
+| `sorting()` | `/sorting` | | columns that sort ([Sorting](/docs/concepts/sorting)) |
+| `rowSelection()` | `/row-selection` | | selected rows and their keys ([Row selection](/docs/concepts/row-selection)) |
+| `cellRange()` | `/range` | `navigation()` | a range of cells ([Cell selection](/docs/concepts/cell-selection)) |
+| `clipboard()` | `/clipboard` | `cellRange()` | copying and pasting the range |
+| `fillHandle()` | `/fill` | `cellRange()` | the fill handle ([Fill handle](/docs/concepts/fill)) |
+
+A feature another one needs is installed with it: a grid missing one throws when it is created,
+naming it (`feature "cellRange" requires feature "navigation": install it too`). Their order in
+the list is free.
 
 ## Installing a feature
 
@@ -17,9 +29,10 @@ the same list on every render.
 
 ```tsx title="people-grid.tsx"
 import { DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 
-const features = [sorting()];
+const features = [navigation(), sorting()];
 
 export function PeopleGrid({ people }: { people: Person[] }) {
     return (
@@ -30,8 +43,8 @@ export function PeopleGrid({ people }: { people: Person[] }) {
 }
 ```
 
-The root then takes the feature's props: `sortColumns`, `defaultSortColumns`,
-`onSortColumnsChange`.
+The root then takes the features' props: `activePosition`, `sortColumns`, `defaultSortColumns`,
+`onSortColumnsChange`, …
 
 </Framework>
 
@@ -40,9 +53,10 @@ The root then takes the feature's props: `sortColumns`, `defaultSortColumns`,
 ```vue title="people-grid.vue"
 <script setup lang="ts">
 import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 
-const features = [sorting()] as const;
+const features = [navigation(), sorting()] as const;
 const DataGrid = typedDataGrid<Person, typeof features>();
 </script>
 
@@ -62,6 +76,7 @@ attributes: `:sort-columns`, `:default-sort-columns`, `@sort-columns-change`.
 
 ```ts title="people-grid.ts"
 import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { DataGridSorting, sorting } from "@fragiola/data-grid-angular/sorting";
 
 @Component({
@@ -74,20 +89,26 @@ import { DataGridSorting, sorting } from "@fragiola/data-grid-angular/sorting";
     `,
 })
 export class PeopleGrid {
-    readonly features = [sorting()];
+    readonly features = [navigation(), sorting()];
     // …
 }
 ```
 
 A feature's inputs are a directive of its own, on the root's element: `DataGridSorting`
-(`dataGridSorting`) holds `[(sortColumns)]`, `[defaultSortColumns]` and `(sortColumnsChange)`.
+(`dataGridSorting`) holds `[(sortColumns)]`, `[defaultSortColumns]` and `(sortColumnsChange)`;
+`DataGridNavigation` `[(activePosition)]`, `DataGridRowSelection` the row selection's,
+`DataGridCellRange` the range's, `DataGridClipboard` `[beforeRangePaste]` and `(rangePaste)`,
+`DataGridFill` the fill (`dataGridFill (fill)="…"`). A feature you give no input needs no
+directive.
 
 </Framework>
 
 Each package re-exports the core's features from an entry of the same name
 (`@fragiola/data-grid-react/sorting`, `@fragiola/data-grid-vue/sorting`,
 `@fragiola/data-grid-angular/sorting`), so an app installs one package. The core's own is
-`@fragiola/data-grid/sorting`.
+`@fragiola/data-grid/sorting`. A feature's hooks are in its entry too: `useSelectAll` in
+`/row-selection`, `useFillHandle` in `/fill` (Angular: `injectSelectAll`, `injectFillHandle` and
+`*dataGridFillHandle`).
 
 ## Fixed when the grid is created
 
@@ -96,8 +117,16 @@ and the console says so once. For other features, mount a new grid (a new `key`)
 
 ## The bare grid
 
-With no features, a grid still renders, scrolls, virtualizes, and moves the active cell; it never
-sorts. A column keeps `sortable` and `compare`, but without `sorting()`:
+With no features, a grid still renders, scrolls and virtualizes, on both axes, as a plain table:
+the APG table pattern.
+
+- it is `role="table"`, its rows `row`, its header cells `columnheader`, its cells `cell`;
+- neither the grid nor its cells are tab stops (no `tabIndex`), no cell is ever active, and the
+  controls inside cells keep their own tab order;
+- the arrows and the other grid keys are the page's;
+- nothing is selectable, nothing copies or pastes, nothing fills, and their props do not compile.
+
+It never sorts either. A column keeps `sortable` and `compare`, but without `sorting()`:
 
 - a `sortable: true` column does not sort;
 - its header cell carries no `aria-sort`, `data-sortable`, `data-sort` or `data-sort-priority`,
@@ -200,11 +229,29 @@ export function flags(): DataGridFeature<FlagsTypes> {
 ```
 
 Installed (`features: [flags(), sorting()]`), its keys are the grid's: `model.run("flags.toggle",
-{ rowIndex: 3 })` goes through the same middleware and returns the same results. A feature can
-also keep its state to the columns and rows (`sourceChanged`), add to a header cell
-(`headerCell`), take keys and clicks (`engine`) and give a root props (`root`, with
-`defineControlled` for a controlled one). Its handlers return `done(state, value)`, or
-`fail(code, message)`.
+{ rowIndex: 3 })` goes through the same middleware and returns the same results. Its handlers
+return `done(state, value)`, or `fail(code, message)`. What else a feature can contribute, every
+part optional:
 
-Features read each other only through keys. Two features of one name, a feature it `requires`
-missing, or a key another one already has throws when the grid is created.
+| part | what it does |
+| --- | --- |
+| `requires` | the features it needs, by name |
+| `sourceChanged(after, before)` | keeps its state to new rows or columns |
+| `stateChanged(after, before)` | after every command (and once at creation): keeps its state to the grid's rules |
+| `view` | the state keys a view carries, so a change renders |
+| `row(view, rowIndex, meta, share)`, `cell(view, cell, span, share)` | fills a row's or a cell's share (its state and attributes): one object reused, nothing allocated per row or cell |
+| `headerCell(view, cell)`, `grid(view)` | a header cell's state and attributes, the grid's attributes (`aria-multiselectable`) |
+| `navigable` | the grid's roles and tab stop are the APG grid's (`navigation()` has it) |
+| `engine(context)` | its keys, presses, clicks, copies and pastes, and drags, in the engine |
+| `root` | the props a root takes for it, controlled or not (`defineControlled`) |
+
+In an engine, a feature's keys run at a place of their own in the grid's: `beforeKeydown` before
+any (never taking one), `keydown` before the grid's own cell keys (a header's sort), `laterKeydown`
+after them (the selections'), `lastKeydown` last (the arrows). Each place runs the features in
+the list's order; the first to take a key ends it. Its `engine` context lends it the grid's own
+means (`engine`: which cell an event is in, scrolling to a cell, focus following a move, events,
+drags on the grid's own drag machinery), so its keys and presses act as the grid's do.
+
+Features read each other only through keys (`model.get("cell-selection")`), never each other's
+code. Two features of one name, a feature it `requires` missing, or a key another one already has
+throws when the grid is created.

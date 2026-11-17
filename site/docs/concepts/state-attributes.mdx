@@ -16,7 +16,7 @@ group's label you render with `useGroupLabel`
 ([Collapsible groups and sticky labels](/docs/concepts/collapsible-groups)), and `row-drag-handle`
 on a row's handle you render with `useRowDragHandle` ([Row reordering](/docs/concepts/row-reordering)), and `group-toggle` on a
 group row's toggle you render with `useGroupToggle` ([Row grouping](/docs/concepts/row-grouping)), and
-`fill-handle` on a fill handle you render with `useFillHandle` ([Fill handle](/docs/concepts/fill)). Rows and cells carry
+`fill-handle` on a fill handle you render with `/fill`'s `useFillHandle` ([Fill handle](/docs/concepts/fill)). Rows and cells carry
 their indexes: `data-row-index` (header rows are `-1` and above, a header cell spanning rows is at
 its top one; the top summary rows are before the header's, the bottom ones after the body's) and `data-column-index` (a header cell spanning columns is at its first). Tests
 select by them, never by class names.
