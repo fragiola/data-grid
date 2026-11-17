@@ -286,13 +286,45 @@ export class DataGridRoot<TRow = unknown> {
         };
         let props = own;
         for (const source of this.sources()) {
-            props = { ...props, ...source() } as GridRootProps<
+            props = { ...props, ...this.rendering(source()) } as GridRootProps<
                 TRow,
                 DataGridNode
             >;
         }
         return props;
     }
+
+    /**
+     * Another source's props, its callbacks rendering what they changed before the next event, as
+     * the outputs' handlers do (`[dataGridLocalRows]`' sort: a second click on a header reads the
+     * rows the first one sorted). Each callback is wrapped once, for as long as the source gives it.
+     */
+    private rendering(
+        props: Partial<GridRootProps<TRow, DataGridNode>>,
+    ): Partial<GridRootProps<TRow, DataGridNode>> {
+        const wrapped: Record<string, unknown> = { ...props };
+        for (const [key, value] of Object.entries(props)) {
+            if (!key.startsWith("on") || typeof value !== "function") continue;
+            let render = this.renderingCallbacks.get(value);
+            if (!render) {
+                render = (...args: unknown[]) => {
+                    const result = (value as (...a: unknown[]) => unknown)(
+                        ...args,
+                    );
+                    this.renderSoon();
+                    return result;
+                };
+                this.renderingCallbacks.set(value, render);
+            }
+            wrapped[key] = render;
+        }
+        return wrapped as Partial<GridRootProps<TRow, DataGridNode>>;
+    }
+
+    private readonly renderingCallbacks = new WeakMap<
+        object,
+        (...args: unknown[]) => unknown
+    >();
 
     /**
      * The outputs as the root's handlers: one function each, for the directive's life. What the
