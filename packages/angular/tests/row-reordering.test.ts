@@ -24,8 +24,8 @@ import {
     type DataGridRef,
     type RowMove,
     type RowState,
-    type SortColumn,
 } from "../src/public-api";
+import { DataGridSorting, type SortColumn, sorting } from "../src/sorting";
 import {
     cellAt,
     fire,
@@ -76,14 +76,14 @@ interface GridProps {
 const CELL = `@if (cell.columnIndex === 0) {<span [dataGridRowDragHandle]="cell" #handle="dataGridRowDragHandle" [attr.data-testid]="'handle-' + cell.rowIndex">{{ handle.state()?.reorderable ? "⋮" : "" }}</span>{{ cell.value }}} @else {<ng-container *dataGridCellContent />}`;
 
 @Component({
-    imports: [DATA_GRID],
+    imports: [DATA_GRID, DataGridSorting],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="columns" [rows]="rows()" [rowKey]="rowKey" [rowHeight]="20" [headerRowHeight]="20"
             [gridRef]="gridRef()"
             [reorderableRows]="!!props().onRowMove" (rowMove)="props().onRowMove?.($event)"
             [activePosition]="props().activePosition" (activePositionChange)="props().onActivePositionChange?.($event)"
-            [sortColumns]="props().sortColumns">
+            [features]="features" dataGridSorting [sortColumns]="props().sortColumns">
             @if (table()) {
                 <table dataGridGrid>
                     <thead *dataGridHeader>
@@ -131,6 +131,7 @@ const CELL = `@if (cell.columnIndex === 0) {<span [dataGridRowDragHandle]="cell"
     `,
 })
 class Tasks {
+    readonly features = [sorting()];
     readonly rows = input<readonly Task[]>(tasks);
     readonly table = input(false);
     readonly props = input<GridProps>({});

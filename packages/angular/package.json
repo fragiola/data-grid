@@ -35,6 +35,12 @@
             "import": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs",
             "default": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs"
         },
+        "./sorting": {
+            "@fragiola/source": "./src/sorting/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-sorting.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -58,6 +64,11 @@
                 "types": "./dist/types/fragiola-data-grid-angular-selection.d.ts",
                 "import": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs",
                 "default": "./dist/fesm2022/fragiola-data-grid-angular-selection.mjs"
+            },
+            "./sorting": {
+                "types": "./dist/types/fragiola-data-grid-angular-sorting.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-sorting.mjs"
             },
             "./package.json": "./package.json"
         }

@@ -10,13 +10,12 @@ import {
     injectLocalRows,
     type LocalRowsResult,
 } from "../src/local";
-import {
-    type Column,
-    DATA_GRID,
-    type DataGridNode,
-    type SortColumn,
-} from "../src/public-api";
+import { type Column, DATA_GRID, type DataGridNode } from "../src/public-api";
+import { type SortColumn, sorting } from "../src/sorting";
 import { click, headerAt, render, settled, stubViewportSize } from "./helpers";
+
+/** The root's features: the local rows' sort is sorting's (Epic #141). */
+const FEATURES = [sorting()];
 
 // One injection function for rows in memory (Epic #47, L1): its props given to the root
 // (`[dataGridLocalRows]`) make the header sort the rows, and its controls filter, search and page
@@ -99,7 +98,7 @@ const TABLE = `
     imports: [DATA_GRID, DataGridLocalRows],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [columns]="columns" [rowHeight]="20" [dataGridLocalRows]="local">
+        <div dataGridRoot [columns]="columns" [rowHeight]="20" [features]="features" [dataGridLocalRows]="local">
             @if (table()) { ${TABLE} } @else { ${DIVS} }
         </div>
     `,
@@ -109,6 +108,7 @@ class People {
     readonly pageSize = input<number | undefined>(undefined);
     readonly table = input(false);
     readonly columns = columns;
+    readonly features = FEATURES;
     readonly local = injectLocalRows(this.rows, columns, () => ({
         pageSize: this.pageSize(),
     }));
@@ -228,7 +228,7 @@ describe("injectLocalRows across renders", () => {
             template: `
                 <button type="button" (click)="rows.set(rows().slice(0, 3))">delete</button>
                 <button type="button" (click)="rows.set(all)">restore</button>
-                <div dataGridRoot [columns]="columns" [dataGridLocalRows]="local">
+                <div dataGridRoot [columns]="columns" [features]="features" [dataGridLocalRows]="local">
                     <div dataGridGrid>
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -246,6 +246,7 @@ describe("injectLocalRows across renders", () => {
         class Deleting {
             readonly all = people;
             readonly columns = columns;
+            readonly features = FEATURES;
             readonly rows = signal<readonly Person[]>(people);
             readonly local = injectLocalRows(this.rows, columns, {
                 pageSize: 2,
@@ -295,7 +296,7 @@ describe("injectLocalRows across renders", () => {
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
                 {{ see() }}
-                <div dataGridRoot [columns]="columns" [dataGridLocalRows]="local">
+                <div dataGridRoot [columns]="columns" [features]="features" [dataGridLocalRows]="local">
                     <div dataGridGrid>
                         <div *dataGridHeader>
                             <ng-template dataGridHeaderRows let-row>
@@ -312,6 +313,7 @@ describe("injectLocalRows across renders", () => {
         })
         class Watch {
             readonly columns = columns;
+            readonly features = FEATURES;
             readonly local = injectLocalRows(people, columns);
             // the template reads the props: a new sort renders it again
             see() {

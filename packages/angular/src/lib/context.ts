@@ -3,6 +3,7 @@ import type {
     CellRenderProps,
     ColumnOrGroup,
     DataGridEngine,
+    DataGridFeatures,
     DataGridModel,
     EditDraft,
     GridCellInfo,
@@ -17,9 +18,16 @@ import type {
 } from "@fragiola/data-grid";
 import type { DataGridNode } from "./utils/content";
 
-/** What `injectDataGrid()` returns: the grid's model and its engine (column renderers return nodes). */
-export interface DataGridContextValue<TRow = unknown> {
-    readonly model: DataGridModel<TRow, DataGridNode>;
+/**
+ * What `injectDataGrid()` returns: the grid's model and its engine (column renderers return nodes).
+ * The model's keys are the core's and the installed features' (`TFeatures`; left out, a grid of
+ * any features).
+ */
+export interface DataGridContextValue<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> {
+    readonly model: DataGridModel<TRow, DataGridNode, TFeatures>;
     readonly engine: DataGridEngine<TRow, DataGridNode>;
 }
 
@@ -27,11 +35,13 @@ export interface DataGridContextValue<TRow = unknown> {
  * A handle on a grid from outside its `[dataGridRoot]`: `current` is the grid's model and engine
  * while a root holds it (`<div dataGridRoot [gridRef]="gridRef">`), `null` otherwise. It tells when
  * that changes, so the injection functions take it (`injectRowWindow(gridRef)`,
- * `injectDataGrid(gridRef)`) and follow the grid from anywhere.
+ * `injectDataGrid(gridRef)`) and follow the grid from anywhere. Typed by the row and the features
+ * (`createDataGridRef<Person, typeof features>()`); any ref fits a root.
  */
-export type DataGridRef<TRow = unknown> = GridHandle<
-    DataGridContextValue<TRow>
->;
+export type DataGridRef<
+    TRow = unknown,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = GridHandle<DataGridContextValue<TRow, TFeatures>>;
 
 /** A body row, as `[dataGridRows]` hands it to its template. */
 export type RowInfo<TRow = unknown> = GridRowInfo<TRow>;
@@ -81,7 +91,7 @@ export type TypedBy<TRow> =
 
 /** What a `[dataGridRoot]` gives the parts inside it. */
 export interface GridContext {
-    readonly model: DataGridModel<unknown, DataGridNode>;
+    readonly model: DataGridModel<unknown, DataGridNode, DataGridFeatures>;
     readonly engine: DataGridEngine<unknown, DataGridNode>;
     /** the view: a part follows it (a new window, new sizes), never a scroll frame (D9) */
     readonly view: Signal<GridView<unknown, DataGridNode>>;

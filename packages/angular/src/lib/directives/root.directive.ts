@@ -25,6 +25,7 @@ import {
     type ColumnOrGroup,
     type ColumnWidths,
     type DataGridEngine,
+    type DataGridFeatures,
     type DataGridModel,
     type DetailHeight,
     type EditDraft,
@@ -43,7 +44,6 @@ import {
     type RowSelectable,
     type RowSelection,
     rootPropsOf,
-    type SortColumn,
 } from "@fragiola/data-grid";
 import {
     DATA_GRID_HEADER_ROW,
@@ -63,16 +63,30 @@ import {
     optionalBoolean,
 } from "../utils/helpers";
 
+/** The root's props as it hands them to the core: a grid of any features. */
+type RootProps<TRow> = GridRootProps<TRow, DataGridNode, DataGridFeatures>;
+
 /** The root's state (React's `RootState`): none of its own. */
 export type RootState = Record<string, never>;
 
 /**
- * The root props another directive on the root's element gives it (`[dataGridLocalRows]`): they
- * win over the root's own inputs.
+ * The root props another directive on the root's element gives it (`[dataGridLocalRows]`,
+ * `[dataGridSorting]`), typed by the features whose props it gives (`TFeatures`).
  */
-export type RootPropsSource<TRow> = () => Partial<
-    GridRootProps<TRow, DataGridNode>
->;
+export type RootPropsSource<
+    TRow,
+    TFeatures extends DataGridFeatures = DataGridFeatures,
+> = () => Partial<GridRootProps<TRow, DataGridNode, TFeatures>>;
+
+/** How a source's props stand to the root's inputs and the other sources'. */
+export interface RootPropsSourceOptions {
+    /**
+     * the props are inputs of the root's (a feature's: `[dataGridSorting]`): the other sources
+     * win over them, as over the root's own. Left out, the source wins over the inputs
+     * (`[dataGridLocalRows]`)
+     */
+    readonly inputs?: boolean | undefined;
+}
 
 /**
  * The grid's root: put it on the scroll container (`<div dataGridRoot [rows]="rows"
@@ -80,8 +94,10 @@ export type RootPropsSource<TRow> = () => Partial<
  * its inputs onto the model's commands (controlled or not: the core's `bindGridRoot`, after every
  * render), tells what changed through its outputs, and runs the grid's keys, clicks, presses and
  * clipboard events after the consumer's own listeners on its element, so `preventDefault` cancels
- * one. Each `onXChange` of React is the output `xChange` (`[(sortColumns)]` binds both ways); the
- * row moves and the fill are on while `reorderableRows` and `fillable` are.
+ * one. Each `onXChange` of React is the output `xChange` (`[(activePosition)]` binds both ways);
+ * the row moves and the fill are on while `reorderableRows` and `fillable` are. It installs its
+ * `features` (`[sorting()]`, fixed when it is created: a later list is told in the console, never
+ * taken); a feature's inputs are another directive's on the same element (`[dataGridSorting]`).
  */
 @Directive({
     selector: "[dataGridRoot]",
@@ -121,10 +137,6 @@ export class DataGridRoot<TRow = unknown> {
     readonly summaryRowHeight = input<number | undefined>(undefined);
     readonly activePosition = input<CellPosition | null | undefined>(undefined);
     readonly defaultActivePosition = input<CellPosition | null | undefined>(
-        undefined,
-    );
-    readonly sortColumns = input<readonly SortColumn[] | undefined>(undefined);
-    readonly defaultSortColumns = input<readonly SortColumn[] | undefined>(
         undefined,
     );
     readonly expandedRowKeys = input<readonly RowKey[] | undefined>(undefined);
@@ -182,13 +194,17 @@ export class DataGridRoot<TRow = unknown> {
     readonly direction = input<GridDirection | undefined>(undefined);
     readonly ownTabStop = input(undefined, { transform: optionalBoolean });
     /**
+     * the features the grid installs (`[sorting()]`), fixed when it is created: a list given
+     * later is told in the console, never taken. A feature not installed is not in the bundle
+     */
+    readonly features = input<DataGridFeatures | undefined>(undefined);
+    /**
      * a handle on this grid from outside the root (`createDataGridRef()`): its model and engine,
      * and the injection functions that take it
      */
     readonly gridRef = input<DataGridRef<TRow> | undefined>(undefined);
 
     readonly activePositionChange = output<CellPosition | null>();
-    readonly sortColumnsChange = output<readonly SortColumn[]>();
     readonly expandedRowKeysChange = output<readonly RowKey[]>();
     readonly expandedGroupKeysChange = output<readonly RowKey[]>();
     readonly selectedRowKeysChange = output<readonly RowKey[]>();
@@ -210,15 +226,20 @@ export class DataGridRoot<TRow = unknown> {
     readonly rowsEndReached = output<{ rowCount: number }>();
 
     private readonly host = injectHost();
-    private readonly sources = signal<readonly RootPropsSource<TRow>[]>([]);
-    private bound: GridRoot<TRow, DataGridNode> | undefined;
+    private readonly sources = signal<
+        readonly {
+            readonly source: RootPropsSource<TRow>;
+            readonly inputs: boolean;
+        }[]
+    >([]);
+    private bound: GridRoot<TRow, DataGridNode, DataGridFeatures> | undefined;
     /** bumped whenever the engine reports a new view */
     private readonly viewTick = signal(0);
     private readonly draftTick = signal(0);
 
     /** The root's props now: its inputs, the outputs as handlers, and the other sources'. */
-    private props(): GridRootProps<TRow, DataGridNode> {
-        const own: GridRootProps<TRow, DataGridNode> = {
+    private props(): RootProps<TRow> {
+        const own: RootProps<TRow> = {
             columns: this.columns(),
             ...(this.rows() !== undefined
                 ? { rows: this.rows() as readonly TRow[] }
@@ -236,9 +257,6 @@ export class DataGridRoot<TRow = unknown> {
             activePosition: this.activePosition(),
             defaultActivePosition: this.defaultActivePosition(),
             onActivePositionChange: this.handlers.activePosition,
-            sortColumns: this.sortColumns(),
-            defaultSortColumns: this.defaultSortColumns(),
-            onSortColumnsChange: this.handlers.sortColumns,
             expandedRowKeys: this.expandedRowKeys(),
             defaultExpandedRowKeys: this.defaultExpandedRowKeys(),
             onExpandedRowKeysChange: this.handlers.expandedRowKeys,
@@ -283,13 +301,19 @@ export class DataGridRoot<TRow = unknown> {
             maxScrollSize: this.maxScrollSize(),
             direction: this.direction(),
             ownTabStop: this.ownTabStop(),
+            features: this.features(),
         };
+        // the features' inputs first, as the root's own; the other sources over them
+        const sources = this.sources();
         let props = own;
-        for (const source of this.sources()) {
-            props = { ...props, ...this.rendering(source()) } as GridRootProps<
-                TRow,
-                DataGridNode
-            >;
+        for (const inputs of [true, false]) {
+            for (const entry of sources) {
+                if (entry.inputs !== inputs) continue;
+                props = {
+                    ...props,
+                    ...this.rendering(entry.source()),
+                } as RootProps<TRow>;
+            }
         }
         return props;
     }
@@ -300,8 +324,8 @@ export class DataGridRoot<TRow = unknown> {
      * rows the first one sorted). Each callback is wrapped once, for as long as the source gives it.
      */
     private rendering(
-        props: Partial<GridRootProps<TRow, DataGridNode>>,
-    ): Partial<GridRootProps<TRow, DataGridNode>> {
+        props: Partial<RootProps<TRow>>,
+    ): Partial<RootProps<TRow>> {
         const wrapped: Record<string, unknown> = { ...props };
         for (const [key, value] of Object.entries(props)) {
             if (!key.startsWith("on") || typeof value !== "function") continue;
@@ -318,7 +342,7 @@ export class DataGridRoot<TRow = unknown> {
             }
             wrapped[key] = render;
         }
-        return wrapped as Partial<GridRootProps<TRow, DataGridNode>>;
+        return wrapped as Partial<RootProps<TRow>>;
     }
 
     private readonly renderingCallbacks = new WeakMap<
@@ -335,7 +359,6 @@ export class DataGridRoot<TRow = unknown> {
      */
     private readonly handlers = {
         activePosition: this.emitting(this.activePositionChange),
-        sortColumns: this.emitting(this.sortColumnsChange),
         expandedRowKeys: this.emitting(this.expandedRowKeysChange),
         expandedGroupKeys: this.emitting(this.expandedGroupKeysChange),
         selectedRowKeys: this.emitting(this.selectedRowKeysChange),
@@ -367,7 +390,7 @@ export class DataGridRoot<TRow = unknown> {
      * The model and engine, made from the inputs the first time they are needed (a part reads
      * them in its computeds and effects, which run once the inputs are set).
      */
-    private get root(): GridRoot<TRow, DataGridNode> {
+    private get root(): GridRoot<TRow, DataGridNode, DataGridFeatures> {
         if (!this.bound) {
             const root = untracked(() => bindGridRoot(() => this.props()));
             this.bound = root;
@@ -405,7 +428,7 @@ export class DataGridRoot<TRow = unknown> {
     }
 
     /** The grid's model: its data, its rules and its commands. */
-    get model(): DataGridModel<TRow, DataGridNode> {
+    get model(): DataGridModel<TRow, DataGridNode, DataGridFeatures> {
         return this.root.model;
     }
 
@@ -487,12 +510,24 @@ export class DataGridRoot<TRow = unknown> {
         });
     }
 
-    /** Another source of root props (`[dataGridLocalRows]`), until the returned stop. */
-    addPropsSource(source: RootPropsSource<TRow>): () => void {
-        this.sources.update((sources) => [...sources, source]);
+    /**
+     * Another source of root props (`[dataGridLocalRows]`, a feature's inputs: `[dataGridSorting]`),
+     * until the returned stop. Its callbacks render what they changed before the next event, as
+     * the outputs do.
+     */
+    addPropsSource<TFeatures extends DataGridFeatures = DataGridFeatures>(
+        source: RootPropsSource<TRow, TFeatures>,
+        options?: RootPropsSourceOptions,
+    ): () => void {
+        const entry = {
+            // a feature's props, read by the core only when that feature is installed
+            source: source as unknown as RootPropsSource<TRow>,
+            inputs: options?.inputs ?? false,
+        };
+        this.sources.update((sources) => [...sources, entry]);
         return () =>
             this.sources.update((sources) =>
-                sources.filter((other) => other !== source),
+                sources.filter((other) => other !== entry),
             );
     }
 }
