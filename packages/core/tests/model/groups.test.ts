@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createDataGridModel } from "../../src";
 import { gridModel } from "../features";
 import { CELLS, leaf, type Row, TREE } from "../header/tree";
 

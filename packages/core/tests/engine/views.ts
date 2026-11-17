@@ -2,6 +2,7 @@ import {
     type Column,
     createDataGridModel,
     type DataGridFeatures,
+    type DataGridState,
     type GridView,
     type ModelOptions,
 } from "../../src";
@@ -47,7 +48,10 @@ export const windowOf = (start: number, end: number): AxisWindow => ({
 const FEATURES = new WeakMap<object, GridFeatures>();
 
 export function stateOf<const TFeatures extends DataGridFeatures = Features>(
-    options: ModelOptions<Row, unknown, TFeatures> = {},
+    // the features inferred from `features` alone (else every feature of Epic #144)
+    options: ModelOptions<Row, unknown, NoInfer<TFeatures>> & {
+        readonly features?: TFeatures | undefined;
+    } = {},
 ) {
     const model = createDataGridModel<Row, unknown, TFeatures>({
         // every feature of Epic #144, unless the test names its own
@@ -69,7 +73,7 @@ export function featuresFor(state: object): GridFeatures {
 
 /** The inputs of a view of `state`, the rows 10–20 and the columns 2–5 rendered. */
 export function inputsOf(
-    state = stateOf(),
+    state: DataGridState<Row, unknown> = stateOf(),
     overrides: Partial<ViewInputs<Row, unknown>> = {},
 ): ViewInputs<Row, unknown> {
     return {
@@ -95,9 +99,7 @@ export function inputsOf(
         columnReorder: null,
         reorderableRows: false,
         rowReorder: null,
-        fillable: false,
-        fill: null,
-        fillSource: null,
+        featureFields: null,
         direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),
         features: featuresFor(state),
@@ -107,7 +109,7 @@ export function inputsOf(
 
 /** A view of `state`, as `inputsOf` lays it out. */
 export function viewOf(
-    state = stateOf(),
+    state: DataGridState<Row, unknown> = stateOf(),
     overrides: Partial<ViewInputs<Row, unknown>> = {},
 ): GridView<Row, unknown> {
     return buildView(inputsOf(state, overrides));

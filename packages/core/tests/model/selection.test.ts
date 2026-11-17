@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type DataGridModelOptions, type RowKey, veto } from "../../src";
-import { gridModel } from "../features";
+import { type ModelOptions, type RowKey, veto } from "../../src";
+import { type Features, gridModel } from "../features";
 
 // Selected rows (Epic #57, R1–R5): the model keeps their keys, in the order they were selected,
 // and changes them only through commands; a range and select-all are all or nothing.
@@ -15,7 +15,7 @@ const people: Person[] = Array.from({ length: 10 }, (_, i) => ({
     locked: i === 4,
 }));
 
-function grid(options: DataGridModelOptions<Person> = {}) {
+function grid(options: ModelOptions<Person, unknown, Features> = {}) {
     return gridModel<Person>({
         columns: [{ key: "id", width: 100 }],
         rows: people,

@@ -5,11 +5,12 @@ import {
     type Column,
     type CommandEvent,
     cellPart,
-    type DataGridModelOptions,
+    type ModelOptions,
     type RangePaste,
     summaryCellPart,
     veto,
 } from "../../src";
+import type { Features } from "../features";
 import {
     cellElement,
     keydown,
@@ -59,7 +60,7 @@ const range = (
 ): CellRange => ({ anchor: at(...anchor), focus: at(...focus) });
 
 function setup(
-    modelOptions: Partial<DataGridModelOptions<Row>> = {},
+    modelOptions: ModelOptions<Row, unknown, Features> = {},
     options: MountOptions = {},
 ) {
     const grid = document.createElement("div");

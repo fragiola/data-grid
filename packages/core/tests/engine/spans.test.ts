@@ -10,13 +10,14 @@ import {
     columnResizerPart,
     headerCellBox,
     headerCellPart,
+    type ModelOptions,
     rowColumns,
 } from "../../src";
 import { activeColumn, elementPosition } from "../../src/engine/view";
 import { columnsError } from "../../src/header/header";
 import { spanAt } from "../../src/model/spans";
 import { sorting } from "../../src/sorting";
-import { gridModel } from "../features";
+import { type Features, gridModel } from "../features";
 import {
     cellElement,
     click,
@@ -64,7 +65,7 @@ const COLUMNS: Column<Row>[] = [
     column("c9", { pinned: "end" }),
 ];
 
-const spans = (options: Parameters<typeof stateOf>[0] = {}) =>
+const spans = (options: ModelOptions<Row, unknown, Features> = {}) =>
     stateOf({ columns: COLUMNS, ...options });
 
 describe("a body cell's span", () => {

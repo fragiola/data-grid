@@ -534,5 +534,20 @@ export type AnyFeatures<TFeatures extends DataGridFeatures> = [
 ] extends [never]
     ? false
     : FeatureTypes extends OwnTypes<TFeatures[number]>
-      ? true
+      ? // a known feature whose members are all optional (props only: the clipboard's) is
+        // assignable from `FeatureTypes` too: it still names keys of its own
+        [KeysOf<OwnTypes<TFeatures[number]>>] extends [never]
+          ? true
+          : false
       : false;
+
+/** The keys a feature's types name: none for a feature of unknown types (`FeatureTypes`). */
+type KeysOf<T> = T extends FeatureTypes
+    ?
+          | keyof T["state"]
+          | keyof T["options"]
+          | keyof T["commands"]
+          | keyof T["queries"]
+          | keyof T["questions"]
+          | keyof T["props"]
+    : never;

@@ -1,6 +1,7 @@
 // Type fixtures: checked by `tsc`, never run. `@ts-expect-error` marks what must not compile.
 // A grid's keys and root props are the core's and its installed features' (Epic #141).
 
+import type { CellPosition, CellRange, RowKey } from "../../src";
 import {
     bindGridRoot,
     type Column,
@@ -13,6 +14,11 @@ import {
     type GridRootProps,
     type Middleware,
 } from "../../src";
+import { clipboard } from "../../src/clipboard";
+import { fillHandle } from "../../src/fill";
+import { navigation } from "../../src/navigation";
+import { cellRange } from "../../src/range";
+import { rowSelection } from "../../src/row-selection";
 import { type SortColumn, sorting } from "../../src/sorting";
 
 interface Person {
@@ -22,6 +28,7 @@ interface Person {
 
 const columns: Column<Person>[] = [{ key: "age", width: 60, sortable: true }];
 const rows: Person[] = [];
+const origin = { rowIndex: 0, columnIndex: 0 };
 
 // without sorting, its keys do not compile
 const bare = createDataGridModel({ columns, rows });
@@ -35,7 +42,7 @@ bare.get("sort-columns");
 bare.is("column-sortable", { columnKey: "age" });
 // @ts-expect-error: its options neither
 createDataGridModel({ columns, rows, sortColumns: [] });
-bare.run("active-position.clear");
+bare.run("column-order.reset");
 
 // with it, they do, typed
 const sorted = createDataGridModel({
@@ -55,7 +62,7 @@ sorted.run("sort-columns.set", {
 // @ts-expect-error: a payload of the wrong shape
 sorted.run("sort-columns.toggle", { column: "age" });
 // the core's keys are still there, the row type still flows
-sorted.run("active-position.clear");
+sorted.run("column-order.reset");
 const person: Person | undefined = sorted.get("row-by", { index: 0 });
 
 // a middleware narrows a feature's commands too, and one written for any grid fits it
@@ -84,15 +91,15 @@ const anyFeatures: DataGridModel<Person> = sorted;
 anyFeatures.run("active-positon.clear");
 // @ts-expect-error
 anyFeatures.get("nope");
-anyFeatures.run("active-position.clear");
+anyFeatures.run("column-order.reset");
 const noFeatures: DataGridModel<Person> = bare;
 // a middleware written for a grid without features fits one with them
 declare const coreOnly: Middleware<Person, unknown, []>;
 sorted.use(coreOnly);
 bare.use((ctx, next) => {
-    if (ctx.command === "active-position.move") {
-        const direction: string = ctx.payload.direction;
-        void direction;
+    if (ctx.command === "column-widths.resize") {
+        const width: number = ctx.payload.width;
+        void width;
     }
     return next();
 });
@@ -117,6 +124,112 @@ const withoutSort: GridRootProps<Person, unknown, []> = {
 };
 const root = bindGridRoot(() => withSort);
 root.model.run("sort-columns.toggle", { columnKey: "age" });
+
+// Epic #144: navigation, row selection, cell ranges, the clipboard and the fill handle are
+// features. Without them, their keys, options and root props do not compile
+// @ts-expect-error
+bare.run("active-position.set", { rowIndex: 0, columnIndex: 0 });
+// @ts-expect-error
+bare.get("active-position");
+// @ts-expect-error
+bare.is("cell-active", { rowIndex: 0, columnIndex: 0 });
+// @ts-expect-error
+bare.run("selected-rows.set", { rowKeys: [0] });
+// @ts-expect-error
+bare.get("selected-row-keys");
+// @ts-expect-error
+bare.is("row-selected", { rowIndex: 0 });
+// @ts-expect-error
+bare.run("selected-range.set", { anchor: origin, focus: origin });
+// @ts-expect-error
+bare.is("cell-selected", origin);
+// @ts-expect-error
+createDataGridModel({ columns, rows, activePosition: origin });
+// @ts-expect-error
+createDataGridModel({ columns, rows, rowSelection: "multiple" });
+// @ts-expect-error
+createDataGridModel({ columns, rows, cellSelection: "range" });
+const bareRoot: GridRootProps<Person, unknown, []> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    activePosition: origin,
+};
+const bareRows: GridRootProps<Person, unknown, []> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    rowSelection: "multiple",
+};
+const bareRange: GridRootProps<Person, unknown, []> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    cellSelection: "range",
+};
+// cell ranges without the clipboard or the fill handle: their props neither
+const ranged = [navigation(), cellRange()] as const;
+const noPaste: GridRootProps<Person, unknown, typeof ranged> = {
+    columns,
+    rows,
+    features: ranged,
+    // @ts-expect-error
+    onRangePaste: () => {},
+};
+const noFill: GridRootProps<Person, unknown, typeof ranged> = {
+    columns,
+    rows,
+    features: ranged,
+    // @ts-expect-error
+    onFill: () => {},
+};
+
+// with them, they do, typed
+const features = [
+    navigation(),
+    rowSelection(),
+    cellRange(),
+    clipboard(),
+    fillHandle(),
+] as const;
+const featured = createDataGridModel({
+    columns,
+    rows,
+    features,
+    activePosition: origin,
+    rowSelection: "multiple",
+    isRowSelectable: (row) => row.age > 0,
+    cellSelection: "range",
+});
+featured.run("active-position.set", origin);
+const active: CellPosition | null = featured.get("active-position");
+featured.is("cell-active", origin);
+featured.is("row-active", { rowIndex: 0 });
+featured.run("selected-rows.set", { rowKeys: [0] });
+const selectedKeys: readonly RowKey[] = featured.get("selected-row-keys");
+featured.is("row-selected", { rowIndex: 0 });
+featured.run("selected-range.set", { anchor: origin, focus: origin });
+featured.is("cell-selected", origin);
+const range: CellRange | null = featured.state.selectedRange;
+// @ts-expect-error: a payload of the wrong shape
+featured.run("active-position.set", { rowIndex: 0 });
+// @ts-expect-error: not a row key
+featured.run("selected-rows.set", { rowKeys: [{}] });
+const featuredRoot: GridRootProps<Person, unknown, typeof features> = {
+    columns,
+    rows,
+    features,
+    activePosition: origin,
+    onActivePositionChange: (position) => position?.rowIndex,
+    rowSelection: "multiple",
+    selectedRowKeys: [],
+    onSelectedRowKeysChange: (keys) => keys.length,
+    cellSelection: "range",
+    selectedRange: null,
+    onSelectedRangeChange: (next) => next?.anchor,
+    onRangePaste: (paste) => paste.values,
+    onFill: (fill) => fill.target,
+};
 
 // a feature of an app's own: its types read the grid's row type (`this["row"]`, at a member)
 interface FlagQueries<TRow> {
@@ -168,4 +281,13 @@ void [
     noFeatures,
     withoutSort,
     merged,
+    bareRoot,
+    bareRows,
+    bareRange,
+    noPaste,
+    noFill,
+    active,
+    selectedKeys,
+    range,
+    featuredRoot,
 ];

@@ -153,7 +153,10 @@ export interface MountOptions extends DataGridEngineOptions {
 export function mountEngine<
     const TFeatures extends DataGridFeatures = Features,
 >(
-    modelOptions: ModelOptions<Row, unknown, TFeatures>,
+    // the features inferred from `features` alone (else every feature of Epic #144)
+    modelOptions: ModelOptions<Row, unknown, NoInfer<TFeatures>> & {
+        readonly features?: TFeatures | undefined;
+    },
     options: MountOptions = {},
 ) {
     const {

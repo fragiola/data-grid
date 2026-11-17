@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
     type Column,
     type ColumnOrGroup,
+    createDataGridModel,
     type ModelOptions,
     veto,
 } from "../../src";
 import { sorting } from "../../src/sorting";
-import { FEATURES, gridModel } from "../features";
+import { FEATURES, type Features } from "../features";
 
 type Sorting = ReturnType<typeof sorting>;
+/** every feature of Epic #144, and sorting */
+type Sorted = [...Features, Sorting];
 
 // The column order (Epic #75, O1, O2, O5): the model keeps the keys in the order siblings take,
 // moves a reorderable column or group among its siblings only (the pinned among the pinned), and
@@ -43,8 +46,8 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
     column("b"),
 ];
 
-function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
-    return gridModel<Row, unknown, [Sorting]>({
+function grid(options: ModelOptions<Row, unknown, Sorted> = {}) {
+    return createDataGridModel<Row, unknown, Sorted>({
         features: [...FEATURES, sorting()],
         columns: COLUMNS,
         rowCount: 10,

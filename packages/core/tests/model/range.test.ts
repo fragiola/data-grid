@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     type CellRange,
     type Column,
+    createDataGridModel,
     type ModelOptions,
     veto,
 } from "../../src";
@@ -14,9 +15,11 @@ import {
 } from "../../src/model/range";
 import { valueText } from "../../src/model/source";
 import { sorting } from "../../src/sorting";
-import { FEATURES, gridModel } from "../features";
+import { FEATURES, type Features, gridModel } from "../features";
 
 type Sorting = ReturnType<typeof sorting>;
+/** every feature of Epic #144, and sorting */
+type Sorted = [...Features, Sorting];
 
 // A range of cells (Epic #88, E4.1–E4.2): the model keeps one, between body cells, changed only
 // through commands while cells are selectable; it stays inside the body when the grid's shape
@@ -34,8 +37,8 @@ const COLUMNS: Column<Row>[] = [
     { key: "d", width: 100, getValue: () => ({ not: "text" }) },
 ];
 
-function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
-    return gridModel<Row, unknown, [Sorting]>({
+function grid(options: ModelOptions<Row, unknown, Sorted> = {}) {
+    return createDataGridModel<Row, unknown, Sorted>({
         features: [...FEATURES, sorting()],
         columns: COLUMNS,
         rows: Array.from({ length: 10 }, (_, id) => ({ id })),

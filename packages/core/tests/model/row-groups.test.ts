@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { DataGridModelOptions, GroupRow, RowMeta } from "../../src";
-import { gridModel } from "../features";
+import type { GroupRow, ModelOptions, RowMeta } from "../../src";
+import { type Features, gridModel } from "../features";
 
 // Row kinds (Epic #87, E3.1): a source says what each index is (`getRowMeta`): a group row, which
 // has no data row and is keyed by its group, or a data row at a depth. The model expands row
@@ -43,7 +43,7 @@ const SHOWN: readonly { meta: RowMeta; row?: Row }[] = [
     { meta: { expandable: true }, row: { id: "p", amount: 5 } },
 ];
 
-function setup(options: DataGridModelOptions<Row> = {}) {
+function setup(options: ModelOptions<Row, unknown, Features> = {}) {
     return gridModel<Row>({
         columns: [
             { key: "id", width: 100 },

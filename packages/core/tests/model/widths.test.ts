@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type ColumnOrGroup, type DataGridModelOptions, veto } from "../../src";
+import { type ColumnOrGroup, type ModelOptions, veto } from "../../src";
 import { columnsError } from "../../src/header/header";
 import {
     autoWidthsOf,
     keptWidthsOf,
     sharedWidths,
 } from "../../src/model/widths";
-import { gridModel } from "../features";
+import { type Features, gridModel } from "../features";
 
 // Column widths (Epic #70, W1, W2, W5, W7): the model keeps the resized columns' widths over their
 // `width`, clamped to their limits; a group's resize is shared by its resizable columns. The
@@ -37,7 +37,7 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
     },
 ];
 
-function grid(options: DataGridModelOptions<Row> = {}) {
+function grid(options: ModelOptions<Row, unknown, Features> = {}) {
     return gridModel<Row>({ columns: COLUMNS, rows: [], ...options });
 }
 

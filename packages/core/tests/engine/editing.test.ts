@@ -4,10 +4,13 @@ import {
     type CellEdit,
     type Column,
     cellPart,
-    type DataGridModelOptions,
     EDITOR_ATTRIBUTE,
     type EditDraft,
+    type GridView,
+    type ModelOptions,
 } from "../../src";
+import type { CellRangeState } from "../../src/range";
+import type { Features } from "../features";
 import {
     cellElement,
     click,
@@ -63,7 +66,7 @@ function editorName(engine: { get(key: "edit-draft"): EditDraft | null }) {
     return engine.get("edit-draft")?.editorProps[EDITOR_ATTRIBUTE] ?? "";
 }
 
-function setup(modelOptions: Partial<DataGridModelOptions<Row>> = {}) {
+function setup(modelOptions: ModelOptions<Row, unknown, Features> = {}) {
     const grid = document.createElement("div");
     const mounted = mountEngine(
         { columns: COLUMNS, rowCount: 100, ...modelOptions },
@@ -606,7 +609,10 @@ describe("inside an edit", () => {
         expect(editing()).toEqual(at(2, 1));
         pointer(engine, cell, "pointermove", 250, { clientY: 160 });
         frame();
-        expect(view().selectedRange).toBeNull();
+        // cell ranges installed: their state on the view
+        expect(
+            (view() as GridView<Row> & CellRangeState).selectedRange,
+        ).toBeNull();
         expect(
             cellPart(view(), { ...at(2, 1), loaded: true }).state.editing,
         ).toBe(true);

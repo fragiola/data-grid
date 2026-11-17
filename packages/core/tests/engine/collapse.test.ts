@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     type Column,
     type ColumnOrGroup,
+    createDataGridModel,
     GROUP_LABEL_ATTRIBUTE,
     headerCellBox,
     headerCellPart,
@@ -234,7 +235,7 @@ describe("the model", () => {
         const sortable = columnsWith((key) =>
             key === "g3" ? { sortable: true, resizable: true } : {},
         );
-        const m = gridModel({
+        const m = createDataGridModel({
             columns: sortable,
             rows,
             features: [...FEATURES, sorting()],

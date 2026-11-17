@@ -4,12 +4,14 @@ import {
     type CellRange,
     type Column,
     cellPart,
-    type DataGridModelOptions,
     FILL_HANDLE_ATTRIBUTE,
     type FillDrag,
+    type GridView,
+    type ModelOptions,
     type RangeFill,
 } from "../../src";
-import { fillHandlePart, repeatedFill } from "../../src/fill";
+import { type FillView, fillHandlePart, repeatedFill } from "../../src/fill";
+import type { Features } from "../features";
 import {
     cellElement,
     click,
@@ -58,7 +60,7 @@ const range = (
 ): CellRange => ({ anchor: at(...anchor), focus: at(...focus) });
 
 function setup(
-    modelOptions: Partial<DataGridModelOptions<Row>> = {},
+    modelOptions: ModelOptions<Row, unknown, Features> = {},
     options: MountOptions = {},
 ) {
     const grid = document.createElement("div");
@@ -91,7 +93,9 @@ function setup(
         y: number,
         init: PointerEventInit = {},
     ) => pointer(engine, target, type, x, { clientY: y, ...init });
-    return { ...mounted, grid, fills, states, handleIn, press };
+    // the fill handle installed: its fields on the view
+    const view = () => mounted.view() as GridView<Row> & FillView;
+    return { ...mounted, view, grid, fills, states, handleIn, press };
 }
 
 describe("a fill's drag", () => {

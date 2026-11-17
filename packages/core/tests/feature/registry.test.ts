@@ -13,6 +13,7 @@ import {
     headerCellPart,
     withoutRootProps,
 } from "../../src";
+import { navigation } from "../../src/navigation";
 import { sorting } from "../../src/sorting";
 import { cellElement, click, keydown, mountEngine } from "../engine/harness";
 
@@ -218,7 +219,7 @@ describe("composing features", () => {
         const model = createDataGridModel({
             columns,
             rows,
-            features: [counter(log)],
+            features: [counter(log), navigation()],
             count: 4,
         });
         model.run("active-position.set", { rowIndex: 0, columnIndex: 0 });

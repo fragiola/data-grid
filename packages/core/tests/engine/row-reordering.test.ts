@@ -10,7 +10,7 @@ import {
     veto,
 } from "../../src";
 import { sorting } from "../../src/sorting";
-import { FEATURES } from "../features";
+import { FEATURES, type Features } from "../features";
 import {
     cellElement,
     keydown,
@@ -23,6 +23,8 @@ import {
 import { stateOf, viewOf } from "./views";
 
 type Sorting = ReturnType<typeof sorting>;
+/** every feature of Epic #144, and sorting */
+type Sorted = [...Features, Sorting];
 
 // Row reordering on screen (Epic #86, E2.3): a press on a row's drag handle drags past a click's
 // slop, its target worked out from the row axis (off screen, variable heights and details alike),
@@ -51,7 +53,7 @@ const middleOf = (rowIndex: number, top = 0) =>
     TOP + rowIndex * ROW + ROW / 2 - top;
 
 function setup(
-    modelOptions: Partial<ModelOptions<Row, unknown, [Sorting]>> = {},
+    modelOptions: Partial<ModelOptions<Row, unknown, Sorted>> = {},
     options: MountOptions = {},
 ) {
     const grid = document.createElement("div");

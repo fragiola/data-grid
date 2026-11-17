@@ -8,7 +8,7 @@ import {
     type DataGridModel,
     type EngineEventMap,
 } from "../../src";
-import { gridModel } from "../features";
+import { type Features, gridModel } from "../features";
 import {
     cellElement,
     fakeResizeObserver,
@@ -491,7 +491,7 @@ describe("scroll scaling", () => {
 });
 
 describe("the keyboard", () => {
-    function active(model: DataGridModel<Row>) {
+    function active(model: DataGridModel<Row, unknown, Features>) {
         return model.get("active-position");
     }
 
