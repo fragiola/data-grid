@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { pageCount } from "@fragiola/data-grid/local";
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { type SortColumn, sorting } from "@fragiola/data-grid-vue/sorting";
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "@lucide/vue";
 import {
@@ -20,8 +21,9 @@ import RequestLog from "./request-log.vue";
 import { fetchPeople } from "./server";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const features = [sorting()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop)
+const features = [sorting(), navigation()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

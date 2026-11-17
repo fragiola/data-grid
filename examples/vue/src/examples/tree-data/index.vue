@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { type RowKey, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Search } from "@lucide/vue";
 import { h, ref, useId } from "vue";
@@ -18,8 +20,9 @@ const searchInset = {
     start: h(Search, { "aria-hidden": "true", class: styles.searchIcon }),
 };
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const features = [sorting()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), row selection
+const features = [sorting(), navigation(), rowSelection()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.
@@ -63,6 +66,7 @@ const textOf = (event: Event) =>
         <!-- the same files listed by a server, folder by folder, as they are expanded -->
         <ServerTree v-if="lazy" v-slot="{ tree }">
             <DataGrid.Root
+                :features="features"
                 v-bind="tree"
                 :columns="columns"
                 :row-height="34"

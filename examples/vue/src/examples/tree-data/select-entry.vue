@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CellInfo, RowKey } from "@fragiola/data-grid-vue";
-import { useSelectAll } from "@fragiola/data-grid-vue/selection";
+import { useSelectAll } from "@fragiola/data-grid-vue/row-selection";
 import { computed } from "vue";
 import { Checkbox } from "#/components/ui/checkbox";
 import type { Entry } from "./files";

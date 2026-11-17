@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { useDataGrid, useGridView } from "@fragiola/data-grid-vue";
+import {
+    type DataGridFeature,
+    useDataGrid,
+    useGridView,
+} from "@fragiola/data-grid-vue";
+import type { RowSelectionTypes } from "@fragiola/data-grid-vue/row-selection";
 import { computed } from "vue";
 import type { Task } from "../_kit/tasks";
 import Checkbox from "./checkbox.vue";
 
 const props = defineProps<{ rowIndex: number; name: string }>();
 
-const { model } = useDataGrid<Task>();
+// the grid's model, typed by the feature this part reads (row selection, installed by the grid)
+const { model } = useDataGrid<Task, [DataGridFeature<RowSelectionTypes>]>();
 // the view moves with the selection: the box follows
 const view = useGridView();
 const checked = computed(() => {

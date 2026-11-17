@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { Star } from "@lucide/vue";
 import { computed, h, shallowRef, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
@@ -16,8 +17,12 @@ import {
 } from "./facets";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Task` as a type argument.
-const DataGrid = typedDataGrid<Task>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Task, typeof features>();
 
 const all = tasks(200);
 
@@ -130,6 +135,7 @@ function toggleValue(key: FacetKey, value: string) {
             </fieldset>
         </aside>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rows"
             :row-key="rowKey"

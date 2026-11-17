@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, ref, useId, type VNodeChild } from "vue";
 import { Switch } from "#/components/ui/switch";
 import { formatMoney } from "../_kit/data";
@@ -8,8 +9,12 @@ import { detailHeight, type Order, orders, total } from "./orders";
 import OrdersGrid from "./orders-grid.vue";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Order` as a type argument.
-const DataGrid = typedDataGrid<Order>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Order, typeof features>();
 
 const orderColumns: Column<Order, VNodeChild>[] = [
     {
@@ -75,6 +80,7 @@ const rowKey = (row: Order) => row.id;
             measured once rendered ("auto", about 160px until then)
         -->
         <DataGrid.Root
+            :features="features"
             :columns="orderColumns"
             :rows="orders"
             :row-key="rowKey"

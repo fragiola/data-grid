@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { useDataGrid, useGridView } from "@fragiola/data-grid-vue";
+import {
+    type DataGridFeature,
+    useDataGrid,
+    useGridView,
+} from "@fragiola/data-grid-vue";
+import type { RowSelectionTypes } from "@fragiola/data-grid-vue/row-selection";
 import { computed } from "vue";
 import { Checkbox } from "#/components/ui/checkbox";
 import type { Person } from "../_kit/data";
@@ -8,7 +13,8 @@ import type { Person } from "../_kit/data";
 
 const props = defineProps<{ rowIndex: number; name: string }>();
 
-const { model } = useDataGrid<Person>();
+// the grid's model, typed by the feature this part reads (row selection, installed by the grid)
+const { model } = useDataGrid<Person, [DataGridFeature<RowSelectionTypes>]>();
 // the view moves with the selection: the box follows
 const view = useGridView();
 const checked = computed(() => {

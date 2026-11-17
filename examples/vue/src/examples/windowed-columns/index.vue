@@ -5,6 +5,7 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { onBeforeUnmount, type VNodeChild } from "vue";
 import { formatNumber, measurement } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
@@ -21,8 +22,12 @@ interface Row {
     index: number;
 }
 
-// The parts typed by the row type: a template cannot pass `Row` as a type argument.
-const DataGrid = typedDataGrid<Row>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Row, typeof features>();
 
 /** Every row exists from the start: the same getter for the grid's whole life. */
 const getRow = (index: number): Row => ({ index });
@@ -85,6 +90,7 @@ const onColumnWindowChange = (columns: AxisWindow) => {
     <div :class="styles.frame">
         <div :class="styles.layout">
             <DataGrid.Root
+                :features="features"
                 :columns="columns"
                 :row-count="ROWS"
                 :get-row="getRow"

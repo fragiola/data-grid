@@ -4,13 +4,18 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import type { VNodeChild } from "vue";
 import Readout from "./readout.vue";
 import type { Row } from "./row";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Row` as a type argument.
-const DataGrid = typedDataGrid<Row>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Row, typeof features>();
 
 const ROWS = 1_000;
 const COLUMNS = 100;
@@ -39,6 +44,7 @@ const gridRef = useDataGridRef<Row>();
         <Readout :grid-ref="gridRef" />
         <div :class="styles.stage">
             <DataGrid.Root
+                :features="features"
                 :grid-ref="gridRef"
                 :columns="columns"
                 :row-count="ROWS"

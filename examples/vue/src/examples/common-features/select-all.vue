@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useSelectAll } from "@fragiola/data-grid-vue/selection";
+import { useSelectAll } from "@fragiola/data-grid-vue/row-selection";
 import { computed, inject } from "vue";
 import { Checkbox } from "#/components/ui/checkbox";
 import { SELECTABLE_IDS } from "./selectable-ids";

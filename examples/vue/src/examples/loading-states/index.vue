@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { RefreshCw, TriangleAlert } from "@lucide/vue";
 import {
     computed,
@@ -15,8 +16,12 @@ import { Switch } from "#/components/ui/switch";
 import { formatMoney, type Person, person } from "../_kit/data";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const COUNT = 40;
 /** the skeleton rows the first load shows: about a screen's worth */
@@ -180,6 +185,7 @@ const setFailNext = (fail: boolean) => {
             </Clickable.Button>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :row-count="rowCount"
             :get-row="getRow"

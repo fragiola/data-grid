@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
     type CellRange,
     type Column,
     type RangeFill,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { fillHandle, repeatedFill } from "@fragiola/data-grid-vue/fill";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { cellRange } from "@fragiola/data-grid-vue/range";
 import { ref, shallowRef, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { hash } from "../_kit/data";
@@ -116,8 +118,12 @@ function unitsFill({ source, target }: RangeFill): RangeFill | null {
         : { source: weeksOf(source), target: weeksOf(target) };
 }
 
+// the features the grid installs: cell navigation (the keys, the active cell, the tab stop), cell
+// ranges, the fill handle
+const features = [navigation(), cellRange(), fillHandle()] as const;
+
 // the parts typed by the row type: a template cannot pass `Plan` as a type argument
-const DataGrid = typedDataGrid<Plan>();
+const DataGrid = typedDataGrid<Plan, typeof features>();
 
 const MODES = ["repeat", "series"] as const;
 
@@ -173,6 +179,7 @@ function fill(filled: RangeFill) {
             <span role="status" :class="styles.status">{{ announcement }}</span>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="plans"
             :row-key="planKey"

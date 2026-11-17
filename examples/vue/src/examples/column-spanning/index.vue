@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { h, type VNodeChild } from "vue";
 import {
     bookingAt,
@@ -11,8 +12,12 @@ import {
 } from "./bookings";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Room` as a type argument.
-const DataGrid = typedDataGrid<Room>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Room, typeof features>();
 
 /**
  * An hour of the day: a booking starting at it spans the hours it takes (the grid renders no
@@ -70,6 +75,7 @@ const rowKey = (row: Room) => row.id;
 <template>
     <div :class="styles.frame">
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :rows="rooms"
             :row-key="rowKey"

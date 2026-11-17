@@ -5,6 +5,7 @@ import {
     typedDataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { computed, ref, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
@@ -19,8 +20,12 @@ interface Row {
     index: number;
 }
 
-// The parts typed by the row type: a template cannot pass `Row` as a type argument.
-const DataGrid = typedDataGrid<Row>();
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const features = [navigation()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Row, typeof features>();
 
 const getRow = (index: number): Row => ({ index });
 
@@ -60,7 +65,7 @@ function indexOf(text: string, count: number): number | undefined {
 }
 
 // the grid's model and engine from outside its root
-const gridRef = useDataGridRef<Row>();
+const gridRef = useDataGridRef<Row, typeof features>();
 const row = ref("5000");
 const column = ref("120");
 const align = ref<ScrollAlign>("center");
@@ -160,6 +165,7 @@ function makeActive() {
             </Clickable.Button>
         </div>
         <DataGrid.Root
+            :features="features"
             :grid-ref="gridRef"
             :columns="columns"
             :row-count="ROWS"
