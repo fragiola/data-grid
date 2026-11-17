@@ -27,18 +27,22 @@ describe("a spec's examples", () => {
     const available = ["hello-grid", "large-dataset"];
 
     it("run when the framework has every one", () => {
-        expect(skipReason("vue", available, ["hello-grid"])).toBeUndefined();
-        expect(skipReason("vue", available, [])).toBeUndefined();
-        expect(skipOrFail("vue", available, ["hello-grid"])).toBeUndefined();
+        expect(
+            skipReason("angular", available, ["hello-grid"]),
+        ).toBeUndefined();
+        expect(skipReason("angular", available, [])).toBeUndefined();
+        expect(
+            skipOrFail("angular", available, ["hello-grid"]),
+        ).toBeUndefined();
     });
 
     it("skip, naming the missing ones, when it lacks some", () => {
         expect(
-            skipReason("vue", available, ["large-dataset", "fill", "rtl"]),
-        ).toBe("vue has no fill, rtl example");
-        // Vue is not complete yet: it skips
-        expect(skipOrFail("vue", available, ["fill"])).toBe(
-            "vue has no fill example",
+            skipReason("angular", available, ["large-dataset", "fill", "rtl"]),
+        ).toBe("angular has no fill, rtl example");
+        // Angular is not complete yet: it skips
+        expect(skipOrFail("angular", available, ["fill"])).toBe(
+            "angular has no fill example",
         );
     });
 });
@@ -46,8 +50,8 @@ describe("a spec's examples", () => {
 describe("a complete framework", () => {
     const available = ["hello-grid"];
 
-    it("is React, the one whose app has every example", () => {
-        expect(COMPLETE_FRAMEWORKS).toEqual(["react"]);
+    it("is React or Vue, the ones whose app has every example", () => {
+        expect(COMPLETE_FRAMEWORKS).toEqual(["react", "vue"]);
     });
 
     it("fails a spec whose example it lacks, instead of skipping it", () => {
@@ -55,5 +59,8 @@ describe("a complete framework", () => {
             /react has no fill example, but every react example is required/,
         );
         expect(skipOrFail("react", available, ["hello-grid"])).toBeUndefined();
+        expect(() => skipOrFail("vue", available, ["fill"])).toThrow(
+            /vue has no fill example, but every vue example is required/,
+        );
     });
 });

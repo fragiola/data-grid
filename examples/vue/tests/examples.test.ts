@@ -13,8 +13,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 // The Vue side of the example contract (README of examples/react/src/examples, and `#/` imports
 // per §6 of the site export contract): an example is single-file components (`index.vue` its
 // entry) and `styles.ts`, importing only what a consumer can copy; the code panel lists exactly the
-// files it is compiled from, and each example assembles the grid itself. The Vue app ships a subset
-// of examples/react's examples while it is written (e2e/available.ts): never one React lacks.
+// files it is compiled from, and each example assembles the grid itself. The Vue app has every
+// example of examples/react, under the same ids (a complete framework in e2e/available.ts: no
+// shared spec skips for Vue), and wears the same classes.
 
 const APP = examplesApp("vue");
 const EXAMPLES_DIR = APP.examplesDir;
@@ -58,11 +59,35 @@ describe("the Vue examples", () => {
         );
     });
 
-    it("are examples of examples/react, under the same ids", () => {
-        const react = listExampleSlugs(examplesApp("react"));
+    it("are the examples of examples/react, under the same ids: every one, no other", () => {
+        // a React example without a Vue counterpart fails here, and its spec fails for Vue
+        expect(listExampleSlugs(APP)).toEqual(
+            listExampleSlugs(examplesApp("react")),
+        );
+    });
+
+    it("look like React's: a class string both styles.ts export is the same", async () => {
+        // a state function may differ (a Vue part has no `class={(state) => …}`: its looks come
+        // from `data-*` or what a slot hands), a string never does
+        const reactDir = examplesApp("react").examplesDir;
+        let compared = 0;
         for (const slug of listExampleSlugs(APP)) {
-            expect(react, slug).toContain(slug);
+            const vue: Record<string, unknown> = await import(
+                join(EXAMPLES_DIR, slug, "styles.ts")
+            );
+            const react: Record<string, unknown> = await import(
+                join(reactDir, slug, "styles.ts")
+            );
+            for (const [name, value] of Object.entries(vue)) {
+                const original = react[name];
+                if (typeof value !== "string" || typeof original !== "string") {
+                    continue;
+                }
+                expect(value, `${slug}/styles.ts: ${name}`).toBe(original);
+                compared++;
+            }
         }
+        expect(compared).toBeGreaterThan(0);
     });
 
     it("import only what a consumer can copy", () => {
