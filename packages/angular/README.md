@@ -15,6 +15,7 @@ pnpm add @fragiola/data-grid-angular
 ```ts
 import { ChangeDetectionStrategy, Component } from "@angular/core";
 import { type Column, DATA_GRID, type DataGridNode } from "@fragiola/data-grid-angular";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
 
 interface Person {
     name: string;
@@ -26,7 +27,7 @@ interface Person {
     imports: [DATA_GRID],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [columns]="columns" [rows]="rows" style="height: 300px">
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="rows" style="height: 300px">
             <div dataGridGrid>
                 <div *dataGridHeader class="bg-white">
                     <div dataGridHeaderRow>
@@ -49,6 +50,8 @@ interface Person {
     `,
 })
 export class People {
+    // the keys, the active cell and the tab stop: without it, the grid is a plain table
+    readonly features = [navigation()];
     readonly columns: Column<Person, DataGridNode>[] = [
         { key: "name", name: "Name", width: 160 },
         { key: "age", name: "Age", width: 80 },
@@ -68,19 +71,33 @@ The same primitives as `@fragiola/data-grid-react`, mapped onto Angular:
   `<td [dataGridCell]="cell">`): the Angular form of `render`. A part that renders only sometimes
   is a structural directive on its element (`*dataGridHeader`, `*dataGridEmpty`,
   `*dataGridRowDetail`, `*dataGridSummary`, `*dataGridColumnResizer`, `*dataGridGroupToggle`,
-  `*dataGridFillHandle`, `*dataGridCellEdit`).
+  `*dataGridCellEdit`; `*dataGridFillHandle` from `/fill`).
 - The recursion is your templates: `<ng-template dataGridRows let-row>`,
   `<ng-template dataGridCells let-cell>`, typed by the columns or the root you give them.
 - `class` and `style` are your element's, under the structural style (its keys win). Your
   listeners run before the grid's keys, clicks and presses, so `preventDefault` cancels them.
 - The root's inputs are the core's root props; React's `onXChange` callbacks are outputs
-  (`(activePositionChange)`, `[(sortColumns)]`, …).
+  (`(editingCellChange)`, `[(columnWidths)]`, …).
 - Column renderers return text or a template with its context (`Column<TRow, DataGridNode>`,
   `templateContent(template, props)`), which `*dataGridCellContent` renders.
 - Every hook is an injection function (`injectRow`, `injectCell`, `injectRowWindow`, …)
   returning signals; `createDataGridRef()` makes a handle on a grid.
-- `/local` (`injectLocalRows`, `[dataGridLocalRows]`) and `/selection` (`injectSelectAll`) are
-  opt-in entry points.
+- `/local` (`injectLocalRows`, `[dataGridLocalRows]`) is an opt-in entry point.
+- The features are opt-in too: the root installs them (`[features]="[navigation(), sorting()]"`,
+  fixed once created), and a feature's inputs and outputs are its own directive's on the root's
+  element, from its entry point (each re-exports the core's of the same name):
+
+  | entry | feature | on the root |
+  | --- | --- | --- |
+  | `/navigation` | `navigation()` | `dataGridNavigation [(activePosition)]`, `[defaultActivePosition]` |
+  | `/row-selection` | `rowSelection()` | `dataGridRowSelection rowSelection`, `[isRowSelectable]`, `[(selectedRowKeys)]`, `[defaultSelectedRowKeys]`; `injectSelectAll` |
+  | `/range` | `cellRange()` (needs navigation) | `dataGridCellRange cellSelection`, `[(selectedRange)]`, `[defaultSelectedRange]` |
+  | `/clipboard` | `clipboard()` (needs `cellRange()`) | `dataGridClipboard [beforeRangePaste]`, `(rangePaste)` |
+  | `/fill` | `fillHandle()` (needs `cellRange()`) | `dataGridFill (fill)` (cells fill while it is on; `[dataGridFill]="false"` turns them off); `*dataGridFillHandle`, `injectFillHandle` |
+  | `/sorting` | `sorting()` | `dataGridSorting [(sortColumns)]`, `[defaultSortColumns]` |
+
+  Without navigation the grid is the ARIA table (`table`, `cell`, `columnheader`): no tab stop on
+  it nor on a cell, and the arrow keys do nothing.
 
 Zoneless and `OnPush`-safe: scrolling renders nothing until the rendered window changes, the
 engine writes the layers' offsets itself. Angular 22; browser rendering only (no SSR yet).

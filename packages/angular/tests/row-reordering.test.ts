@@ -15,6 +15,7 @@ import {
     vi,
 } from "vitest";
 import { injectLocalRows } from "../src/local";
+import { DataGridNavigation } from "../src/navigation";
 import {
     type CellPosition,
     type Column,
@@ -26,6 +27,7 @@ import {
     type RowState,
 } from "../src/public-api";
 import { DataGridSorting, type SortColumn, sorting } from "../src/sorting";
+import { TEST_FEATURES, type TestFeatures } from "./grid";
 import {
     cellAt,
     fire,
@@ -76,13 +78,13 @@ interface GridProps {
 const CELL = `@if (cell.columnIndex === 0) {<span [dataGridRowDragHandle]="cell" #handle="dataGridRowDragHandle" [attr.data-testid]="'handle-' + cell.rowIndex">{{ handle.state()?.reorderable ? "⋮" : "" }}</span>{{ cell.value }}} @else {<ng-container *dataGridCellContent />}`;
 
 @Component({
-    imports: [DATA_GRID, DataGridSorting],
+    imports: [DATA_GRID, DataGridNavigation, DataGridSorting],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="columns" [rows]="rows()" [rowKey]="rowKey" [rowHeight]="20" [headerRowHeight]="20"
             [gridRef]="gridRef()"
             [reorderableRows]="!!props().onRowMove" (rowMove)="props().onRowMove?.($event)"
-            [activePosition]="props().activePosition" (activePositionChange)="props().onActivePositionChange?.($event)"
+            dataGridNavigation [activePosition]="props().activePosition" (activePositionChange)="props().onActivePositionChange?.($event)"
             [features]="features" dataGridSorting [sortColumns]="props().sortColumns">
             @if (table()) {
                 <table dataGridGrid>
@@ -131,7 +133,7 @@ const CELL = `@if (cell.columnIndex === 0) {<span [dataGridRowDragHandle]="cell"
     `,
 })
 class Tasks {
-    readonly features = [sorting()];
+    readonly features = [...TEST_FEATURES, sorting()];
     readonly rows = input<readonly Task[]>(tasks);
     readonly table = input(false);
     readonly props = input<GridProps>({});
@@ -163,7 +165,7 @@ async function mountGrid(props: GridProps, rows: readonly Task[] = tasks) {
 }
 
 /** the last app's grid */
-let latestRef: DataGridRef<Task> | undefined;
+let latestRef: DataGridRef<Task, TestFeatures> | undefined;
 
 /** The app: its rows in its state, each move applied, the moves kept. */
 function mountApp({
@@ -174,7 +176,7 @@ function mountApp({
     onMove?: (move: RowMove) => void;
 }) {
     let rows: readonly Task[] = tasks;
-    const gridRef = createDataGridRef<Task>();
+    const gridRef = createDataGridRef<Task, TestFeatures>();
     latestRef = gridRef;
     let fixture: ComponentFixture<Tasks> | undefined;
     return render(Tasks, (created) => {

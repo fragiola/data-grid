@@ -18,9 +18,6 @@ import {
     type AxisWindow,
     bindGridRoot,
     type CellEditEvent,
-    type CellPosition,
-    type CellRange,
-    type CellSelection,
     type ColumnOrder,
     type ColumnOrGroup,
     type ColumnWidths,
@@ -34,15 +31,11 @@ import {
     type GridRoot,
     type GridRootProps,
     type GridView,
-    type RangeFill,
-    type RangePaste,
     type RowHeight,
     type RowKey,
     type RowKeyGetter,
     type RowMetaGetter,
     type RowMove,
-    type RowSelectable,
-    type RowSelection,
     rootPropsOf,
 } from "@fragiola/data-grid";
 import {
@@ -94,10 +87,11 @@ export interface RootPropsSourceOptions {
  * its inputs onto the model's commands (controlled or not: the core's `bindGridRoot`, after every
  * render), tells what changed through its outputs, and runs the grid's keys, clicks, presses and
  * clipboard events after the consumer's own listeners on its element, so `preventDefault` cancels
- * one. Each `onXChange` of React is the output `xChange` (`[(activePosition)]` binds both ways);
- * the row moves and the fill are on while `reorderableRows` and `fillable` are. It installs its
- * `features` (`[sorting()]`, fixed when it is created: a later list is told in the console, never
- * taken); a feature's inputs are another directive's on the same element (`[dataGridSorting]`).
+ * one. Each `onXChange` of React is the output `xChange` (`[(editingCell)]` binds both ways);
+ * the row moves are on while `reorderableRows` is. It installs its `features` (`[navigation(),
+ * sorting()]`, fixed when it is created: a later list is told in the console, never taken); a
+ * feature's inputs are another directive's on the same element, from the feature's entry point
+ * (`[dataGridNavigation]`, `[dataGridSorting]`, …).
  */
 @Directive({
     selector: "[dataGridRoot]",
@@ -135,10 +129,6 @@ export class DataGridRoot<TRow = unknown> {
         { readonly top?: number; readonly bottom?: number } | undefined
     >(undefined);
     readonly summaryRowHeight = input<number | undefined>(undefined);
-    readonly activePosition = input<CellPosition | null | undefined>(undefined);
-    readonly defaultActivePosition = input<CellPosition | null | undefined>(
-        undefined,
-    );
     readonly expandedRowKeys = input<readonly RowKey[] | undefined>(undefined);
     readonly defaultExpandedRowKeys = input<readonly RowKey[] | undefined>(
         undefined,
@@ -151,27 +141,10 @@ export class DataGridRoot<TRow = unknown> {
     );
     readonly detailHeight = input<DetailHeight<TRow> | undefined>(undefined);
     readonly estimatedDetailHeight = input<number | undefined>(undefined);
-    readonly rowSelection = input<RowSelection | undefined>(undefined);
-    readonly isRowSelectable = input<RowSelectable<TRow> | undefined>(
-        undefined,
-    );
-    readonly selectedRowKeys = input<readonly RowKey[] | undefined>(undefined);
-    readonly defaultSelectedRowKeys = input<readonly RowKey[] | undefined>(
-        undefined,
-    );
     readonly editingCell = input<EditingCell | null | undefined>(undefined);
     readonly defaultEditingCell = input<EditingCell | null | undefined>(
         undefined,
     );
-    readonly cellSelection = input<CellSelection | undefined>(undefined);
-    readonly selectedRange = input<CellRange | null | undefined>(undefined);
-    readonly defaultSelectedRange = input<CellRange | null | undefined>(
-        undefined,
-    );
-    /** asked before a paste is told (`rangePaste`): `false` refuses it */
-    readonly beforeRangePaste = input<
-        ((paste: RangePaste) => boolean | undefined) | undefined
-    >(undefined);
     readonly columnWidths = input<ColumnWidths | undefined>(undefined);
     readonly defaultColumnWidths = input<ColumnWidths | undefined>(undefined);
     readonly columnOrder = input<ColumnOrder | undefined>(undefined);
@@ -184,8 +157,6 @@ export class DataGridRoot<TRow = unknown> {
     );
     /** the rows move by drag and keys (React: `onRowMove` given): told by `rowMove` */
     readonly reorderableRows = input(undefined, { transform: optionalBoolean });
-    /** the fill handle fills cells (React: `onFill` given): told by `fill` */
-    readonly fillable = input(undefined, { transform: optionalBoolean });
     readonly endReachedThreshold = input<number | undefined>(undefined);
     readonly overscan = input<{ rows?: number; columns?: number } | undefined>(
         undefined,
@@ -204,18 +175,11 @@ export class DataGridRoot<TRow = unknown> {
      */
     readonly gridRef = input<DataGridRef<TRow> | undefined>(undefined);
 
-    readonly activePositionChange = output<CellPosition | null>();
     readonly expandedRowKeysChange = output<readonly RowKey[]>();
     readonly expandedGroupKeysChange = output<readonly RowKey[]>();
-    readonly selectedRowKeysChange = output<readonly RowKey[]>();
     readonly editingCellChange = output<EditingCell | null>();
     /** an edit committed (Epic #88): the cell, its value and its row */
     readonly cellEdit = output<CellEditEvent<TRow>>();
-    readonly selectedRangeChange = output<CellRange | null>();
-    /** a paste over the range (Epic #88), once `beforeRangePaste` let it */
-    readonly rangePaste = output<RangePaste>();
-    /** a fill (Epic #88), while `fillable` */
-    readonly fill = output<RangeFill>();
     readonly columnWidthsChange = output<ColumnWidths>();
     readonly columnOrderChange = output<ColumnOrder>();
     readonly collapsedGroupKeysChange = output<readonly string[]>();
@@ -254,9 +218,6 @@ export class DataGridRoot<TRow = unknown> {
             headerRowHeight: this.headerRowHeight(),
             summaryRows: this.summaryRows(),
             summaryRowHeight: this.summaryRowHeight(),
-            activePosition: this.activePosition(),
-            defaultActivePosition: this.defaultActivePosition(),
-            onActivePositionChange: this.handlers.activePosition,
             expandedRowKeys: this.expandedRowKeys(),
             defaultExpandedRowKeys: this.defaultExpandedRowKeys(),
             onExpandedRowKeysChange: this.handlers.expandedRowKeys,
@@ -265,22 +226,10 @@ export class DataGridRoot<TRow = unknown> {
             onExpandedGroupKeysChange: this.handlers.expandedGroupKeys,
             detailHeight: this.detailHeight(),
             estimatedDetailHeight: this.estimatedDetailHeight(),
-            rowSelection: this.rowSelection(),
-            isRowSelectable: this.isRowSelectable(),
-            selectedRowKeys: this.selectedRowKeys(),
-            defaultSelectedRowKeys: this.defaultSelectedRowKeys(),
-            onSelectedRowKeysChange: this.handlers.selectedRowKeys,
             editingCell: this.editingCell(),
             defaultEditingCell: this.defaultEditingCell(),
             onEditingCellChange: this.handlers.editingCell,
             onCellEdit: this.handlers.cellEdit,
-            cellSelection: this.cellSelection(),
-            selectedRange: this.selectedRange(),
-            defaultSelectedRange: this.defaultSelectedRange(),
-            onSelectedRangeChange: this.handlers.selectedRange,
-            onRangePaste: this.handlers.rangePaste,
-            onBeforeRangePaste: this.beforeRangePaste(),
-            onFill: this.fillable() ? this.handlers.fill : undefined,
             columnWidths: this.columnWidths(),
             defaultColumnWidths: this.defaultColumnWidths(),
             onColumnWidthsChange: this.handlers.columnWidths,
@@ -358,15 +307,10 @@ export class DataGridRoot<TRow = unknown> {
      * or move rows not moved yet.
      */
     private readonly handlers = {
-        activePosition: this.emitting(this.activePositionChange),
         expandedRowKeys: this.emitting(this.expandedRowKeysChange),
         expandedGroupKeys: this.emitting(this.expandedGroupKeysChange),
-        selectedRowKeys: this.emitting(this.selectedRowKeysChange),
         editingCell: this.emitting(this.editingCellChange),
         cellEdit: this.emitting(this.cellEdit),
-        selectedRange: this.emitting(this.selectedRangeChange),
-        rangePaste: this.emitting(this.rangePaste),
-        fill: this.emitting(this.fill),
         columnWidths: this.emitting(this.columnWidthsChange),
         columnOrder: this.emitting(this.columnOrderChange),
         collapsedGroupKeys: this.emitting(this.collapsedGroupKeysChange),

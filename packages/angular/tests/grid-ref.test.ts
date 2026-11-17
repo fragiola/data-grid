@@ -17,6 +17,7 @@ import {
     injectDataGrid,
     injectRowWindow,
 } from "../src/public-api";
+import { TEST_FEATURES, type TestFeatures } from "./grid";
 import {
     click,
     render,
@@ -103,11 +104,11 @@ async function scroll(element: HTMLElement, top: number) {
 }
 
 /** The ref the last app made, handed out for the test. */
-let latestRef: DataGridRef<Person> | undefined;
+let latestRef: DataGridRef<Person, TestFeatures> | undefined;
 
 /** Makes the app's ref, and hands it out. */
 function appRef(): DataGridRef<Person> {
-    const gridRef = createDataGridRef<Person>();
+    const gridRef = createDataGridRef<Person, TestFeatures>();
     latestRef = gridRef;
     return gridRef;
 }
@@ -133,10 +134,11 @@ class App {
     imports: [DATA_GRID, StatusBar],
     changeDetection: ChangeDetectionStrategy.OnPush,
     providers: [{ provide: GRID_REF, useFactory: appRef }],
-    template: `{{ count() }}<test-status /><div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [gridRef]="gridRef">${PARTS}</div>`,
+    template: `{{ count() }}<test-status /><div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [features]="features" [gridRef]="gridRef">${PARTS}</div>`,
 })
 class AppWithStatus {
     readonly gridRef = inject(GRID_REF);
+    readonly features = TEST_FEATURES;
     readonly rows = people;
     readonly columns = columns;
     count() {
@@ -263,12 +265,13 @@ describe("gridRef", () => {
             imports: [DATA_GRID],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [gridRef]="gridRef">${PARTS}</div>
-                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [gridRef]="gridRef">${PARTS}</div>
+                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [features]="features" [gridRef]="gridRef">${PARTS}</div>
+                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20" [features]="features" [gridRef]="gridRef">${PARTS}</div>
             `,
         })
         class Twice {
-            readonly gridRef = createDataGridRef<Person>();
+            readonly gridRef = createDataGridRef<Person, TestFeatures>();
+            readonly features = TEST_FEATURES;
             readonly rows = people;
             readonly columns = columns;
         }

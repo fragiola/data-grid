@@ -18,6 +18,8 @@ import {
     type DataGridNode,
     type RowKey,
 } from "../src/public-api";
+import { DataGridRowSelection } from "../src/row-selection";
+import { TEST_FEATURES } from "./grid";
 import {
     cellAt,
     click,
@@ -82,10 +84,10 @@ const CELL = `
 `;
 
 @Component({
-    imports: [DATA_GRID, DataGridLocalRows],
+    imports: [DATA_GRID, DataGridRowSelection, DataGridLocalRows],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [columns]="columns" [rowHeight]="20" [rowSelection]="rowSelection()" [dataGridLocalRows]="local">
+        <div dataGridRoot [features]="features" dataGridRowSelection [columns]="columns" [rowHeight]="20" [rowSelection]="rowSelection()" [dataGridLocalRows]="local">
             @if (table()) {
                 <table dataGridGrid>
                     <thead *dataGridHeader>
@@ -133,6 +135,7 @@ const CELL = `
     `,
 })
 class Sales {
+    readonly features = TEST_FEATURES;
     readonly groupBy = input<readonly string[]>(["country"]);
     readonly table = input(false);
     readonly expandedGroupKeys = input<readonly RowKey[] | undefined>(
@@ -324,13 +327,14 @@ describe("row groups", () => {
             imports: [DATA_GRID],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [columns]="columns" [rows]="rows" [rowHeight]="20"
+                <div dataGridRoot [features]="features" [columns]="columns" [rows]="rows" [rowHeight]="20"
                     [getRowMeta]="meta() ? getRowMeta : undefined">
                     <div dataGridGrid></div>
                 </div>
             `,
         })
         class Meta {
+            readonly features = TEST_FEATURES;
             readonly columns = columns;
             readonly rows = sales;
             readonly getRowMeta = () => ({ depth: 0 });

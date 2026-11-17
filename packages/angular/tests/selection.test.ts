@@ -19,8 +19,13 @@ import {
     type RowSelection,
     type RowState,
 } from "../src/public-api";
-import { injectSelectAll } from "../src/selection";
-import { renderTestGrid, type TestProps, TestRootProps } from "./grid";
+import { injectSelectAll } from "../src/row-selection";
+import {
+    renderTestGrid,
+    type TestFeatures,
+    type TestProps,
+    TestRootProps,
+} from "./grid";
 import {
     cellAt,
     click,
@@ -272,7 +277,7 @@ describe("controlled selection", () => {
     });
 
     it("keeps a Shift+click's anchor without one before, as uncontrolled", async () => {
-        const gridRef = createDataGridRef<Person>();
+        const gridRef = createDataGridRef<Person, TestFeatures>();
         const { container } = await renderControlled(gridRef);
         const run = (rowIndex: number, extend: boolean) =>
             gridRef.current?.model.run("selected-rows.toggle", {

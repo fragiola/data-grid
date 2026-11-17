@@ -1,8 +1,14 @@
 import { computed, Directive, input } from "@angular/core";
-import { type FillHandleState, fillHandlePartOf } from "@fragiola/data-grid";
-import { injectGrid } from "../context";
-import { bindPart } from "../utils/helpers";
-import { structuralView } from "../utils/structural";
+import {
+    type FillHandleState,
+    fillHandlePartOf,
+} from "@fragiola/data-grid/fill";
+import {
+    injectDataGrid,
+    injectGridView,
+    ɵbindPart,
+    ɵstructuralView,
+} from "@fragiola/data-grid-angular";
 
 /** The context of the `*dataGridFillHandle` template. */
 export interface FillHandleContext {
@@ -14,8 +20,9 @@ export interface FillHandleContext {
 /**
  * A fill handle (Epic #88, E4.4), the app's element in a cell: `<span *dataGridFillHandle="cell">
  * </span>` (a cell's info, or its position). It renders only in the cell at the corner a fill
- * drags from, while cells fill (`fillable` on the root) and none is edited. Its look, place at the
- * corner, cursor and `touch-action: none` are the app's (React's `useFillHandle`).
+ * drags from, while cells fill (`fillHandle()` installed, `dataGridFill` on the root) and none is
+ * edited. Its look, place at the corner, cursor and `touch-action: none` are the app's (React's
+ * `useFillHandle`).
  */
 @Directive({ selector: "ng-template[dataGridFillHandle]" })
 export class DataGridFillHandle {
@@ -33,15 +40,16 @@ export class DataGridFillHandle {
     }
 
     constructor() {
-        const grid = injectGrid("*dataGridFillHandle");
+        const grid = injectDataGrid();
+        const view = injectGridView();
         const part = computed(() =>
-            fillHandlePartOf(grid.view(), this.dataGridFillHandle()),
+            fillHandlePartOf(view(), this.dataGridFillHandle()),
         );
-        const element = structuralView<FillHandleContext>(() => {
+        const element = ɵstructuralView<FillHandleContext>(() => {
             const { state } = part();
             return state.visible ? { $implicit: state, state } : null;
         });
-        bindPart(
+        ɵbindPart(
             () => grid.engine,
             element,
             () => ({ props: part().props }),

@@ -48,7 +48,6 @@ const ANGULAR_ONLY = [
     // the parts React gives through a hook's props (Angular cannot spread props)
     "DataGridColumnResizer",
     "DataGridRowDragHandle",
-    "DataGridFillHandle",
     "DataGridGroupToggle",
     "DataGridGroupLabel",
     "DataGridCellEdit",
@@ -58,7 +57,30 @@ const ANGULAR_ONLY = [
     "DataGridTemplate",
     "templateContent",
     "contextOf",
+    // private to the package's own entry points (the fill handle's element), as Angular's `ɵ` names
+    "ɵbindPart",
+    "ɵstructuralView",
 ];
+
+/**
+ * The opt-in entries (React's subpaths, the same names), and the directives only Angular's have:
+ * a feature's root inputs and outputs (React's `Root` props, typed by the feature), the parts
+ * React gives through a hook's props.
+ */
+const ENTRIES: Readonly<Record<string, readonly string[]>> = {
+    local: ["DataGridLocalRows"],
+    navigation: ["DataGridNavigation"],
+    "row-selection": ["DataGridRowSelection"],
+    range: ["DataGridCellRange"],
+    clipboard: ["DataGridClipboard"],
+    fill: ["DataGridFill", "DataGridFillHandle"],
+    sorting: ["DataGridSorting"],
+};
+
+/** The features' entries: each re-exports the core's of the same name. */
+const FEATURE_ENTRIES = Object.keys(ENTRIES).filter(
+    (entry) => entry !== "local",
+);
 
 /** React's type names with no Angular counterpart: its element props (a directive's inputs). */
 const REACT_ONLY_TYPES = [
@@ -163,54 +185,53 @@ describe("@fragiola/data-grid-angular", () => {
         ).toEqual([]);
     });
 
-    it("maps the opt-in entries: /local, /selection and /sorting", async () => {
-        const reactLocal = await import(
-            /* @vite-ignore */ join(
-                import.meta.dirname,
-                "../../react/src/local/index.ts",
-            )
-        );
-        const reactSelection = await import(
-            /* @vite-ignore */ join(
-                import.meta.dirname,
-                "../../react/src/selection/index.ts",
-            )
-        );
-        const reactSorting = await import(
-            /* @vite-ignore */ join(
-                import.meta.dirname,
-                "../../react/src/sorting/index.ts",
-            )
-        );
-        const local = await import("../src/local/index");
-        const selection = await import("../src/selection/index");
-        const sorting = await import("../src/sorting/index");
+    it("maps the opt-in entries: /local and the features'", async () => {
         const map = (names: string[]) => names.map((name) => hookOf(name));
-        expect(Object.keys(local).sort()).toEqual(
-            [...map(Object.keys(reactLocal)), "DataGridLocalRows"].sort(),
-        );
-        expect(Object.keys(selection).sort()).toEqual(
-            map(Object.keys(reactSelection)).sort(),
-        );
-        // the root's sort inputs: React's `Root` props, typed by `sorting()`
-        expect(Object.keys(sorting).sort()).toEqual(
-            [...map(Object.keys(reactSorting)), "DataGridSorting"].sort(),
-        );
-        // the same functions as the core's
-        for (const name of Object.keys(reactSorting)) {
-            expect((sorting as Record<string, unknown>)[name], name).toBe(
-                reactSorting[name],
+        for (const [entry, directives] of Object.entries(ENTRIES)) {
+            const reactEntry = (await import(
+                /* @vite-ignore */ join(
+                    import.meta.dirname,
+                    `../../react/src/${entry}/index.ts`,
+                )
+            )) as Record<string, unknown>;
+            const angularEntry = (await import(
+                /* @vite-ignore */ join(
+                    import.meta.dirname,
+                    `../src/${entry}/index.ts`,
+                )
+            )) as Record<string, unknown>;
+            expect(Object.keys(angularEntry).sort(), entry).toEqual(
+                [...map(Object.keys(reactEntry)), ...directives].sort(),
             );
+            // and its types (`SortColumn`, `RowSelectionProps`, …)
+            const angularTypes = new Set(
+                exportedNames(read(`src/${entry}/index.ts`)),
+            );
+            expect(
+                exportedNames(read(`../react/src/${entry}/index.ts`))
+                    .map((name) => hookOf(name))
+                    .filter((name) => !angularTypes.has(name)),
+                entry,
+            ).toEqual([]);
         }
-        // and its types (`SortColumn`, `SortingProps`, …)
-        const sortingTypes = new Set(
-            exportedNames(read("src/sorting/index.ts")),
-        );
-        expect(
-            exportedNames(read("../react/src/sorting/index.ts")).filter(
-                (name) => !sortingTypes.has(name),
-            ),
-        ).toEqual([]);
+        // a feature's entry: the same functions as the core's
+        for (const entry of FEATURE_ENTRIES) {
+            const coreEntry = (await import(
+                /* @vite-ignore */ join(
+                    import.meta.dirname,
+                    `../../core/src/${entry}/index.ts`,
+                )
+            )) as Record<string, unknown>;
+            const angularEntry = (await import(
+                /* @vite-ignore */ join(
+                    import.meta.dirname,
+                    `../src/${entry}/index.ts`,
+                )
+            )) as Record<string, unknown>;
+            for (const [name, value] of Object.entries(coreEntry)) {
+                expect(angularEntry[name], `${entry}: ${name}`).toBe(value);
+            }
+        }
     });
 
     it("never imports another framework, and imports nothing at runtime but Angular and the core", () => {
@@ -233,9 +254,9 @@ describe("@fragiola/data-grid-angular", () => {
                     [
                         "@angular/core",
                         "@fragiola/data-grid",
-                        "@fragiola/data-grid/local",
-                        "@fragiola/data-grid/selection",
-                        "@fragiola/data-grid/sorting",
+                        ...Object.keys(ENTRIES).map(
+                            (entry) => `@fragiola/data-grid/${entry}`,
+                        ),
                         // the opt-in entries import the main one by its name
                         "@fragiola/data-grid-angular",
                     ],
@@ -246,11 +267,14 @@ describe("@fragiola/data-grid-angular", () => {
     });
 
     it("keeps the main entry free of the opt-in ones", () => {
+        const entries = Object.keys(ENTRIES).join("|");
         for (const file of sources().filter(
-            (path) => !/[/\\](local|selection|sorting)[/\\]/.test(path),
+            (path) => !new RegExp(`[/\\\\](${entries})[/\\\\]`).test(path),
         )) {
             expect(readFileSync(file, "utf8"), file).not.toMatch(
-                /from "@fragiola\/data-grid(\/local|\/selection|\/sorting|-angular)"/,
+                new RegExp(
+                    `from "@fragiola/data-grid(/(${entries})|-angular)"`,
+                ),
             );
         }
     });

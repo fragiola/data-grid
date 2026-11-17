@@ -6,6 +6,8 @@ import {
     type LocalRowsResult,
 } from "../src/local";
 import { type Column, DATA_GRID, type DataGridNode } from "../src/public-api";
+import { DataGridRowSelection } from "../src/row-selection";
+import { TEST_FEATURES } from "./grid";
 import {
     cellAt,
     click,
@@ -57,11 +59,11 @@ let latest: LocalRowsResult<File> | undefined;
 
 // the first column's cell: the toggle and the name; the others the cell's own content
 @Component({
-    imports: [DATA_GRID, DataGridLocalRows],
+    imports: [DATA_GRID, DataGridRowSelection, DataGridLocalRows],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         {{ tick() ? "" : "" }}
-        <div dataGridRoot [dataGridLocalRows]="local" [columns]="columns" [rowHeight]="20" rowSelection="multiple">
+        <div dataGridRoot [features]="features" dataGridRowSelection [dataGridLocalRows]="local" [columns]="columns" [rowHeight]="20" rowSelection="multiple">
             <div dataGridGrid>
                 <div dataGridBody>
                     <ng-template dataGridRows [dataGridRows]="columns" let-row>
@@ -77,6 +79,7 @@ let latest: LocalRowsResult<File> | undefined;
     `,
 })
 class Files {
+    readonly features = TEST_FEATURES;
     /** only renders it again */
     readonly tick = input(0);
     readonly columns = columns;
