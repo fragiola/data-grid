@@ -2,7 +2,7 @@ import {
     ChangeDetectionStrategy,
     Component,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -122,10 +122,10 @@ const rows: Profile[] = people(100_000).map((person) => ({
 export default class AutoRowHeights {
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Profile>>();
-    private readonly skillsCell =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Profile>>>
-        >("skillsCell");
+    @ViewChild("skillsCell", { static: true })
+    private readonly skillsCell!: TemplateRef<
+        TemplateContext<CellTemplateProps<Profile>>
+    >;
 
     readonly columns: Column<Profile, DataGridNode>[] = [
         {
@@ -142,7 +142,7 @@ export default class AutoRowHeights {
             key: "skills",
             name: "Skills",
             width: 240,
-            renderCell: (props) => templateContent(this.skillsCell(), props),
+            renderCell: (props) => templateContent(this.skillsCell, props),
         },
         { key: "city", name: "City", width: 130, sortable: true },
     ];

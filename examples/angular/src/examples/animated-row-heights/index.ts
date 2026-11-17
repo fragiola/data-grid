@@ -4,7 +4,7 @@ import {
     effect,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -101,10 +101,10 @@ export default class AnimatedRowHeights {
     protected readonly HEIGHTS = HEIGHTS;
     protected readonly ROWS = ROWS;
     protected readonly cellContext = contextOf<CellTemplateProps<Task>>();
-    private readonly taskCell =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Task>>>
-        >("taskCell");
+    @ViewChild("taskCell", { static: true })
+    private readonly taskCell!: TemplateRef<
+        TemplateContext<CellTemplateProps<Task>>
+    >;
 
     readonly columns: Column<Task, DataGridNode>[] = [
         { key: "id", name: "#", width: 64 },
@@ -113,7 +113,7 @@ export default class AnimatedRowHeights {
             name: "Task",
             width: 240,
             // two lines: the project shows as the row grows tall enough for it
-            renderCell: (props) => templateContent(this.taskCell(), props),
+            renderCell: (props) => templateContent(this.taskCell, props),
         },
         { key: "priority", name: "Priority", width: 110 },
         { key: "status", name: "Status", width: 130 },

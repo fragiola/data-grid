@@ -2,7 +2,7 @@ import {
     ChangeDetectionStrategy,
     Component,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -79,10 +79,10 @@ const NOTES = [
 export default class VariableRowHeight {
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Person>>();
-    private readonly notesCell =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Person>>>
-        >("notesCell");
+    @ViewChild("notesCell", { static: true })
+    private readonly notesCell!: TemplateRef<
+        TemplateContext<CellTemplateProps<Person>>
+    >;
 
     readonly rows = rows;
     readonly rowHeight = rowHeight;
@@ -96,7 +96,7 @@ export default class VariableRowHeight {
             name: "Notes",
             width: 360,
             // one note per line, as many as the row has
-            renderCell: (props) => templateContent(this.notesCell(), props),
+            renderCell: (props) => templateContent(this.notesCell, props),
         },
     ];
 

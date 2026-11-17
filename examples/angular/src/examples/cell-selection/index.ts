@@ -4,7 +4,7 @@ import {
     computed,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellRange,
@@ -213,8 +213,10 @@ type LineCell = TemplateRef<TemplateContext<CellTemplateProps<Line>>>;
 export default class CellSelection {
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Line>>();
-    private readonly ownerCell = viewChild.required<LineCell>("ownerCell");
-    private readonly totalCell = viewChild.required<LineCell>("totalCell");
+    @ViewChild("ownerCell", { static: true })
+    private readonly ownerCell!: LineCell;
+    @ViewChild("totalCell", { static: true })
+    private readonly totalCell!: LineCell;
 
     readonly columns: LineColumn[] = [
         { key: "item", name: "Line", width: 180, pinned: "start" },
@@ -223,7 +225,7 @@ export default class CellSelection {
             name: "Owner",
             width: 150,
             getValue: (row) => row.owner,
-            renderCell: (props) => templateContent(this.ownerCell(), props),
+            renderCell: (props) => templateContent(this.ownerCell, props),
             // the value is an object: the clipboard gets its name (without it, nothing)
             getCopyText: ({ row }) => row.owner.name,
         },
@@ -243,7 +245,7 @@ export default class CellSelection {
             width: 120,
             pinned: "end",
             getValue: totalOf,
-            renderCell: (props) => templateContent(this.totalCell(), props),
+            renderCell: (props) => templateContent(this.totalCell, props),
         },
     ];
 

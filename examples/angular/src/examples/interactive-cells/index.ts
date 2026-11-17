@@ -3,7 +3,7 @@ import {
     Component,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -160,43 +160,47 @@ export default class InteractiveCells {
     protected readonly STATUS_ITEMS = STATUS_ITEMS;
     protected readonly cellContext = contextOf<CellTemplateProps<Task>>();
 
-    private readonly doneCell = viewChild.required<TaskCell>("doneCell");
-    private readonly nameCell = viewChild.required<TaskCell>("nameCell");
-    private readonly statusCell = viewChild.required<TaskCell>("statusCell");
-    private readonly assigneeCell =
-        viewChild.required<TaskCell>("assigneeCell");
-    private readonly actionsCell = viewChild.required<TaskCell>("actionsCell");
+    @ViewChild("doneCell", { static: true })
+    private readonly doneCell!: TaskCell;
+    @ViewChild("nameCell", { static: true })
+    private readonly nameCell!: TaskCell;
+    @ViewChild("statusCell", { static: true })
+    private readonly statusCell!: TaskCell;
+    @ViewChild("assigneeCell", { static: true })
+    private readonly assigneeCell!: TaskCell;
+    @ViewChild("actionsCell", { static: true })
+    private readonly actionsCell!: TaskCell;
 
     readonly columns: Column<Task, DataGridNode>[] = [
         {
             key: "done",
             name: "Done",
             width: 64,
-            renderCell: (props) => templateContent(this.doneCell(), props),
+            renderCell: (props) => templateContent(this.doneCell, props),
         },
         {
             key: "name",
             name: "Task",
             width: 240,
-            renderCell: (props) => templateContent(this.nameCell(), props),
+            renderCell: (props) => templateContent(this.nameCell, props),
         },
         {
             key: "status",
             name: "Status",
             width: 170,
-            renderCell: (props) => templateContent(this.statusCell(), props),
+            renderCell: (props) => templateContent(this.statusCell, props),
         },
         {
             key: "assignee",
             name: "Assignee",
             width: 150,
-            renderCell: (props) => templateContent(this.assigneeCell(), props),
+            renderCell: (props) => templateContent(this.assigneeCell, props),
         },
         {
             key: "actions",
             name: "Actions",
             width: 110,
-            renderCell: (props) => templateContent(this.actionsCell(), props),
+            renderCell: (props) => templateContent(this.actionsCell, props),
         },
     ];
 

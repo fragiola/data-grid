@@ -3,7 +3,7 @@ import {
     Component,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellEditEvent,
@@ -127,18 +127,18 @@ export default class Editing {
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Row>>();
     protected readonly editContext = contextOf<Edit>();
-    private readonly budgetCell =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Row>>>
-        >("budgetCell");
-    private readonly textEditor =
-        viewChild.required<EditTemplate>("textEditor");
-    private readonly amountEditor =
-        viewChild.required<EditTemplate>("amountEditor");
-    private readonly statusEditor =
-        viewChild.required<EditTemplate>("statusEditor");
-    private readonly dateEditor =
-        viewChild.required<EditTemplate>("dateEditor");
+    @ViewChild("budgetCell", { static: true })
+    private readonly budgetCell!: TemplateRef<
+        TemplateContext<CellTemplateProps<Row>>
+    >;
+    @ViewChild("textEditor", { static: true })
+    private readonly textEditor!: EditTemplate;
+    @ViewChild("amountEditor", { static: true })
+    private readonly amountEditor!: EditTemplate;
+    @ViewChild("statusEditor", { static: true })
+    private readonly statusEditor!: EditTemplate;
+    @ViewChild("dateEditor", { static: true })
+    private readonly dateEditor!: EditTemplate;
 
     readonly columns: Column<Row, DataGridNode>[] = [
         {
@@ -146,7 +146,7 @@ export default class Editing {
             name: "Task",
             width: 220,
             editable: true,
-            renderEditCell: (edit) => templateContent(this.textEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.textEditor, edit),
         },
         { key: "project", name: "Project", width: 120 },
         {
@@ -155,24 +155,22 @@ export default class Editing {
             width: 120,
             // a completed task's budget is closed
             editable: (row) => row.status !== "Completed",
-            renderCell: (props) => templateContent(this.budgetCell(), props),
-            renderEditCell: (edit) =>
-                templateContent(this.amountEditor(), edit),
+            renderCell: (props) => templateContent(this.budgetCell, props),
+            renderEditCell: (edit) => templateContent(this.amountEditor, edit),
         },
         {
             key: "status",
             name: "Status",
             width: 160,
             editable: true,
-            renderEditCell: (edit) =>
-                templateContent(this.statusEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.statusEditor, edit),
         },
         {
             key: "due",
             name: "Due",
             width: 150,
             editable: true,
-            renderEditCell: (edit) => templateContent(this.dateEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.dateEditor, edit),
         },
         { key: "assignee", name: "Assignee", width: 120 },
     ];

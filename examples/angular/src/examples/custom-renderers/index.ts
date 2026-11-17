@@ -3,7 +3,7 @@ import {
     Component,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellEditEvent,
@@ -117,23 +117,21 @@ export default class CustomRenderers {
     protected readonly cellContext = contextOf<CellTemplateProps<Task>>();
     protected readonly editContext = contextOf<EditProps>();
 
-    private readonly selectAll =
-        viewChild.required<TemplateRef<TemplateContext<object>>>("selectAll");
-    private readonly selectRow =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Task>>>
-        >("selectRow");
-    private readonly titleEditor =
-        viewChild.required<TemplateRef<TemplateContext<EditProps>>>(
-            "titleEditor",
-        );
+    @ViewChild("selectAll", { static: true })
+    private readonly selectAll!: TemplateRef<TemplateContext<object>>;
+    @ViewChild("selectRow", { static: true })
+    private readonly selectRow!: TemplateRef<
+        TemplateContext<CellTemplateProps<Task>>
+    >;
+    @ViewChild("titleEditor", { static: true })
+    private readonly titleEditor!: TemplateRef<TemplateContext<EditProps>>;
 
     readonly columns: Column<Task, DataGridNode>[] = [
         {
             key: "select",
             width: 44,
-            renderHeaderCell: () => templateContent(this.selectAll(), {}),
-            renderCell: (props) => templateContent(this.selectRow(), props),
+            renderHeaderCell: () => templateContent(this.selectAll, {}),
+            renderCell: (props) => templateContent(this.selectRow, props),
         },
         { key: "id", name: "#", width: 64, sortable: true },
         {
@@ -142,7 +140,7 @@ export default class CustomRenderers {
             width: 220,
             sortable: true,
             editable: true,
-            renderEditCell: (edit) => templateContent(this.titleEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.titleEditor, edit),
         },
         { key: "priority", name: "Priority", width: 110, sortable: true },
         { key: "status", name: "Status", width: 130, sortable: true },

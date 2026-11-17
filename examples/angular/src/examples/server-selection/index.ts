@@ -6,7 +6,7 @@ import {
     signal,
     type TemplateRef,
     untracked,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -193,19 +193,19 @@ export default class ServerSelection {
     protected readonly headerContext = contextOf<object>();
     protected readonly cellContext = contextOf<CellTemplateProps<Person>>();
 
-    private readonly selectAll =
-        viewChild.required<TemplateRef<TemplateContext<object>>>("selectAll");
-    private readonly selectRow =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Person>>>
-        >("selectRow");
+    @ViewChild("selectAll", { static: true })
+    private readonly selectAll!: TemplateRef<TemplateContext<object>>;
+    @ViewChild("selectRow", { static: true })
+    private readonly selectRow!: TemplateRef<
+        TemplateContext<CellTemplateProps<Person>>
+    >;
 
     readonly columns: Column<Person, DataGridNode>[] = [
         {
             key: "select",
             width: 48,
-            renderHeaderCell: () => templateContent(this.selectAll(), {}),
-            renderCell: (props) => templateContent(this.selectRow(), props),
+            renderHeaderCell: () => templateContent(this.selectAll, {}),
+            renderCell: (props) => templateContent(this.selectRow, props),
         },
         { key: "id", name: "#", width: 80 },
         { key: "name", name: "Name", width: 180 },

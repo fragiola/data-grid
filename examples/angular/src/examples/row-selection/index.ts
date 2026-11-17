@@ -3,7 +3,7 @@ import {
     Component,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -136,19 +136,19 @@ export default class RowSelectionExample {
 
     readonly headerContext = contextOf<object>();
     readonly cellContext = contextOf<CellTemplateProps<Task>>();
-    readonly selectAll =
-        viewChild.required<TemplateRef<TemplateContext<object>>>("selectAll");
-    readonly selectRow =
-        viewChild.required<
-            TemplateRef<TemplateContext<CellTemplateProps<Task>>>
-        >("selectRow");
+    @ViewChild("selectAll", { static: true })
+    private readonly selectAll!: TemplateRef<TemplateContext<object>>;
+    @ViewChild("selectRow", { static: true })
+    private readonly selectRow!: TemplateRef<
+        TemplateContext<CellTemplateProps<Task>>
+    >;
 
     readonly columns: Column<Task, DataGridNode>[] = [
         {
             key: "select",
             width: 48,
-            renderHeaderCell: () => templateContent(this.selectAll(), {}),
-            renderCell: (props) => templateContent(this.selectRow(), props),
+            renderHeaderCell: () => templateContent(this.selectAll, {}),
+            renderCell: (props) => templateContent(this.selectRow, props),
         },
         { key: "name", name: "Task", width: 240 },
         { key: "status", name: "Status", width: 130 },

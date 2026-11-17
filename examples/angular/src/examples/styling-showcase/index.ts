@@ -4,7 +4,7 @@ import {
     computed,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -119,10 +119,14 @@ export default class StylingShowcase {
     readonly name = signal<styles.PresetName>("spreadsheet");
     protected readonly preset = computed(() => styles.PRESETS[this.name()]);
 
-    private readonly status = viewChild.required<CellTemplate>("status");
-    private readonly delta = viewChild.required<CellTemplate>("delta");
-    private readonly shipped = viewChild.required<CellTemplate>("shipped");
-    private readonly tag = viewChild.required<CellTemplate>("tag");
+    @ViewChild("status", { static: true })
+    private readonly status!: CellTemplate;
+    @ViewChild("delta", { static: true })
+    private readonly delta!: CellTemplate;
+    @ViewChild("shipped", { static: true })
+    private readonly shipped!: CellTemplate;
+    @ViewChild("tag", { static: true })
+    private readonly tag!: CellTemplate;
 
     readonly columns: Column<Project, DataGridNode>[] = [
         { key: "id", name: "#", width: 64 },
@@ -132,26 +136,26 @@ export default class StylingShowcase {
             key: "status",
             name: "Status",
             width: 120,
-            renderCell: (props) => templateContent(this.status(), props),
+            renderCell: (props) => templateContent(this.status, props),
         },
         { key: "score", name: "Health", width: 100 },
         {
             key: "delta",
             name: "Change",
             width: 96,
-            renderCell: (props) => templateContent(this.delta(), props),
+            renderCell: (props) => templateContent(this.delta, props),
         },
         {
             key: "shipped",
             name: "Shipped",
             width: 90,
-            renderCell: (props) => templateContent(this.shipped(), props),
+            renderCell: (props) => templateContent(this.shipped, props),
         },
         {
             key: "tag",
             name: "Area",
             width: 120,
-            renderCell: (props) => templateContent(this.tag(), props),
+            renderCell: (props) => templateContent(this.tag, props),
         },
     ];
 

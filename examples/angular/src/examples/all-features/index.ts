@@ -3,7 +3,7 @@ import {
     Component,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import { repeatedFill } from "@fragiola/data-grid/fill";
 import {
@@ -170,14 +170,14 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
 export default class AllFeatures {
     protected readonly styles = styles;
     protected readonly editContext = contextOf<Edit>();
-    private readonly textEditor =
-        viewChild.required<EditTemplate>("textEditor");
-    private readonly amountEditor =
-        viewChild.required<EditTemplate>("amountEditor");
-    private readonly statusEditor =
-        viewChild.required<EditTemplate>("statusEditor");
-    private readonly dateEditor =
-        viewChild.required<EditTemplate>("dateEditor");
+    @ViewChild("textEditor", { static: true })
+    private readonly textEditor!: EditTemplate;
+    @ViewChild("amountEditor", { static: true })
+    private readonly amountEditor!: EditTemplate;
+    @ViewChild("statusEditor", { static: true })
+    private readonly statusEditor!: EditTemplate;
+    @ViewChild("dateEditor", { static: true })
+    private readonly dateEditor!: EditTemplate;
 
     readonly columns: Column<BudgetedTask, DataGridNode>[] = [
         {
@@ -188,7 +188,7 @@ export default class AllFeatures {
             sortable: true,
             resizable: true,
             editable: true,
-            renderEditCell: (edit) => templateContent(this.textEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.textEditor, edit),
         },
         {
             key: "project",
@@ -205,8 +205,7 @@ export default class AllFeatures {
             resizable: true,
             editable: (task) => task.status !== "Completed",
             renderCell: ({ row }) => formatMoney(row.budget),
-            renderEditCell: (edit) =>
-                templateContent(this.amountEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.amountEditor, edit),
         },
         {
             key: "status",
@@ -215,8 +214,7 @@ export default class AllFeatures {
             sortable: true,
             resizable: true,
             editable: true,
-            renderEditCell: (edit) =>
-                templateContent(this.statusEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.statusEditor, edit),
         },
         {
             key: "due",
@@ -225,7 +223,7 @@ export default class AllFeatures {
             sortable: true,
             resizable: true,
             editable: true,
-            renderEditCell: (edit) => templateContent(this.dateEditor(), edit),
+            renderEditCell: (edit) => templateContent(this.dateEditor, edit),
         },
         {
             key: "assignee",

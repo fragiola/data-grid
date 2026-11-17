@@ -4,7 +4,7 @@ import {
     computed,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -139,10 +139,10 @@ export default class Tasks {
     protected readonly all = all;
     protected readonly cellContext = contextOf<CellTemplateProps<Task>>();
 
-    private readonly priorityCell =
-        viewChild.required<TaskCell>("priorityCell");
-    private readonly effectivenessCell =
-        viewChild.required<TaskCell>("effectivenessCell");
+    @ViewChild("priorityCell", { static: true })
+    private readonly priorityCell!: TaskCell;
+    @ViewChild("effectivenessCell", { static: true })
+    private readonly effectivenessCell!: TaskCell;
 
     readonly columns: Column<Task, DataGridNode>[] = [
         { key: "name", name: "Name", width: 220 },
@@ -151,7 +151,7 @@ export default class Tasks {
             key: "priority",
             name: "Priority",
             width: 110,
-            renderCell: (props) => templateContent(this.priorityCell(), props),
+            renderCell: (props) => templateContent(this.priorityCell, props),
         },
         { key: "status", name: "Status", width: 130 },
         { key: "assignee", name: "Assigned to", width: 120 },
@@ -166,7 +166,7 @@ export default class Tasks {
             name: "Effectiveness",
             width: 140,
             renderCell: (props) =>
-                templateContent(this.effectivenessCell(), props),
+                templateContent(this.effectivenessCell, props),
         },
     ];
 

@@ -4,7 +4,7 @@ import {
     computed,
     signal,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type CellTemplateProps,
@@ -292,38 +292,42 @@ export default class Companies {
     protected readonly headerContext =
         contextOf<HeaderCellRenderProps<Company, DataGridNode>>();
 
-    private readonly selectAllHeader =
-        viewChild.required<CompanyHeader>("selectAllHeader");
-    private readonly selectCell = viewChild.required<CompanyCell>("selectCell");
-    private readonly companyHeader =
-        viewChild.required<CompanyHeader>("companyHeader");
-    private readonly companyCell =
-        viewChild.required<CompanyCell>("companyCell");
-    private readonly domainHeader =
-        viewChild.required<CompanyHeader>("domainHeader");
-    private readonly domainCell = viewChild.required<CompanyCell>("domainCell");
-    private readonly categoriesHeader =
-        viewChild.required<CompanyHeader>("categoriesHeader");
-    private readonly categoriesCell =
-        viewChild.required<CompanyCell>("categoriesCell");
-    private readonly descriptionHeader =
-        viewChild.required<CompanyHeader>("descriptionHeader");
-    private readonly descriptionCell =
-        viewChild.required<CompanyCell>("descriptionCell");
-    private readonly linkedinHeader =
-        viewChild.required<CompanyHeader>("linkedinHeader");
-    private readonly linkedinCell =
-        viewChild.required<CompanyCell>("linkedinCell");
-    private readonly employeesHeader =
-        viewChild.required<CompanyHeader>("employeesHeader");
-    private readonly employeesCell =
-        viewChild.required<CompanyCell>("employeesCell");
-    private readonly arrHeader = viewChild.required<CompanyHeader>("arrHeader");
-    private readonly arrCell = viewChild.required<CompanyCell>("arrCell");
-    private readonly countryHeader =
-        viewChild.required<CompanyHeader>("countryHeader");
-    private readonly countryCell =
-        viewChild.required<CompanyCell>("countryCell");
+    @ViewChild("selectAllHeader", { static: true })
+    private readonly selectAllHeader!: CompanyHeader;
+    @ViewChild("selectCell", { static: true })
+    private readonly selectCell!: CompanyCell;
+    @ViewChild("companyHeader", { static: true })
+    private readonly companyHeader!: CompanyHeader;
+    @ViewChild("companyCell", { static: true })
+    private readonly companyCell!: CompanyCell;
+    @ViewChild("domainHeader", { static: true })
+    private readonly domainHeader!: CompanyHeader;
+    @ViewChild("domainCell", { static: true })
+    private readonly domainCell!: CompanyCell;
+    @ViewChild("categoriesHeader", { static: true })
+    private readonly categoriesHeader!: CompanyHeader;
+    @ViewChild("categoriesCell", { static: true })
+    private readonly categoriesCell!: CompanyCell;
+    @ViewChild("descriptionHeader", { static: true })
+    private readonly descriptionHeader!: CompanyHeader;
+    @ViewChild("descriptionCell", { static: true })
+    private readonly descriptionCell!: CompanyCell;
+    @ViewChild("linkedinHeader", { static: true })
+    private readonly linkedinHeader!: CompanyHeader;
+    @ViewChild("linkedinCell", { static: true })
+    private readonly linkedinCell!: CompanyCell;
+    @ViewChild("employeesHeader", { static: true })
+    private readonly employeesHeader!: CompanyHeader;
+    @ViewChild("employeesCell", { static: true })
+    private readonly employeesCell!: CompanyCell;
+    @ViewChild("arrHeader", { static: true })
+    private readonly arrHeader!: CompanyHeader;
+    @ViewChild("arrCell", { static: true })
+    private readonly arrCell!: CompanyCell;
+    @ViewChild("countryHeader", { static: true })
+    private readonly countryHeader!: CompanyHeader;
+    @ViewChild("countryCell", { static: true })
+    private readonly countryCell!: CompanyCell;
 
     // Every column but the checkboxes resizes (a handle in its header cell) and moves (its header
     // cell dragged, or Ctrl/⌘+Shift+←/→ on it); its `name` is the handle's, the header showing its
@@ -333,8 +337,8 @@ export default class Companies {
             key: "select",
             width: 48,
             renderHeaderCell: (props) =>
-                templateContent(this.selectAllHeader(), props),
-            renderCell: (props) => templateContent(this.selectCell(), props),
+                templateContent(this.selectAllHeader, props),
+            renderCell: (props) => templateContent(this.selectCell, props),
         },
         {
             key: "name",
@@ -344,8 +348,8 @@ export default class Companies {
             reorderable: true,
             sortable: true,
             renderHeaderCell: (props) =>
-                templateContent(this.companyHeader(), props),
-            renderCell: (props) => templateContent(this.companyCell(), props),
+                templateContent(this.companyHeader, props),
+            renderCell: (props) => templateContent(this.companyCell, props),
         },
         {
             key: "domain",
@@ -355,8 +359,8 @@ export default class Companies {
             reorderable: true,
             sortable: true,
             renderHeaderCell: (props) =>
-                templateContent(this.domainHeader(), props),
-            renderCell: (props) => templateContent(this.domainCell(), props),
+                templateContent(this.domainHeader, props),
+            renderCell: (props) => templateContent(this.domainCell, props),
         },
         {
             key: "categories",
@@ -365,9 +369,8 @@ export default class Companies {
             resizable: true,
             reorderable: true,
             renderHeaderCell: (props) =>
-                templateContent(this.categoriesHeader(), props),
-            renderCell: (props) =>
-                templateContent(this.categoriesCell(), props),
+                templateContent(this.categoriesHeader, props),
+            renderCell: (props) => templateContent(this.categoriesCell, props),
         },
         {
             key: "description",
@@ -376,9 +379,8 @@ export default class Companies {
             resizable: true,
             reorderable: true,
             renderHeaderCell: (props) =>
-                templateContent(this.descriptionHeader(), props),
-            renderCell: (props) =>
-                templateContent(this.descriptionCell(), props),
+                templateContent(this.descriptionHeader, props),
+            renderCell: (props) => templateContent(this.descriptionCell, props),
         },
         {
             key: "linkedin",
@@ -387,8 +389,8 @@ export default class Companies {
             resizable: true,
             reorderable: true,
             renderHeaderCell: (props) =>
-                templateContent(this.linkedinHeader(), props),
-            renderCell: (props) => templateContent(this.linkedinCell(), props),
+                templateContent(this.linkedinHeader, props),
+            renderCell: (props) => templateContent(this.linkedinCell, props),
         },
         {
             key: "employees",
@@ -402,8 +404,8 @@ export default class Companies {
                 rank(EMPLOYEE_RANGES, a.employees) -
                 rank(EMPLOYEE_RANGES, b.employees),
             renderHeaderCell: (props) =>
-                templateContent(this.employeesHeader(), props),
-            renderCell: (props) => templateContent(this.employeesCell(), props),
+                templateContent(this.employeesHeader, props),
+            renderCell: (props) => templateContent(this.employeesCell, props),
         },
         {
             key: "arr",
@@ -414,9 +416,8 @@ export default class Companies {
             sortable: true,
             compare: (a, b) =>
                 rank(ARR_RANGES, a.arr) - rank(ARR_RANGES, b.arr),
-            renderHeaderCell: (props) =>
-                templateContent(this.arrHeader(), props),
-            renderCell: (props) => templateContent(this.arrCell(), props),
+            renderHeaderCell: (props) => templateContent(this.arrHeader, props),
+            renderCell: (props) => templateContent(this.arrCell, props),
         },
         {
             key: "country",
@@ -426,8 +427,8 @@ export default class Companies {
             reorderable: true,
             sortable: true,
             renderHeaderCell: (props) =>
-                templateContent(this.countryHeader(), props),
-            renderCell: (props) => templateContent(this.countryCell(), props),
+                templateContent(this.countryHeader, props),
+            renderCell: (props) => templateContent(this.countryCell, props),
         },
     ];
 

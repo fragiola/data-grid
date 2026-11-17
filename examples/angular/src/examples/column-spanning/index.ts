@@ -2,7 +2,7 @@ import {
     ChangeDetectionStrategy,
     Component,
     type TemplateRef,
-    viewChild,
+    ViewChild,
 } from "@angular/core";
 import {
     type Column,
@@ -86,10 +86,8 @@ export default class ColumnSpanning {
     protected readonly styles = styles;
 
     protected readonly bookingContext = contextOf<BookingContext>();
-    private readonly bookingCell =
-        viewChild.required<TemplateRef<TemplateContext<BookingContext>>>(
-            "bookingCell",
-        );
+    @ViewChild("bookingCell", { static: true })
+    private readonly bookingCell!: TemplateRef<TemplateContext<BookingContext>>;
 
     /**
      * An hour of the day: a booking starting at it spans the hours it takes (the grid renders no
@@ -111,7 +109,7 @@ export default class ColumnSpanning {
             renderCell: ({ row }) => {
                 const booking = bookingAt(row, hour);
                 return booking
-                    ? templateContent(this.bookingCell(), {
+                    ? templateContent(this.bookingCell, {
                           title: booking.title,
                           range: `${time(booking.start)}–${time(booking.start + booking.hours)}`,
                       })
