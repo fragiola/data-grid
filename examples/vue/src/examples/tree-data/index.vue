@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { type RowKey, typedDataGrid } from "@fragiola/data-grid-vue";
 import { Search } from "@lucide/vue";
-import { ref, useId } from "vue";
+import { h, ref, useId } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
-import { Field } from "#/components/ui/field";
 import { Switch } from "#/components/ui/switch";
 import { columns } from "./columns";
 import FileGrid from "./file-grid.vue";
@@ -12,6 +11,11 @@ import type { Entry } from "./files";
 import MemoryTree from "./memory-tree.vue";
 import ServerTree from "./server-tree.vue";
 import * as styles from "./styles";
+
+/** The search field's icon, inside it at its start. */
+const searchInset = {
+    start: h(Search, { "aria-hidden": "true", class: styles.searchIcon }),
+};
 
 // The parts typed by the row type: a template cannot pass `Entry` as a type argument.
 const DataGrid = typedDataGrid<Entry>();
@@ -66,25 +70,14 @@ const textOf = (event: Event) =>
         <!-- the files in memory, searched and sorted -->
         <MemoryTree v-else v-slot="{ local }">
             <div :class="styles.toolbar">
-                <!-- Input.Template.Simple's field, its inset an icon -->
-                <Field.Root>
-                    <Field.Row>
-                        <Field.Body :class="styles.search">
-                            <Field.Inset>
-                                <Search
-                                    aria-hidden="true"
-                                    :class="styles.searchIcon"
-                                />
-                            </Field.Inset>
-                            <Input
-                                aria-label="Search files"
-                                placeholder="Search"
-                                :value="local.filter.search"
-                                @input="local.filter.setSearch(textOf($event))"
-                            />
-                        </Field.Body>
-                    </Field.Row>
-                </Field.Root>
+                <Input.Template.Simple
+                    aria-label="Search files"
+                    placeholder="Search"
+                    :value="local.filter.search"
+                    :inset="searchInset"
+                    :class="styles.search"
+                    @input="local.filter.setSearch(textOf($event))"
+                />
                 <Clickable.Button
                     size="sm"
                     variant="ghost"

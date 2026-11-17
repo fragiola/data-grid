@@ -6,10 +6,9 @@ import {
 } from "@fragiola/data-grid-vue";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-vue/local";
 import { Search } from "@lucide/vue";
-import { ref, type VNodeChild } from "vue";
+import { h, ref, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
-import { Field } from "#/components/ui/field";
 import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import GroupLabel from "./group-label.vue";
@@ -17,6 +16,11 @@ import { AGGREGATES, GROUP_BY, GROUPINGS, type Grouping } from "./grouping";
 import SelectGroup from "./select-group.vue";
 import SelectRow from "./select-row.vue";
 import * as styles from "./styles";
+
+/** The search field's icon, inside it at its start. */
+const searchInset = {
+    start: h(Search, { "aria-hidden": "true", class: styles.icon }),
+};
 
 // The parts typed by the row type: a template cannot pass `Person` as a type argument.
 const DataGrid = typedDataGrid<Person>();
@@ -99,22 +103,14 @@ const setSelected = (keys: readonly RowKey[]) => {
                     </Select.Item>
                 </Select.Content>
             </Select.Root>
-            <!-- Input.Template.Simple's field, its inset an icon -->
-            <Field.Root>
-                <Field.Row>
-                    <Field.Body :class="styles.search">
-                        <Field.Inset>
-                            <Search aria-hidden="true" :class="styles.icon" />
-                        </Field.Inset>
-                        <Input
-                            aria-label="Search every column"
-                            placeholder="Search"
-                            :value="local.filter.search"
-                            @input="setSearch"
-                        />
-                    </Field.Body>
-                </Field.Row>
-            </Field.Root>
+            <Input.Template.Simple
+                aria-label="Search every column"
+                placeholder="Search"
+                :value="local.filter.search"
+                :inset="searchInset"
+                :class="styles.search"
+                @input="setSearch"
+            />
             <Clickable.Button
                 size="sm"
                 variant="ghost"

@@ -8,14 +8,18 @@ import {
     ChevronsRight,
     Search,
 } from "@lucide/vue";
-import { computed, type VNodeChild } from "vue";
+import { computed, h, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
 import { Checkbox } from "#/components/ui/checkbox";
-import { Field } from "#/components/ui/field";
 import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+/** The search field's icon, inside it at its start. */
+const searchInset = {
+    start: h(Search, { "aria-hidden": "true", class: styles.icon }),
+};
 
 // The parts typed by the row type: a template cannot pass `Person` as a type argument.
 const DataGrid = typedDataGrid<Person>();
@@ -108,27 +112,13 @@ const rowKey = (row: Person) => row.id;
         <div :class="styles.toolbar">
             <div :class="styles.toolbarRow">
                 <div :class="styles.search">
-                    <!-- Input.Template.Simple's field, its inset an icon -->
-                    <Field.Root>
-                        <Field.Row>
-                            <Field.Body>
-                                <Field.Inset>
-                                    <Search
-                                        aria-hidden="true"
-                                        :class="styles.icon"
-                                    />
-                                </Field.Inset>
-                                <Input
-                                    aria-label="Search every column"
-                                    placeholder="Search"
-                                    :value="local.filter.search"
-                                    @input="
-                                        local.filter.setSearch(textOf($event))
-                                    "
-                                />
-                            </Field.Body>
-                        </Field.Row>
-                    </Field.Root>
+                    <Input.Template.Simple
+                        aria-label="Search every column"
+                        placeholder="Search"
+                        :value="local.filter.search"
+                        :inset="searchInset"
+                        @input="local.filter.setSearch(textOf($event))"
+                    />
                 </div>
                 <div :class="styles.nameFilter">
                     <Input.Template.Simple

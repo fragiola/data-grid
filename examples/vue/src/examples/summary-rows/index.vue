@@ -2,13 +2,17 @@
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { Search } from "@lucide/vue";
-import { computed, type VNodeChild } from "vue";
+import { computed, h, type VNodeChild } from "vue";
 import { Input } from "#/components/atoms/fields";
-import { Field } from "#/components/ui/field";
 import { formatMoney, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 import Summary from "./summary.vue";
 import { totalsOf } from "./totals";
+
+/** The search field's icon, inside it at its start. */
+const searchInset = {
+    start: h(Search, { "aria-hidden": "true", class: styles.icon }),
+};
 
 // The parts typed by the row type: a template cannot pass `Person` as a type argument.
 const DataGrid = typedDataGrid<Person>();
@@ -57,22 +61,14 @@ const setSearch = (event: Event) => {
 <template>
     <div :class="styles.frame">
         <div :class="styles.toolbar">
-            <!-- Input.Template.Simple's field, its inset an icon -->
-            <Field.Root>
-                <Field.Row>
-                    <Field.Body :class="styles.search">
-                        <Field.Inset>
-                            <Search aria-hidden="true" :class="styles.icon" />
-                        </Field.Inset>
-                        <Input
-                            aria-label="Search every column"
-                            placeholder="Search"
-                            :value="local.filter.search"
-                            @input="setSearch"
-                        />
-                    </Field.Body>
-                </Field.Row>
-            </Field.Root>
+            <Input.Template.Simple
+                aria-label="Search every column"
+                placeholder="Search"
+                :value="local.filter.search"
+                :inset="searchInset"
+                :class="styles.search"
+                @input="setSearch"
+            />
         </div>
         <DataGrid.Root
             v-bind="local.props"
