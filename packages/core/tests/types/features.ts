@@ -72,12 +72,24 @@ sorted.use(anyGrid);
 // the engine takes a model with features
 const engine = createDataGridEngine(sorted);
 
-// a model's type carries its features
+// a model's type carries its features, and a model of any features takes it, or a bare one
 const typed: DataGridModel<
     Person,
     unknown,
     readonly [ReturnType<typeof sorting>]
 > = sorted;
+const anyFeatures: DataGridModel<Person> = sorted;
+const noFeatures: DataGridModel<Person> = bare;
+// a middleware written for a grid without features fits one with them
+declare const coreOnly: Middleware<Person, unknown, []>;
+sorted.use(coreOnly);
+bare.use((ctx, next) => {
+    if (ctx.command === "active-position.move") {
+        const direction: string = ctx.payload.direction;
+        void direction;
+    }
+    return next();
+});
 
 // a root's props: sorting's only with sorting installed
 const withSort: GridRootProps<
@@ -140,4 +152,14 @@ const first: Person | undefined = flagged.get("first-flagged-row");
 type Merged = FeatureKeys<readonly [typeof flags], Person>["queries"];
 const merged: Merged["first-flagged-row"]["result"] = first;
 
-void [sort, sortedState, person, engine, typed, withoutSort, merged];
+void [
+    sort,
+    sortedState,
+    person,
+    engine,
+    typed,
+    anyFeatures,
+    noFeatures,
+    withoutSort,
+    merged,
+];

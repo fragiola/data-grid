@@ -110,7 +110,6 @@ import type {
     ColumnOrGroup,
     ColumnWidths,
     CommandContext,
-    CommandEvent,
     CommandFailure,
     CommandListener,
     CommandMap,
@@ -216,11 +215,7 @@ export interface DataGridModel<
         }["middleware"],
     ): () => void;
     /** listens to every committed command (`CommandListener`); returns the unsubscription */
-    subscribe(
-        listener: {
-            listener(event: CommandEvent<TRow, TNode, TFeatures>): void;
-        }["listener"],
-    ): () => void;
+    subscribe(listener: CommandListener<TRow, TNode>): () => void;
 }
 
 type Applied<TRow, TNode, R> = CommandResult<{
@@ -1736,7 +1731,7 @@ export function createDataGridModel<
     );
     // a range and an edit given to start with take the keys they find
     state = withKeptEditing(withRangeKeys(state, null));
-    const middlewares: Middleware<TRow, TNode>[] = [];
+    const middlewares: Middleware<TRow, TNode, []>[] = [];
     const listeners = new Set<CommandListener<TRow, TNode>>();
     const queue: Queued[] = [];
     let running = false;
@@ -1760,7 +1755,7 @@ export function createDataGridModel<
             payload: payload ?? {},
             dryRun,
             state,
-        } as CommandContext<TRow, TNode>;
+        } as CommandContext<TRow, TNode, []>;
         let applied: Applied<TRow, TNode, unknown> | undefined;
         const step = (index: number): CommandResult<unknown> => {
             const middleware = middlewares[index];
@@ -1980,7 +1975,7 @@ export function createDataGridModel<
         }
     }
 
-    const model: DataGridModel<TRow, TNode> = {
+    const model: DataGridModel<TRow, TNode, []> = {
         get state() {
             return state;
         },

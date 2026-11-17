@@ -285,8 +285,36 @@ export interface FeatureKeys<
 > {
     readonly state: Merged<TFeatures, "state", TRow, TNode>;
     readonly options: Merged<TFeatures, "options", TRow, TNode>;
-    readonly commands: Merged<TFeatures, "commands", TRow, TNode>;
-    readonly queries: Merged<TFeatures, "queries", TRow, TNode>;
-    readonly questions: Merged<TFeatures, "questions", TRow, TNode>;
+    readonly commands: Open<
+        TFeatures,
+        Merged<TFeatures, "commands", TRow, TNode>,
+        KeyEntry
+    >;
+    readonly queries: Open<
+        TFeatures,
+        Merged<TFeatures, "queries", TRow, TNode>,
+        KeyEntry
+    >;
+    readonly questions: Open<
+        TFeatures,
+        Merged<TFeatures, "questions", TRow, TNode>,
+        unknown
+    >;
     readonly props: Merged<TFeatures, "props", TRow, TNode>;
 }
+
+/** An entry of a key map no type names (a grid of any features). */
+interface KeyEntry {
+    readonly payload: unknown;
+    readonly result: unknown;
+}
+
+/**
+ * A key map, open to any key when the features are not known (`DataGridFeatures`, a grid of any
+ * features: what a model with features is assignable to); as merged otherwise.
+ */
+type Open<
+    TFeatures extends DataGridFeatures,
+    M,
+    E,
+> = number extends TFeatures["length"] ? Readonly<Record<string, E>> : M;

@@ -1149,13 +1149,12 @@ export type Middleware<
     ): CommandResult<unknown> | undefined;
 }["middleware"];
 
-/** What a listener receives: one event per committed command. */
-export interface CommandEvent<
-    TRow,
-    TNode = unknown,
-    TFeatures extends DataGridFeatures = DataGridFeatures,
-> {
-    readonly command: GridCommandName<TRow, TNode, TFeatures>;
+/**
+ * What a listener receives: one event per committed command, the core's or an installed
+ * feature's (its name a string: a listener reads every grid's events alike).
+ */
+export interface CommandEvent<TRow, TNode = unknown> {
+    readonly command: string;
     readonly payload: unknown;
     /** the command's value */
     readonly result: unknown;
@@ -1164,14 +1163,9 @@ export interface CommandEvent<
     readonly after: DataGridState<TRow, TNode>;
 }
 
-export type CommandListener<
-    TRow,
-    TNode = unknown,
-    TFeatures extends DataGridFeatures = DataGridFeatures,
-> = {
-    // a method's parameters compare both ways: a model with features is a model (Epic #141)
-    listener(event: CommandEvent<TRow, TNode, TFeatures>): void;
-}["listener"];
+export type CommandListener<TRow, TNode = unknown> = (
+    event: CommandEvent<TRow, TNode>,
+) => void;
 
 /** What `model.get` reads: each key's payload (`undefined` for none) and result. */
 export interface QueryMap<TRow, TNode = unknown> {

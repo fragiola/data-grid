@@ -245,7 +245,7 @@ export function createDataGridEngine<
     initialOptions: DataGridEngineOptions = {},
 ): DataGridEngine<TRow, TNode> {
     // the engine runs the core's commands; the features' handlers run their own (Epic #141)
-    const model = gridModel as unknown as DataGridModel<TRow, TNode>;
+    const model = gridModel as unknown as DataGridModel<TRow, TNode, []>;
     /** the model's installed features, composed once */
     const features = featuresOf(model);
     /** the features' keys and clicks, made once with what the engine hands them */
