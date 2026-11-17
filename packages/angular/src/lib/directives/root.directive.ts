@@ -8,6 +8,7 @@ import {
     forwardRef,
     inject,
     input,
+    type OutputEmitterRef,
     output,
     type Signal,
     signal,
@@ -293,41 +294,42 @@ export class DataGridRoot<TRow = unknown> {
         return props;
     }
 
-    /** The outputs as the root's handlers: one function each, for the directive's life. */
+    /**
+     * The outputs as the root's handlers: one function each, for the directive's life. What the
+     * app keeps from them (a controlled piece, its rows) is rendered before the next event, as
+     * React renders a discrete event's change at once: a key pressed meanwhile would start from
+     * the value the app has not handed back yet (the active cell two arrows down would move one),
+     * or move rows not moved yet.
+     */
     private readonly handlers = {
-        activePosition: (value: CellPosition | null) =>
-            this.activePositionChange.emit(value),
-        sortColumns: (value: readonly SortColumn[]) =>
-            this.sortColumnsChange.emit(value),
-        expandedRowKeys: (value: readonly RowKey[]) =>
-            this.expandedRowKeysChange.emit(value),
-        expandedGroupKeys: (value: readonly RowKey[]) =>
-            this.expandedGroupKeysChange.emit(value),
-        selectedRowKeys: (value: readonly RowKey[]) =>
-            this.selectedRowKeysChange.emit(value),
-        editingCell: (value: EditingCell | null) =>
-            this.editingCellChange.emit(value),
-        cellEdit: (value: CellEditEvent<TRow>) => this.cellEdit.emit(value),
-        selectedRange: (value: CellRange | null) =>
-            this.selectedRangeChange.emit(value),
-        rangePaste: (value: RangePaste) => this.rangePaste.emit(value),
-        fill: (value: RangeFill) => this.fill.emit(value),
-        columnWidths: (value: ColumnWidths) =>
-            this.columnWidthsChange.emit(value),
-        columnOrder: (value: ColumnOrder) => this.columnOrderChange.emit(value),
-        collapsedGroupKeys: (value: readonly string[]) =>
-            this.collapsedGroupKeysChange.emit(value),
-        // the app moves its rows: rendered before the next key, which moves the row again
-        rowMove: (value: RowMove) => {
-            this.rowMove.emit(value);
-            this.renderSoon();
-        },
+        activePosition: this.emitting(this.activePositionChange),
+        sortColumns: this.emitting(this.sortColumnsChange),
+        expandedRowKeys: this.emitting(this.expandedRowKeysChange),
+        expandedGroupKeys: this.emitting(this.expandedGroupKeysChange),
+        selectedRowKeys: this.emitting(this.selectedRowKeysChange),
+        editingCell: this.emitting(this.editingCellChange),
+        cellEdit: this.emitting(this.cellEdit),
+        selectedRange: this.emitting(this.selectedRangeChange),
+        rangePaste: this.emitting(this.rangePaste),
+        fill: this.emitting(this.fill),
+        columnWidths: this.emitting(this.columnWidthsChange),
+        columnOrder: this.emitting(this.columnOrderChange),
+        collapsedGroupKeys: this.emitting(this.collapsedGroupKeysChange),
+        rowMove: this.emitting(this.rowMove),
         rowWindow: (value: AxisWindow) => this.rowWindowChange.emit(value),
         columnWindow: (value: AxisWindow) =>
             this.columnWindowChange.emit(value),
         rowsEndReached: (value: { rowCount: number }) =>
             this.rowsEndReached.emit(value),
     };
+
+    /** A handler emitting `output`, then rendering what the app did with it before the next event. */
+    private emitting<T>(output: OutputEmitterRef<T>): (value: T) => void {
+        return (value) => {
+            output.emit(value);
+            this.renderSoon();
+        };
+    }
 
     /**
      * The model and engine, made from the inputs the first time they are needed (a part reads

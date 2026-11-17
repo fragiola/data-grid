@@ -434,6 +434,14 @@ describe("the active cell", () => {
         await settled(fixture);
         expect(component.position()).toEqual({ rowIndex: 1, columnIndex: 2 });
         expect(at(container, 1, 2)).toHaveAttribute("data-active", "");
+        // the app's value is rendered before the next key, as React and Vue do: a key pressed
+        // fast starts from where the last one went (no frame or timer in between)
+        keyDown(at(container, 1, 2) as HTMLElement, { key: "ArrowDown" });
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        expect(at(container, 2, 2)).toHaveAttribute("data-active", "");
+        keyDown(at(container, 2, 2) as HTMLElement, { key: "ArrowDown" });
+        await settled(fixture);
+        expect(component.position()).toEqual({ rowIndex: 3, columnIndex: 2 });
     });
 
     it("follows the model: injectDataGrid().model.run changes the same state", async () => {
