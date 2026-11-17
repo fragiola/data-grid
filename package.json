@@ -23,7 +23,7 @@
         "typecheck": "pnpm -r typecheck",
         "test": "vitest run",
         "bench": "vitest bench --run",
-        "build": "pnpm -r build && node scripts/check-dts.ts",
+        "build": "pnpm -r build && node scripts/check-dts.ts && node scripts/check-features.ts",
         "size": "node scripts/size-report.ts",
         "e2e": "pnpm --workspace-concurrency=1 --filter playground --filter \"./examples/*\" e2e",
         "dev": "pnpm --filter playground dev",

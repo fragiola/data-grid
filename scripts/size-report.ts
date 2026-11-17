@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { builtFiles, chunksOf } from "./built-files.ts";
 
 const root = join(import.meta.dirname, "..");
 
@@ -32,26 +33,6 @@ async function loadMinify(): Promise<Minify | undefined> {
 }
 
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
-
-/** The chunks a built file imports (`./name.js`), by file name. */
-function chunksOf(source: string): string[] {
-    return [...source.matchAll(/from\s*["']\.\/([^"']+\.js)["']/g)].map(
-        ([, name]) => name ?? "",
-    );
-}
-
-/** A package's built files, relative to its `dist`: tsdown's `*.js`, ng-packagr's `fesm2022/*.mjs`. */
-function builtFiles(dist: string): string[] {
-    const fesm = join(dist, "fesm2022");
-    return [
-        ...readdirSync(dist).filter((file) => file.endsWith(".js")),
-        ...(existsSync(fesm)
-            ? readdirSync(fesm)
-                  .filter((file) => file.endsWith(".mjs"))
-                  .map((file) => `fesm2022/${file}`)
-            : []),
-    ].sort();
-}
 
 async function main() {
     const minify = await loadMinify();
