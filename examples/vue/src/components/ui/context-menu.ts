@@ -22,7 +22,7 @@ import {
     ContextMenuTrigger as ContextMenuTriggerPrimitive,
     injectContextMenuRootContext,
 } from "reka-ui";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, type StyleValue } from "vue";
 import { createMenuParts } from "#/components/families/menu/parts";
 import { cn } from "#/lib/cn";
 
@@ -85,12 +85,16 @@ const ContextMenuContent = defineComponent({
                 {
                     "data-slot": "context-menu-content",
                     ...attrs,
-                    style: {
-                        "--available-height":
-                            "var(--reka-context-menu-content-available-height)",
-                        "--transform-origin":
-                            "var(--reka-context-menu-content-transform-origin)",
-                    },
+                    // Base UI's variables over Reka UI's, after the consumer's style
+                    style: [
+                        attrs.style as StyleValue,
+                        {
+                            "--available-height":
+                                "var(--reka-context-menu-content-available-height)",
+                            "--transform-origin":
+                                "var(--reka-context-menu-content-transform-origin)",
+                        },
+                    ],
                 },
                 slots,
             );

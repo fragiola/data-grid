@@ -13,7 +13,7 @@ import {
     CheckboxIndicator as CheckboxIndicatorPrimitive,
     CheckboxRoot as CheckboxRootPrimitive,
 } from "reka-ui";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, mergeProps } from "vue";
 import { cn } from "#/lib/cn";
 
 /** What a change carries besides the new state: the click (or key) that made it. */
@@ -40,9 +40,9 @@ const CheckboxRoot = defineComponent({
             const state = props.indeterminate ? "indeterminate" : props.checked;
             return h(
                 CheckboxRootPrimitive,
-                {
+                // the consumer's listeners merged with the box's own, never replaced
+                mergeProps(attrs, {
                     "data-slot": "checkbox",
-                    ...attrs,
                     modelValue: state,
                     disabled: props.disabled,
                     "data-checked": state === true ? "" : undefined,
@@ -66,7 +66,7 @@ const CheckboxRoot = defineComponent({
                         "transition-colors",
                         attrs.class as string,
                     ),
-                },
+                }),
                 slots,
             );
         };

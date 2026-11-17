@@ -2,7 +2,9 @@
 // (examples/react/src/components/atoms/fields): the same classes and palette roles (the `field`
 // family) on native controls. `Input`, `Numeric` (a number input whose arrow keys step within
 // `min`/`max`) and `Textarea` are bare controls; `Input.Template.Simple` is a whole field: label,
-// row, input, description and error, linked by id.
+// row, input, description and error; the label is linked to the input by id (the description and
+// the error are not tied to it through `aria-describedby`, as Base UI's Field does: no example
+// shows one).
 
 import {
     defineComponent,

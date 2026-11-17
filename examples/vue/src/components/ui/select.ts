@@ -41,6 +41,7 @@ import {
     inject,
     type PropType,
     provide,
+    type StyleValue,
 } from "vue";
 import { field } from "#/components/families/field";
 import { menu } from "#/components/families/menu";
@@ -177,12 +178,16 @@ const SelectContent = defineComponent({
                                 "data-open": root.open.value ? "" : undefined,
                                 "data-closed": root.open.value ? undefined : "",
                                 ...attrs,
-                                style: {
-                                    "--available-height":
-                                        "var(--reka-select-content-available-height)",
-                                    "--transform-origin":
-                                        "var(--reka-select-content-transform-origin)",
-                                },
+                                // Base UI's variables over Reka UI's, after the consumer's style
+                                style: [
+                                    attrs.style as StyleValue,
+                                    {
+                                        "--available-height":
+                                            "var(--reka-select-content-available-height)",
+                                        "--transform-origin":
+                                            "var(--reka-select-content-transform-origin)",
+                                    },
+                                ],
                                 class: cn(
                                     popup.content("z-50 outline-none"),
                                     attrs.class as string,
