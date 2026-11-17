@@ -9,4 +9,16 @@ packages:
 # key; `onlyBuiltDependencies` was its predecessor.
 allowBuilds:
   esbuild: true
+  # @angular/build's native helpers: their prebuilt binaries come as optional dependencies, so
+  # their install scripts (node-gyp fallbacks) never need to run
+  "@parcel/watcher": false
+  lmdb: false
+  msgpackr-extract: false
 verifyDepsBeforeRun: false
+# @analogjs/vite-plugin-angular imports `typescript` without declaring it: as a peer, it gets the
+# TypeScript of the Angular folder that installs it (6.0.3, which the Angular compiler supports),
+# not the workspace's TypeScript 7
+packageExtensions:
+  "@analogjs/vite-plugin-angular":
+    peerDependencies:
+      typescript: "*"

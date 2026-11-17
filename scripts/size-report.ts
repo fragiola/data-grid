@@ -1,4 +1,5 @@
-// Reports the packages' bundle sizes (Epic #62, Q2): every `packages/*/dist/*.js`, raw, gzip and,
+// Reports the packages' bundle sizes (Epic #62, Q2): every `packages/*/dist/*.js` (and an Angular
+// package's `dist/fesm2022/*.mjs`, ng-packagr's bundles), raw, gzip and,
 // when the build's own minifier is reachable (rolldown, under tsdown), minified + gzip; and the
 // chunks each file imports, so an entry point that pulls a shared chunk shows it. A report, never a
 // gate: it prints a markdown table (to `$GITHUB_STEP_SUMMARY` too, in CI) and always exits 0. Run
@@ -39,6 +40,19 @@ function chunksOf(source: string): string[] {
     );
 }
 
+/** A package's built files, relative to its `dist`: tsdown's `*.js`, ng-packagr's `fesm2022/*.mjs`. */
+function builtFiles(dist: string): string[] {
+    const fesm = join(dist, "fesm2022");
+    return [
+        ...readdirSync(dist).filter((file) => file.endsWith(".js")),
+        ...(existsSync(fesm)
+            ? readdirSync(fesm)
+                  .filter((file) => file.endsWith(".mjs"))
+                  .map((file) => `fesm2022/${file}`)
+            : []),
+    ].sort();
+}
+
 async function main() {
     const minify = await loadMinify();
     const lines = [
@@ -51,9 +65,7 @@ async function main() {
             lines.push(`| packages/${pkg} | not built | | | |`);
             continue;
         }
-        for (const name of readdirSync(dist)
-            .filter((file) => file.endsWith(".js"))
-            .sort()) {
+        for (const name of builtFiles(dist)) {
             const source = readFileSync(join(dist, name), "utf8");
             let minified: string | undefined;
             try {

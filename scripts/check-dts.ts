@@ -20,10 +20,18 @@ export function codeOnly(source: string): string {
     );
 }
 
+/**
+ * The Angular compiler's own metadata on a compiled class (`static ɵfac`, `static ɵdir`, …): it
+ * names a generic directive with `any` (`ɵɵDirectiveDeclaration<DataGridRow<any>, …>`), and no
+ * consumer types anything with it (from Dockable's check, same author and licence).
+ */
+const ANGULAR_METADATA = /^\s*static\s+ɵ(?:fac|dir|cmp|mod|inj|prov|pipe)\s*:/;
+
 /** The lines of a declaration file that use `any`. */
 export function anyUses(source: string): string[] {
     return codeOnly(source)
         .split("\n")
+        .filter((line) => !ANGULAR_METADATA.test(line))
         .filter((line) => /(?<![\w$])any(?![\w$])/.test(line))
         .map((line) => line.trim());
 }
