@@ -6,7 +6,6 @@ import {
     ViewChild,
 } from "@angular/core";
 import {
-    type CellEditEvent,
     type CellTemplateProps,
     type Column,
     contextOf,
@@ -16,6 +15,11 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import {
+    type CellEditEvent,
+    DataGridEditing,
+    editing,
+} from "@fragiola/data-grid-angular/editing";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { Input, Numeric } from "#/components/atoms/fields";
 import {
@@ -46,6 +50,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
     selector: "example-editing",
     imports: [
         DATA_GRID,
+        DataGridEditing,
         Input,
         Numeric,
         TextEditor,
@@ -74,6 +79,7 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
                 [rows]="rows()"
                 [rowKey]="rowKey"
                 [rowHeight]="38"
+                [dataGridEditing]="columns"
                 (cellEdit)="onCellEdit($event)"
                 [class]="styles.root"
             >
@@ -126,8 +132,9 @@ type EditTemplate = TemplateRef<TemplateContext<Edit>>;
     `,
 })
 export default class Editing {
-    // cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
-    readonly features = [navigation()];
+    // the features the grid installs: cell navigation (the keys, the active cell, the tab stop)
+    // and cell editing (the edit's keys, its draft, its commit), which requires it
+    readonly features = [navigation(), editing()];
     protected readonly styles = styles;
     protected readonly cellContext = contextOf<CellTemplateProps<Row>>();
     protected readonly editContext = contextOf<Edit>();

@@ -6,7 +6,6 @@ import {
     ViewChild,
 } from "@angular/core";
 import {
-    type CellEditEvent,
     type CellInfo,
     type CellTemplateProps,
     type Column,
@@ -17,6 +16,11 @@ import {
     type TemplateContext,
     templateContent,
 } from "@fragiola/data-grid-angular";
+import {
+    type CellEditEvent,
+    DataGridEditing,
+    editing,
+} from "@fragiola/data-grid-angular/editing";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -55,6 +59,7 @@ type EditProps = EditCellRenderProps<Task, DataGridNode>;
     selector: "example-custom-renderers",
     imports: [
         DATA_GRID,
+        DataGridEditing,
         DataGridLocalRows,
         Input,
         SelectAll,
@@ -75,6 +80,7 @@ type EditProps = EditCellRenderProps<Task, DataGridNode>;
                 [rowHeight]="36"
                 dataGridRowSelection
                 rowSelection="multiple"
+                [dataGridEditing]="columns"
                 (cellEdit)="onCellEdit($event)"
                 [class]="styles.root"
             >
@@ -159,8 +165,8 @@ export default class CustomRenderers {
 
     private readonly rows = signal<readonly Task[]>(ROWS);
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection
-    readonly features = [sorting(), navigation(), rowSelection()];
+    // cell navigation (the keys, the active cell, the tab stop), row selection, cell editing
+    readonly features = [sorting(), navigation(), rowSelection(), editing()];
     readonly local = injectLocalRows(this.rows, this.columns);
 
     readonly rowKey = (row: Task) => row.id;
