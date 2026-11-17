@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
-import { h, ref, type VNodeChild } from "vue";
+import { h, shallowRef, type VNodeChild } from "vue";
 import { Input } from "#/components/atoms/fields";
 import { Checkbox } from "#/components/ui/checkbox";
 import { type Task, tasks } from "../_kit/tasks";
@@ -102,7 +102,7 @@ function columnsFor({
     ];
 }
 
-const rows = ref<Task[]>(tasks(60));
+const rows = shallowRef<readonly Task[]>(tasks(60));
 
 const columns = columnsFor({
     update: (id, change) => {

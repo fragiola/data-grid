@@ -6,7 +6,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
-import { h, ref, type VNodeChild } from "vue";
+import { h, shallowRef, type VNodeChild } from "vue";
 import { type Task, tasks } from "../_kit/tasks";
 import TextEditor from "../editing/text-editor.vue";
 import HeaderCell from "./header-cell.vue";
@@ -55,7 +55,7 @@ const completed = (task: Task | undefined) => task?.status === "Completed";
 const highPriority = (cell: CellInfo<Task>) =>
     cell.column.key === "priority" && cell.value === "High";
 
-const rows = ref<readonly Task[]>(ROWS);
+const rows = shallowRef<readonly Task[]>(ROWS);
 const local = useLocalRows(rows, columns);
 
 const rowKey = (row: Task) => row.id;
