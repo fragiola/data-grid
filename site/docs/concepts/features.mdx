@@ -1,0 +1,210 @@
+---
+title: Features
+description: A small core and the features your app installs on a grid, sorting the first, each typed, opt-in and left out of a bundle that never imports it.
+---
+
+The grid's core renders, scrolls, virtualizes, moves the active cell and answers the keys. What
+an app may not need is a **feature**: a plain object, made by a factory from its own entry point,
+that the app installs on a grid when it creates it. [Sorting](/docs/concepts/sorting) is the
+first: `sorting()`, from the `/sorting` entry.
+
+## Installing a feature
+
+Give the root a list of features. Make it once, outside the component (or in a field), so it is
+the same list on every render.
+
+<Framework name="react">
+
+```tsx title="people-grid.tsx"
+import { DataGrid } from "@fragiola/data-grid-react";
+import { sorting } from "@fragiola/data-grid-react/sorting";
+
+const features = [sorting()];
+
+export function PeopleGrid({ people }: { people: Person[] }) {
+    return (
+        <DataGrid.Root features={features} columns={columns} rows={people}>
+            {/* … */}
+        </DataGrid.Root>
+    );
+}
+```
+
+The root then takes the feature's props: `sortColumns`, `defaultSortColumns`,
+`onSortColumnsChange`.
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people-grid.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
+
+const features = [sorting()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="people">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+`typedDataGrid<Person, typeof features>()` types the root by the features too. Their props are
+attributes: `:sort-columns`, `:default-sort-columns`, `@sort-columns-change`.
+
+</Framework>
+
+<Framework name="angular">
+
+```ts title="people-grid.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { DataGridSorting, sorting } from "@fragiola/data-grid-angular/sorting";
+
+@Component({
+    selector: "app-people-grid",
+    imports: [DATA_GRID, DataGridSorting],
+    template: `
+        <div dataGridRoot [features]="features" dataGridSorting [(sortColumns)]="sortColumns" [columns]="columns" [rows]="people()">
+            <!-- … -->
+        </div>
+    `,
+})
+export class PeopleGrid {
+    readonly features = [sorting()];
+    // …
+}
+```
+
+A feature's inputs are a directive of its own, on the root's element: `DataGridSorting`
+(`dataGridSorting`) holds `[(sortColumns)]`, `[defaultSortColumns]` and `(sortColumnsChange)`.
+
+</Framework>
+
+Each package re-exports the core's features from an entry of the same name
+(`@fragiola/data-grid-react/sorting`, `@fragiola/data-grid-vue/sorting`,
+`@fragiola/data-grid-angular/sorting`), so an app installs one package. The core's own is
+`@fragiola/data-grid/sorting`.
+
+## Fixed when the grid is created
+
+A grid installs its features once, when it is created. A different list given later is ignored,
+and the console says so once. For other features, mount a new grid (a new `key`).
+
+## The bare grid
+
+With no features, a grid still renders, scrolls, virtualizes, and moves the active cell; it never
+sorts. A column keeps `sortable` and `compare`, but without `sorting()`:
+
+- a `sortable: true` column does not sort;
+- its header cell carries no `aria-sort`, `data-sortable`, `data-sort` or `data-sort-priority`,
+  and the header cell's state has no `sortable`, `sortDirection` or `sortPriority`;
+- a click, Enter or Space on a header cell is not the grid's;
+- the sort props do not compile (in Angular, `[sortColumns]` is not a known input without
+  `DataGridSorting`).
+
+Rows in memory hand the root their sort (`useLocalRows`, `injectLocalRows`,
+`[dataGridLocalRows]`), so [install `sorting()`](/docs/concepts/rows-in-memory) with them.
+
+## Typed by the features
+
+The model's keys are the core's and the installed features': `model.run("sort-columns.toggle", …)`
+is a type error on a grid without sorting. The hooks and the refs take the features as a type
+argument, after the row:
+
+<Framework name="react">
+
+```tsx title="toolbar.tsx"
+const features = [sorting()];
+
+function ClearSort() {
+    const { model } = useDataGrid<Person, typeof features>();
+    return (
+        <button type="button" onClick={() => model.run("sort-columns.set", { sortColumns: [] })}>
+            Clear the sort
+        </button>
+    );
+}
+
+// outside the root: useDataGridRef<Person, typeof features>(), or createDataGridRef<…>()
+```
+
+</Framework>
+
+<Framework name="vue">
+
+`useDataGrid<Person, typeof features>()`, `useDataGridRef<Person, typeof features>()` and
+`createDataGridRef<Person, typeof features>()`, as in React.
+
+</Framework>
+
+<Framework name="angular">
+
+`injectDataGrid<Person, typeof features>()` and `createDataGridRef<Person, typeof features>()`.
+
+</Framework>
+
+Without the type argument, they are typed by the core alone. A plain `DataGridModel<Person>` is a
+grid of any features: a model with features is one, so code that serves every grid takes it.
+
+At runtime, a command of a feature that is not installed (an untyped call, say) never throws: it
+returns `{ ok: false, error: { code: "not_found" } }`, as any command the grid does not know. A
+`get` of a key no feature has is `undefined`, an `is` is `false`.
+
+## Not in your bundle
+
+A feature lives in its own entry point, and the packages' main entries never import one: a feature
+your app does not import is not in its bundle. `pnpm build` checks it, failing when a package's
+main entry holds a feature's code.
+
+## Your own feature
+
+`defineFeature` makes one, from `@fragiola/data-grid` (re-exported by every package). Its types
+extend `FeatureTypes`: its slice of the state, the model's options, its commands, `get` and `is`
+keys, and a root's props; `this["row"]` is the grid's row type, at a member's level. Every part
+is optional.
+
+```ts title="flags.ts"
+import { type DataGridFeature, defineFeature, done, type FeatureTypes } from "@fragiola/data-grid";
+
+interface FlagsTypes extends FeatureTypes {
+    readonly state: { readonly flagged: readonly number[] };
+    readonly commands: {
+        "flags.toggle": { payload: { readonly rowIndex: number }; result: readonly number[] };
+    };
+    readonly questions: { "row-flagged": { readonly rowIndex: number } };
+}
+
+const FLAGS = defineFeature<FlagsTypes>({
+    name: "flags",
+    initial: () => ({ flagged: [] }),
+    commands: {
+        "flags.toggle": (state, { rowIndex }) => {
+            const flagged = state.flagged.includes(rowIndex)
+                ? state.flagged.filter((index) => index !== rowIndex)
+                : [...state.flagged, rowIndex];
+            return done({ ...state, flagged }, flagged);
+        },
+    },
+    questions: {
+        "row-flagged": (state, { rowIndex }) => state.flagged.includes(rowIndex),
+    },
+});
+
+export function flags(): DataGridFeature<FlagsTypes> {
+    return FLAGS;
+}
+```
+
+Installed (`features: [flags(), sorting()]`), its keys are the grid's: `model.run("flags.toggle",
+{ rowIndex: 3 })` goes through the same middleware and returns the same results. A feature can
+also keep its state to the columns and rows (`sourceChanged`), add to a header cell
+(`headerCell`), take keys and clicks (`engine`) and give a root props (`root`, with
+`defineControlled` for a controlled one). Its handlers return `done(state, value)`, or
+`fail(code, message)`.
+
+Features read each other only through keys. Two features of one name, a feature it `requires`
+missing, or a key another one already has throws when the grid is created.

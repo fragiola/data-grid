@@ -47,7 +47,7 @@ select by them, never by class names.
 | `data-range-edge` | cell | the range's edges it sits on, space-separated: `top`, `bottom`, `start`, `end` (match one with `~=`) |
 | `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `data-pinned-edge` | cell, header cell | its pinned part's edge: it ends at the last column pinned at the start, or starts at the first pinned at the end |
-| `data-sortable` | header cell | its column is sortable ([Sorting](/docs/concepts/sorting)) |
+| `data-sortable` | header cell | its column is sortable, with `sorting()` installed ([Sorting](/docs/concepts/sorting)) |
 | `data-sort` | header cell | `ascending` or `descending`, while its column is sorted |
 | `data-sort-priority` | header cell | its column's place in the sort, 1-based |
 | `data-resizable` | header cell | its column can be resized, or for a group one of its columns ([Column resizing](/docs/concepts/column-resizing)) |
@@ -73,7 +73,7 @@ select by them, never by class names.
 | `aria-colindex` | cell, header cell | 1-based (a group's first column) |
 | `aria-colspan` | cell, header cell, row detail | the columns a group or a [spanning cell](/docs/concepts/column-spanning) covers, when more than one; a detail spans every column |
 | `aria-rowspan` | header cell | the header rows a column spans, when more than one |
-| `aria-sort` | header cell | the first sorted column's direction |
+| `aria-sort` | header cell | the first sorted column's direction, with `sorting()` installed |
 | `aria-multiselectable` | grid | `true` when many rows can be selected, or ranges of cells |
 | `aria-selected` | row | `true` or `false` on a row that can be selected, `true` on one your keys select anyway (`false` is ARIA's own "selectable, not selected"); a group row's, `true` while every one of its rows is |
 | `aria-selected` | cell | `true` in the selected range, `false` outside it, while cells are selectable ([Cell selection](/docs/concepts/cell-selection)); none on header and summary cells |

@@ -13,11 +13,15 @@ show. A grid fed by a server never loads it.
 
 `useLocalRows(rows, columns, options)` comes from its own entry point,
 `@fragiola/data-grid-react/local`. Spread its `props` onto `DataGrid.Root`: the current page's
-rows, and the sort, so a click on a sortable header sorts them. Give its `filter` and `page` to
-your own controls.
+rows, and the sort, so a click on a sortable header sorts them. The sort is a
+[feature](/docs/concepts/features): install `sorting()` on the root too, or no column sorts. Give
+its `filter` and `page` to your own controls.
 
 ```tsx title="people.tsx"
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
+
+const features = [sorting()];
 
 const local = useLocalRows(people, columns, {
     pageSize: 50,
@@ -28,7 +32,7 @@ const local = useLocalRows(people, columns, {
     value={local.filter.search}
     onChange={(event) => local.filter.setSearch(event.target.value)}
 />
-<DataGrid.Root columns={columns} {...local.props}>
+<DataGrid.Root features={features} columns={columns} {...local.props}>
     {/* … */}
 </DataGrid.Root>
 <button type="button" disabled={!local.page.canNext} onClick={local.page.next}>
@@ -40,7 +44,7 @@ It returns:
 
 | field | holds |
 | --- | --- |
-| `props` | `rows`, `sortColumns` and `onSortColumnsChange`, for `DataGrid.Root` |
+| `props` | `rows`, `sortColumns` and `onSortColumnsChange`, for `DataGrid.Root` (the sort taken only with `sorting()` installed) |
 | `rows` | the current page's rows |
 | `total`, `filteredCount` | every row given, and those passing the filters and the search |
 | `sort` | `columns`, `set`, `clear` |
@@ -123,6 +127,7 @@ const [tasks, setTasks] = useState(initialTasks);
 const local = useLocalRows(tasks, columns);
 
 <DataGrid.Root
+    features={features}
     {...local.props}
     columns={columns}
     onRowMove={(move) => setTasks(local.moveRow(move))}
@@ -141,7 +146,8 @@ shown by their places among your rows, a view's `rowIndexes`, so equal rows are 
 ## On a server
 
 With more rows than the browser should hold, keep the same state in your app and send it: the
-sort is grid state (`sortColumns` and `onSortColumnsChange`, the header toggles it), the filters,
+sort is grid state (`sortColumns` and `onSortColumnsChange`, with `sorting()` installed; the
+header toggles it), the filters,
 the search and the page are yours. The grid shows the page that comes back.
 
 <Example id="server-side" />

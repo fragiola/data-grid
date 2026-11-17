@@ -39,8 +39,9 @@ while it has focus, as the examples do, pair the two: `[data-active]:focus-withi
 Moves stop at the edges. In a [right-to-left](/docs/concepts/right-to-left) grid the arrows
 mirror: ← moves to the next column and → to the previous one, as they point; Home and End stay the
 row's first and last cell, Ctrl+Shift+← moves a header cell after its next sibling, and on a resize
-handle ← moves it to the left, which widens its column. A click or a Tab into a cell makes it active. On a sortable column's
-header cell, Enter and Space toggle its [sort](/docs/concepts/sorting) (Ctrl adds the column).
+handle ← moves it to the left, which widens its column. A click or a Tab into a cell makes it active. With
+[sorting](/docs/concepts/sorting) installed, Enter and Space on a sortable column's header cell
+toggle its sort (Ctrl adds the column).
 On a [reorderable](/docs/concepts/column-reordering) header cell, Ctrl+Shift+← and Ctrl+Shift+→
 move its column (or group) before the previous sibling or after the next one, focus staying on
 it; elsewhere they move the active cell as the arrows do. While the rows
@@ -87,7 +88,7 @@ A cell's controls take the keys in **interaction**, the grid's other mode beside
 
 A click on a control does what Enter does: its cell becomes active and its controls take the keys.
 Focus leaving the cell (a click elsewhere, a menu portalled out of it) goes back to navigation. On
-a sortable column's header cell, Enter sorts, and F2 reaches its controls. A cell in interaction
+a sortable column's header cell (sorting installed), Enter sorts, and F2 reaches its controls. A cell in interaction
 carries `data-interacting`, and `useCell` and `useHeaderCell` report `interacting`.
 
 <Example id="interactive-cells" />

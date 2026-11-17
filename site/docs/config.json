@@ -31,6 +31,10 @@
                     "path": "concepts/model-and-engine"
                 },
                 {
+                    "label": "Features",
+                    "path": "concepts/features"
+                },
+                {
                     "label": "The primitive contract",
                     "path": "concepts/primitive-contract"
                 },

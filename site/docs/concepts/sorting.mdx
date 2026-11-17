@@ -10,6 +10,75 @@ the sort.
 
 <Example id="sorting" />
 
+## Install sorting
+
+Sorting is a [feature](/docs/concepts/features): install `sorting()`, from the `/sorting` entry,
+on the grid. Without it, no column sorts and the sort props do not compile.
+
+<Framework name="react">
+
+```tsx title="people.tsx"
+import { sorting } from "@fragiola/data-grid-react/sorting";
+
+const features = [sorting()];
+
+<DataGrid.Root features={features} columns={columns} rows={people}>
+    {/* … */}
+</DataGrid.Root>
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
+
+const features = [sorting()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="people">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+The sort's inputs are `DataGridSorting`'s, a directive on the root's element
+(`dataGridSorting`), from the same entry. Import it in the component.
+
+```ts title="people.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { DataGridSorting, sorting } from "@fragiola/data-grid-angular/sorting";
+
+@Component({
+    selector: "app-people",
+    imports: [DATA_GRID, DataGridSorting],
+    template: `
+        <div dataGridRoot [features]="features" dataGridSorting [(sortColumns)]="sortColumns" [columns]="columns" [rows]="rows()">
+            <!-- … -->
+        </div>
+    `,
+})
+export class People {
+    readonly features = [sorting()];
+    readonly sortColumns = signal<readonly SortColumn[]>([]);
+    // …
+}
+```
+
+With rows in memory, `[dataGridLocalRows]` gives the root the sort: `DataGridSorting` is not
+needed, `[features]` still is.
+
+</Framework>
+
 ## Sortable columns
 
 A column with `sortable: true` sorts the grid. A group never does: its columns can.
@@ -24,22 +93,30 @@ const columns: Column<Person>[] = [
 
 ## The sort
 
-The sort is a list of `{ columnKey, direction }`, the first column first; `direction` is
-`"ascending"` or `"descending"`, the values of `aria-sort`. Like the active cell, it is
-controlled or not:
+The sort is a list of `{ columnKey, direction }` (`SortColumn`, from the `/sorting` entry), the
+first column first; `direction` is `"ascending"` or `"descending"`, the values of `aria-sort`.
+Like the active cell, it is controlled or not:
 
 - `sortColumns` with `onSortColumnsChange`: a change is asked for, and only the prop applies it;
 - `defaultSortColumns`: the grid starts from it, applies changes and tells
   `onSortColumnsChange`.
 
+In Vue they are attributes (`:sort-columns`, `@sort-columns-change`); in Angular,
+`DataGridSorting`'s `[(sortColumns)]`, `[defaultSortColumns]` and `(sortColumnsChange)`.
+
 ```tsx title="people.tsx"
+import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
+
+const features = [sorting()];
+
 // rows in memory: one hook keeps the sort and orders the rows
 const local = useLocalRows(people, columns);
-<DataGrid.Root columns={columns} {...local.props}>{/* … */}</DataGrid.Root>
+<DataGrid.Root features={features} columns={columns} {...local.props}>{/* … */}</DataGrid.Root>
 
 // a server: the app keeps the sort and sends it
 const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([]);
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={pageFromServer}
     sortColumns={sortColumns}
@@ -68,7 +145,10 @@ The same changes go through the model, for a toolbar or a menu of your own:
 `model.run("sort-columns.toggle", { columnKey: "name", multi: true })`,
 `model.run("sort-columns.set", { sortColumns: [] })`, reached with
 [`useDataGrid()` or a `gridRef`](/docs/concepts/model-and-engine#from-outside-the-root).
-A middleware can refuse or rewrite them.
+These keys are sorting's, so the model must be typed by the features:
+`useDataGrid<Person, typeof features>()`, `useDataGridRef<Person, typeof features>()`
+(`injectDataGrid` and `createDataGridRef` in Angular). `model.get("sort-columns")` reads the
+sort. A middleware can refuse or rewrite them.
 
 ## What it shows
 
@@ -85,7 +165,19 @@ its first one; the others are in `data-sort`. A sorted column with no header cel
 [spans](/docs/concepts/column-spanning) over it) still sorts and keeps its priority: the next
 one carries `aria-sort`. Indicators are yours: draw an arrow from
 `data-sort` in CSS, or from the header cell's state (`sortable`, `sortDirection`,
-`sortPriority`) in a `render` function, as the example does.
+`sortPriority`) in a `render` function, as the example does. Without sorting installed, none of
+these attributes is there, and those state fields are `undefined`.
+
+`sortColumnsOf(view)`, from the `/sorting` entry, reads the whole sort from the grid's view, to
+show a priority only while several columns sort:
+
+```tsx title="header-cell.tsx"
+import { sortColumnsOf } from "@fragiola/data-grid-react/sorting";
+
+const sortColumns = sortColumnsOf(useGridView());
+// …
+{sortColumns.length > 1 && state.sortPriority !== undefined && <span>{state.sortPriority}</span>}
+```
 
 ## Rows stay yours
 

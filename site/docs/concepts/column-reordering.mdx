@@ -95,7 +95,7 @@ model.use((ctx, next) =>
 A press with the primary button on a reorderable header cell reaches the grid after your own
 `onPointerDown` (so `preventDefault` there keeps it from dragging). The grid does not prevent it:
 until the pointer moves past a click's few pixels, it is a click, which focuses the cell and
-[sorts](/docs/concepts/sorting) a sortable column. Past them, the cell drags, holding the pointer.
+[sorts](/docs/concepts/sorting) a sortable column (sorting installed). Past them, the cell drags, holding the pointer.
 A press on a control inside the cell, or on a [resize handle](/docs/concepts/column-resizing),
 never drags, and the click that ends a drag never sorts.
 

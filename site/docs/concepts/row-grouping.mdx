@@ -20,6 +20,10 @@ are expanded. Spread its `props` on the root: grouped, they are the rows shown (
 ```tsx title="people.tsx"
 import { type Column, DataGrid, useGroupToggle } from "@fragiola/data-grid-react";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
+
+// the sortable columns sort only with sorting installed
+const features = [sorting()];
 
 const columns: Column<Person>[] = [
     { key: "name", name: "Name", width: 220 },
@@ -41,7 +45,7 @@ function People({ people }: { people: Person[] }) {
         defaultExpandedGroupKeys: [groupKeyOf([["team", "Design"]])],
     });
     return (
-        <DataGrid.Root {...local.props} columns={columns}>
+        <DataGrid.Root features={features} {...local.props} columns={columns}>
             <DataGrid.Grid aria-label="People">
                 <DataGrid.Header />
                 <DataGrid.Body>

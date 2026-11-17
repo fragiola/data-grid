@@ -64,8 +64,9 @@ same on both sides; what you render around and inside it must be too:
 - render the same structure on both sides: a `table` with `thead`, `tbody`, `tr` and `th`/`td`
   parts all the way down (the browser moves a `div` out of a `table` while it parses the HTML,
   and React then finds the page changed), or `div`s;
-- start from the same state: a `defaultActivePosition`, a `defaultSortColumns` or a
-  `defaultSelectedRange` given on the server must be given on the client too;
+- start from the same state: the same `features`, and a `defaultActivePosition`, a
+  `defaultSortColumns` or a `defaultSelectedRange` given on the server must be given on the
+  client too;
 - read nothing that only the browser knows (the window's size, `localStorage`, the time) while
   rendering: read it in an effect and pass it down after hydration.
 
