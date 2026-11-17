@@ -16,7 +16,7 @@
 //     kit's other popups (`#/components/floating`), in the body of the trigger's document.
 //   - Base UI's `open` is controlled by the app through `onOpenChange`; here `(openChange)` says
 //     when it opens or closes, and the app closes it (`close()`) when it should not be open, as a
-//     right-click outside the body's cells. `openAt(point)` opens it at a point, for a long press
+//     right-click outside the body's cells (closed in `(openChange)` as it opens, it never shows). `openAt(point)` opens it at a point, for a long press
 //     the app times itself. Closed, focus goes back to what had it; the app may move it after
 //     (React's `finalFocus`), in `(openChange)`.
 

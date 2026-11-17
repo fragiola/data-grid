@@ -330,7 +330,7 @@ export function injectPopup(
     const open = signal(false);
 
     function hide() {
-        if (!floating.isOpen) return;
+        if (!open()) return;
         floating.close();
         open.set(false);
         onOpenChange?.(false);
@@ -353,6 +353,8 @@ export function injectPopup(
         // said before the content renders: a content that reads state when it opens is current
         open.set(true);
         onOpenChange?.(true);
+        // closed by the app as it opened (`hide()` in its `onOpenChange`): it stays closed
+        if (!open()) return;
         floating.open(container, template, undefined, injector, {
             owner,
             onDismiss: hide,

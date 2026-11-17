@@ -370,6 +370,23 @@ describe("ContextMenu", () => {
         expect(document.querySelector('[role="menu"]')).toBeNull();
         expect(fixture.componentInstance.opened()).toBe(false);
     });
+
+    it("stays closed when closed as it opens, from its openChange", async () => {
+        const { root, fixture, stable } = await render(ContextMenuHost);
+        const trigger = fixture.debugElement.children[0]?.references.trigger;
+        const said: boolean[] = [];
+        trigger.openChange.subscribe((open: boolean) => {
+            said.push(open);
+            if (open) trigger.close();
+        });
+        root.querySelector('[data-testid="area"]')?.dispatchEvent(
+            new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+        );
+        await stable();
+        expect(document.querySelector('[role="menu"]')).toBeNull();
+        expect(trigger.open()).toBe(false);
+        expect(said).toEqual([true, false]);
+    });
 });
 
 @Component({
