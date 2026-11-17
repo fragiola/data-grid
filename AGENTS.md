@@ -79,10 +79,13 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    still one generic, and `getRow` unchanged (see D10's row kinds).
 7. **Sizes (D7).** `rowHeight: number | (index) => number | "auto"` (`RowHeight`; `"auto"`:
    measured, Epic #86, below); columns `width: number` (px), the
-   width a column starts with and a reset gives back: the model keeps a resized column's width
-   over it (`columnWidths`, Epic #70). The effective width, within the column's limits, is the
-   override (`columnWidths`), else the engine's automatic width (`autoSize`), else its flex share
-   (`flex`), else `width` (Epic #80). **Measured heights (Epic #86, E2.2):** `rowHeight: "auto"`
+   width a column starts with and a reset gives back: with `columnResize()` installed (a feature
+   since Epic #148) the model keeps a resized column's width over it (`columnWidths`, Epic #70).
+   The effective width, within the column's limits, is the override (`columnWidths`: the
+   feature's, through its `columnWidths` contribution point; none without it), else the engine's
+   automatic width (`autoSize`), else its flex share (`flex`), else `width` (Epic #80). `width`,
+   `flex`, `autoSize` and a resizable column's limits on its flex share and automatic width stay
+   the core's: how a column's width is declared. **Measured heights (Epic #86, E2.2):** `rowHeight: "auto"`
    with `estimatedRowHeight` (default `DEFAULT_ROW_HEIGHT`) and `detailHeight: "auto"` with
    `estimatedDetailHeight` (default `DEFAULT_DETAIL_HEIGHT`): model state, options and
    `sizes.set` (an estimate is a size above 0: `sizes.set` refuses another with
@@ -177,7 +180,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     cell (or a widget holding controls), a drag and a held key's repeats are not a sort. `aria-sort` on the first
     sorted column with a header cell of its own only (one a collapsed group hides or a header
     span covers still sorts, its priority kept); `data-sortable`, `data-sort`, `data-sort-priority`. The grid never orders
-    the rows: the app does. **Pinned columns (Epic #31, P1–P7; at the end, Epic #85, E1.1):**
+    the rows: the app does. **Pinned columns (Epic #31, P1–P7; at the end, Epic #85, E1.1;
+    pinning is `columnPinning()` since Epic #148, `/column-pinning`: which columns are pinned in
+    effect and the strips' widths, the fit rule below, through its `pinnedColumns` contribution
+    point, and `get("pinned-column-keys")`. The declared parts (validation, spans that never cross
+    a part, moves within a part) stay the core's column model, and so do the layers, the insets
+    and the windows between the strips, zeros without pinning: every column scrolls):**
     `pinned: "start"` on the leading columns, `pinned: "end"` on the trailing ones (`PinnedSide`;
     `columnsError` refuses a start after a column not pinned at the start, a column after one
     pinned at the end, and a group mixing parts). They are always rendered (the start part first
@@ -259,7 +267,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     model's snap and it share `coveringCell`). A fit
     never measures a spanning cell; a header span reorders with the columns it covers, a covered
     column cannot move.
-    **Collapsible groups and sticky labels (Epic #85, E1.3):** `collapsible: true` on a group;
+    **Collapsible groups and sticky labels (Epic #85, E1.3; collapsing is `columnGroupCollapse()`
+    since Epic #148, `/column-group-collapse`: the groups, their `groupShow` layout and the sticky
+    labels stay the core's, a collapsible group laid out expanded without the feature; the keys,
+    commands, `group-collapsed`, the header cell's `collapsed`, the root props and
+    `columnAnchored` are the feature's):** `collapsible: true` on a group;
     its children `groupShow?: GroupShow` (`"expanded" | "collapsed"`, unset: both; `columnsError`
     refuses `groupShow` outside a collapsible group's children, a collapsible group showing
     no child in either state, and `collapsible` on a column). The model keeps
@@ -752,7 +764,11 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    repeated over the target (row by row down, column by column across, starting again after its
    last), with `fillHandle()`, `fillTargetOf` and `fillHandlePart(Of)`. A series, undo and a
    keyboard fill (Ctrl+D) are the app's.
-   **Column resizing (Epic #70, W1–W8):** the model keeps `columnWidths` (`{ [columnKey]: px }`,
+   **Column resizing (Epic #70, W1–W8; `columnResize()` since Epic #148, `/column-resize`: its
+   state, commands, `get("column-widths")`, root props, the resizer's part and hook, the drag, the
+   keys (`interactionKeydown`), the fit (`fit-columns`), the engine's `column-resize` key, view
+   field and event, and the `autoWidths` middleware; `column-width-by` and the width math stay
+   the core's):** the model keeps `columnWidths` (`{ [columnKey]: px }`,
    over each column's `width`; a key that is not a column is kept: it may come back),
    controlled or not on `Root` like the sort (`columnWidths`/`defaultColumnWidths`/
    `onColumnWidthsChange`); `column-widths.set { columnWidths }`, `.resize { columnKey, width }`,
@@ -819,7 +835,12 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
    the group's handle (the group ends off the pointer): make it resizable or keep it out of the
    group. Fitting rows not rendered, canvas text measuring and `flex` on groups are not the
    grid's.
-   **Column reordering (Epic #75, O1–O6):** the model keeps `columnOrder` (keys of columns and
+   **Column reordering (Epic #75, O1–O6; `columnReorder()` since Epic #148, `/column-reorder`:
+   its state, commands, root props, `columnLayout` arrangement, header drag (a `FeatureDrag` on
+   the shared machinery, `axis: "x"`), Ctrl/⌘+Shift+←/→ (its `keydown`), the engine's
+   `column-reorder` key, view field and event; it reads the declared parts through the core's
+   header helpers and the strips in effect through `EngineKit.pinned`, never pinning's code):**
+   the model keeps `columnOrder` (keys of columns and
    groups, the order siblings take: in each sibling list, a group's children or the top level,
    the listed entries take the listed ones' places in its order, the others keep theirs; pinned
    and unpinned are ordered apart, so the pinned lead whatever it says; a key that is not an entry
@@ -956,14 +977,15 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     focus, hands the cell's keys to its controls: Tab and Shift+Tab cycle them, Escape (or focus
     leaving the cell) gives them back. The cell in interaction is always the active one
     (`engine.get("interaction")`, the `interaction` event, `view.interaction`,
-    `interact-cell`/`leave-cell`); `data-interacting` on it. A column's resize handle is a control
-    of its header cell: in interaction (F2, Enter on a header that does not sort, Tab among its
+    `interact-cell`/`leave-cell`); `data-interacting` on it. A column's resize handle (with
+    `columnResize()`, its `interactionKeydown`, Epic #148) is a control of its header cell: in interaction (F2, Enter on a header that does not sort, Tab among its
     controls), on the focused handle ←/→ move it by 10 px (Shift: 50), the column growing the way it grows (`resizeSign`: right, left in RTL, toward the start pinned at the end), Home/End go to the minimum
     and the maximum (its `aria-valuemax`: without a `maxWidth`, the view's width), each one
     `column-widths.resize` after the consumer's handlers, and Enter fits its column to its
     content (one `column-widths.set`, Epic #80); the other page keys and Space do
     nothing there (no paging); Escape leaves interaction and keeps the width. On a reorderable
-    header cell in navigation, Ctrl/⌘+Shift+←/→ run one `column-order.move` before the previous
+    header cell in navigation (with `columnReorder()`, its `keydown`, Epic #148),
+    Ctrl/⌘+Shift+←/→ run one `column-order.move` before the previous
     sibling or after the next (handled at an end or at the pinned edge too, moving nothing),
     after the consumer's handlers; the active cell follows and focus stays on it; on a body cell
     or a fixed header cell they are plain arrows (Epic #75). While rows move (`onRowMove`, Epic
@@ -1061,11 +1083,17 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 A **minimal core plus opt-in features** (the ecosystem's pattern,
 `../guidelines/architecture/features.md`; this repo is its reference): a feature the app does
 not import is not in its bundle. Epics #144–#153 move every other optional behaviour onto it
-(column and row features, filtering, search, paging come next). Seven are features now:
+(row features, filtering, search, paging come next). Eleven are features now:
 `sorting()` (`/sorting`, Epic #141), and since Epic #144 `navigation()` (`/navigation`),
 `rowSelection()` (`/row-selection`), `cellRange()` (`/range`, requires `navigation`),
 `clipboard()` (`/clipboard`, requires `cellRange`) and `fillHandle()` (`/fill`, requires
-`cellRange`), and since Epic #146 `editing()` (`/editing`, requires `navigation`).
+`cellRange`), since Epic #146 `editing()` (`/editing`, requires `navigation`), and since Epic
+#148 the column features: `columnResize()` (`/column-resize`), `columnReorder()`
+(`/column-reorder`), `columnPinning()` (`/column-pinning`) and `columnGroupCollapse()`
+(`/column-group-collapse`). The core keeps the column model (columns and groups as declared,
+their header rows, spans and sticky labels, the declared pinned parts, `width`, `flex`,
+`autoSize` and the limits on a resizable column's flex/auto width) and the layers (sticky
+insets, the windows between the strips: zeros without pinning).
 
 - **The contract** (`src/feature/feature.ts`): a feature is a plain object a factory makes,
   exported from its own entry point (`sorting()` from `@fragiola/data-grid/sorting`; the
@@ -1085,7 +1113,14 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   share)` and `cell(view, cell, span, share)` (they fill a reused `RowShare`/`CellShare`:
   nothing allocated per row or cell), `grid(view)` (attributes: `aria-multiselectable`) and
   `headerCell(view, cell)` (part state fields and attributes, `data-*` and ARIA, merged in the
-  features' order), `engine(context)` and `root`. The part state fields a feature fills stay
+  features' order), `engine(context)` and `root`; since Epic #148 `columnLayout` (`{ changed(after,
+  before), arrangement(state) }`: its say in the columns' layout, `{ arrange?, collapsed? }`, each
+  sibling list in its order and the collapsed groups; a `changed` state lays the columns out
+  again, the active cell following its column: `relaidOut`, `model/layout.ts`'s
+  `followedColumn`), `columnWidths(state)` (overrides over the declared sizing: resizing's; the
+  first feature having it) and `pinnedColumns(columns, columnAxis, viewportWidth)` (the
+  `PinnedColumns` in effect, `{ startCount, startWidth, endCount, endWidth }`: pinning's; none
+  without it). The core asks these points, never a feature's state. The part state fields a feature fills stay
   declared, optional, on the core's part types (`HeaderCellState.sortable`, `CellState.selected`,
   …: `undefined` without it): a type costs no bytes.
 - **In an engine** (`FeatureEngine`, made once per engine; `context`: the typed `model`,
@@ -1093,19 +1128,24 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   questions (`cellOf`, `bodyCellOf`, `pressedBodyCellOf`, `cellElement`, `inViewport`,
   `markedOf`), scroll (`scrollToCell`, `pageSize`, `visibleColumns`), focus (`followFocus`,
   `focusFirstVisibleCell`), `emit`, `refresh`, the drags (`press`, `capture`, `askFrame`,
-  `endDrag`, `stopDrag`, `drag`, `cellDragStep`, `cellUnder`), and since Epic #146 `activate`
-  and `move` (the navigation's, through the engine) and `leaveInteraction`). The keys go one
+  `endDrag`, `stopDrag`, `drag`, `cellDragStep`, `cellUnder`), since Epic #146 `activate`
+  and `move` (the navigation's, through the engine) and `leaveInteraction`, and since Epic #148
+  the columns' layout (`columnAxis`, `viewportWidth`, `pinned`, `scrollLeft`, `viewX`,
+  `columnOffsetAt`, `columnEdgeStep`, `edgeScroll`, `committed`, `measureColumns`,
+  `autoWidths(overrides?)`)). The keys go one
   chain, each hook walked in install order, `true` taking the key: `beforeKeydown` (never takes:
   the clipboard) → a drag's Escape → `guardKeydown` (an element a feature holds: an edit's
   editor and cell; `true` takes, `false` ends the chain untaken, `undefined` lets it through) →
   the guards (a control's `ownsKeysOf`, Alt: a character typed with Alt walks `startKeydown`
-  only) → `keydown` (sorting) → the row groups' keys → `startKeydown` (an edit's start) → the
-  interaction's Enter/F2 → the column and row moves' keys →
+  only; inside it, after the interaction's Escape and Tab on a cell's control,
+  `interactionKeydown`: a resizer's keys, Epic #148) → `keydown` (sorting, a column's move:
+  reordering's Ctrl/⌘+Shift+←/→) → the row groups' keys → `startKeydown` (an edit's start) → the
+  interaction's Enter/F2 → the row moves' keys (the core's until Epic #151) →
   `laterKeydown` (the range's, the row selection's: it defers Shift+↑/↓ and Ctrl/⌘+A to the
   range while `get("cell-selection")` is set) → Escape's release → the scaled Space →
-  `lastKeydown` (navigation's arrows). Also `click`, `pointerdown` (after a resizer's, before a
-  row handle's and a header cell's: a fill handle inside a row's handle is the fill's; a body
-  cell's range leaves a row's handle to it), `copy`, `paste`, `changed(before, after)` (run before
+  `lastKeydown` (navigation's arrows). Also `click`, `pointerdown` (before a row handle's: a
+  resizer's, a fill handle's (inside a row's handle it is the fill's), a body cell's range
+  (it leaves a row's handle to it), a reorderable header cell's: disjoint targets), `copy`, `paste`, `changed(before, after)` (run before
   the engine's own follow, so the view built for the change shows the feature's fields),
   `followed(before, after)` (after it, the engine laid out: a drag whose cells are gone ends),
   `attach(viewport) => detach`, `optionsChanged`, and since Epic #146 `pointerEnd` (a press's
@@ -1113,13 +1153,22 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   feature holds, never an interaction), `rendered(view)` (the adapter's commit, focus moved) and
   `actions` (`engine.run` actions: editing's `edit-cell`, `change-edit`, `commit-edit`,
   `cancel-edit`; a clash throws, an action no feature has does nothing),
-  `view()` (its engine-held view fields), `queries` (`engine.get` keys: `fill`, `edit-draft`), and navigation's
+  `view()` (its engine-held view fields), `queries` (`engine.get` keys: `fill`, `edit-draft`,
+  `column-resize`, `column-reorder`; `fit-columns` is resizing's action), since Epic #148
+  `columnsFollowed(before, after)` (the columns laid out again for a change, a new axis or header,
+  before the view is built: a column's drag follows its column, its view field set, not
+  refreshed; told in `followed`), `columnAnchored(before, after)` (a relayout of the same entries
+  keeps the view on its first column by key: collapse's) and `destroy` (resizing's middleware
+  goes), and navigation's
   `activate(position)` and `move(direction)` (without them no cell is ever active and an edit's
   Enter/Tab move nothing). A feature's `editCell(view, cell, draft, engine)` (editing's) gives an
   edited cell's editor props, which the adapters' cell parts read through the core's
   `cellEditOf`. A feature's drag is a `FeatureDrag` (`kind: "feature"`, `start?`,
-  `step`, `end(how)`) on the shared `PointerDrag` machinery (`engine/drag.ts`): one drag at a
-  time, whoever owns it.
+  `step`, `end(how)`, since Epic #148 `axis?` (`"x"`, `"y"`: the pointer moves it follows),
+  `fixed?` (a scroll asks no frame of it: a resize) and `click?` (the click ending it: a
+  resizer's double click fits)) on the shared `PointerDrag` machinery (`engine/drag.ts`): one drag
+  at a time, whoever owns it; a column's resize and move are feature drags, a row's stays the
+  core's `RowDrag` until Epic #151.
 - **The registry** (`src/feature/registry.ts`): `createDataGridModel({ features })` composes
   them once (`composeFeatures`: one function or list per contribution point, nothing allocated
   per cell; `undefined` when no feature contributes) and keeps them for its engines and root in
@@ -1131,14 +1180,15 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   import of the other's types; `get("cell-selection")`), never by importing its code.
 - **The root** (`FeatureRoot`): its props' names, the model options they give, its controlled
   pieces (`defineControlled`, the same `bindControlled`; `ControlledProp.first`: followed and
-  settled with the layout inputs, the active position), `follow` (plain props followed after the
+  settled before the data props, `"layout"` first of all (the widths, the order, the collapsed
+  groups, Epic #148), `true` right after (the active position)), `follow` (plain props followed after the
   core's data props: `rowSelection`, `cellSelection`), `engineOptions` (`fillable` while
   `onFill`) and `events(engine, props, model)` (`onFill`, `onRangePaste`, `onCellEdit`). `bindGridRoot` takes
   `features` from the first props: fixed for the root's life, a later list (by its items) is
-  told once with `console.warn` and not taken. Settle order: the layout inputs and the active
-  position, the expanded rows, the row groups, then the features' pieces in install order (the
-  edit's since Epic #146; only the order of `on…Change` calls in one commit can differ from
-  before Epics #144 and #146).
+  told once with `console.warn` and not taken. Settle order: the layout inputs (`first:
+  "layout"`) and the active position (`first: true`), the expanded rows, the row groups, then the
+  features' other pieces in install order (the edit's since Epic #146; only the order of
+  `on…Change` calls in one commit can differ from before Epics #144, #146 and #148).
   `GRID_ROOT_PROPS` lists only the core's; `withoutRootProps(props, features)` leaves the
   installed features' props off the element too.
 - **Typed keys**: `DataGridModel<TRow, TNode, TFeatures>`' key maps are the core's merged with
@@ -1150,14 +1200,15 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   `CommandEvent.command` is a string (`AnyFeatures`: a known feature whose types name only
   optional props, the clipboard, is still known). Root props: `GridRootProps<TRow, TNode,
   TFeatures>` (`sortColumns` compiles only with `sorting()`, `activePosition` only with
-  `navigation()`, `onFill` only with `fillHandle()`). `GridView` declares none of a feature's
+  `navigation()`, `onFill` only with `fillHandle()`, `columnWidths` only with `columnResize()`). `GridView` declares none of a feature's
   fields: read them as `view as GridView & FillView`. The adapters' hooks, composables, inject
   functions and refs take the features as a type argument (`useDataGrid<Person, typeof
   features>()`, `createDataGridRef<…>()`); any ref fits a root. Type fixtures:
   `tests/types/features.ts(x)` in every package.
 - **Entries**: each feature is a tsdown entry and an `exports`/`publishConfig.exports` subpath
   of the core; an adapter re-exports it under its own subpath, with its own hooks there
-  (`useSelectAll` in `/row-selection`, `useFillHandle` in `/fill`; Angular: an ng-packagr
+  (`useSelectAll` in `/row-selection`, `useFillHandle` in `/fill`, `useColumnResizer` in
+  `/column-resize`; Angular: an ng-packagr
   secondary entry with its own `[dataGridRoot][dataGridX]` directive for the feature's inputs).
   Nothing a main entry imports reaches a feature (the entry tests), and **the bundle guard**
   (`scripts/check-features.ts`, run by `pnpm build`, tested by
@@ -1165,11 +1216,14 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
   holds a feature's markers (its command, `get` and `is` keys, read from the built feature) or
   imports a feature's entry point. `pnpm size` lists each entry.
 - **The bare grid**: `apps/playground/fixtures/bare-grid` (no feature, both structures, both
-  axes scaled: a table, no tab stop, arrows do nothing) and `e2e/bare.spec.ts`. Every example
+  axes scaled: a table, no tab stop, arrows do nothing; its first column declared pinned,
+  resizable and reorderable, which scrolls, never moves nor resizes) and `e2e/bare.spec.ts`. Every example
   and fixture installs what it uses (`navigation()` wherever keys move: practically all;
   `useLocalRows`' props carry the sort: install `sorting()` with them; `editing()` wherever a
-  column is `editable`); the stress fixture
-  installs every migrated feature (sorting, Epic #144's five and editing), its commit counts
+  column is `editable`; the column features wherever a column is `pinned`, `resizable`,
+  `reorderable` or a group `collapsible`); the stress fixture
+  installs every migrated feature (sorting, Epic #144's five, editing and the four column
+  features), its commit counts
   unchanged (D9).
 
 ## Commands
@@ -1196,8 +1250,10 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
 packages/core/      @fragiola/data-grid        src/<domain>/ (axis, engine, model, …, feature,
                                                utils), local/, the features (sorting/,
                                                navigation/, row-selection/, range/, clipboard/,
-                                               fill/, editing/: each feature.ts and index.ts,
-                                               its entry);
+                                               fill/, editing/, column-resize/,
+                                               column-reorder/, column-pinning/,
+                                               column-group-collapse/: each feature.ts and
+                                               index.ts, its entry);
                                                tests/ mirrors src/
 packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid.*`), context.ts
                     src/components/            one primitive per file (root.tsx, grid.tsx, cell.tsx, …)
@@ -1206,7 +1262,8 @@ packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid
                     src/utils/                 pure helpers (cells-of.ts, row-style.ts, use-render.ts, …)
                     src/local/, src/<feature>/ the opt-in entries (sorting/, navigation/,
                                                row-selection/, range/, clipboard/, fill/,
-                                               editing/);
+                                               editing/, column-resize/, column-reorder/,
+                                               column-pinning/, column-group-collapse/);
                                                tests/ named after behaviour
 packages/vue/       @fragiola/data-grid-vue    the same layout: src/components/ (root.ts, …),
                                                src/composables/ (use-cell.ts, …), src/utils/,
@@ -1218,7 +1275,9 @@ packages/angular/   @fragiola/data-grid-angular src/public-api.ts (the entry), s
                                                utils/; src/local/, src/<feature>/ (ng-packagr's
                                                secondary entries: local/, sorting/,
                                                navigation/, row-selection/, range/, clipboard/,
-                                               fill/, editing/ ng-package.json);
+                                               fill/, editing/, column-resize/,
+                                               column-reorder/, column-pinning/,
+                                               column-group-collapse/ ng-package.json);
                                                scripts/check-dist.ts
 apps/playground/    src/main.tsx, app.tsx      the entries
                     src/shell/                 the shell: catalog, sidebar, toolbar, stage, source
@@ -1376,7 +1435,8 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   `data-row-index`/`data-column-index`; e2e selectors use them, never class names.
 - **No text and no names.** Primitives render only their children (or the column's renderer) and
   set no `aria-label` of their own.
-- **A column resizer is the app's element (Epic #70, W3).** `useColumnResizer(cell)` returns
+- **A column resizer is the app's element (Epic #70, W3).** `useColumnResizer(cell)` (from
+  `/column-resize`, with `columnResize()` installed: Epic #148) returns
   `{ state, props }` (`state`: `columnKey`, `resizable`, `resizing`, `width` (on screen: a flex
   share or an automatic width included), `minWidth`, `maxWidth`, `edge` (`"end"`, `"start"` for
   a column pinned at the end: the edge the app places it on); `props`: the separator's ARIA, `tabIndex`, `data-grid-column-resizer`,
@@ -1411,7 +1471,7 @@ Every primitive follows the same rules. Tests enforce them; keep it that way.
   app's `onPointerDown`, as a resizer's does.
 - **Hooks have one shape.** `useDataGrid()` is `{ model, engine }` (with a `gridRef`, or `null`
   until a root holds it; `useRow`'s props hold a measured row's `ref`); a part hook (`useRow`, `useCell`, `useHeaderCell`,
-  `useColumnResizer`, `useGroupLabel`, `useRowDragHandle`, `useGroupToggle`, `/fill`'s `useFillHandle`, `useSummaryRow`, `useSummaryCell`) returns
+  `useGroupLabel`, `useRowDragHandle`, `useGroupToggle`, `/column-resize`'s `useColumnResizer`, `/fill`'s `useFillHandle`, `useSummaryRow`, `useSummaryCell`) returns
   `{ state, props }`, the structural style in `props.style`.
 - **Keys go to the engine after the consumer.** `Root` calls the engine's `keydown` after the
   consumer's `onKeyDown` (on `Root` or on its `render` element), and a cell's `onKeyDown` runs
@@ -1512,9 +1572,9 @@ React prop.
   structural style gets its `px` (Vue adds no unit).
 - **Listeners in Vue casing compose as in React**: internal first, then the consumer's, then the
   engine's (`after`: `keydown`, `click`, `pointerdown`, `copy`, `paste` on `Root`), so a
-  `preventDefault` cancels the grid's. `Root`'s own callbacks are props (`onColumnWidthsChange`,
-  or `@column-widths-change`); a feature's are attributes (below: `@active-position-change`,
-  editing's `@editing-cell-change` and `@cell-edit`).
+  `preventDefault` cancels the grid's. `Root`'s own callbacks are props (`onExpandedRowKeysChange`,
+  or `@expanded-row-keys-change`); a feature's are attributes (below: `@active-position-change`,
+  editing's `@editing-cell-change` and `@cell-edit`, resizing's `@column-widths-change`).
 - **A feature's props are fallthrough attributes** (Epic #141): `Root` declares its own props
   once, so `sort-columns`/`sortColumns`, `@sort-columns-change` reach it as attrs; it hands them
   to the core through getters of the latest values (`gridPropsOf`, only with features) and keeps
@@ -1546,8 +1606,8 @@ React prop.
   on its element (the template's first root element is the part's): `*dataGridHeader`,
   `*dataGridEmpty` (it makes the area and the row around the app's cell), `*dataGridRowDetail`,
   `*dataGridSummary="'top'"`, and the app's elements React gives through hooks:
-  `*dataGridColumnResizer`, `*dataGridGroupToggle`, `*dataGridFillHandle` (`/fill`),
-  `*dataGridCellEdit` (`/editing`, Epic #146);
+  `*dataGridGroupToggle`, `*dataGridColumnResizer` (`/column-resize`, Epic #148),
+  `*dataGridFillHandle` (`/fill`), `*dataGridCellEdit` (`/editing`, Epic #146);
   `[dataGridRowDragHandle]` and `[dataGridGroupLabel]` always render. Selectors
   `dataGrid<Part>`, classes `DataGrid<Part>`, `exportAs` the selector; `DATA_GRID` is every
   directive (React's `DataGrid` namespace).
@@ -1583,10 +1643,16 @@ React prop.
   `rangePaste`; `[dataGridFill]`: on by presence (`[dataGridFill]="false"` off, React's `onFill`
   given), the output `fill`, replacing the root's `fillable` and `fill`; `[dataGridEditing]`
   (Epic #146): `[(editingCell)]`, `[defaultEditingCell]`, the output `cellEdit`, its row typed by
-  `[dataGridEditing]="columns"`), so they compile only
+  `[dataGridEditing]="columns"`; Epic #148: `[dataGridColumnResize]`: `[(columnWidths)]`,
+  `[defaultColumnWidths]`; `[dataGridColumnReorder]`: `[(columnOrder)]`, `[defaultColumnOrder]`;
+  `[dataGridColumnGroupCollapse]`: `[(collapsedGroupKeys)]`, `[defaultCollapsedGroupKeys]`;
+  `columnPinning()` has no input; the root lost its own width, order and collapsed groups inputs
+  and outputs), so they compile only
   where the app imports it; the root takes `[features]`. `*dataGridFillHandle` and
   `injectFillHandle` are `/fill`'s, `*dataGridCellEdit` and `injectCellEdit` `/editing`'s (through
-  the private `ɵinjectGrid` and `ɵDATA_GRID_CELL`), `injectSelectAll` `/row-selection`'s. The
+  the private `ɵinjectGrid` and `ɵDATA_GRID_CELL`), `injectSelectAll` `/row-selection`'s,
+  `*dataGridColumnResizer` and `injectColumnResizer` `/column-resize`'s (through `ɵinjectGrid`,
+  `ɵbindPart`, `ɵstructuralView`). The
   model and the engine are made from the inputs the first time a part reads them (after the
   inputs are set: `injectDataGrid()`'s are read when used). The view is a signal fed by the
   engine's subscription; a scroll within the rendered window changes no signal (D9,

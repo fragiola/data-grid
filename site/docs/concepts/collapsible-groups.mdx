@@ -41,6 +41,75 @@ the rows every column needs, so opening or closing a group never changes its hei
 with fewer groups above it spans the rows down to the last, as in any
 [column group](/docs/concepts/column-groups).
 
+## Install collapsing
+
+Collapsing is a [feature](/docs/concepts/features): `columnGroupCollapse()` from the
+`/column-group-collapse` entry. Without it, a `collapsible` group stays expanded: it shows its
+children whose `groupShow` is `"expanded"` or unset, its header cell has no `collapsed` state nor
+`data-collapsible`, `column-groups.toggle` and `column-groups.set` are `not_found` (and do not
+compile, as `collapsedGroupKeys`, `defaultCollapsedGroupKeys` and `onCollapsedGroupKeysChange` do
+not). The groups themselves (their header rows, spans and [sticky labels](#sticky-labels)) are the
+core's: they are how columns are declared.
+
+<Framework name="react">
+
+```tsx title="sales.tsx"
+import { columnGroupCollapse } from "@fragiola/data-grid-react/column-group-collapse";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation(), columnGroupCollapse()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="sales.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnGroupCollapse } from "@fragiola/data-grid-vue/column-group-collapse";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+
+const features = [navigation(), columnGroupCollapse()] as const;
+const DataGrid = typedDataGrid<Sales, typeof features>();
+</script>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+The collapsed groups' inputs and output are `DataGridColumnGroupCollapse`'s, a directive on the
+root's element, from `/column-group-collapse`: `[(collapsedGroupKeys)]` and
+`[defaultCollapsedGroupKeys]`.
+
+```ts title="sales.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import {
+    columnGroupCollapse,
+    DataGridColumnGroupCollapse,
+} from "@fragiola/data-grid-angular/column-group-collapse";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+
+@Component({
+    selector: "app-sales",
+    imports: [DATA_GRID, DataGridColumnGroupCollapse],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="rows"
+            dataGridColumnGroupCollapse [(collapsedGroupKeys)]="collapsed">
+            <!-- … -->
+        </div>
+    `,
+})
+export class Sales {
+    readonly features = [navigation(), columnGroupCollapse()];
+    collapsed: readonly string[] = [];
+    // …
+}
+```
+
+</Framework>
+
 ## Opening and closing
 
 The model keeps the collapsed groups' keys, `collapsedGroupKeys`, in the order they were
@@ -60,6 +129,7 @@ On `Root` they are controlled or not, as every piece of grid state: `collapsedGr
 
 ```tsx title="grid.tsx"
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={rows}
     defaultCollapsedGroupKeys={["2025"]}
@@ -75,7 +145,7 @@ and the cell carries `data-collapsible` and, while closed, `data-collapsed`.
 
 ```tsx title="group-header.tsx"
 function GroupHeader({ cell }: { cell: HeaderCellInfo<Sales> }) {
-    const { model } = useDataGrid<Sales>();
+    const { model } = useDataGrid<Sales, typeof features>();
     const { state } = useHeaderCell(cell);
     return (
         <>
@@ -166,6 +236,6 @@ A pinned group is always in view: its label stays where it is.
 
 | attribute | on | when |
 | --- | --- | --- |
-| `data-collapsible` | header cell | it is a collapsible group's |
-| `data-collapsed` | header cell | its group is closed |
+| `data-collapsible` | header cell | it is a collapsible group's (with `columnGroupCollapse()`) |
+| `data-collapsed` | header cell | its group is closed (with `columnGroupCollapse()`) |
 | `data-grid-part="group-label"` | group label | always, with `data-grid-group-label` naming its group's key |

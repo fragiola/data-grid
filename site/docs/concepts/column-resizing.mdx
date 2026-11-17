@@ -9,6 +9,81 @@ look, its cursor and its name. The grid renders none.
 
 <Example id="column-resizing" />
 
+## Install resizing
+
+Resizing is a [feature](/docs/concepts/features): `columnResize()` from the `/column-resize`
+entry, which also holds the handle's hook (`useColumnResizer`). Without it, a column's
+`resizable`, `minWidth` and `maxWidth` resize nothing: a handle has no behaviour (no drag, no keys,
+no fit), `fit-columns` does nothing, the header cells carry no `data-resizable`, and
+`columnWidths`, `defaultColumnWidths`, `onColumnWidthsChange` and the `column-widths.*` commands do
+not compile. A column is its declared width: its `width`, its
+[automatic width or flex share](/docs/concepts/auto-widths), which stay the core's (a resizable
+column's limits keep those too).
+
+<Framework name="react">
+
+```tsx title="people.tsx"
+import { columnResize, useColumnResizer } from "@fragiola/data-grid-react/column-resize";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation(), columnResize()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnResize } from "@fragiola/data-grid-vue/column-resize";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+
+const features = [navigation(), columnResize()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
+</script>
+```
+
+A handle in a header cell's slot takes `useColumnResizer(() => cell)`, from the same
+`/column-resize` entry.
+
+</Framework>
+
+<Framework name="angular">
+
+The widths' inputs and output are `DataGridColumnResize`'s, a directive on the root's element:
+`[(columnWidths)]` and `[defaultColumnWidths]`. A handle is `*dataGridColumnResizer`
+(`DataGridColumnResizer`), and `injectColumnResizer` its injection function, all from
+`/column-resize`.
+
+```ts title="people.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import {
+    columnResize,
+    DataGridColumnResize,
+    DataGridColumnResizer,
+} from "@fragiola/data-grid-angular/column-resize";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+
+@Component({
+    selector: "app-people",
+    imports: [DATA_GRID, DataGridColumnResize, DataGridColumnResizer],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="people"
+            dataGridColumnResize [(columnWidths)]="widths">
+            <!-- … <div *dataGridColumnResizer="cell" aria-label="Resize"></div> … -->
+        </div>
+    `,
+})
+export class People {
+    readonly features = [navigation(), columnResize()];
+    widths: ColumnWidths = {};
+    // …
+}
+```
+
+</Framework>
+
 ## Resizable columns
 
 A column with `resizable: true` can be resized; the others keep their `width`. A resizable column
@@ -42,6 +117,7 @@ const [widths, setWidths] = useState<ColumnWidths>({});
 
 <button onClick={() => setWidths({})}>Reset widths</button>
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={people}
     columnWidths={widths}
@@ -57,19 +133,15 @@ are a plain object.
 
 ## The handle
 
-`useColumnResizer(cell)` returns the state and the props of a handle you render inside a header
+`useColumnResizer(cell)` (from `/column-resize`) returns the state and the props of a handle you render inside a header
 cell. Under a cell that does not resize, `state.resizable` is false and there are no props:
 render nothing there. A header cell given children shows only them, so
 `headerCellContent(cell)` writes what it would show by default (the column's or the group's
 `renderHeaderCell`, else its `name`) before your handle:
 
 ```tsx title="resizer.tsx"
-import {
-    DataGrid,
-    type HeaderCellInfo,
-    headerCellContent,
-    useColumnResizer,
-} from "@fragiola/data-grid-react";
+import { DataGrid, type HeaderCellInfo, headerCellContent } from "@fragiola/data-grid-react";
+import { useColumnResizer } from "@fragiola/data-grid-react/column-resize";
 
 function Resizer({ cell }: { cell: HeaderCellInfo<Person> }) {
     const { state, props } = useColumnResizer(cell);

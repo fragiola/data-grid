@@ -86,7 +86,7 @@ const DataGrid = typedDataGrid<Person, typeof features>();
 | `className`, `style` | the `class` and `style` attributes, merged under the structural style (structural keys win; the layers and the pinned cells drop the keys the engine writes, as in React) |
 | `className={(state) => …}`, `style={(state) => …}` | no function form: a `data-*` selector (`data-active:outline-2`), or the `render` slot's `state` |
 | `onKeyDown`, `onClick`, `onPointerDown`, `onCopy`, `onPaste`, … | listeners (`@keydown`, `@click`, `@pointerdown`, `@copy`, `@paste`): the part's own first, then yours, then the grid's keys, clicks, presses and clipboard on `Root`, so `preventDefault` in yours cancels the grid's |
-| `onColumnWidthsChange` and the other `Root` callbacks | the same props, `:on-column-widths-change="…"`, or the listener form `@column-widths-change="…"` |
+| `onColumnWidthsChange` (with `columnResize()`) and the other `Root` callbacks | the same props, `:on-column-widths-change="…"`, or the listener form `@column-widths-change="…"` |
 | `features={features}` | `:features="features"`, fixed when the grid is created |
 | a feature's props (`sortColumns`, `activePosition`, `rowSelection`, `selectedRange`, `onRangePaste`, `onFill`, `editingCell`, `onCellEdit`, …) | attributes on `Root`: `:sort-columns`, `@sort-columns-change`, `:active-position`, `@active-position-change`, `:on-fill` (or camelCase), typed by `typedDataGrid<TRow, typeof features>()` |
 | `ref` | a template ref on a part is its component instance; the element is its `$el`. A handle on the grid is a `gridRef` |
@@ -165,7 +165,7 @@ row or cell (a value, a ref or a getter) and returns `{ state, props }` as compu
 | `useHeaderRows()`, `useHeaderCells(row?)` | the header rows, a header row's cells |
 | `useSummaryRows(position?)`, `useSummaryCells(row?)` | the summary rows, a summary row's cells |
 | `useRow(row)`, `useCell(cell)`, `useHeaderCell(cell)`, `useSummaryRow(row)`, `useSummaryCell(cell)`, `useRowDetail(row)` | a part's `{ state, props }` |
-| `useColumnResizer(cell)`, `useRowDragHandle(row)`, `useGroupToggle(row)`, `useGroupLabel(cell)` | the `{ state, props }` of an element of yours: a resize handle, a drag handle, a group's toggle, a sticky group label |
+| `useRowDragHandle(row)`, `useGroupToggle(row)`, `useGroupLabel(cell)`, `/column-resize`'s `useColumnResizer(cell)` | the `{ state, props }` of an element of yours: a drag handle, a group's toggle, a sticky group label, a resize handle |
 | `/editing`'s `useCellEdit(cell)` | the editor props of the cell being edited (`EditCellRenderProps`), a computed ref, `null` otherwise |
 
 The opt-in entry points have the same exports as React's:

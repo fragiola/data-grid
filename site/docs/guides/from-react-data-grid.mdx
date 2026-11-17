@@ -32,7 +32,8 @@ deliberately does nothing.
 - **The grid writes no data.** There is no `onRowsChange`: an edit, a paste, a fill and a row
   move are events, and your app writes its rows.
 - **What you need, you install.** The keys, sorting, row selection, ranges, the clipboard, the
-  fill handle and editing are [features](/docs/concepts/features), each from its own entry: a
+  fill handle, editing and the columns' resizing, reordering, pinning and collapsing are
+  [features](/docs/concepts/features), each from its own entry: a
   grid gets them through `features`, and what it does not install is not in your bundle. React
   Data Grid's keyboard is `navigation()`; without it the grid is a plain table.
 
@@ -102,9 +103,9 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 
 | React Data Grid | here | notes |
 | --- | --- | --- |
-| `columnWidths` (a `Map`), `onColumnWidthsChange` | `columnWidths` (`{ [columnKey]: px }`), `onColumnWidthsChange`, `defaultColumnWidths` | only the widths a person or your code set; a column's own `width` is the rest. See [Column resizing](/docs/concepts/column-resizing) |
+| `columnWidths` (a `Map`), `onColumnWidthsChange` | `columnWidths` (`{ [columnKey]: px }`), `onColumnWidthsChange`, `defaultColumnWidths`, with `columnResize()` | only the widths a person or your code set; a column's own `width` is the rest. See [Column resizing](/docs/concepts/column-resizing) |
 | `onColumnResize(column, width)` | `onColumnWidthsChange` | or `engine.subscribe("column-resize", …)` for the drag as it happens |
-| `onColumnsReorder(sourceKey, targetKey)` | `columnOrder`, `onColumnOrderChange`, `defaultColumnOrder` | the order is a list of keys; you never reorder `columns` yourself. See [Column reordering](/docs/concepts/column-reordering) |
+| `onColumnsReorder(sourceKey, targetKey)` | `columnOrder`, `onColumnOrderChange`, `defaultColumnOrder`, with `columnReorder()` | the order is a list of keys; you never reorder `columns` yourself. See [Column reordering](/docs/concepts/column-reordering) |
 | `defaultColumnOptions` | — | spread your own defaults into each column: `columns.map((column) => ({ resizable: true, ...column }))` |
 
 ### Events
@@ -155,11 +156,11 @@ Inside the root, `useDataGrid()` returns the same `{ model, engine }`. See
 | `name` (a string or an element) | `name` (a string) | the header's text; an element goes in `renderHeaderCell` |
 | `width` (a number, `"auto"`, `"1fr"`, a percentage, `"max-content"`) | `width` (pixels, required), `flex`, `autoSize` | `flex` shares the room left in proportion, `autoSize` fits the content once, and the `fit-columns` action fits on demand. See [Automatic widths](/docs/concepts/auto-widths) |
 | `minWidth` (default 50), `maxWidth` | `minWidth` (default 40), `maxWidth` | they limit a resizable column |
-| `frozen` (`true`, `"start"`, `"end"`) | `pinned` (`"start"` or `"end"`) | see [Pinned columns](/docs/concepts/pinned-columns) |
-| `resizable` | `resizable` | the handle is your element, with `useColumnResizer(cell)`'s props |
+| `frozen` (`true`, `"start"`, `"end"`) | `pinned` (`"start"` or `"end"`) | with `columnPinning()` installed (`/column-pinning`). See [Pinned columns](/docs/concepts/pinned-columns) |
+| `resizable` | `resizable` | with `columnResize()` installed; the handle is your element, with `useColumnResizer(cell)`'s props (both from `/column-resize`) |
 | `sortable` | `sortable` | the same, with `sorting()` installed |
 | `sortDescendingFirst` | — | no direct equivalent: a column sorts ascending first. A middleware gives a column the other cycle ([Descending first](#descending-first)) |
-| `draggable` | `reorderable` | on columns and on groups; the indicator is yours (`data-drop-target`) |
+| `draggable` | `reorderable` | on columns and on groups, with `columnReorder()` installed (`/column-reorder`); the indicator is yours (`data-drop-target`) |
 | `renderCell(props)` | `renderCell({ row, rowIndex, column, columnIndex, value })` | no `onRowChange`: update your rows. A cell's children replace it entirely |
 | `renderHeaderCell(props)` | `renderHeaderCell({ column, columnIndex })` | `headerCellContent(cell)` is the default content, to place a resize handle beside |
 | `renderEditCell({ row, onRowChange, onClose })` | `renderEditCell({ row, value, initialValue, startKey, onChange, onCommit, onCancel, editorProps })` | the draft is a value, not a row; `editorProps` marks a portalled popover as part of the edit |
@@ -221,7 +222,8 @@ model.use((ctx, next) => {
 
 A group is `{ key, name, children }`, as in React Data Grid, with a **`key`** of its own (unique
 among the groups and columns). `headerCellClass` becomes `className` on its `HeaderCell`. A group
-can move whole (`reorderable`) and collapse (`collapsible`, its children's `groupShow`), with a
+can move whole (`reorderable`, with `columnReorder()`) and collapse (`collapsible`, its children's
+`groupShow`, with `columnGroupCollapse()`), with a
 label that stays in view as the columns scroll. See [Column groups](/docs/concepts/column-groups)
 and [Collapsible groups](/docs/concepts/collapsible-groups).
 

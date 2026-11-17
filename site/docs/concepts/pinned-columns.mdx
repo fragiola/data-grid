@@ -10,6 +10,50 @@ as divs or as a real table.
 
 <Example id="pinned-columns" />
 
+## Install pinning
+
+Pinning is a [feature](/docs/concepts/features): `columnPinning()` from the `/column-pinning`
+entry. It has no props: installed, the columns' `pinned` keeps them in view. Without it, `pinned`
+is ignored: every column scrolls, no cell is sticky or carries `data-pinned`, and
+`get("pinned-column-keys")` does not compile. The parts a `pinned` declares stay the core's column
+model either way: the same validation, spans that never cross a part, and
+[moves](/docs/concepts/column-reordering) within a part, so a list of columns means the same with
+and without pinning. The layers the grid writes (the sticky insets, the windows between the
+strips) are the core's too, and lay nothing out without pinned columns in effect.
+
+<Framework name="react">
+
+```tsx title="people.tsx"
+import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation(), columnPinning()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+
+const features = [navigation(), columnPinning()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
+</script>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+`columnPinning()` comes from `@fragiola/data-grid-angular/column-pinning`, and has no directive:
+give it in the root's `[features]` (`readonly features = [navigation(), columnPinning()]`).
+
+</Framework>
+
 ## Pinning a column
 
 Give the leading columns `pinned: "start"` and the trailing ones `pinned: "end"`. The columns
@@ -53,6 +97,7 @@ end sit at the view's end, or, in a grid narrower than its view, right after the
 
 When the pinned columns of both parts are as wide as the view or wider (a narrow screen), they
 would hide every other column: they scroll with the rest until the view is wider again.
+`get("pinned-column-keys")` reads the columns pinned as declared, `{ start, end }`, their keys.
 
 A column moves only within its part ([reordering](/docs/concepts/column-reordering)), and a
 column pinned at the end flexes and fits like any other; it [resizes](/docs/concepts/column-resizing)

@@ -17,13 +17,16 @@ A column's width on screen is the first of these, within its `minWidth` and `max
 resizable (a column that does not resize has no limits):
 
 1. the width a person set (`columnWidths`: a drag, a key, a fit, or your own
-   `column-widths.set`, see [Column resizing](/docs/concepts/column-resizing));
+   `column-widths.set`, with `columnResize()` installed, see
+   [Column resizing](/docs/concepts/column-resizing));
 2. its automatic width, when it has `autoSize`;
 3. its share of the view, when it has `flex`;
 4. its `width`.
 
 A grid without `flex` or `autoSize` lays its columns out as before: nothing is measured, and a
-change of the view's width changes no column.
+change of the view's width changes no column. `flex` and `autoSize` are the core's, how a column's
+width is declared: they need no feature. Fitting a column on demand (a double click, Enter,
+`fit-columns`) is resizing's, `columnResize()` from `/column-resize`: without it, none fits.
 
 ## Flex columns
 
@@ -74,16 +77,18 @@ the fitted ones, so a controlled parent answers once:
 - **Enter** on a focused handle, its keyboard equivalent
   ([Keyboard and accessibility](/docs/concepts/keyboard#resize-handles));
 - the engine's **`fit-columns`** action, for a button of yours: `columnKeys` names the columns (a
-  group's key, its columns), and without it every rendered resizable column fits.
+  group's key, its columns), and without it every rendered resizable column fits. It is
+  `columnResize()`'s: without the feature, it does nothing.
 
 ```tsx title="fit-all.tsx"
-const gridRef = useDataGridRef<Person>();
+const features = [navigation(), columnResize()];
+const gridRef = useDataGridRef<Person, typeof features>();
 
 <button onClick={() => gridRef.current?.engine.run("fit-columns", {})}>Fit all</button>
 <button onClick={() => gridRef.current?.engine.run("fit-columns", { columnKeys: ["email"] })}>
     Fit Email
 </button>
-<DataGrid.Root gridRef={gridRef} columns={columns} rows={people}>
+<DataGrid.Root features={features} gridRef={gridRef} columns={columns} rows={people}>
     {/* … */}
 </DataGrid.Root>
 ```

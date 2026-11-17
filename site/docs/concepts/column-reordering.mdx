@@ -9,6 +9,74 @@ cursor, and any words a screen reader hears. The grid draws and says nothing.
 
 <Example id="column-reordering" />
 
+## Install reordering
+
+Reordering is a [feature](/docs/concepts/features): `columnReorder()` from the `/column-reorder`
+entry. Without it, a column's or a group's `reorderable` moves nothing: a header cell's drag is a
+plain press (focus, a sort), Ctrl/⌘+Shift+←/→ moves nothing, the header cells carry no
+`data-reorderable`, and `columnOrder`, `defaultColumnOrder`, `onColumnOrderChange` and the
+`column-order.*` commands do not compile. The columns keep their declared order. It reads the
+pinned parts as declared (the core's column model) and the pinned strips in effect from the
+engine, never [pinning](/docs/concepts/pinned-columns)'s code: each works without the other.
+
+<Framework name="react">
+
+```tsx title="people.tsx"
+import { columnReorder } from "@fragiola/data-grid-react/column-reorder";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation(), columnReorder()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="people.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnReorder } from "@fragiola/data-grid-vue/column-reorder";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+
+const features = [navigation(), columnReorder()] as const;
+const DataGrid = typedDataGrid<Person, typeof features>();
+</script>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+The order's inputs and output are `DataGridColumnReorder`'s, a directive on the root's element,
+from `/column-reorder`: `[(columnOrder)]` and `[defaultColumnOrder]`.
+
+```ts title="people.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import {
+    columnReorder,
+    DataGridColumnReorder,
+} from "@fragiola/data-grid-angular/column-reorder";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+
+@Component({
+    selector: "app-people",
+    imports: [DATA_GRID, DataGridColumnReorder],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="people"
+            dataGridColumnReorder [(columnOrder)]="order">
+            <!-- … -->
+        </div>
+    `,
+})
+export class People {
+    readonly features = [navigation(), columnReorder()];
+    order: ColumnOrder = [];
+    // …
+}
+```
+
+</Framework>
+
 ## Reorderable columns
 
 A column or a group with `reorderable: true` can be moved; the others stay where they are
@@ -46,6 +114,7 @@ const [order, setOrder] = useState<ColumnOrder>([]);
 
 <button onClick={() => setOrder([])}>Reset order</button>
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={people}
     columnOrder={order}
@@ -177,7 +246,7 @@ which column moved and where, in your columns' names.
 ```tsx title="people.tsx"
 const [order, setOrder] = useState<ColumnOrder>([]);
 const [message, setMessage] = useState("");
-const gridRef = useDataGridRef<Person>();
+const gridRef = useDataGridRef<Person, typeof features>();
 const moving = useRef(false);
 
 useEffect(
@@ -193,6 +262,7 @@ useEffect(
 
 <span role="status">{message}</span>
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={people}
     gridRef={gridRef}

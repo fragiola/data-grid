@@ -35,7 +35,7 @@ select by them, never by class names.
 | `data-loading` | row, cell | its row is not loaded yet (`getRow` answered `undefined`) |
 | `data-empty` | root, grid | the grid has no rows ([Empty state](/docs/guides/empty-state)) |
 | `data-group` | header cell | it is a group's ([Column groups](/docs/concepts/column-groups)) |
-| `data-collapsible` | header cell | it is a collapsible group's ([Collapsible groups](/docs/concepts/collapsible-groups)) |
+| `data-collapsible` | header cell | it is a collapsible group's, with `columnGroupCollapse()` ([Collapsible groups](/docs/concepts/collapsible-groups)) |
 | `data-collapsed` | header cell | its collapsible group is closed |
 | `data-expanded` | row | it shows its detail ([Master-detail](/docs/guides/master-detail)) |
 | `data-group-row` | row | it is a group row ([Row grouping](/docs/concepts/row-grouping)) |
@@ -45,14 +45,14 @@ select by them, never by class names.
 | `data-selected` | row | it is selected ([Row selection](/docs/concepts/row-selection)) |
 | `data-selected-cell` | cell | it is in the selected range ([Cell selection](/docs/concepts/cell-selection)) |
 | `data-range-edge` | cell | the range's edges it sits on, space-separated: `top`, `bottom`, `start`, `end` (match one with `~=`) |
-| `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned ([Pinned columns](/docs/concepts/pinned-columns)) |
+| `data-pinned` | cell, header cell | `start` or `end`: where its column is pinned, with `columnPinning()` ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `data-pinned-edge` | cell, header cell | its pinned part's edge: it ends at the last column pinned at the start, or starts at the first pinned at the end |
 | `data-sortable` | header cell | its column is sortable, with `sorting()` installed ([Sorting](/docs/concepts/sorting)) |
 | `data-sort` | header cell | `ascending` or `descending`, while its column is sorted |
 | `data-sort-priority` | header cell | its column's place in the sort, 1-based |
-| `data-resizable` | header cell | its column can be resized, or for a group one of its columns ([Column resizing](/docs/concepts/column-resizing)) |
+| `data-resizable` | header cell | its column can be resized, or for a group one of its columns, with `columnResize()` ([Column resizing](/docs/concepts/column-resizing)) |
 | `data-resizing` | header cell, resize handle | a drag is resizing its column (or group) |
-| `data-reorderable` | header cell | its column or group can be moved ([Column reordering](/docs/concepts/column-reordering)) |
+| `data-reorderable` | header cell | its column or group can be moved, with `columnReorder()` ([Column reordering](/docs/concepts/column-reordering)) |
 | `data-dragging` | header cell | a drag is moving its column or group |
 | `data-drop-target` | header cell | `before` or `after`: a drag would drop beside it, on that side |
 | `data-dragging` | row, row drag handle | a drag is moving the row ([Row reordering](/docs/concepts/row-reordering)) |
