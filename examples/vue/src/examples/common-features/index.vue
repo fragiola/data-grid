@@ -4,6 +4,8 @@ import {
     type RowKey,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
+import { columnResize } from "@fragiola/data-grid-vue/column-resize";
 import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
@@ -42,8 +44,16 @@ interface Job extends BudgetedTask {
 }
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection, cell editing
-const features = [sorting(), navigation(), rowSelection(), editing()] as const;
+// navigation (the keys, the active cell, the tab stop), row selection, cell editing, column
+// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls)
+const features = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    editing(),
+    columnResize(),
+    columnPinning(),
+] as const;
 
 const DataGrid = typedDataGrid<Job, typeof features>();
 

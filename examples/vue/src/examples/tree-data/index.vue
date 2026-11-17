@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type RowKey, typedDataGrid } from "@fragiola/data-grid-vue";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
@@ -21,8 +22,14 @@ const searchInset = {
 };
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-const features = [sorting(), navigation(), rowSelection()] as const;
+// navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
+// every column scrolls)
+const features = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    columnPinning(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

@@ -6,6 +6,8 @@ import {
     type RowKey,
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
+import { columnReorder } from "@fragiola/data-grid-vue/column-reorder";
+import { columnResize } from "@fragiola/data-grid-vue/column-resize";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
@@ -50,8 +52,15 @@ import { COMPANY_IDS, isSortKey, type SortKey } from "./state";
 import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection
-const features = [sorting(), navigation(), rowSelection()] as const;
+// navigation (the keys, the active cell, the tab stop), row selection, column resizing (its
+// handles, keys and fits), column reordering (a header cell's drag and keys)
+const features = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    columnResize(),
+    columnReorder(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

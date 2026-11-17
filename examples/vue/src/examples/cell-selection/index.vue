@@ -6,6 +6,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { clipboard } from "@fragiola/data-grid-vue/clipboard";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { cellRange } from "@fragiola/data-grid-vue/range";
 import { h, ref, shallowRef, type VNodeChild } from "vue";
@@ -167,8 +168,14 @@ function withPaste(
 }
 
 // the features the grid installs: cell navigation (the keys, the active cell, the tab stop), cell
-// ranges, the clipboard (a range's copy and paste)
-const features = [navigation(), cellRange(), clipboard()] as const;
+// ranges, the clipboard (a range's copy and paste), pinned columns (without it, every column
+// scrolls)
+const features = [
+    navigation(),
+    cellRange(),
+    clipboard(),
+    columnPinning(),
+] as const;
 
 // the parts typed by the row type: a template cannot pass `Line` as a type argument
 const DataGrid = typedDataGrid<Line, typeof features>();

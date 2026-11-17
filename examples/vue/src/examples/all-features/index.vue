@@ -7,6 +7,8 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
 import { clipboard } from "@fragiola/data-grid-vue/clipboard";
+import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
+import { columnResize } from "@fragiola/data-grid-vue/column-resize";
 import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
 import { fillHandle, repeatedFill } from "@fragiola/data-grid-vue/fill";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
@@ -36,7 +38,8 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), cell ranges, the clipboard (a range's copy
-// and paste), the fill handle, cell editing
+// and paste), the fill handle, cell editing, column resizing (its handles, keys and fits), pinned
+// columns (without it, every column scrolls)
 const features = [
     sorting(),
     navigation(),
@@ -44,6 +47,8 @@ const features = [
     clipboard(),
     fillHandle(),
     editing(),
+    columnResize(),
+    columnPinning(),
 ] as const;
 
 const DataGrid = typedDataGrid<BudgetedTask, typeof features>();

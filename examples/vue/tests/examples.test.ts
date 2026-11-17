@@ -26,7 +26,7 @@ const ALLOWED = [
     // the core's extras only: its main entry's types and helpers come through the Vue package,
     // and so do its features (each re-exported by the Vue package's own subpath, Epic #144)
     /^@fragiola\/data-grid\/local$/,
-    /^@fragiola\/data-grid-vue(\/(local|sorting|navigation|row-selection|range|clipboard|fill|editing))?$/,
+    /^@fragiola\/data-grid-vue(\/(local|sorting|navigation|row-selection|range|clipboard|fill|editing|column-resize|column-reorder|column-pinning|column-group-collapse))?$/,
     /^@lucide\/vue$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,
