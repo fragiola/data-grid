@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { type ColumnOrGroup, headerCellSort } from "../../src";
+import type { ColumnOrGroup } from "../../src";
+import { headerCellSort, type SortingState, sorting } from "../../src/sorting";
 import {
     cellElement,
     click as clickFrom,
@@ -8,11 +9,11 @@ import {
     keyEvent,
     mountEngine,
     type Row,
-} from "./harness";
+} from "../engine/harness";
 
 // Sorting from the header (Epic #27, S3–S6): a click, Enter or Space on a sortable column's
 // header cell toggles the sort, Ctrl/⌘ adds the column; a consumer's preventDefault, a control
-// inside the cell, a drag and a held key's repeats do not sort.
+// inside the cell, a drag and a held key's repeats do not sort. Sorting installed (Epic #141).
 
 // "id" spans both header rows; "who" groups the sortable "name" and the unsortable "note"
 const COLUMNS: ColumnOrGroup<Row>[] = [
@@ -30,6 +31,7 @@ function setup() {
     const { model, engine, view, grid } = mountEngine({
         columns: COLUMNS,
         rowCount: 100,
+        features: [sorting()],
     });
     /** a header cell's element, as an adapter renders it: at its top row and first column */
     const headerCell = (rowIndex: number, columnIndex: number) =>
@@ -204,7 +206,7 @@ describe("the view", () => {
         const of = (key: string) => {
             const cell = cells.find((candidate) => candidate.key === key);
             if (!cell) throw new Error(`no header cell ${key}`);
-            return headerCellSort(after, cell);
+            return headerCellSort(after as typeof after & SortingState, cell);
         };
         expect(of("name")).toEqual({
             sortable: true,

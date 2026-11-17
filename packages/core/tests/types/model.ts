@@ -142,11 +142,9 @@ const sortableGroup: ColumnOrGroup<Person> = {
     sortable: true,
     children: [sortableColumn],
 };
+// sorting is a feature (Epic #141): its keys are typed by `features` (tests/types/features.ts)
+// @ts-expect-error
 grid.run("sort-columns.toggle", { columnKey: "age", multi: true });
-grid.run("sort-columns.set", {
-    // @ts-expect-error
-    sortColumns: [{ columnKey: "age", direction: "up" }],
-});
 void sortableGroup;
 
 // a column pins at the start or at the end (Epic #85); a group is pinned by its columns

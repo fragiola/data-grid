@@ -11,6 +11,7 @@ import {
     veto,
 } from "../../src";
 import { columnAxisOf } from "../../src/engine/view";
+import { sorting } from "../../src/sorting";
 import {
     cellElement,
     click,
@@ -97,7 +98,7 @@ function setup(columns: ColumnOrGroup<Row>[] = COLUMNS) {
     };
     const a = resizable(0, "a");
     const mounted = mountEngine(
-        { columns, rowCount: 100 },
+        { columns, rowCount: 100, features: [sorting()] },
         { grid, width: 600 },
     );
     const { model, engine } = mounted;
@@ -386,16 +387,16 @@ describe("a drag on a resizer", () => {
         });
         Object.defineProperty(event, "target", { value: a.cell });
         expect(engine.adapter.click(event)).toBe(true);
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
         // a press with no move
         expect(clickOn(a.resizer)).toBe(true);
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
         // a press the engine was never handed (no drag) on a resizer is still no sort
         expect(click(engine, a.resizer).handled).toBe(false);
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
         // the header cell itself still sorts
         expect(click(engine, a.cell).handled).toBe(true);
-        expect(model.state.sortColumns).toEqual([
+        expect(model.get("sort-columns")).toEqual([
             { columnKey: "a", direction: "ascending" },
         ]);
     });
@@ -482,7 +483,7 @@ describe("a double click on a resizer", () => {
         // each column within its limits: "d" stops at 250
         clickOn(g.resizer, 2);
         expect(model.get("column-widths")).toEqual({ a: 170, c: 60, d: 250 });
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
     });
 });
 

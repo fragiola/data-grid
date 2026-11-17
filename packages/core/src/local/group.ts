@@ -5,9 +5,8 @@ import type {
     RowKey,
     RowKeyGetter,
     RowMeta,
-    SortColumn,
-    SortDirection,
 } from "../model/types";
+import type { SortColumn, SortDirection } from "../sorting/types";
 import { keySet } from "../utils/utils";
 import { entryKeyOf, type RowEntry } from "./filter";
 import { sortedByEntry } from "./sort";

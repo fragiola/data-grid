@@ -3,7 +3,7 @@ import {
     type CellRange,
     type Column,
     createDataGridModel,
-    type DataGridModelOptions,
+    type ModelOptions,
     veto,
 } from "../../src";
 import {
@@ -15,6 +15,9 @@ import {
     sameCellRange,
     valueText,
 } from "../../src/model/range";
+import { sorting } from "../../src/sorting";
+
+type Sorting = ReturnType<typeof sorting>;
 
 // A range of cells (Epic #88, E4.1–E4.2): the model keeps one, between body cells, changed only
 // through commands while cells are selectable; it stays inside the body when the grid's shape
@@ -32,8 +35,9 @@ const COLUMNS: Column<Row>[] = [
     { key: "d", width: 100, getValue: () => ({ not: "text" }) },
 ];
 
-function grid(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
+function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
+    return createDataGridModel<Row, unknown, [Sorting]>({
+        features: [sorting()],
         columns: COLUMNS,
         rows: Array.from({ length: 10 }, (_, id) => ({ id })),
         cellSelection: "range",

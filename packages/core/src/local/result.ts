@@ -1,12 +1,8 @@
 // What every adapter's `useLocalRows` takes and gives (Epic #123): its options, the props it
 // hands a root and the controls it gives the app's UI, built once here from the pipeline.
 
-import type {
-    RowKey,
-    RowKeyGetter,
-    RowMetaGetter,
-    SortColumn,
-} from "../model/types";
+import type { RowKey, RowKeyGetter, RowMetaGetter } from "../model/types";
+import type { SortColumn } from "../sorting/types";
 import type { LocalFilters } from "./filter";
 import type {
     LocalRows,

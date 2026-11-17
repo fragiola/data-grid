@@ -8,6 +8,7 @@ import {
     rowDetailPart,
     rowPart,
 } from "../../src";
+import { sorting } from "../../src/sorting";
 import { COLUMNS, column, type Row, stateOf, viewOf } from "./views";
 
 // A part's state as a pure function of the view (Q4), with what ARIA says of it beyond the state:
@@ -184,6 +185,7 @@ describe("headerCellPart", () => {
         const view = viewOf(
             stateOf({
                 columns: COLUMNS.map((entry) => sortable(entry.key)),
+                features: [sorting()],
                 sortColumns: [
                     { columnKey: "c3", direction: "descending" },
                     { columnKey: "c2", direction: "ascending" },
@@ -213,13 +215,19 @@ describe("headerCellPart", () => {
                 dropTarget: null,
             },
             tabIndex: -1,
-            ariaSort: "descending",
+            // sorting's (Epic #141)
+            attributes: {
+                "aria-sort": "descending",
+                "data-sortable": "",
+                "data-sort": "descending",
+                "data-sort-priority": "1",
+            },
         });
         expect(second.state).toMatchObject({
             sortDirection: "ascending",
             sortPriority: 2,
         });
-        expect(second.ariaSort).toBeUndefined();
+        expect(second.attributes?.["aria-sort"]).toBeUndefined();
         expect(
             headerCellPart(view, headerCell(view, "c4")).state,
         ).toMatchObject({
@@ -257,15 +265,15 @@ describe("headerCellPart", () => {
             active: true,
         });
         expect(spanning.tabIndex).toBe(0);
-        expect(headerCellPart(view, headerCell(view, "g")).state).toMatchObject(
-            {
-                rowIndex: -2,
-                columnSpan: 3,
-                group: true,
-                active: false,
-                sortable: false,
-            },
-        );
+        const group = headerCellPart(view, headerCell(view, "g"));
+        expect(group.state).toMatchObject({
+            rowIndex: -2,
+            columnSpan: 3,
+            group: true,
+            active: false,
+        });
+        // without sorting (Epic #141), no sort
+        expect(group.state.sortable).toBeUndefined();
     });
 
     it("is interacting at the view's interaction, and pinned over pinned columns", () => {

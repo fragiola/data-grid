@@ -10,6 +10,7 @@ import {
     rowLeft,
 } from "../../src";
 import { columnsError } from "../../src/header/header";
+import { sorting } from "../../src/sorting";
 import { mountEngine, type Row } from "./harness";
 
 // Collapsible column groups and sticky group labels (Epic #85, E1.3): a collapsible group shows
@@ -60,8 +61,9 @@ function model(options: Parameters<typeof createDataGridModel<Row>>[0] = {}) {
     return createDataGridModel<Row>({ columns: COLUMNS, rows, ...options });
 }
 
-const keys = (m: ReturnType<typeof model>) =>
-    m.get("columns").map((entry) => entry.key);
+const keys = (m: {
+    readonly state: { readonly columns: readonly Column<Row>[] };
+}) => m.state.columns.map((entry) => entry.key);
 
 describe("validation", () => {
     it("takes a collapsible group showing a column in each state, groupShow under it only", () => {
@@ -232,9 +234,10 @@ describe("the model", () => {
         const sortable = columnsWith((key) =>
             key === "g3" ? { sortable: true, resizable: true } : {},
         );
-        const m = createDataGridModel<Row>({
+        const m = createDataGridModel({
             columns: sortable,
             rows,
+            features: [sorting()],
             columnWidths: { g3: 150 },
             sortColumns: [{ columnKey: "g3", direction: "ascending" }],
             columnOrder: ["g8", "g0"],
@@ -409,6 +412,7 @@ describe("the engine", () => {
                 columns: options.columns ?? COLUMNS,
                 rowCount: 1_000,
                 direction: options.direction,
+                features: [sorting()],
             },
             {
                 overscan: { rows: 2, columns: 1 },
@@ -615,10 +619,10 @@ describe("the engine", () => {
             if (!cell) throw new Error(`no cell ${key}`);
             return headerCellPart(view(), cell);
         };
-        expect(part("g3").ariaSort).toBe("ascending");
-        expect(part("c0").ariaSort).toBeUndefined();
+        expect(part("g3").attributes?.["aria-sort"]).toBe("ascending");
+        expect(part("c0").attributes?.["aria-sort"]).toBeUndefined();
         m.run("column-groups.toggle", { groupKey: "g" });
-        expect(part("c0").ariaSort).toBe("descending");
+        expect(part("c0").attributes?.["aria-sort"]).toBe("descending");
         expect(part("c0").state.sortPriority).toBe(2);
     });
 

@@ -1,7 +1,7 @@
 {
     "name": "@fragiola/data-grid",
     "version": "0.0.0",
-    "description": "Headless data grid core: a typed model with commands, axis math and scroll scaling for millions of cells, windows, cell navigation and the engine that binds a grid to the DOM.",
+    "description": "Headless data grid core: a typed model with commands, axis math and scroll scaling for millions of cells, windows, cell navigation, the engine that binds a grid to the DOM, and opt-in features (sorting).",
     "license": "MIT",
     "type": "module",
     "author": {
@@ -41,6 +41,12 @@
             "import": "./dist/fill.js",
             "default": "./dist/fill.js"
         },
+        "./sorting": {
+            "@fragiola/source": "./src/sorting/index.ts",
+            "types": "./dist/sorting.d.ts",
+            "import": "./dist/sorting.js",
+            "default": "./dist/sorting.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -68,6 +74,11 @@
                 "types": "./dist/fill.d.ts",
                 "import": "./dist/fill.js",
                 "default": "./dist/fill.js"
+            },
+            "./sorting": {
+                "types": "./dist/sorting.d.ts",
+                "import": "./dist/sorting.js",
+                "default": "./dist/sorting.js"
             },
             "./package.json": "./package.json"
         }

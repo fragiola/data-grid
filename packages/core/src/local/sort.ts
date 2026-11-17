@@ -1,5 +1,6 @@
 import { cellValue } from "../model/source";
-import type { Column, SortColumn } from "../model/types";
+import type { Column } from "../model/types";
+import type { SortColumn } from "../sorting/types";
 import type { RowEntry } from "./filter";
 import { compareValues, isEmptyValue } from "./values";
 

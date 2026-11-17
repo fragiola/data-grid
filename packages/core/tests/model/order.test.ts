@@ -3,9 +3,12 @@ import {
     type Column,
     type ColumnOrGroup,
     createDataGridModel,
-    type DataGridModelOptions,
+    type ModelOptions,
     veto,
 } from "../../src";
+import { sorting } from "../../src/sorting";
+
+type Sorting = ReturnType<typeof sorting>;
 
 // The column order (Epic #75, O1, O2, O5): the model keeps the keys in the order siblings take,
 // moves a reorderable column or group among its siblings only (the pinned among the pinned), and
@@ -40,8 +43,9 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
     column("b"),
 ];
 
-function grid(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
+function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
+    return createDataGridModel<Row, unknown, [Sorting]>({
+        features: [sorting()],
         columns: COLUMNS,
         rowCount: 10,
         getRow: (id) => ({ id }),

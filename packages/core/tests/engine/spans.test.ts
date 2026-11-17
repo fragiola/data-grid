@@ -16,6 +16,7 @@ import {
 import { activeColumn, elementPosition } from "../../src/engine/view";
 import { columnsError } from "../../src/header/header";
 import { spanAt } from "../../src/model/spans";
+import { sorting } from "../../src/sorting";
 import {
     cellElement,
     click,
@@ -745,6 +746,7 @@ describe("the epic review", () => {
         const view = viewOf(
             stateOf({
                 columns,
+                features: [sorting()],
                 sortColumns: [
                     { columnKey: "b", direction: "ascending" },
                     { columnKey: "c", direction: "descending" },
@@ -758,8 +760,8 @@ describe("the epic review", () => {
             return headerCellPart(view, cell);
         };
         // b is covered by a's header span: it sorts first, with no header cell to say so
-        expect(part("b").ariaSort).toBeUndefined();
-        expect(part("c").ariaSort).toBe("descending");
+        expect(part("b").attributes?.["aria-sort"]).toBeUndefined();
+        expect(part("c").attributes?.["aria-sort"]).toBe("descending");
         expect(part("c").state.sortPriority).toBe(2);
     });
 });

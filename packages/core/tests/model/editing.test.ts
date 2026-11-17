@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-    type Column,
-    createDataGridModel,
-    type DataGridModelOptions,
-} from "../../src";
+import { type Column, createDataGridModel, type ModelOptions } from "../../src";
+import { sorting } from "../../src/sorting";
+
+type Sorting = ReturnType<typeof sorting>;
 
 // Cell editing (Epic #88, E4.3): the model keeps which cell is edited, the active one of a loaded
 // data row whose column is editable for it; it refuses any other, and drops the edit when the
@@ -34,8 +33,9 @@ const at = (rowIndex: number, columnIndex: number) => ({
     columnIndex,
 });
 
-function grid(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
+function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
+    return createDataGridModel<Row, unknown, [Sorting]>({
+        features: [sorting()],
         columns: COLUMNS,
         rows,
         ...options,

@@ -8,6 +8,7 @@ import {
     headerCellPart,
     veto,
 } from "../../src";
+import { sorting } from "../../src/sorting";
 import {
     cellElement,
     keydown,
@@ -75,7 +76,7 @@ function setup(
         e: headerCell(-2, 6),
     };
     const mounted = mountEngine(
-        { columns, rowCount: 100 },
+        { columns, rowCount: 100, features: [sorting()] },
         { grid, width: 600, ...options },
     );
     const { model, engine } = mounted;
@@ -211,14 +212,14 @@ describe("a drag on a header cell", () => {
         press(cells.a, "pointermove", 250);
         press(cells.a, "pointerup", 250);
         expect(clickOn(cells.a, 250)).toBe(true);
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
         expect(moves).toEqual([]);
         // a press that moves less than the slop is a click
         press(cells.a, "pointerdown", 250);
         press(cells.a, "pointermove", 253);
         press(cells.a, "pointerup", 253);
         expect(clickOn(cells.a, 253)).toBe(true);
-        expect(model.state.sortColumns).toEqual([
+        expect(model.get("sort-columns")).toEqual([
             { columnKey: "a", direction: "ascending" },
         ]);
     });
@@ -385,7 +386,7 @@ describe("a drag on a header cell", () => {
         press(cells.a, "pointerup", 370);
         expect(clickOn(cells.a, 370)).toBe(true);
         expect(moves).toEqual([]);
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
     });
 
     it("takes Escape in the grid's keys, after the consumer's", () => {
@@ -447,7 +448,7 @@ describe("a drag on a header cell", () => {
         press(cells.e, "pointerup", 800);
         expect(pressed(cells.a, 250)).toBe(true);
         press(cells.a, "pointerup", 250);
-        expect(model.state.sortColumns).toEqual([]);
+        expect(model.get("sort-columns")).toEqual([]);
     });
 
     it("leaves a resizable column's resizer its own drag", () => {
@@ -483,7 +484,7 @@ describe("a drag on a header cell", () => {
         press(cells.a, "pointerdown", 250);
         press(cells.a, "pointerup", 250);
         expect(clickOn(cells.a, 250)).toBe(true);
-        expect(model.state.sortColumns).toHaveLength(1);
+        expect(model.get("sort-columns")).toHaveLength(1);
     });
 
     it("runs one command a middleware can refuse: nothing moves", () => {

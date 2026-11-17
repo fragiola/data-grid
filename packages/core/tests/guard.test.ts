@@ -39,7 +39,7 @@ const IMPORT_FRAMEWORK =
  * root LICENSE carries that project's notice.
  */
 const DERIVED: { file: string; from: keyof typeof NOTICES }[] = [
-    { file: "src/model/sort.ts", from: "react-data-grid" },
+    { file: "src/sorting/sort.ts", from: "react-data-grid" },
 ];
 
 /** What a derived file's header and the root LICENSE must name, per reference project. */
