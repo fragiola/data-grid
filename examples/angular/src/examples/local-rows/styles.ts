@@ -1,0 +1,77 @@
+import type { RowInfo } from "@fragiola/data-grid-angular";
+import { cn } from "#/lib/cn";
+
+export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";
+
+/** the filters in two rows: the text ones and the salary, then the teams, the clear and the count */
+export const toolbar =
+    "palette-surface flex flex-col gap-2 text-sm text-palette-contrast font-(family-name:--dg-font)";
+
+export const toolbarRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
+
+export const icon = "size-4 opacity-70";
+
+/** the fields share the first row, wrapping on a narrow frame */
+export const search = "min-w-48 flex-[2_1_0%]";
+
+export const nameFilter = "min-w-40 flex-1";
+
+export const select = "w-40 flex-none";
+
+/** the team facets: a row of checkboxes, the legend as their label */
+export const teams = "flex flex-wrap items-center gap-3";
+
+export const teamsTitle = "float-left me-1 text-palette-accent/80";
+
+export const team = "flex cursor-pointer items-center gap-1.5";
+
+export const count = "ms-auto text-xs text-palette-accent/85 tabular-nums";
+
+export const pager =
+    "palette-surface flex items-center justify-end gap-2 text-sm text-palette-contrast font-(family-name:--dg-font)";
+
+export const pageOf = "min-w-28 text-center tabular-nums";
+
+/** the scroll container: the theme's frame, font and size */
+export const root = cn(
+    "palette-raised min-h-0 flex-1 bg-palette-base text-palette-contrast",
+    "rounded-(--dg-radius) border-(length:--dg-border) border-palette-line shadow-(--dg-shadow)",
+    "font-(family-name:--dg-font) text-(length:--dg-font-size)",
+);
+
+/** the grid is the tab stop until a cell is active */
+export const grid =
+    "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--dg-active-line)";
+
+/** opaque: the rows scroll under it (its place above them is the grid's) */
+export const header = "bg-palette-base";
+
+export const headerRow = cn(
+    "bg-(--dg-header-bg) text-palette-accent",
+    "border-b-(length:--dg-gridline) border-(--dg-gridline-color)",
+);
+
+export const headerCell = cn(
+    "flex items-center px-(--dg-cell-padding) outline-none",
+    // a sortable header cell sorts on a click: it reads as one, and its text is not selected
+    "data-sortable:cursor-pointer data-sortable:select-none data-sortable:hover:text-palette-contrast",
+    "font-(--dg-header-weight) [text-transform:var(--dg-header-transform)] tracking-(--dg-header-tracking)",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
+);
+
+/** by the row (`[dataGridRows]` hands it to its template): every other one tinted */
+export const row = (row: RowInfo) =>
+    cn(
+        "border-b-(length:--dg-gridline) border-(--dg-gridline-color) transition-colors duration-(--dg-motion) hover:bg-(--dg-row-hover-bg)",
+        row.rowIndex % 2 === 1 && "bg-(--dg-row-alt-bg)",
+    );
+
+/** the active cell's outline sits inside it, so neighbours never cover it */
+export const cell = cn(
+    "flex items-center overflow-hidden whitespace-nowrap px-(--dg-cell-padding) outline-none",
+    "data-active:focus-within:outline-(length:--dg-active-width) data-active:focus-within:outline-(--dg-active-line) data-active:focus-within:[outline-style:var(--dg-active-style)] data-active:focus-within:[outline-offset:calc(var(--dg-active-width)*-1)]",
+);
+
+/** the empty state's cell (as tall as the visible body): the message centred in it */
+export const empty =
+    "flex h-full items-center justify-center p-6 text-sm text-palette-contrast/70";

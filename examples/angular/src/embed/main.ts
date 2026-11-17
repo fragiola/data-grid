@@ -62,7 +62,9 @@ class EmbedErrorHandler implements ErrorHandler {
                 class="palette-danger m-4 self-start rounded-md bg-palette-soft p-4 text-palette-accent"
             >This example failed: {{ failure() }}</div>
         } @else if (example(); as component) {
-            <div #content data-testid="example-root" class="flex min-h-0 min-w-0 flex-col">
+            <!-- the example's host element lays out as its content (*:contents): the example's
+                 frame sits in this flex column as React's does, its h-full the stage's height -->
+            <div #content data-testid="example-root" class="flex min-h-0 min-w-0 flex-col *:contents">
                 <ng-container *ngComponentOutlet="component" />
             </div>
         }

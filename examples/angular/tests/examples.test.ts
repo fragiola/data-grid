@@ -14,9 +14,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 // imports per §6 of the site export contract): an example is standalone components (`index.ts`
 // its entry, exporting the example by default) and `styles.ts`, importing only what a consumer can
 // copy; the code panel lists exactly the files it is compiled from, and each example assembles the
-// grid itself. The Angular app's examples are examples of examples/react, under the same ids (not
-// every one yet: Epic #132 brings the others, and a shared spec of an example Angular lacks is
-// skipped, e2e/available.ts), and wear the same classes.
+// grid itself. The Angular app has every example of examples/react, under the same ids (a complete
+// framework in e2e/available.ts: no shared spec skips for Angular), and wears the same classes.
 
 const APP = examplesApp("angular");
 const EXAMPLES_DIR = APP.examplesDir;
@@ -60,12 +59,11 @@ describe("the Angular examples", () => {
         );
     });
 
-    it("are examples of examples/react, under the same ids", () => {
-        const react = listExampleSlugs(examplesApp("react"));
-        for (const slug of listExampleSlugs(APP)) {
-            expect(react, slug).toContain(slug);
-        }
-        expect(listExampleSlugs(APP)).toEqual(["hello-grid", "unstyled"]);
+    it("are the examples of examples/react, under the same ids: every one, no other", () => {
+        // a React example without an Angular counterpart fails here, and its spec fails for Angular
+        expect(listExampleSlugs(APP)).toEqual(
+            listExampleSlugs(examplesApp("react")),
+        );
     });
 
     it("look like React's: a class string both styles.ts export is the same", async () => {

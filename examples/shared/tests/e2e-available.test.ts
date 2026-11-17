@@ -40,9 +40,9 @@ describe("a spec's examples", () => {
         expect(
             skipReason("angular", available, ["large-dataset", "fill", "rtl"]),
         ).toBe("angular has no fill, rtl example");
-        // Angular is not complete yet: it skips
-        expect(skipOrFail("angular", available, ["fill"])).toBe(
-            "angular has no fill example",
+        // every framework is complete now: a lacking one fails instead (below)
+        expect(() => skipOrFail("angular", available, ["fill"])).toThrow(
+            /angular has no fill example, but every angular example is required/,
         );
     });
 });
@@ -50,8 +50,8 @@ describe("a spec's examples", () => {
 describe("a complete framework", () => {
     const available = ["hello-grid"];
 
-    it("is React or Vue, the ones whose app has every example", () => {
-        expect(COMPLETE_FRAMEWORKS).toEqual(["react", "vue"]);
+    it("is every framework: React, Vue and Angular each have every example", () => {
+        expect(COMPLETE_FRAMEWORKS).toEqual(["react", "vue", "angular"]);
     });
 
     it("fails a spec whose example it lacks, instead of skipping it", () => {

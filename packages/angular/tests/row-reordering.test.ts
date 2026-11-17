@@ -465,6 +465,29 @@ describe("the keys", () => {
         expect(document.activeElement).toBe(cellAt(container, 2, 1));
         expect(root(container)).toBeInTheDocument();
     });
+
+    it("render the app's moved rows before the next key, as React and Vue do (a key pressed fast moves the row again)", async () => {
+        const onMove = vi.fn();
+        const { container } = await mountApp({ onMove });
+        const cell = cellAt(container, 0, 1);
+        cell.focus();
+        await settled();
+        keyDown(cell, { key: "ArrowDown", ctrlKey: true, shiftKey: true });
+        // the next key comes in a later task: by then, the moved rows are rendered and the
+        // active cell has followed its row (no frame or timer in between)
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        expect(ids(container)).toEqual(["1", "0", "2", "3", "4"]);
+        const active = document.activeElement as HTMLElement;
+        expect(active).toBe(cellAt(container, 1, 1));
+        keyDown(active, { key: "ArrowDown", ctrlKey: true, shiftKey: true });
+        await settled();
+        expect(onMove).toHaveBeenLastCalledWith({
+            fromIndex: 1,
+            toIndex: 2,
+            rowKey: 0,
+        });
+        expect(ids(container)).toEqual(["1", "2", "0", "3", "4"]);
+    });
 });
 
 describe("injectLocalRows' moveRow", () => {

@@ -60,8 +60,9 @@ looking for its feature would search, and `order` is its place inside the catego
    `data-grid-part` and `data-*` state, roles, accessible names, and the markup and test ids the
    example renders itself, never a class name or a React detail. A spec opening an example a
    framework lacks is skipped there (`openExample`, `requireExamples`), except in a framework
-   that ships them all (`COMPLETE_FRAMEWORKS`: React and Vue). Vue's example follows in the same
-   change (`examples/vue/src/examples/README.md`).
+   that ships them all (`COMPLETE_FRAMEWORKS`: React, Vue and Angular). The Vue and Angular
+   examples follow in the same change (`examples/vue/src/examples/README.md`,
+   `examples/angular/src/examples/README.md`).
 
 ## Anatomy of an example
 

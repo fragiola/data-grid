@@ -1069,11 +1069,14 @@ examples/vue/       src/examples/<slug>/       the site's Vue examples, every Re
                                                families copied from examples/react)
                     src/lib, styles            `cn` and the theme, copied from examples/react
                     playwright.config.ts       the shared specs against this embed
-examples/angular/   src/examples/<slug>/       the site's Angular examples (index.ts, a standalone
-                                               component exported by default, and styles.ts):
-                                               hello-grid and unstyled so far (Epic #132 brings the
-                                               others); the embed app, Vite with the Analog plugin
-                    src/lib, styles, _kit      `cn`, the theme and the kit's data, copied
+examples/angular/   src/examples/<slug>/       the site's Angular examples, every React one under the
+                                               same id (index.ts, a standalone component exported by
+                                               default, styles.ts, siblings; its README); the embed
+                                               app, Vite with the Analog plugin (Epic #132)
+                    src/components             the Angular kit: Fragiola UI's pieces over Angular CDK
+                                               and native elements, `@lucide/angular` icons (its
+                                               families copied from examples/react)
+                    src/lib, styles            `cn` and the theme, copied from examples/react
                     playwright.config.ts       the shared specs against this embed
 site/               docs/                      the pages fragiola.com/data-grid serves
                     export.ts, contract.ts     `pnpm site:export` and its validation, every framework
@@ -1448,12 +1451,13 @@ repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: th
 (`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
 and one examples app per framework of `site/project.json`'s `frameworks` (`examples/<framework>`,
 package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest:
-`examples/react` and `examples/vue`, each with every example, Epic #126; `examples/angular`
-with `hello-grid` and `unstyled`, Epic #129, the others in Epic #132). What every framework's examples share (the metadata, the themes, the
+`examples/react`, `examples/vue` (Epic #126) and `examples/angular` (Epics #129, #132), each with
+every example). What every framework's examples share (the metadata, the themes, the
 embed's messages, the manifest builder, the loader generator and every Playwright spec) lives
 once in `examples/shared` (`examples-shared`, private, imports no framework); an example keeps
 its id in every framework, and a spec for an example a framework lacks is skipped there, unless
-that framework ships them all (`COMPLETE_FRAMEWORKS` in `examples/shared/e2e/available.ts`). CI's
+that framework ships them all (`COMPLETE_FRAMEWORKS` in `examples/shared/e2e/available.ts`: React,
+Vue and Angular). CI's
 examples e2e is a matrix over the `examples/*` apps with a `playwright.config.ts`. `www` owns the shell,
 the gallery chrome, the code panel and search. A page's `title` is at most 60 characters and
 never repeats "Data Grid"; its `description` is 50–160 characters, plain words, no `: ` (YAML);

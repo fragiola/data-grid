@@ -210,6 +210,17 @@ for (const table of [false, true]) {
 }
 
 describe("injectLocalRows across renders", () => {
+    it("renders a sort before the next event, as the outputs do", async () => {
+        const { container } = await render(People);
+        click(headerAt(container, 1));
+        // a microtask, no frame or timer: a second click reads the rows the first one sorted
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        expect(names(container)[0]).toBe("Davi");
+        click(headerAt(container, 1));
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        expect(names(container)[0]).toBe("Carla");
+    });
+
     it("keeps the sort, the filters and the page (inside the pages left) when the rows change", async () => {
         @Component({
             imports: [DATA_GRID, DataGridLocalRows],

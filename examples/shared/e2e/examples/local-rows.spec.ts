@@ -45,18 +45,26 @@ test("searches, filters by column and goes back to the first page", async ({
     await page.getByRole("button", { name: "Clear filters" }).click();
     await expect(page.getByTestId("count")).toHaveText("1,000 of 1,000 people");
 
+    // each control's effect is read once the app has rendered it (polled: a framework may render
+    // an app's change after the click returns)
     await page.getByRole("checkbox", { name: "Data" }).click();
     await page.getByRole("checkbox", { name: "Mobile" }).click();
-    for (const team of await values(page, 3)) {
-        expect(["Data", "Mobile"]).toContain(team);
-    }
+    await expect
+        .poll(async () =>
+            (await values(page, 3)).every((team) =>
+                ["Data", "Mobile"].includes(team),
+            ),
+        )
+        .toBe(true);
     await page.getByRole("combobox", { name: "Salary" }).click();
     await page.getByRole("option", { name: "From $120k" }).click();
-    for (const salary of await values(page, 4)) {
-        expect(Number(salary.replace(/[^\d]/g, ""))).toBeGreaterThanOrEqual(
-            120_000,
-        );
-    }
+    await expect
+        .poll(async () =>
+            (await values(page, 4)).every(
+                (salary) => Number(salary.replace(/[^\d]/g, "")) >= 120_000,
+            ),
+        )
+        .toBe(true);
     await page.getByRole("textbox", { name: "Name contains" }).fill("zzzz");
     await expect(page.getByTestId("empty")).toBeVisible();
     await expect(page.getByTestId("count")).toHaveText("0 of 1,000 people");
