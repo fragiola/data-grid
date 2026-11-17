@@ -15,6 +15,7 @@ creates it.
 | `cellRange()` | `/range` | `navigation()` | a range of cells ([Cell selection](/docs/concepts/cell-selection)) |
 | `clipboard()` | `/clipboard` | `cellRange()` | copying and pasting the range |
 | `fillHandle()` | `/fill` | `cellRange()` | the fill handle ([Fill handle](/docs/concepts/fill)) |
+| `editing()` | `/editing` | `navigation()` | cells edited in place ([Editing cells](/docs/concepts/editing)) |
 
 A feature another one needs is installed with it: a grid missing one throws when it is created,
 naming it (`feature "cellRange" requires feature "navigation": install it too`). Their order in
@@ -98,8 +99,9 @@ A feature's inputs are a directive of its own, on the root's element: `DataGridS
 (`dataGridSorting`) holds `[(sortColumns)]`, `[defaultSortColumns]` and `(sortColumnsChange)`;
 `DataGridNavigation` `[(activePosition)]`, `DataGridRowSelection` the row selection's,
 `DataGridCellRange` the range's, `DataGridClipboard` `[beforeRangePaste]` and `(rangePaste)`,
-`DataGridFill` the fill (`dataGridFill (fill)="…"`). A feature you give no input needs no
-directive.
+`DataGridFill` the fill (`dataGridFill (fill)="…"`), `DataGridEditing` the edit
+(`[dataGridEditing]="columns" [(editingCell)]="…" (cellEdit)="…"`). A feature you give no input
+needs no directive.
 
 </Framework>
 
@@ -107,8 +109,9 @@ Each package re-exports the core's features from an entry of the same name
 (`@fragiola/data-grid-react/sorting`, `@fragiola/data-grid-vue/sorting`,
 `@fragiola/data-grid-angular/sorting`), so an app installs one package. The core's own is
 `@fragiola/data-grid/sorting`. A feature's hooks are in its entry too: `useSelectAll` in
-`/row-selection`, `useFillHandle` in `/fill` (Angular: `injectSelectAll`, `injectFillHandle` and
-`*dataGridFillHandle`).
+`/row-selection`, `useFillHandle` in `/fill`, `useCellEdit` in `/editing` (Angular:
+`injectSelectAll`, `injectFillHandle` and `*dataGridFillHandle`, `injectCellEdit` and
+`*dataGridCellEdit`).
 
 ## Fixed when the grid is created
 
@@ -242,12 +245,14 @@ part optional:
 | `row(view, rowIndex, meta, share)`, `cell(view, cell, span, share)` | fills a row's or a cell's share (its state and attributes): one object reused, nothing allocated per row or cell |
 | `headerCell(view, cell)`, `grid(view)` | a header cell's state and attributes, the grid's attributes (`aria-multiselectable`) |
 | `navigable` | the grid's roles and tab stop are the APG grid's (`navigation()` has it) |
-| `engine(context)` | its keys, presses, clicks, copies and pastes, and drags, in the engine |
+| `engine(context)` | its keys, presses, clicks, focus, copies and pastes, drags and engine actions, in the engine |
+| `editCell(view, cell, draft, engine)` | an edited cell's editor props, what its column's `renderEditCell` gets (`editing()` has it) |
 | `root` | the props a root takes for it, controlled or not (`defineControlled`) |
 
 In an engine, a feature's keys run at a place of their own in the grid's: `beforeKeydown` before
-any (never taking one), `keydown` before the grid's own cell keys (a header's sort), `laterKeydown`
-after them (the selections'), `lastKeydown` last (the arrows). Each place runs the features in
+any (never taking one), `guardKeydown` for the elements it holds (an edit's editor), `keydown`
+before the grid's own cell keys (a header's sort), `startKeydown` among them (an edit's start),
+`laterKeydown` after them (the selections'), `lastKeydown` last (the arrows). Each place runs the features in
 the list's order; the first to take a key ends it. Its `engine` context lends it the grid's own
 means (`engine`: which cell an event is in, scrolling to a cell, focus following a move, events,
 drags on the grid's own drag machinery), so its keys and presses act as the grid's do.

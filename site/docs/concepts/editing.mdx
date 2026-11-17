@@ -10,6 +10,78 @@ you render), and so is the data: a commit is an event, and you write the value i
 
 <Example id="editing" />
 
+## Install editing
+
+Editing is a [feature](/docs/concepts/features): `editing()` from the `/editing` entry, which needs
+`navigation()` (the edited cell is the active one). `useCellEdit` and the type of a commit,
+`CellEditEvent`, come from the same entry. Without it, a column's `editable` and `renderEditCell`
+do nothing: Enter, F2, typing and a double click never start an edit, no cell renders an editor,
+and `editingCell`, `onEditingCellChange` and `onCellEdit` do not compile.
+
+<Framework name="react">
+
+```tsx title="tasks.tsx"
+import { type CellEditEvent, editing, useCellEdit } from "@fragiola/data-grid-react/editing";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+
+const features = [navigation(), editing()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="tasks.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { type CellEditEvent, editing } from "@fragiola/data-grid-vue/editing";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+
+const features = [navigation(), editing()] as const;
+const DataGrid = typedDataGrid<Task, typeof features>();
+</script>
+
+<template>
+    <DataGrid.Root :features="features" :columns="columns" :rows="tasks" :on-cell-edit="edited">
+        <!-- … -->
+    </DataGrid.Root>
+</template>
+```
+
+An editor in a cell's slot takes `useCellEdit(() => cell)`, from the same `/editing` entry.
+
+</Framework>
+
+<Framework name="angular">
+
+The edit's inputs and outputs are `DataGridEditing`'s, a directive on the root's element:
+`[(editingCell)]`, `[defaultEditingCell]` and `(cellEdit)`, its row typed by the columns it is
+given (`[dataGridEditing]="columns"`). An editor in a cell's content is `*dataGridCellEdit`
+(`DataGridCellEdit`), and `injectCellEdit` its injection function, all from `/editing`.
+
+```ts title="tasks.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import { type CellEditEvent, DataGridEditing, editing } from "@fragiola/data-grid-angular/editing";
+import { navigation } from "@fragiola/data-grid-angular/navigation";
+
+@Component({
+    selector: "app-tasks",
+    imports: [DATA_GRID, DataGridEditing],
+    template: `
+        <div dataGridRoot [features]="features" [columns]="columns" [rows]="tasks()"
+            [dataGridEditing]="columns" (cellEdit)="edited($event)">
+            <!-- … -->
+        </div>
+    `,
+})
+export class Tasks {
+    readonly features = [navigation(), editing()];
+    // …
+}
+```
+
+</Framework>
+
 ## Editable columns
 
 A column's `editable` turns its cells into editable ones: `true` for every row, or a function of
@@ -64,6 +136,7 @@ changed from the one it started from. Write it into your rows: the grid writes n
 
 ```tsx title="tasks.tsx"
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={tasks}
     onCellEdit={({ row, columnKey, value }) =>
