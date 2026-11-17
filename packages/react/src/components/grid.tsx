@@ -10,10 +10,11 @@ export type { GridState } from "@fragiola/data-grid";
 export type GridProps = DivPrimitiveProps<GridState> & { children?: ReactNode };
 
 /**
- * The grid (`role="grid"`; `treegrid` when its rows have kinds, Epic #87: `getRowMeta` on the
- * root) and the sizer: as large as the whole dataset (the physical size, under scroll scaling), so
- * the scrollbars represent it. A `<table>` through `render`. It is the grid's tab stop while no
- * cell is active.
+ * The grid (`role="grid"` with `navigation()` installed, `treegrid` when its rows have kinds,
+ * Epic #87: `getRowMeta` on the root; `role="table"` without navigation) and the sizer: as large
+ * as the whole dataset (the physical size, under scroll scaling), so the scrollbars represent it.
+ * A `<table>` through `render`. With navigation, it is the grid's tab stop while no cell is
+ * active; without it, neither it nor a cell is a tab stop.
  */
 export function Grid(props: GridProps) {
     const { children, ...rest } = props;

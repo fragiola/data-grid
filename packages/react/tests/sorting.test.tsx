@@ -9,7 +9,11 @@ import {
     useDataGridRef,
 } from "../src";
 import { type SortColumn, sorting } from "../src/sorting";
-import { headerAt, stubViewportSize } from "./helpers";
+import {
+    FEATURES as GRID_FEATURES,
+    headerAt,
+    stubViewportSize,
+} from "./helpers";
 
 // Sorting (Epic #27): `sortable` columns, the sort controlled or not like the active position
 // (S5), toggled by a click, Enter or Space on a header cell after the consumer's handlers (S4),
@@ -45,7 +49,7 @@ const columns: Column<Person>[] = [
 
 stubViewportSize(400, 235);
 
-const FEATURES = [sorting()] as const;
+const FEATURES = [sorting(), ...GRID_FEATURES] as const;
 
 type GridProps = Pick<
     RootProps<Person, typeof FEATURES>,

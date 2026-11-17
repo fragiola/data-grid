@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { type CellInfo, type Column, DataGrid } from "../src";
-import { cellAt, headerAt, stubViewportSize, tags } from "./helpers";
+import { cellAt, FEATURES, headerAt, stubViewportSize, tags } from "./helpers";
 
 // Column spans (Epic #85, E1.2): `Cells` hands one cell per rendered column, a spanning cell
 // standing for the ones it covers; the spanning cell is as wide as its columns, with
@@ -44,7 +44,12 @@ function Grid({
 }) {
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={columns}
+            rows={rows}
+            rowHeight={20}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRow render={tag.headerRow}>
@@ -134,7 +139,12 @@ describe("a render function (the epic review)", () => {
     it("finds a body cell's span in its props' aria-colspan", () => {
         const seen = new Map<string, unknown>();
         render(
-            <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={columns}
+                rows={rows}
+                rowHeight={20}
+            >
                 <DataGrid.Grid>
                     <DataGrid.Body>
                         <DataGrid.Rows<Row>>

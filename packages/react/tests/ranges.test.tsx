@@ -8,9 +8,17 @@ import {
     DataGrid,
     type DataGridRef,
     type RangePaste,
+    type RootProps,
     useDataGridRef,
 } from "../src";
-import { cellAt, root, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    root,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Cell ranges and the clipboard (Epic #88, E4.1–E4.2): `Root` maps `cellSelection` and the range
 // (controlled or not) onto the model; cells carry `data-selected-cell`, `data-range-edge` and
@@ -35,7 +43,7 @@ stubViewportSize(400, 300);
 
 type GridProps = Partial<
     Pick<
-        React.ComponentProps<typeof DataGrid.Root<Item>>,
+        RootProps<Item, Features>,
         | "cellSelection"
         | "selectedRange"
         | "defaultSelectedRange"
@@ -48,7 +56,7 @@ type GridProps = Partial<
     >
 > & {
     table?: boolean;
-    gridRef?: DataGridRef<Item>;
+    gridRef?: DataGridRef<Item, Features>;
     cellStates?: CellState[];
 };
 
@@ -56,6 +64,7 @@ function Grid({ table = false, cellStates, ...props }: GridProps) {
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rows={items}
             rowHeight={20}
@@ -286,9 +295,9 @@ describe("the selected range", () => {
     });
 
     it("goes when cellSelection is removed, and is read through a gridRef", () => {
-        const held: { ref?: DataGridRef<Item> } = {};
+        const held: { ref?: DataGridRef<Item, Features> } = {};
         function App({ on }: { on: boolean }) {
-            const gridRef = useDataGridRef<Item>();
+            const gridRef = useDataGridRef<Item, Features>();
             held.ref = gridRef;
             return (
                 <Grid

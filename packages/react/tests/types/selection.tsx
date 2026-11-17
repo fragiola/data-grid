@@ -1,7 +1,14 @@
 // Type fixtures: checked by `tsc`, never run. `@ts-expect-error` marks what must not compile.
 
 import { type Column, DataGrid, type RowKey } from "../../src";
-import { type SelectAll, useSelectAll } from "../../src/selection";
+import {
+    rowSelection,
+    type SelectAll,
+    useSelectAll,
+} from "../../src/row-selection";
+
+// row selection is a feature (Epic #144): installed, its props compile
+const features = [rowSelection()] as const;
 
 interface Person {
     id: string;
@@ -16,6 +23,7 @@ export function People({ keys }: { keys: readonly RowKey[] }) {
         <DataGrid.Root
             columns={columns}
             rows={people}
+            features={features}
             rowSelection="multiple"
             // the row keeps its type
             isRowSelectable={(row) => !row.locked}

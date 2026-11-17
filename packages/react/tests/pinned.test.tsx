@@ -2,7 +2,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { Activity } from "react";
 import { describe, expect, it } from "vitest";
 import { type Column, type ColumnOrGroup, DataGrid } from "../src";
-import { cellAt, stubViewportSize, tags } from "./helpers";
+import { cellAt, FEATURES, stubViewportSize, tags } from "./helpers";
 
 // Pinned columns (Epic #31, P3 and P5; Epic #38): pinned cells and header cells carry
 // `data-pinned` and `data-pinned-edge`, sit sticky in their row's flow (rows are flex containers
@@ -47,7 +47,12 @@ function Grid({
 }) {
     const tag = tags(table);
     return (
-        <DataGrid.Root columns={cells} rows={rows} rowHeight={20}>
+        <DataGrid.Root
+            features={FEATURES}
+            columns={cells}
+            rows={rows}
+            rowHeight={20}
+        >
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header}>
                     <DataGrid.HeaderRows<Row>>
@@ -198,7 +203,12 @@ describe("pinned cells", () => {
 
     it("drop a transform and insets on their render element too", () => {
         const { container } = render(
-            <DataGrid.Root columns={columns} rows={rows} rowHeight={20}>
+            <DataGrid.Root
+                features={FEATURES}
+                columns={columns}
+                rows={rows}
+                rowHeight={20}
+            >
                 <DataGrid.Grid>
                     <DataGrid.Body>
                         <DataGrid.Rows<Row>>

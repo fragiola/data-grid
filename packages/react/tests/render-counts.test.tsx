@@ -9,11 +9,18 @@ import {
     type HeaderCellInfo,
     type RootProps,
     type RowKey,
-    useFillHandle,
     useGroupLabel,
 } from "../src";
+import { useFillHandle } from "../src/fill";
 import { groupKeyOf, useLocalRows } from "../src/local";
-import { renderCounting, root, scrollRoot, stubViewportSize } from "./helpers";
+import {
+    FEATURES,
+    type Features,
+    renderCounting,
+    root,
+    scrollRoot,
+    stubViewportSize,
+} from "./helpers";
 
 // D9 across features (Epic #89, E5.3): a scroll that keeps the rendered windows renders nothing
 // in React, whichever feature is on (the engine writes the layers' offsets and the sticky insets
@@ -64,13 +71,14 @@ function Label({ cell }: { cell: HeaderCellInfo<Item> }) {
 }
 
 type GridProps = Partial<
-    Omit<RootProps<Item>, "rows" | "rowCount" | "getRow" | "children">
+    Omit<RootProps<Item, Features>, "rows" | "rowCount" | "getRow" | "children">
 > & { rows?: readonly Item[]; fillHandle?: boolean };
 
 /** Every part rendered: the header with group labels, summary rows, cells, details. */
 function Grid({ fillHandle = false, rows = items, ...props }: GridProps) {
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={COLUMNS}
             rowKey={rowKey}
             rowHeight={20}

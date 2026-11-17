@@ -7,7 +7,14 @@ import {
     type DataGridContextValue,
     useDataGrid,
 } from "../src";
-import { cellAt, root, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    root,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Summary rows (Epic #86, E2.1): `Summary` renders a position's rows sticky (the top ones under the
 // header, the bottom ones at the visible body's bottom edge), each a `SummaryRow` of
@@ -49,10 +56,10 @@ const columns: Column<Row>[] = [
 // a 35px header, two 30px summary rows: 300 − 35 − 30 − 60 = 175 for the body
 stubViewportSize(800, 300);
 
-let grid: DataGridContextValue<Row> | null = null;
+let grid: DataGridContextValue<Row, Features> | null = null;
 
 function Expose() {
-    grid = useDataGrid<Row>();
+    grid = useDataGrid<Row, Features>();
     return null;
 }
 
@@ -74,6 +81,7 @@ function Grid({
     const summary = table ? TABLE_SUMMARY : undefined;
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rows={rows}
             rowHeight={20}
@@ -279,6 +287,7 @@ describe("summary rows", () => {
         const ref = createRef<HTMLDivElement>();
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 summaryRows={{ top: 1 }}
@@ -349,6 +358,7 @@ describe("summary rows", () => {
         const plain: Column<Row>[] = [{ key: "id", width: 100 }];
         const { container } = render(
             <DataGrid.Root
+                features={FEATURES}
                 columns={plain}
                 rows={rows}
                 summaryRows={{ bottom: 1 }}
@@ -362,7 +372,7 @@ describe("summary rows", () => {
         expect(own).toBeEmptyDOMElement();
         expect(() =>
             render(
-                <DataGrid.Root columns={plain} rows={rows}>
+                <DataGrid.Root features={FEATURES} columns={plain} rows={rows}>
                     <DataGrid.SummaryCells />
                 </DataGrid.Root>,
             ),
@@ -374,6 +384,7 @@ describe("summary rows", () => {
         function Controlled({ count }: { count: number }) {
             return (
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rows={rows.slice(0, count)}
                     summaryRows={{ bottom: 1 }}
@@ -416,6 +427,7 @@ describe("summary rows", () => {
         function Live({ note }: { note: string }) {
             return (
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={live}
                     rows={rows}
                     summaryRows={{ top: 1 }}
@@ -465,6 +477,7 @@ describe("a summary cell's controls", () => {
     function Editable({ count }: { count: number }) {
         return (
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows.slice(0, count)}
                 rowHeight={20}

@@ -2,7 +2,14 @@ import { fireEvent, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { type Column, DataGrid, type GridDirection, useDataGrid } from "../src";
-import { cellAt, root, rowAt, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    root,
+    rowAt,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Pinned end columns and right to left (Epic #85, E1.1): a column pinned at the end is sticky in
 // its row's flow like one pinned at the start (`data-pinned="end"`, its part's edge on the first);
@@ -46,6 +53,7 @@ function Grid({
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={cells}
             rows={rows}
             rowHeight={20}
@@ -201,7 +209,12 @@ describe("right to left", () => {
 
     it("keeps the empty state at the view's start", () => {
         const empty = render(
-            <DataGrid.Root columns={columns} rows={[]} direction="rtl">
+            <DataGrid.Root
+                features={FEATURES}
+                columns={columns}
+                rows={[]}
+                direction="rtl"
+            >
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
@@ -234,6 +247,7 @@ describe("the root's dir (the epic review)", () => {
         const html = (direction?: GridDirection) =>
             renderToString(
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rows={[]}
                     direction={direction}
@@ -267,7 +281,7 @@ describe("the root's dir (the epic review)", () => {
             );
         }
         const { container, getByTestId } = render(
-            <DataGrid.Root columns={columns} rows={[]}>
+            <DataGrid.Root features={FEATURES} columns={columns} rows={[]}>
                 <Commands />
             </DataGrid.Root>,
         );

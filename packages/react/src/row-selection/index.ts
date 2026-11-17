@@ -1,23 +1,51 @@
-// @fragiola/data-grid-react/selection: the selection's extras (Epic #57, R8). An opt-in entry
-// point: the primitives never import it, and an app that never imports it never ships it.
+// @fragiola/data-grid-react/row-selection: row selection (Epic #57; a feature since Epic #144),
+// the core's (`@fragiola/data-grid/row-selection`) re-exported, and its "select all" hook. An
+// opt-in entry point: the primitives never import it, and an app that never installs row
+// selection never ships it.
 
-import type { RowKey } from "@fragiola/data-grid";
+import type {
+    DataGridFeature,
+    DataGridModel,
+    RowKey,
+} from "@fragiola/data-grid";
 import {
+    type RowSelectionTypes,
     type SelectionStatus,
     selectAllState,
     selectAllToggled,
-} from "@fragiola/data-grid/selection";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+} from "@fragiola/data-grid/row-selection";
+import {
+    type ReactNode,
+    useCallback,
+    useMemo,
+    useSyncExternalStore,
+} from "react";
 import { useDataGrid } from "../context";
 import { type DataGridRef, noSubscription } from "../hooks/use-data-grid-ref";
 
 export {
+    type RowSelectionCommands,
+    type RowSelectionOptions,
+    type RowSelectionProps,
+    type RowSelectionState,
+    type RowSelectionTypes,
+    rowSelection,
+    type SelectAllState,
     type SelectionStatus,
+    selectAllState,
+    selectAllToggled,
     selectionStatus,
     toggledRowKeys,
     withoutRowKeys,
     withRowKeys,
-} from "@fragiola/data-grid/selection";
+} from "@fragiola/data-grid/row-selection";
+
+/** A model with row selection installed (what `useSelectAll` reads and runs). */
+type SelectionModel<TRow> = DataGridModel<
+    TRow,
+    ReactNode,
+    readonly [DataGridFeature<RowSelectionTypes>]
+>;
 
 /** What `useSelectAll` gives a "select all" control. */
 export interface SelectAll {
@@ -41,14 +69,17 @@ export interface SelectAll {
  * A "select all" control's state over the rows the app names (`rowKeys`: the rows on screen, a
  * page, every filtered row; leave out the rows that cannot be selected), and its toggle, through
  * `selected-rows.set` (a controlled grid asks the parent). While rows are not selectable, nothing
- * is selected and the toggle does nothing. Inside a `Root`, or with a `gridRef` (nothing selected
- * until a `Root` takes it).
+ * is selected and the toggle does nothing; without `rowSelection()` installed, rows never are.
+ * Inside a `Root`, or with a `gridRef` (nothing selected until a `Root` takes it).
  */
 export function useSelectAll<TRow>(
     rowKeys: readonly RowKey[],
     gridRef?: DataGridRef<TRow>,
 ): SelectAll {
-    const model = useDataGrid(gridRef)?.model;
+    // the feature's state and command: `undefined` and `not_found` without it installed
+    const model = useDataGrid(gridRef)?.model as
+        | SelectionModel<TRow>
+        | undefined;
     const subscribe = useMemo(
         () =>
             model

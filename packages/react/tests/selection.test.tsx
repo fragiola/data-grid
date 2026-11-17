@@ -10,8 +10,15 @@ import {
     useDataGridRef,
 } from "../src";
 import { useLocalRows } from "../src/local";
-import { useSelectAll } from "../src/selection";
-import { cellAt, rowAt, stubViewportSize, tags } from "./helpers";
+import { useSelectAll } from "../src/row-selection";
+import {
+    cellAt,
+    FEATURES,
+    type Features,
+    rowAt,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Row selection (Epic #57, R1–R8): `Root` maps the selection (controlled or not), its mode and
 // `isRowSelectable` onto the model; rows carry `data-selected` and `aria-selected`, the grid
@@ -34,7 +41,7 @@ stubViewportSize(400, 300);
 const KEYS = people.map((person) => person.id);
 
 /** A header checkbox through useSelectAll, as an app writes it. */
-function SelectAll({ gridRef }: { gridRef?: DataGridRef<Person> }) {
+function SelectAll({ gridRef }: { gridRef?: DataGridRef<Person, Features> }) {
     const all = useSelectAll(KEYS, gridRef);
     return (
         <input
@@ -57,7 +64,7 @@ type GridProps = {
     defaultSelectedRowKeys?: readonly RowKey[];
     onSelectedRowKeysChange?: (keys: readonly RowKey[]) => void;
     isRowSelectable?: (row: Person) => boolean;
-    gridRef?: DataGridRef<Person>;
+    gridRef?: DataGridRef<Person, Features>;
     rowStates?: boolean[];
 };
 
@@ -70,6 +77,7 @@ function Grid({
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rows={people}
             rowKey={(row) => row.id}
@@ -194,7 +202,7 @@ describe("controlled selection", () => {
         let run: ((rowIndex: number, extend: boolean) => void) | undefined;
         function Controlled() {
             const [keys, setKeys] = useState<readonly RowKey[]>([]);
-            const gridRef = useDataGridRef<Person>();
+            const gridRef = useDataGridRef<Person, Features>();
             run = (rowIndex, extend) =>
                 gridRef.current?.model.run("selected-rows.toggle", {
                     rowIndex,
@@ -260,7 +268,12 @@ describe("modes and rows that cannot be selected", () => {
     it("without rowSelection, rows carry nothing and Shift+Space is not the grid's", () => {
         function Plain() {
             return (
-                <DataGrid.Root columns={columns} rows={people} rowHeight={20}>
+                <DataGrid.Root
+                    features={FEATURES}
+                    columns={columns}
+                    rows={people}
+                    rowHeight={20}
+                >
                     <DataGrid.Grid>
                         <DataGrid.Body>
                             <DataGrid.Rows<Person>>
@@ -346,7 +359,7 @@ describe("useSelectAll", () => {
 
     it("works outside the root through a gridRef", () => {
         function Outside() {
-            const gridRef = useDataGridRef<Person>();
+            const gridRef = useDataGridRef<Person, Features>();
             return (
                 <>
                     <SelectAll gridRef={gridRef} />

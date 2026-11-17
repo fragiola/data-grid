@@ -8,7 +8,7 @@ import {
     type RowKey,
     useDataGrid,
 } from "../src";
-import { stubViewportSize, tags } from "./helpers";
+import { FEATURES, stubViewportSize, tags } from "./helpers";
 
 // Row details (Epic #41, M1–M4): `Root` maps the expansion (controlled or not) and `detailHeight`
 // onto the model; `DataGrid.RowDetail` renders inside its row, after its cells, only while the
@@ -79,6 +79,7 @@ function Grid({
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={cells}
             rows={rows}
             rowKey={(row) => row.id}

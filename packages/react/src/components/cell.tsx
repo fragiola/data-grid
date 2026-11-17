@@ -17,11 +17,12 @@ export type CellProps<TRow> = DivPrimitiveProps<CellState> & {
 };
 
 /**
- * A body cell (`role="gridcell"`), positioned in its row. A `<td>` through `render`, which then
- * gets `colSpan` when it spans columns (`aria-colspan`, a column's `colSpan`); a render function
- * finds the span in its props' `aria-colspan` (`<td {...props} colSpan={props["aria-colspan"]} />`).
- * The active cell is the grid's tab stop (`tabIndex` 0, `data-active`); the others take focus on
- * click.
+ * A body cell (`role="gridcell"` with `navigation()` installed, else `cell`), positioned in its
+ * row. A `<td>` through `render`, which then gets `colSpan` when it spans columns
+ * (`aria-colspan`, a column's `colSpan`); a render function finds the span in its props'
+ * `aria-colspan` (`<td {...props} colSpan={props["aria-colspan"]} />`).
+ * With navigation, the active cell is the grid's tab stop (`tabIndex` 0, `data-active`); the
+ * others take focus on click. Without it, a cell has no `tabIndex`.
  */
 export function Cell<TRow>(props: CellProps<TRow>) {
     const { cell, children, ...rest } = props;

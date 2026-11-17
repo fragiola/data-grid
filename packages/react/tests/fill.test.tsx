@@ -1,13 +1,8 @@
 import { act, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-    type CellInfo,
-    type Column,
-    DataGrid,
-    type RangeFill,
-    useFillHandle,
-} from "../src";
-import { cellAt, stubViewportSize, tags } from "./helpers";
+import { type CellInfo, type Column, DataGrid, type RangeFill } from "../src";
+import { useFillHandle } from "../src/fill";
+import { cellAt, FEATURES, stubViewportSize, tags } from "./helpers";
 
 // The fill handle (Epic #88, E4.4): `Root`'s `onFill` turns filling on; `useFillHandle` gives the
 // app's element its mark in the cell at the range's corner (else the active cell), none
@@ -43,6 +38,7 @@ function Grid({
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rows={items}
             rowHeight={20}

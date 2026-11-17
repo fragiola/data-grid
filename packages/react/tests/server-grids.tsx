@@ -8,7 +8,7 @@ import {
 } from "../src";
 import { groupKeyOf, useLocalRows } from "../src/local";
 import { sorting } from "../src/sorting";
-import { tags } from "./helpers";
+import { FEATURES as GRID_FEATURES, tags } from "./helpers";
 
 // The grids the server-rendering tests share (Epic #89, E5.1): `server.test.tsx` renders each one
 // to a string in plain Node, `hydration.test.tsx` hydrates that string in jsdom. Each one renders
@@ -69,10 +69,13 @@ const treeMeta = (index: number): RowMeta =>
         ? { depth: 1, parentIndex: index - 1, setSize: 1, posInSet: 1 }
         : { depth: 0, expandable: true };
 
-/** A grid's root props over the sales: its columns and rows, else these. */
-/** the features a grid may install: sorting, which `useLocalRows`' sort is (Epic #141) */
-const FEATURES = [sorting()] as const;
+/**
+ * the features every grid installs: sorting, which `useLocalRows`' sort is (Epic #141), and the
+ * navigation, selections, clipboard and fill handle (Epic #144)
+ */
+const FEATURES = [sorting(), ...GRID_FEATURES] as const;
 
+/** A grid's root props over the sales: its columns and rows, else these. */
 type GridOptions = Omit<
     RootProps<Sale, typeof FEATURES>,
     "columns" | "rows" | "rowCount" | "getRow"
@@ -85,6 +88,7 @@ type GridOptions = Omit<
 /** A whole grid: every part, as a table or as divs. */
 function Composition({
     table = false,
+    features = FEATURES,
     columns: given = columns,
     rows = sales,
     ...root
@@ -108,6 +112,7 @@ function Composition({
     );
     return (
         <DataGrid.Root
+            features={features}
             columns={given}
             rows={rows}
             rowKey={rowKey}
@@ -178,7 +183,7 @@ function RowGroups({ table }: { table: boolean }) {
         rowKey,
         defaultExpandedGroupKeys: [groupKeyOf([["country", "Brazil"]])],
     });
-    return <Composition table={table} features={FEATURES} {...local.props} />;
+    return <Composition table={table} {...local.props} />;
 }
 
 /** The grids, by name: each one as a table and as divs. */

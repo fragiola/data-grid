@@ -11,7 +11,7 @@ import {
     useDataGridRef,
     useRowWindow,
 } from "../src";
-import { root, stubViewportSize } from "./helpers";
+import { FEATURES, type Features, root, stubViewportSize } from "./helpers";
 
 // A grid reached from outside its root (Epic #23, R2): `gridRef` holds the root's model and
 // engine, and the hooks that take it follow the grid from anywhere. jsdom lays nothing out: the
@@ -38,11 +38,12 @@ function Grid({
     gridRef,
     getRow,
 }: {
-    gridRef: DataGridRef<Person>;
+    gridRef: DataGridRef<Person, Features>;
     getRow?: (index: number) => Person | undefined;
 }) {
     return getRow ? (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rowCount={people.length}
             getRow={getRow}
@@ -56,6 +57,7 @@ function Grid({
         </DataGrid.Root>
     ) : (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rows={people}
             rowHeight={20}
@@ -74,7 +76,7 @@ function StatusBar({
     gridRef,
     renders,
 }: {
-    gridRef: DataGridRef<Person>;
+    gridRef: DataGridRef<Person, Features>;
     renders?: () => void;
 }) {
     renders?.();
@@ -101,13 +103,13 @@ function App({
     before,
     children,
 }: {
-    onRef: (gridRef: DataGridRef<Person>) => void;
+    onRef: (gridRef: DataGridRef<Person, Features>) => void;
     renders?: () => void;
-    before?: (gridRef: DataGridRef<Person>) => ReactNode;
-    children?: (gridRef: DataGridRef<Person>) => ReactNode;
+    before?: (gridRef: DataGridRef<Person, Features>) => ReactNode;
+    children?: (gridRef: DataGridRef<Person, Features>) => ReactNode;
 }) {
     renders?.();
-    const gridRef = useDataGridRef<Person>();
+    const gridRef = useDataGridRef<Person, Features>();
     onRef(gridRef);
     return (
         <>
@@ -119,7 +121,7 @@ function App({
 
 describe("gridRef", () => {
     it("holds the root's model and engine while it is mounted, and null after", () => {
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { unmount } = render(<App onRef={(ref) => (gridRef = ref)} />);
         const grid = gridRef?.current;
         expect(grid?.model.get("row-count")).toBe(1_000);
@@ -132,7 +134,7 @@ describe("gridRef", () => {
     });
 
     it("is the same object across renders", () => {
-        const refs = new Set<DataGridRef<Person>>();
+        const refs = new Set<DataGridRef<Person, Features>>();
         const { rerender } = render(<App onRef={(ref) => refs.add(ref)} />);
         rerender(<App onRef={(ref) => refs.add(ref)} />);
         expect(refs.size).toBe(1);
@@ -174,7 +176,7 @@ describe("gridRef", () => {
     });
 
     it("drives the live grid under StrictMode", () => {
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { container } = render(
             <StrictMode>
                 <App
@@ -198,7 +200,7 @@ describe("gridRef", () => {
     });
 
     it("follows a remounted root", () => {
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         function Remounting() {
             const [key, setKey] = useState(0);
             return (
@@ -235,7 +237,7 @@ describe("gridRef", () => {
 
     it("belongs to one mounted root: a second one is told in the console and does not take it", () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { container } = render(
             <App onRef={(ref) => (gridRef = ref)}>
                 {(ref) => (
@@ -267,12 +269,12 @@ describe("gridRef", () => {
 
     it("can be made outside a component, and refuses one it did not make", () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
-        const made = createDataGridRef<Person>();
+        const made = createDataGridRef<Person, Features>();
         const { unmount } = render(<Grid gridRef={made} />);
         expect(made.current?.model.get("row-count")).toBe(1_000);
         unmount();
         expect(made.current).toBeNull();
-        const fake: DataGridRef<Person> = {
+        const fake: DataGridRef<Person, Features> = {
             current: null,
             subscribe: () => () => {},
         };
@@ -291,7 +293,7 @@ describe("gridRef", () => {
                 loaded.set(person.id, person);
             }
         };
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { container } = render(
             <App onRef={(ref) => (gridRef = ref)}>
                 {(ref) => <Grid gridRef={ref} getRow={getRow} />}
@@ -323,13 +325,17 @@ describe("gridRef", () => {
 describe("hooks outside the root", () => {
     it("useDataGrid(gridRef) is null until a root takes the ref, then its grid", () => {
         const seen: (string | null)[] = [];
-        function Reader({ gridRef }: { gridRef: DataGridRef<Person> }) {
+        function Reader({
+            gridRef,
+        }: {
+            gridRef: DataGridRef<Person, Features>;
+        }) {
             const grid = useDataGrid(gridRef);
             seen.push(grid ? `rows ${grid.model.get("row-count")}` : null);
             return null;
         }
         function Toggle() {
-            const gridRef = useDataGridRef<Person>();
+            const gridRef = useDataGridRef<Person, Features>();
             const [shown, setShown] = useState(false);
             return (
                 <>
@@ -349,7 +355,7 @@ describe("hooks outside the root", () => {
 
     it("the window hooks give the empty window until then", () => {
         function Lonely() {
-            const gridRef = useDataGridRef<Person>();
+            const gridRef = useDataGridRef<Person, Features>();
             const rows = useRowWindow(gridRef);
             return (
                 <output data-testid="lonely">

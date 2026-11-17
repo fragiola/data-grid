@@ -4,9 +4,14 @@ import { describe, expect, it } from "vitest";
 import { type Column, DataGrid } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
 import { type SortColumn, sorting } from "../src/sorting";
-import { headerAt, stubViewportSize, tags } from "./helpers";
+import {
+    FEATURES as GRID_FEATURES,
+    headerAt,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
-const FEATURES = [sorting()] as const;
+const FEATURES = [sorting(), ...GRID_FEATURES] as const;
 
 // One hook for rows in memory (Epic #47, L1): its props spread onto Root make the header sort the
 // rows, and its controls filter, search and page what the grid shows.

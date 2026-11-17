@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 
 // `useLocalRows` is opt-in (Epic #47, L2): nothing the primitives' entry imports, however deep,
 // reaches `src/local` or the core's `/local`, so an app that never imports `/local` never ships it.
-// The features are opt-in the same way (Epic #141): `/sorting`.
+// The features are opt-in the same way: `/sorting` (Epic #141), `/navigation`, `/row-selection`,
+// `/range`, `/clipboard` and `/fill` (Epic #144), each its own entry re-exporting the core's.
 
 const src = join(import.meta.dirname, "../src");
 
@@ -39,16 +40,60 @@ function reachable(entry: string): {
     return { files, packages };
 }
 
+/** The opt-in entries: rows in memory and the features. */
+const EXTRAS = [
+    "local",
+    "sorting",
+    "navigation",
+    "row-selection",
+    "range",
+    "clipboard",
+    "fill",
+];
+
 describe("the primitives' entry", () => {
-    it("never reaches the opt-in extras: rows in memory, the selection's, the features", () => {
+    it("never reaches the opt-in extras: rows in memory, the features", () => {
         const { files, packages } = reachable(join(src, "index.ts"));
         const names = [...files].map((file) => relative(src, file));
         expect(names.length).toBeGreaterThan(5);
-        for (const extra of ["local", "selection", "sorting"]) {
+        for (const extra of EXTRAS) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(
                 [...packages].filter((name) => name.endsWith(`/${extra}`)),
             ).toEqual([]);
+        }
+    });
+});
+
+describe("the opt-in entries", () => {
+    const manifest = JSON.parse(
+        readFileSync(join(import.meta.dirname, "../package.json"), "utf8"),
+    ) as {
+        exports: Record<string, Record<string, string>>;
+        publishConfig: { exports: Record<string, Record<string, string>> };
+    };
+
+    it("are each a subpath, its source first, and published from dist", () => {
+        for (const extra of EXTRAS) {
+            const entry = manifest.exports[`./${extra}`];
+            expect(Object.keys(entry ?? {})[0]).toBe("@fragiola/source");
+            expect(entry?.["@fragiola/source"]).toBe(`./src/${extra}/index.ts`);
+            expect(existsSync(join(src, extra, "index.ts"))).toBe(true);
+            expect(manifest.publishConfig.exports[`./${extra}`]).toEqual({
+                types: `./dist/${extra}.d.ts`,
+                import: `./dist/${extra}.js`,
+                default: `./dist/${extra}.js`,
+            });
+        }
+        // `/selection` is `/row-selection` since Epic #144, with no alias
+        expect(manifest.exports["./selection"]).toBeUndefined();
+    });
+
+    it("re-export the core's feature entry of the same name", () => {
+        for (const extra of EXTRAS.filter((name) => name !== "local")) {
+            expect(reachable(join(src, extra, "index.ts")).packages).toContain(
+                `@fragiola/data-grid/${extra}`,
+            );
         }
     });
 });

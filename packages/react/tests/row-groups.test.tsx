@@ -9,7 +9,14 @@ import {
     useGroupToggle,
 } from "../src";
 import { groupKeyOf, type LocalRowsResult, useLocalRows } from "../src/local";
-import { cellAt, root, rowAt, stubViewportSize, tags } from "./helpers";
+import {
+    cellAt,
+    FEATURES,
+    root,
+    rowAt,
+    stubViewportSize,
+    tags,
+} from "./helpers";
 
 // Row groups in React (Epic #87, E3.1–E3.2): `useLocalRows` groups by columns and hands the root
 // the rows shown with their kinds; the grid is a treegrid, group rows render their value and the
@@ -90,6 +97,7 @@ function Sales({
     const tag = tags(table);
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={columns}
             rowHeight={20}
             rowSelection={rowSelection}
@@ -299,6 +307,7 @@ describe("row groups", () => {
         const getRowMeta = () => ({ depth: 0 });
         const plain = (props: { meta?: boolean }) => (
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={sales}
                 rowHeight={20}
