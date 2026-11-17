@@ -116,12 +116,69 @@ describe("@fragiola/data-grid-vue", () => {
                         "vue",
                         "@fragiola/data-grid",
                         "@fragiola/data-grid/local",
-                        "@fragiola/data-grid/selection",
                         "@fragiola/data-grid/sorting",
+                        "@fragiola/data-grid/navigation",
+                        "@fragiola/data-grid/row-selection",
+                        "@fragiola/data-grid/range",
+                        "@fragiola/data-grid/clipboard",
+                        "@fragiola/data-grid/fill",
                     ],
                     file,
                 ).toContain(specifier);
             }
         }
+    });
+});
+
+// Each feature's entry (Epic #141, #144): the core's same entry, re-exported whole, plus the
+// feature's composables; the main entry has none of them.
+const FEATURE_ENTRIES = {
+    sorting: [],
+    navigation: [],
+    "row-selection": ["useSelectAll"],
+    range: [],
+    clipboard: [],
+    fill: ["useFillHandle"],
+} as const;
+
+describe("the features' entries", () => {
+    for (const [entry, own] of Object.entries(FEATURE_ENTRIES)) {
+        it(`/${entry} re-exports the core's /${entry}, and its composables`, async () => {
+            const coreEntry = (await import(
+                `@fragiola/data-grid/${entry}`
+            )) as Record<string, unknown>;
+            const vueEntry = (await import(
+                `../src/${entry}/index.ts`
+            )) as Record<string, unknown>;
+            for (const [name, value] of Object.entries(coreEntry)) {
+                expect(vueEntry[name], name).toBe(value);
+            }
+            expect(
+                Object.keys(vueEntry).filter((name) => !(name in coreEntry)),
+            ).toEqual([...own]);
+            for (const name of Object.keys(vueEntry)) {
+                expect(name in vue, name).toBe(false);
+            }
+        });
+    }
+
+    it("are the package's subpaths, from their sources and their builds", () => {
+        const pkg = JSON.parse(read("package.json")) as {
+            exports: Record<string, Record<string, string>>;
+            publishConfig: { exports: Record<string, Record<string, string>> };
+        };
+        for (const entry of [...Object.keys(FEATURE_ENTRIES), "local"]) {
+            const subpath = pkg.exports[`./${entry}`];
+            expect(Object.keys(subpath ?? {})[0], entry).toBe(
+                "@fragiola/source",
+            );
+            expect(subpath?.["@fragiola/source"]).toBe(
+                `./src/${entry}/index.ts`,
+            );
+            expect(pkg.publishConfig.exports[`./${entry}`]?.import).toBe(
+                `./dist/${entry}.js`,
+            );
+        }
+        expect(pkg.exports["./selection"]).toBeUndefined();
     });
 });

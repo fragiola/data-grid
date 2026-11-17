@@ -29,6 +29,8 @@ import {
 } from "../src";
 import {
     click,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -49,7 +51,7 @@ interface Person {
     age: number;
 }
 
-const G = typedDataGrid<Person>();
+const G = typedDataGrid<Person, Features>();
 
 const people: Person[] = Array.from({ length: 1_000 }, (_, i) => ({
     id: i,
@@ -89,7 +91,7 @@ const STRUCTURAL = new Set([
 ]);
 
 type DivGridProps = Pick<
-    RootProps<Person>,
+    RootProps<Person, Features>,
     | "headerRowHeight"
     | "activePosition"
     | "defaultActivePosition"
@@ -101,7 +103,7 @@ type DivGridProps = Pick<
 function divGrid({ rows = people, ...props }: DivGridProps = {}) {
     return h(
         G.Root,
-        { columns, rows, rowHeight: 20, ...props },
+        { features: FEATURES, columns, rows, rowHeight: 20, ...props },
         {
             default: () => [
                 h(
@@ -117,7 +119,7 @@ function divGrid({ rows = people, ...props }: DivGridProps = {}) {
 function tableGrid() {
     return h(
         G.Root,
-        { columns, rows: people, rowHeight: 20 },
+        { features: FEATURES, columns, rows: people, rowHeight: 20 },
         {
             default: () => [
                 h(
@@ -220,7 +222,7 @@ function tableGrid() {
 function grid(
     props: Partial<
         Pick<
-            RootProps<Person>,
+            RootProps<Person, Features>,
             | "defaultActivePosition"
             | "onActivePositionChange"
             | "summaryRows"
@@ -232,7 +234,7 @@ function grid(
 ) {
     return h(
         G.Root,
-        { columns, rows: people, ...props },
+        { features: FEATURES, columns, rows: people, ...props },
         { default: () => [h(G.Grid, gridProps, { default: children })] },
     );
 }
@@ -346,6 +348,7 @@ describe("the primitive contract", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns: columns.map((column, index) =>
                         index === 0
                             ? { ...column, pinned: "start" as const }
@@ -513,7 +516,7 @@ describe("the primitive contract", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows: people },
+                { features: FEATURES, columns, rows: people },
                 {
                     default: () => [
                         h(
@@ -567,6 +570,7 @@ describe("the primitive contract", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rowCount: 100,
                     getRow: (index: number) => loaded.get(index),
@@ -649,10 +653,10 @@ describe("the active cell", () => {
     });
 
     it("follows the model: useDataGrid().model.run changes the same state, through onChange when controlled", async () => {
-        let grid: DataGridContextValue<Person> | null = null;
+        let grid: DataGridContextValue<Person, Features> | null = null;
         const Probe = defineComponent({
             setup() {
-                grid = useDataGrid<Person>();
+                grid = useDataGrid<Person, Features>();
                 return () => null;
             },
         });
@@ -661,6 +665,7 @@ describe("the active cell", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rows: people,
                     activePosition: position.value,
@@ -677,7 +682,7 @@ describe("the active cell", () => {
             ),
         );
         await settled();
-        (grid as DataGridContextValue<Person> | null)?.model.run(
+        (grid as DataGridContextValue<Person, Features> | null)?.model.run(
             "active-position.set",
             { rowIndex: 4, columnIndex: 2 },
         );
@@ -780,7 +785,7 @@ describe("the empty state", () => {
     function emptyGrid(rows: Person[]) {
         return h(
             G.Root,
-            { columns, rows, rowHeight: 20 },
+            { features: FEATURES, columns, rows, rowHeight: 20 },
             {
                 default: () => [
                     h(
@@ -857,7 +862,7 @@ describe("the empty state", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows: [] },
+                { features: FEATURES, columns, rows: [] },
                 {
                     default: () => [
                         h(
@@ -917,7 +922,7 @@ describe("the empty state", () => {
         renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows: [] },
+                { features: FEATURES, columns, rows: [] },
                 {
                     default: () => [
                         h(
@@ -949,7 +954,7 @@ describe("the empty state", () => {
         const emptyOf = (cells: Column<Person, VNodeChild>[]) =>
             h(
                 G.Root,
-                { columns: cells, rows: [] },
+                { features: FEATURES, columns: cells, rows: [] },
                 {
                     default: () => [
                         h(
@@ -983,7 +988,7 @@ describe("the empty state", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows: [] },
+                { features: FEATURES, columns, rows: [] },
                 {
                     default: () => [
                         h(
@@ -1038,7 +1043,7 @@ describe("the empty state", () => {
         const tableEmpty = (as?: typeof Td) =>
             h(
                 G.Root,
-                { columns, rows: [] },
+                { features: FEATURES, columns, rows: [] },
                 {
                     default: () => [
                         h(
@@ -1151,7 +1156,12 @@ describe("column groups", () => {
         const tag = tags(table);
         return h(
             G.Root,
-            { columns: groupedColumns, rows: people, rowHeight: 20 },
+            {
+                features: FEATURES,
+                columns: groupedColumns,
+                rows: people,
+                rowHeight: 20,
+            },
             {
                 default: () => [
                     h(
@@ -1293,6 +1303,7 @@ describe("column groups", () => {
             h(
                 DataGrid.Root,
                 {
+                    features: FEATURES,
                     columns: [{ key: "x", name: "X", width: 40 }],
                     rows: people.slice(0, 2),
                 },
@@ -1542,7 +1553,7 @@ describe("column groups", () => {
         let firstHeader: unknown;
         const Grab = defineComponent({
             setup() {
-                model = useDataGrid<Person>().model;
+                model = useDataGrid<Person, Features>().model;
                 // read in setup, before the root's mounted hook runs
                 firstHeader ??= model.state.header;
                 return () => null;
@@ -1554,6 +1565,7 @@ describe("column groups", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns: groupedColumns,
                     rows: people,
                     "data-version": version.value,
@@ -1612,7 +1624,12 @@ describe("regressions", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rowCount: 100, getRow: getRow.value },
+                {
+                    features: FEATURES,
+                    columns,
+                    rowCount: 100,
+                    getRow: getRow.value,
+                },
                 {
                     default: () => [
                         h(G.Grid, {}, { default: () => [h(G.Body)] }),
@@ -1671,6 +1688,7 @@ describe("epic review regressions", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rows: people,
                     defaultActivePosition: { rowIndex: 0, columnIndex: 0 },
@@ -1881,6 +1899,7 @@ describe("layering (Epic #89, E5.2)", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rows: people,
                     summaryRows: { top: 1, bottom: 1 },

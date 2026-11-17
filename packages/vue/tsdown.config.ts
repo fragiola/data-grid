@@ -2,13 +2,18 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
     // the primitives, and the opt-in extras, each its own file: the local pipeline's composable
-    // (`@fragiola/data-grid-vue/local`), the selection's (`@fragiola/data-grid-vue/selection`)
-    // and the features, the core's re-exported (`@fragiola/data-grid-vue/sorting`, Epic #141)
+    // (`@fragiola/data-grid-vue/local`) and the features, the core's re-exported with their
+    // composables (`/sorting`, Epic #141; `/navigation`, `/row-selection` with `useSelectAll`,
+    // `/range`, `/clipboard`, `/fill` with `useFillHandle`, Epic #144)
     entry: {
         index: "src/index.ts",
         local: "src/local/index.ts",
-        selection: "src/selection/index.ts",
         sorting: "src/sorting/index.ts",
+        navigation: "src/navigation/index.ts",
+        "row-selection": "src/row-selection/index.ts",
+        range: "src/range/index.ts",
+        clipboard: "src/clipboard/index.ts",
+        fill: "src/fill/index.ts",
     },
     format: "esm",
     platform: "browser",

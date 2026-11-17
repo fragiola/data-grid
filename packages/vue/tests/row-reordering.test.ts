@@ -29,6 +29,7 @@ import {
 import { useLocalRows } from "../src/local";
 import { type SortColumn, sorting } from "../src/sorting";
 import {
+    FEATURES as ALL,
     cellAt,
     fire,
     h,
@@ -53,7 +54,7 @@ interface Task {
     title: string;
 }
 
-const FEATURES = [sorting()] as const;
+const FEATURES = [sorting(), ...ALL] as const;
 
 const G = typedDataGrid<Task, typeof FEATURES>();
 
@@ -188,7 +189,7 @@ function mountGrid(props: GridProps) {
 }
 
 /** the last app's grid */
-let latestRef: DataGridRef<Task> | undefined;
+let latestRef: DataGridRef<Task, typeof FEATURES> | undefined;
 
 /** The app: its rows in its state, each move applied, the moves kept. */
 function mountApp({
@@ -199,7 +200,7 @@ function mountApp({
     onMove?: (move: RowMove) => void;
 }) {
     const rows = shallowRef<readonly Task[]>(tasks);
-    const gridRef = createDataGridRef<Task>();
+    const gridRef = createDataGridRef<Task, typeof FEATURES>();
     latestRef = gridRef;
     return renderGrid(() =>
         grid({

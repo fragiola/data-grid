@@ -17,6 +17,8 @@ import { groupKeyOf, type LocalRowsResult, useLocalRows } from "../src/local";
 import {
     cellAt,
     click,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -38,7 +40,7 @@ interface Sale {
     amount: number;
 }
 
-const G = typedDataGrid<Sale>();
+const G = typedDataGrid<Sale, Features>();
 
 const sales: Sale[] = [
     { id: 1, country: "France", city: "Paris", amount: 10 },
@@ -125,6 +127,7 @@ const Sales = defineComponent({
             return h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rowHeight: 20,
                     rowSelection: props.rowSelection,
@@ -384,6 +387,7 @@ describe("row groups", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rows: sales,
                     rowHeight: 20,

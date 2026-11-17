@@ -1,13 +1,16 @@
-import { type FillHandleState, fillHandlePartOf } from "@fragiola/data-grid";
+import {
+    type FillHandleState,
+    fillHandlePartOf,
+} from "@fragiola/data-grid/fill";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
+import type { PartComposableResult } from "../composables/internal";
 import { useGridView } from "../context";
 import { vueProps } from "../utils/render";
-import type { PartComposableResult } from "./internal";
 
 /**
  * A fill handle (Epic #88, E4.4): the state and props of an element the app renders in a cell
  * (a cell's info, or its position), visible in the cell at the corner a fill drags from while
- * cells fill (`onFill` on `DataGrid.Root`) and none is edited. Its look, place at the corner, cursor
+ * cells fill (`fillHandle()` installed, `onFill` on `DataGrid.Root`) and none is edited. Its look, place at the corner, cursor
  * and `touch-action: none` are the app's. Not visible (`state.visible` false), it has no props.
  */
 export function useFillHandle(

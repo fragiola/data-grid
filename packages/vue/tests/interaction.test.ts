@@ -12,6 +12,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -29,7 +31,7 @@ interface Task {
     title: string;
 }
 
-const G = typedDataGrid<Task>();
+const G = typedDataGrid<Task, Features>();
 
 const tasks: Task[] = Array.from({ length: 20 }, (_, id) => ({
     id,
@@ -171,7 +173,7 @@ function grid({
         );
     return h(
         G.Root,
-        { columns: cells, rows: tasks, rowHeight: 24 },
+        { features: FEATURES, columns: cells, rows: tasks, rowHeight: 24 },
         {
             default: () => [
                 h(

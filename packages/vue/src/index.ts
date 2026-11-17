@@ -53,7 +53,6 @@ export {
     createDataGridRef,
     useDataGridRef,
 } from "./composables/use-data-grid-ref";
-export { useFillHandle } from "./composables/use-fill-handle";
 export { useGroupLabel } from "./composables/use-group-label";
 export { useGroupToggle } from "./composables/use-group-toggle";
 export { useHeaderCell } from "./composables/use-header-cell";

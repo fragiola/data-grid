@@ -20,6 +20,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -39,7 +41,7 @@ interface Row {
     amount: number;
 }
 
-const G = typedDataGrid<Row>();
+const G = typedDataGrid<Row, Features>();
 
 const rows: Row[] = Array.from({ length: 20 }, (_, id) => ({
     id,
@@ -71,11 +73,11 @@ const columns: Column<Row, VNodeChild>[] = [
 // a 35px header, two 30px summary rows: 300 − 35 − 30 − 60 = 175 for the body
 stubViewportSize(800, 300);
 
-let grid: DataGridContextValue<Row> | null = null;
+let grid: DataGridContextValue<Row, Features> | null = null;
 
 const Expose = defineComponent({
     setup() {
-        grid = useDataGrid<Row>();
+        grid = useDataGrid<Row, Features>();
         return () => null;
     },
 });
@@ -119,6 +121,7 @@ function gridOf({
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns,
             rows,
             rowHeight: 20,
@@ -312,77 +315,89 @@ describe("summary rows", () => {
     // found by its forwarded attribute, and state-based classes go through the `render` slot
     it("follow the primitive contract: render, ref, className and style functions, forwarded props", async () => {
         const { container } = renderGrid(() =>
-            h(G.Root, { columns, rows, summaryRows: { top: 1 } }, () => [
-                h(G.Grid, null, () => [
-                    h(
-                        G.Summary,
-                        {
-                            position: "top",
-                            "data-testid": "summary",
-                            // structural keys win
-                            style: { top: "3px", color: "red" },
-                        },
-                        {
-                            render: ({
-                                props,
-                                state,
-                                children,
-                            }: RenderSlotProps<SummaryState>) => [
-                                h(
-                                    "div",
-                                    mergeProps(props, {
-                                        class: `summary-${state.position}`,
+            h(
+                G.Root,
+                { features: FEATURES, columns, rows, summaryRows: { top: 1 } },
+                () => [
+                    h(G.Grid, null, () => [
+                        h(
+                            G.Summary,
+                            {
+                                position: "top",
+                                "data-testid": "summary",
+                                // structural keys win
+                                style: { top: "3px", color: "red" },
+                            },
+                            {
+                                render: ({
+                                    props,
+                                    state,
+                                    children,
+                                }: RenderSlotProps<SummaryState>) => [
+                                    h(
+                                        "div",
+                                        mergeProps(props, {
+                                            class: `summary-${state.position}`,
+                                        }),
+                                        [children],
+                                    ),
+                                ],
+                                default: () => [
+                                    h(G.SummaryRows, null, {
+                                        default: ({
+                                            row,
+                                        }: {
+                                            row: SummaryRowInfo;
+                                        }) => [
+                                            h(
+                                                G.SummaryRow,
+                                                {
+                                                    row,
+                                                    style: {
+                                                        transform: "none",
+                                                    },
+                                                },
+                                                {
+                                                    render: ({
+                                                        props,
+                                                        state,
+                                                        children,
+                                                    }: RenderSlotProps<SummaryRowState>) => [
+                                                        h(
+                                                            "div",
+                                                            mergeProps(props, {
+                                                                class: `row-${state.summaryIndex}`,
+                                                            }),
+                                                            [children],
+                                                        ),
+                                                    ],
+                                                    default: () => [
+                                                        h(
+                                                            G.SummaryCells,
+                                                            null,
+                                                            {
+                                                                default: ({
+                                                                    cell,
+                                                                }: {
+                                                                    cell: SummaryCellInfo<Row>;
+                                                                }) => [
+                                                                    summaryCellOf(
+                                                                        cell,
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                        ],
                                     }),
-                                    [children],
-                                ),
-                            ],
-                            default: () => [
-                                h(G.SummaryRows, null, {
-                                    default: ({
-                                        row,
-                                    }: {
-                                        row: SummaryRowInfo;
-                                    }) => [
-                                        h(
-                                            G.SummaryRow,
-                                            {
-                                                row,
-                                                style: { transform: "none" },
-                                            },
-                                            {
-                                                render: ({
-                                                    props,
-                                                    state,
-                                                    children,
-                                                }: RenderSlotProps<SummaryRowState>) => [
-                                                    h(
-                                                        "div",
-                                                        mergeProps(props, {
-                                                            class: `row-${state.summaryIndex}`,
-                                                        }),
-                                                        [children],
-                                                    ),
-                                                ],
-                                                default: () => [
-                                                    h(G.SummaryCells, null, {
-                                                        default: ({
-                                                            cell,
-                                                        }: {
-                                                            cell: SummaryCellInfo<Row>;
-                                                        }) => [
-                                                            summaryCellOf(cell),
-                                                        ],
-                                                    }),
-                                                ],
-                                            },
-                                        ),
-                                    ],
-                                }),
-                            ],
-                        },
-                    ),
-                ]),
-            ]),
+                                ],
+                            },
+                        ),
+                    ]),
+                ],
+            ),
         );
         await settled();
         const summary = container.querySelector<HTMLElement>(
@@ -412,7 +427,12 @@ describe("summary rows", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns: plain, rows, summaryRows: { bottom: 1 } },
+                {
+                    features: FEATURES,
+                    columns: plain,
+                    rows,
+                    summaryRows: { bottom: 1 },
+                },
                 () => [
                     h(G.Grid, null, () => [
                         h(G.Summary, { position: "bottom" }),
@@ -425,7 +445,9 @@ describe("summary rows", () => {
         expect(own).toBeEmptyDOMElement();
         expect(() =>
             renderGrid(() =>
-                h(G.Root, { columns: plain, rows }, () => [h(G.SummaryCells)]),
+                h(G.Root, { features: FEATURES, columns: plain, rows }, () => [
+                    h(G.SummaryCells),
+                ]),
             ),
         ).toThrow(/SummaryRow/);
     });
@@ -436,6 +458,7 @@ describe("summary rows", () => {
             h(
                 G.Root,
                 {
+                    features: FEATURES,
                     columns,
                     rows: rows.slice(0, count),
                     summaryRows: { bottom: 1 },
@@ -476,34 +499,47 @@ describe("summary rows", () => {
             },
         ];
         const { container, update } = mountWith(shallowRef("a"), (note) =>
-            h(G.Root, { columns: live, rows, summaryRows: { top: 1 } }, () => [
-                h(Expose),
-                h(G.Grid, null, () => [
-                    h(G.Summary, { position: "top" }, () => [
-                        h(G.SummaryRows, null, {
-                            default: ({ row }: { row: SummaryRowInfo }) => [
-                                h(G.SummaryRow, { row }, () => [
-                                    h(G.SummaryCells, null, {
-                                        default: ({
-                                            cell,
-                                        }: {
-                                            cell: SummaryCellInfo<Row>;
-                                        }) => [
-                                            h(G.SummaryCell, { cell }, () => [
-                                                note,
-                                                " ",
-                                                cell.column.renderSummaryCell?.(
-                                                    cell,
+            h(
+                G.Root,
+                {
+                    features: FEATURES,
+                    columns: live,
+                    rows,
+                    summaryRows: { top: 1 },
+                },
+                () => [
+                    h(Expose),
+                    h(G.Grid, null, () => [
+                        h(G.Summary, { position: "top" }, () => [
+                            h(G.SummaryRows, null, {
+                                default: ({ row }: { row: SummaryRowInfo }) => [
+                                    h(G.SummaryRow, { row }, () => [
+                                        h(G.SummaryCells, null, {
+                                            default: ({
+                                                cell,
+                                            }: {
+                                                cell: SummaryCellInfo<Row>;
+                                            }) => [
+                                                h(
+                                                    G.SummaryCell,
+                                                    { cell },
+                                                    () => [
+                                                        note,
+                                                        " ",
+                                                        cell.column.renderSummaryCell?.(
+                                                            cell,
+                                                        ),
+                                                    ],
                                                 ),
-                                            ]),
-                                        ],
-                                    }),
-                                ]),
-                            ],
-                        }),
+                                            ],
+                                        }),
+                                    ]),
+                                ],
+                            }),
+                        ]),
                     ]),
-                ]),
-            ]),
+                ],
+            ),
         );
         await settled();
         const own = () => summaryCell(container, -2, 0);
@@ -546,6 +582,7 @@ describe("a summary cell's controls", () => {
         return h(
             G.Root,
             {
+                features: FEATURES,
                 columns,
                 rows: rows.slice(0, count),
                 rowHeight: 20,

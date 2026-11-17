@@ -12,6 +12,8 @@ import {
 } from "../src";
 import {
     click,
+    FEATURES,
+    type Features,
     h,
     renderGrid,
     root,
@@ -40,7 +42,7 @@ const columns: Column<Person, VNodeChild>[] = [
     { key: "id", name: "Id", width: 100 },
 ];
 
-const G = typedDataGrid<Person>();
+const G = typedDataGrid<Person, Features>();
 
 stubViewportSize(400, 235);
 
@@ -49,7 +51,7 @@ function grid({
     getRow,
     key,
 }: {
-    gridRef: DataGridRef<Person>;
+    gridRef: DataGridRef<Person, Features>;
     getRow?: (index: number) => Person | undefined;
     key?: number;
 }) {
@@ -58,7 +60,7 @@ function grid({
         : { rows: people };
     return h(
         G.Root,
-        { key, columns, ...data, rowHeight: 20, gridRef },
+        { features: FEATURES, key, columns, ...data, rowHeight: 20, gridRef },
         {
             default: () => [
                 h(G.Grid, null, {
@@ -73,7 +75,7 @@ function grid({
 const StatusBar = defineComponent({
     props: {
         gridRef: {
-            type: Object as PropType<DataGridRef<Person>>,
+            type: Object as PropType<DataGridRef<Person, Features>>,
             required: true,
         },
         renders: { type: Function as PropType<() => void>, default: undefined },
@@ -107,14 +109,14 @@ function app({
     before,
     children,
 }: {
-    onRef: (gridRef: DataGridRef<Person>) => void;
+    onRef: (gridRef: DataGridRef<Person, Features>) => void;
     renders?: () => void;
-    before?: (gridRef: DataGridRef<Person>) => VNodeChild;
-    children?: (gridRef: DataGridRef<Person>) => VNodeChild;
+    before?: (gridRef: DataGridRef<Person, Features>) => VNodeChild;
+    children?: (gridRef: DataGridRef<Person, Features>) => VNodeChild;
 }) {
     return defineComponent({
         setup() {
-            const gridRef = useDataGridRef<Person>();
+            const gridRef = useDataGridRef<Person, Features>();
             return () => {
                 renders?.();
                 onRef(gridRef);
@@ -129,7 +131,7 @@ function app({
 
 describe("gridRef", () => {
     it("holds the root's model and engine while it is mounted, and null after", async () => {
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { unmount } = renderGrid(
             app({
                 onRef: (held) => {
@@ -149,7 +151,7 @@ describe("gridRef", () => {
     });
 
     it("is the same object across renders", async () => {
-        const refs = new Set<DataGridRef<Person>>();
+        const refs = new Set<DataGridRef<Person, Features>>();
         const tick = ref(0);
         renderGrid(
             app({
@@ -202,7 +204,7 @@ describe("gridRef", () => {
 
     // React's StrictMode (double effects) has no Vue counterpart: the live grid, driven
     it("drives the live grid under StrictMode", async () => {
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { container } = renderGrid(
             app({
                 onRef: (held) => {
@@ -226,7 +228,7 @@ describe("gridRef", () => {
     });
 
     it("follows a remounted root", async () => {
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const key = ref(0);
         const { container } = renderGrid(
             app({
@@ -267,7 +269,7 @@ describe("gridRef", () => {
 
     it("belongs to one mounted root: a second one is told in the console and does not take it", async () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { container } = renderGrid(
             app({
                 onRef: (held) => {
@@ -300,13 +302,13 @@ describe("gridRef", () => {
 
     it("can be made outside a component, and refuses one it did not make", async () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
-        const made = createDataGridRef<Person>();
+        const made = createDataGridRef<Person, Features>();
         const { unmount } = renderGrid(() => grid({ gridRef: made }));
         await settled();
         expect(made.current?.model.get("row-count")).toBe(1_000);
         unmount();
         expect(made.current).toBeNull();
-        const fake: DataGridRef<Person> = {
+        const fake: DataGridRef<Person, Features> = {
             current: null,
             subscribe: () => () => {},
         };
@@ -326,7 +328,7 @@ describe("gridRef", () => {
                 loaded.set(person.id, person);
             }
         };
-        let gridRef: DataGridRef<Person> | undefined;
+        let gridRef: DataGridRef<Person, Features> | undefined;
         const { container } = renderGrid(
             app({
                 onRef: (held) => {
@@ -360,7 +362,7 @@ describe("hooks outside the root", () => {
         const Reader = defineComponent({
             props: {
                 gridRef: {
-                    type: Object as PropType<DataGridRef<Person>>,
+                    type: Object as PropType<DataGridRef<Person, Features>>,
                     required: true,
                 },
             },
@@ -379,7 +381,7 @@ describe("hooks outside the root", () => {
         });
         const Toggle = defineComponent({
             setup() {
-                const gridRef = useDataGridRef<Person>();
+                const gridRef = useDataGridRef<Person, Features>();
                 const shown = ref(false);
                 return () => [
                     h(Reader, { gridRef }),
@@ -410,7 +412,7 @@ describe("hooks outside the root", () => {
     it("the window hooks give the empty window until then", async () => {
         const Lonely = defineComponent({
             setup() {
-                const gridRef = useDataGridRef<Person>();
+                const gridRef = useDataGridRef<Person, Features>();
                 const rows = useRowWindow(gridRef);
                 return () =>
                     h(

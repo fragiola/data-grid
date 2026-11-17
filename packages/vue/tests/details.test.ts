@@ -19,6 +19,8 @@ import {
 } from "../src";
 import {
     click,
+    FEATURES,
+    type Features,
     h,
     renderGrid,
     settled,
@@ -36,7 +38,7 @@ interface Row {
     total: number;
 }
 
-const G = typedDataGrid<Row>();
+const G = typedDataGrid<Row, Features>();
 
 const rows: Row[] = Array.from({ length: 50 }, (_, i) => ({
     id: `r${i}`,
@@ -85,7 +87,7 @@ type GridProps = {
 const Toggle = defineComponent({
     props: { rowIndex: { type: Number, required: true } },
     setup(props) {
-        const { model } = useDataGrid<Row>();
+        const { model } = useDataGrid<Row, Features>();
         return () =>
             h("button", {
                 type: "button",
@@ -110,6 +112,7 @@ function grid({
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns: cells,
             rows,
             rowKey: (row: Row) => row.id,

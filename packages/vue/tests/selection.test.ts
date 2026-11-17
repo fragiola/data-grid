@@ -18,10 +18,12 @@ import {
     useDataGridRef,
 } from "../src";
 import { useLocalRows } from "../src/local";
-import { useSelectAll } from "../src/selection";
+import { useSelectAll } from "../src/row-selection";
 import {
     cellAt,
     click,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -49,7 +51,7 @@ const columns: Column<Person, VNodeChild>[] = [
     { key: "id", name: "Id", width: 120 },
 ];
 
-const G = typedDataGrid<Person>();
+const G = typedDataGrid<Person, Features>();
 
 stubViewportSize(400, 300);
 
@@ -59,7 +61,7 @@ const KEYS = people.map((person) => person.id);
 const SelectAll = defineComponent({
     props: {
         gridRef: {
-            type: Object as PropType<DataGridRef<Person>>,
+            type: Object as PropType<DataGridRef<Person, Features>>,
             default: undefined,
         },
     },
@@ -86,7 +88,7 @@ type GridProps = {
     defaultSelectedRowKeys?: readonly RowKey[];
     onSelectedRowKeysChange?: (keys: readonly RowKey[]) => void;
     isRowSelectable?: (row: Person) => boolean;
-    gridRef?: DataGridRef<Person>;
+    gridRef?: DataGridRef<Person, Features>;
     rowStates?: boolean[];
 };
 
@@ -100,6 +102,7 @@ function grid({
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns,
             rows: people,
             rowKey: (row: Person) => row.id,
@@ -305,7 +308,7 @@ describe("controlled selection", () => {
         const Controlled = defineComponent({
             setup() {
                 const keys = shallowRef<readonly RowKey[]>([]);
-                const gridRef = useDataGridRef<Person>();
+                const gridRef = useDataGridRef<Person, Features>();
                 run = (rowIndex, extend) =>
                     gridRef.current?.model.run("selected-rows.toggle", {
                         rowIndex,
@@ -382,7 +385,7 @@ describe("modes and rows that cannot be selected", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows: people, rowHeight: 20 },
+                { features: FEATURES, columns, rows: people, rowHeight: 20 },
                 {
                     default: () => [
                         h(G.Grid, null, {
@@ -503,7 +506,7 @@ describe("useSelectAll", () => {
     it("works outside the root through a gridRef", async () => {
         const Outside = defineComponent({
             setup() {
-                const gridRef = useDataGridRef<Person>();
+                const gridRef = useDataGridRef<Person, Features>();
                 return () => [h(SelectAll, { gridRef }), grid({ gridRef })];
             },
         });

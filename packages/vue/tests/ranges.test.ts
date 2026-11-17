@@ -15,6 +15,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     h,
     keyDown,
     renderGrid,
@@ -43,13 +45,13 @@ const columns: Column<Item, VNodeChild>[] = ["a", "b", "c", "d"].map((key) => ({
     getValue: (row: Item) => `${key}${row.id}`,
 }));
 
-const G = typedDataGrid<Item>();
+const G = typedDataGrid<Item, Features>();
 
 stubViewportSize(400, 300);
 
 type GridProps = Partial<
     Pick<
-        RootProps<Item>,
+        RootProps<Item, Features>,
         | "cellSelection"
         | "selectedRange"
         | "defaultSelectedRange"
@@ -63,7 +65,7 @@ type GridProps = Partial<
     onCopy?: (event: ClipboardEvent) => void;
     onPaste?: (event: ClipboardEvent) => void;
     table?: boolean;
-    gridRef?: DataGridRef<Item>;
+    gridRef?: DataGridRef<Item, Features>;
     cellStates?: CellState[];
 };
 
@@ -72,6 +74,7 @@ function grid({ table = false, cellStates, ...props }: GridProps = {}) {
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns,
             rows: items,
             rowHeight: 20,
@@ -347,11 +350,11 @@ describe("the selected range", () => {
     });
 
     it("goes when cellSelection is removed, and is read through a gridRef", async () => {
-        const held: { ref?: DataGridRef<Item> } = {};
+        const held: { ref?: DataGridRef<Item, Features> } = {};
         const on = shallowRef(true);
         const App = defineComponent({
             setup() {
-                const gridRef = useDataGridRef<Item>();
+                const gridRef = useDataGridRef<Item, Features>();
                 held.ref = gridRef;
                 return () =>
                     grid({
