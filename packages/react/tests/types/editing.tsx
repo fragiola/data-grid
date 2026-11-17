@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import {
-    type CellEditEvent,
     type Column,
     DataGrid,
     type EditingCell,
-    useCellEdit,
     useDataGrid,
 } from "../../src";
+import { type CellEditEvent, editing, useCellEdit } from "../../src/editing";
+import { navigation } from "../../src/navigation";
+
+// the editing props compile with `editing()` installed (Epic #146), never without
+const features = [navigation(), editing()] as const;
 
 interface Task {
     id: string;
@@ -53,6 +56,7 @@ export function Tasks() {
         <DataGrid.Root
             columns={columns}
             rows={tasks}
+            features={features}
             editingCell={editing}
             onEditingCellChange={setEditing}
             onCellEdit={({ row, columnKey, value }: CellEditEvent<Task>) => {
@@ -62,6 +66,25 @@ export function Tasks() {
                 }
             }}
         />
+    );
+}
+
+export function Bare() {
+    return (
+        <>
+            <DataGrid.Root
+                columns={columns}
+                rows={tasks}
+                // @ts-expect-error: editing's prop, without it
+                editingCell={null}
+            />
+            <DataGrid.Root
+                columns={columns}
+                rows={tasks}
+                // @ts-expect-error: editing's event, without it
+                onCellEdit={() => {}}
+            />
+        </>
     );
 }
 
@@ -76,7 +99,7 @@ export function OwnEditor({
 }
 
 export function Commands() {
-    const { model, engine } = useDataGrid<Task>();
+    const { model, engine } = useDataGrid<Task, typeof features>();
     model.run("editing-cell.set", {
         rowIndex: 0,
         columnIndex: 0,
@@ -93,6 +116,9 @@ export function Commands() {
     });
     // @ts-expect-error: a key that started an edit is a string
     model.run("editing-cell.set", { rowIndex: 0, columnIndex: 0, startKey: 1 });
+    const bare = useDataGrid<Task, []>().model;
+    // @ts-expect-error: editing's command, without it
+    bare.run("editing-cell.clear");
     return editable;
 }
 

@@ -49,6 +49,7 @@ const EXTRAS = [
     "range",
     "clipboard",
     "fill",
+    "editing",
 ];
 
 describe("the primitives' entry", () => {

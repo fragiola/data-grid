@@ -1,13 +1,15 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { type Column, DataGrid, type DataGridFeatures } from "../src";
+import { editing } from "../src/editing";
 import { navigation } from "../src/navigation";
 import { cellAt, headerAt, settled, stubViewportSize, tags } from "./helpers";
 
 // A grid without features (Epic #144): cell navigation is a feature, so a bare grid is the APG
 // table pattern (`role="table"`, `columnheader`, `cell`), with no tab stop of its own, nor on its
 // cells, and the arrow keys move nothing; the controls in its cells keep their own tab order.
-// Installing `navigation()` makes it a grid: `grid`, `gridcell` and the roving tab stop.
+// Installing `navigation()` makes it a grid: `grid`, `gridcell` and the roving tab stop. Cell
+// editing is one too (Epic #146): without `editing()`, an editable column's cell never edits.
 
 interface Task {
     id: number;
@@ -29,20 +31,35 @@ const columns: Column<Task>[] = [
     },
 ];
 
+/** The columns with an editable one, its editor the app's. */
+const editableColumns: Column<Task>[] = [
+    {
+        key: "title",
+        name: "Title",
+        width: 160,
+        editable: true,
+        renderEditCell: ({ value }) => (
+            <input data-editor="" defaultValue={String(value)} />
+        ),
+    },
+];
+
 stubViewportSize(400, 300);
 
 function Grid({
     table = false,
     features,
+    gridColumns = columns,
 }: {
     table?: boolean;
     features?: DataGridFeatures;
+    gridColumns?: Column<Task>[];
 }) {
     const tag = tags(table);
     return (
         <DataGrid.Root
             features={features}
-            columns={columns}
+            columns={gridColumns}
             rows={tasks}
             rowHeight={24}
         >
@@ -155,6 +172,52 @@ for (const table of [false, true]) {
             expect(below).toHaveAttribute("tabindex", "0");
             expect(document.activeElement).toBe(below);
             expect(gridOf(container)).toHaveAttribute("tabindex", "-1");
+        });
+
+        it("edits nothing without editing: Enter, F2, typing and a double click, no editor rendered", async () => {
+            const { container } = render(
+                <Grid
+                    table={table}
+                    features={[navigation()]}
+                    gridColumns={editableColumns}
+                />,
+            );
+            await settled();
+            const cell = cellAt(container, 0, 0);
+            act(() => {
+                fireEvent.click(cell);
+                cell.focus();
+            });
+            expect(cell).toHaveAttribute("data-active", "");
+            for (const key of ["Enter", "F2", "a"]) {
+                expect(fireEvent.keyDown(cell, { key })).toBe(true);
+            }
+            act(() => {
+                fireEvent.click(cell, { detail: 2 });
+            });
+            expect(container.querySelector("[data-editing]")).toBeNull();
+            expect(container.querySelector("[data-editor]")).toBeNull();
+        });
+
+        it("edits with editing installed: the cell renders its column's editor", async () => {
+            const { container } = render(
+                <Grid
+                    table={table}
+                    features={[navigation(), editing()]}
+                    gridColumns={editableColumns}
+                />,
+            );
+            await settled();
+            const cell = cellAt(container, 0, 0);
+            act(() => {
+                fireEvent.click(cell);
+                cell.focus();
+            });
+            act(() => {
+                fireEvent.keyDown(cell, { key: "Enter" });
+            });
+            expect(cell).toHaveAttribute("data-editing", "");
+            expect(cell.querySelector("[data-editor]")).toHaveValue("Task 0");
         });
     });
 }
