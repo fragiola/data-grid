@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import {
     ChevronLeft,
     ChevronRight,
@@ -21,8 +22,12 @@ const searchInset = {
     start: h(Search, { "aria-hidden": "true", class: styles.icon }),
 };
 
-// The parts typed by the row type: a template cannot pass `Person` as a type argument.
-const DataGrid = typedDataGrid<Person>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Person, typeof features>();
 
 const all = people(1_000);
 
@@ -173,6 +178,7 @@ const rowKey = (row: Person) => row.id;
             </div>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :row-key="rowKey"
             :row-height="36"

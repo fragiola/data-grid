@@ -6,6 +6,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Download } from "@lucide/vue";
 import { computed, h, provide, shallowRef, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
@@ -38,7 +39,10 @@ interface Job extends BudgetedTask {
     available: boolean;
 }
 
-const DataGrid = typedDataGrid<Job>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+const DataGrid = typedDataGrid<Job, typeof features>();
 
 const JOBS: Job[] = budgetedTasks(1_000).map((task) => ({
     ...task,
@@ -258,6 +262,7 @@ function edited({ row, columnKey, value }: CellEditEvent<Job>) {
             </Clickable.Button>
         </div>
         <DataGrid.Root
+            :features="features"
             v-bind="local.props"
             :columns="columns"
             :row-key="rowKey"

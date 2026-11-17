@@ -9,6 +9,7 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDown, ArrowUp } from "@lucide/vue";
 import { h, ref, shallowRef, type VNodeChild } from "vue";
 import {
@@ -30,7 +31,10 @@ import * as styles from "./styles";
 // grid owns the keys, the pointer and the clipboard; every value is written by the app, through
 // one rule (`withField`), whether typed, pasted or filled.
 
-const DataGrid = typedDataGrid<BudgetedTask>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+const DataGrid = typedDataGrid<BudgetedTask, typeof features>();
 
 const columns: Column<BudgetedTask, VNodeChild>[] = [
     {
@@ -173,6 +177,7 @@ function filled(fill: RangeFill) {
             <span role="status" :class="styles.status">{{ announcement }}</span>
         </div>
         <DataGrid.Root
+            :features="features"
             v-bind="local.props"
             :grid-ref="gridRef"
             :columns="columns"

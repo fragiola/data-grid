@@ -7,6 +7,7 @@ import {
     typedDataGrid,
 } from "@fragiola/data-grid-vue";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
+import { sorting } from "@fragiola/data-grid-vue/sorting";
 import {
     AtSignIcon,
     Building2Icon,
@@ -46,8 +47,12 @@ import SortLabel from "./sort-label.vue";
 import { COMPANY_IDS, isSortKey, type SortKey } from "./state";
 import * as styles from "./styles";
 
-// The parts typed by the row type: a template cannot pass `Company` as a type argument.
-const DataGrid = typedDataGrid<Company>();
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const features = [sorting()] as const;
+
+// The parts typed by the row type and the features: a template cannot pass them as type
+// arguments.
+const DataGrid = typedDataGrid<Company, typeof features>();
 
 const SORT_LABELS: Record<SortKey, string> = {
     name: "Company",
@@ -309,6 +314,7 @@ const rowKey = (row: Company) => row.id;
             </span>
         </div>
         <DataGrid.Root
+            :features="features"
             :columns="columns"
             :row-key="rowKey"
             :row-height="44"

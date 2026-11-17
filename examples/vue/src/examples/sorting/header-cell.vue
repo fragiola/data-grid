@@ -4,6 +4,7 @@ import {
     typedDataGrid,
     useGridView,
 } from "@fragiola/data-grid-vue";
+import { sortColumnsOf } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "@lucide/vue";
 import { computed } from "vue";
 import type { Person } from "../_kit/data";
@@ -17,7 +18,7 @@ const DataGrid = typedDataGrid<Person>();
 defineProps<{ cell: HeaderCellInfo<Person> }>();
 
 const view = useGridView();
-const sortedColumns = computed(() => view.value.sortColumns.length);
+const sortedColumns = computed(() => sortColumnsOf(view.value).length);
 </script>
 
 <template>

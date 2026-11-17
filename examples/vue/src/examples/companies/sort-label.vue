@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useGridView } from "@fragiola/data-grid-vue";
+import { sortColumnsOf } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDownIcon, ArrowUpIcon } from "@lucide/vue";
 import { computed } from "vue";
 import type { SortKey } from "./state";
@@ -13,7 +14,9 @@ const props = defineProps<{ columnKey: SortKey }>();
 
 const view = useGridView();
 const sorted = computed(() =>
-    view.value.sortColumns.find((entry) => entry.columnKey === props.columnKey),
+    sortColumnsOf(view.value).find(
+        (entry) => entry.columnKey === props.columnKey,
+    ),
 );
 </script>
 
