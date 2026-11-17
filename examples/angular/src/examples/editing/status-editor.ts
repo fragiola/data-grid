@@ -10,6 +10,7 @@ import {
 import type {
     DataGridNode,
     EditCellRenderProps,
+    EditorProps,
 } from "@fragiola/data-grid-angular";
 import { SELECT_PARTS } from "#/components/ui/select";
 import { isStatus } from "../_kit/budgeted-tasks";
@@ -25,9 +26,8 @@ const STATUS_ITEMS = Object.fromEntries(
 
 /** The edit's `editorProps` written on the element as its attributes (React spreads them). */
 @Directive({ selector: "[exampleEditorProps]" })
-export class EditorProps implements OnInit {
-    readonly exampleEditorProps =
-        input.required<Readonly<Record<string, string>>>();
+export class EditorAttributes implements OnInit {
+    readonly exampleEditorProps = input.required<EditorProps>();
     private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
 
     // before the list takes the focus (it does on the next microtask)
@@ -40,7 +40,7 @@ export class EditorProps implements OnInit {
 
 @Component({
     selector: "example-status-editor",
-    imports: [SELECT_PARTS, EditorProps],
+    imports: [SELECT_PARTS, EditorAttributes],
     changeDetection: ChangeDetectionStrategy.OnPush,
     // the trigger is the cell's content, as if this element were not there
     host: { style: "display: contents" },
