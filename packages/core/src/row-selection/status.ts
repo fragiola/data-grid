@@ -1,6 +1,6 @@
 import type { RowKey, RowSelection } from "../model/types";
 
-// The selection's extras (Epic #57, R8), opt-in: `@fragiola/data-grid/selection`. The grid keeps
+// The selection's extras (Epic #57, R8), in `@fragiola/data-grid/row-selection`. The grid keeps
 // the selected keys; these answer questions about a list of keys the app chooses (the rows on
 // screen, a page, every filtered row) and build the key lists a header checkbox sets. Pure
 // functions over keys: no model, no state.

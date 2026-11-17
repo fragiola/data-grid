@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
     type Column,
     type ColumnOrGroup,
-    createDataGridModel,
     GROUP_LABEL_ATTRIBUTE,
     headerCellBox,
     headerCellPart,
@@ -11,6 +10,7 @@ import {
 } from "../../src";
 import { columnsError } from "../../src/header/header";
 import { sorting } from "../../src/sorting";
+import { FEATURES, gridModel } from "../features";
 import { mountEngine, type Row } from "./harness";
 
 // Collapsible column groups and sticky group labels (Epic #85, E1.3): a collapsible group shows
@@ -57,8 +57,8 @@ const COLLAPSED = ["id", "g0", "total", "h0"];
 
 const rows = Array.from({ length: 50 }, (_, id) => ({ id }));
 
-function model(options: Parameters<typeof createDataGridModel<Row>>[0] = {}) {
-    return createDataGridModel<Row>({ columns: COLUMNS, rows, ...options });
+function model(options: Parameters<typeof gridModel<Row>>[0] = {}) {
+    return gridModel<Row>({ columns: COLUMNS, rows, ...options });
 }
 
 const keys = (m: {
@@ -117,7 +117,7 @@ describe("validation", () => {
             ]),
         ).toMatch(/group "g" shows no column expanded/);
         expect(() =>
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: [column("a", { groupShow: "collapsed" })],
             }),
         ).toThrow(/invalid columns/);
@@ -197,7 +197,7 @@ describe("the model", () => {
     });
 
     it("toggles a group a collapsed one hides, which shows its state once expanded", () => {
-        const m = createDataGridModel<Row>({
+        const m = gridModel<Row>({
             rows,
             columns: [
                 {
@@ -234,10 +234,10 @@ describe("the model", () => {
         const sortable = columnsWith((key) =>
             key === "g3" ? { sortable: true, resizable: true } : {},
         );
-        const m = createDataGridModel({
+        const m = gridModel({
             columns: sortable,
             rows,
-            features: [sorting()],
+            features: [...FEATURES, sorting()],
             columnWidths: { g3: 150 },
             sortColumns: [{ columnKey: "g3", direction: "ascending" }],
             columnOrder: ["g8", "g0"],
@@ -336,7 +336,7 @@ const SWAPPED: ColumnOrGroup<Row>[] = [
 
 describe("a group whose children are swapped", () => {
     it("moves the active cell off a hidden column to its group's first column, never past it", () => {
-        const m = createDataGridModel<Row>({ columns: SWAPPED, rows });
+        const m = gridModel<Row>({ columns: SWAPPED, rows });
         m.run("active-position.set", { rowIndex: 2, columnIndex: 4 });
         m.run("column-groups.toggle", { groupKey: "y" });
         // "ytotal", the only column "y" shows, not "z"
@@ -358,7 +358,7 @@ describe("a group whose children are swapped", () => {
 
 describe("the model's set of keys", () => {
     it("takes the same keys in another order as no change", () => {
-        const m = createDataGridModel<Row>({
+        const m = gridModel<Row>({
             columns: [
                 ...COLUMNS,
                 {
@@ -382,7 +382,7 @@ describe("the model's set of keys", () => {
     });
 
     it("keeps keys of no collapsible group without laying the columns out again", () => {
-        const m = createDataGridModel<Row>({ columns: COLUMNS, rows });
+        const m = gridModel<Row>({ columns: COLUMNS, rows });
         const { columns, header } = m.state;
         // "h" does not collapse, "gone" is no group: kept, collapsing nothing
         expect(
@@ -412,7 +412,7 @@ describe("the engine", () => {
                 columns: options.columns ?? COLUMNS,
                 rowCount: 1_000,
                 direction: options.direction,
-                features: [sorting()],
+                features: [...FEATURES, sorting()],
             },
             {
                 overscan: { rows: 2, columns: 1 },

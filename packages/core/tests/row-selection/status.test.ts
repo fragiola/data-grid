@@ -4,7 +4,7 @@ import {
     toggledRowKeys,
     withoutRowKeys,
     withRowKeys,
-} from "../../src/selection";
+} from "../../src/row-selection";
 
 // The selection's extras (Epic #57, R8): answers over a list of keys the app chooses.
 

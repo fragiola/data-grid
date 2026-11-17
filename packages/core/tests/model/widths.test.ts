@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-    type ColumnOrGroup,
-    createDataGridModel,
-    type DataGridModelOptions,
-    veto,
-} from "../../src";
+import { type ColumnOrGroup, type DataGridModelOptions, veto } from "../../src";
 import { columnsError } from "../../src/header/header";
 import {
     autoWidthsOf,
     keptWidthsOf,
     sharedWidths,
 } from "../../src/model/widths";
+import { gridModel } from "../features";
 
 // Column widths (Epic #70, W1, W2, W5, W7): the model keeps the resized columns' widths over their
 // `width`, clamped to their limits; a group's resize is shared by its resizable columns. The
@@ -42,7 +38,7 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
 ];
 
 function grid(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({ columns: COLUMNS, rows: [], ...options });
+    return gridModel<Row>({ columns: COLUMNS, rows: [], ...options });
 }
 
 const width = (model: ReturnType<typeof grid>, columnKey: string) =>
@@ -81,7 +77,7 @@ describe("column widths", () => {
     });
 
     it("clamp a width the column starts outside its limits, and a floor above the maximum", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: [
                 { key: "wide", width: 900, resizable: true, maxWidth: 400 },
                 { key: "thin", width: 10, resizable: true, maxWidth: 30 },
@@ -124,7 +120,7 @@ describe("column-widths.resize", () => {
             }),
         ).toMatchObject({ ok: false, error: { code: "invalid_payload" } });
         expect(
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: [{ key: "g", children: [{ key: "x", width: 50 }] }],
             }).check("column-widths.resize", { columnKey: "g", width: 90 }),
         ).toMatchObject({ ok: false, error: { code: "refused" } });
@@ -160,7 +156,7 @@ describe("column-widths.resize", () => {
     });
 
     it("gives what a column at its limit could not take to every other one, earlier ones too", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: [
                 {
                     key: "g",
@@ -212,7 +208,7 @@ describe("column-widths.resize", () => {
         model.run("column-widths.resize", { columnKey: "a", width: 100 });
         expect(model.get("column-widths")).toEqual({});
         // "m" is at its maximum already: only "n" grows, and only it gets a width
-        const group = createDataGridModel<Row>({
+        const group = gridModel<Row>({
             columns: [
                 {
                     key: "k",
@@ -313,9 +309,9 @@ describe("column limits", () => {
             { key: "x", width: 100, minWidth: 200, maxWidth: 100 },
         ];
         for (const column of bad) {
-            expect(() =>
-                createDataGridModel<Row>({ columns: [column] }),
-            ).toThrow(/invalid columns: column "x"/);
+            expect(() => gridModel<Row>({ columns: [column] })).toThrow(
+                /invalid columns: column "x"/,
+            );
             expect(
                 grid().check("columns.set", { columns: [column] }),
             ).toMatchObject({ ok: false, error: { code: "invalid_payload" } });
@@ -434,7 +430,7 @@ describe("automatic widths (Epic #80)", () => {
     });
 
     it("are where a resize starts from, and a column back to one needs no width (A2)", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: [
                 { key: "a", width: 50, flex: 1, resizable: true },
                 {

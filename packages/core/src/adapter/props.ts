@@ -10,6 +10,7 @@ import {
     ariaRowCount,
     ariaRowDetail,
     ariaRowIndex,
+    cellRole,
     gridRole,
     headerCellBox,
     inlineStart,
@@ -29,8 +30,6 @@ import {
     cellBox,
     cellPart,
     columnResizerPart,
-    type FillHandleState,
-    fillHandlePart,
     type GroupToggleState,
     groupTogglePart,
     type HeaderCellPart,
@@ -49,13 +48,13 @@ import {
     summaryRowPart,
 } from "../engine/parts";
 import type { GridView } from "../engine/types";
-import { valueText } from "../model/range";
 import {
     dataRowAt,
     depthOf,
     rowCellValue,
     rowKeyOf,
     rowMetaAt,
+    valueText,
 } from "../model/source";
 import type {
     Column,
@@ -360,7 +359,7 @@ export function cellProps<TRow, TNode>(
     const { pinned } = state;
     const { width, height } = box;
     return {
-        role: header ? "columnheader" : "gridcell",
+        role: header ? "columnheader" : cellRole(view),
         "aria-colindex": state.columnIndex + 1,
         ...(header ? ariaHeaderCellSpans(header) : undefined),
         ...(ariaColSpan ? { "aria-colspan": ariaColSpan } : undefined),
@@ -368,7 +367,10 @@ export function cellProps<TRow, TNode>(
         ...(ariaSelected === undefined
             ? undefined
             : { "aria-selected": ariaSelected }),
-        tabIndex: part.tabIndex,
+        // the roving tab stop, with navigation (Epic #144)
+        ...(part.tabIndex === undefined
+            ? undefined
+            : { tabIndex: part.tabIndex }),
         ...dataAttributes({
             "grid-part": header
                 ? "header-cell"
@@ -556,7 +558,7 @@ export function rowDetailPartOf<TRow, TNode>(
     return {
         state,
         props: {
-            role: "gridcell",
+            role: cellRole(view),
             ...ariaRowDetail(view),
             ...dataAttributes({
                 "grid-part": "row-detail",
@@ -632,7 +634,7 @@ export function summaryRowPartOf<TRow, TNode>(
  * its `data-*` (`dataOf` its state, a module function: nothing is allocated for a control with
  * none), with no style of its own.
  */
-function controlPart<S>(
+export function controlPart<S>(
     state: S,
     attributes: Record<string, unknown> | undefined,
     dataOf: (state: S) => Parameters<typeof dataAttributes>[0],
@@ -654,11 +656,6 @@ const dragHandleData = (state: RowDragHandleState) => ({
     "grid-part": "row-drag-handle",
     reorderable: state.reorderable,
     dragging: state.dragging,
-});
-
-const fillHandleData = (state: FillHandleState) => ({
-    "grid-part": "fill-handle",
-    filling: state.filling,
 });
 
 const groupToggleData = (state: GroupToggleState) => ({
@@ -690,15 +687,6 @@ export function rowDragHandlePartOf<TRow, TNode>(
         row.loaded,
     );
     return controlPart(state, attributes, dragHandleData);
-}
-
-/** A fill handle's state and props (`useFillHandle`): none in a cell but the range's corner. */
-export function fillHandlePartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: { readonly rowIndex: number; readonly columnIndex: number },
-): PartResult<FillHandleState> {
-    const { state, attributes } = fillHandlePart(view, cell);
-    return controlPart(state, attributes, fillHandleData);
 }
 
 /** A row group's toggle's state and props (`useGroupToggle`): none under a row that does not expand. */
@@ -777,13 +765,14 @@ export function gridPartOf<TRow, TNode>(
             role: gridRole(view),
             "aria-rowcount": ariaRowCount(view),
             "aria-colcount": view.columnCount,
-            // many rows selectable (R7), or ranges of cells (Epic #88)
-            ...(view.rowSelection === "multiple" || view.cellSelection
-                ? { "aria-multiselectable": true }
-                : {}),
-            // the grid's tab stop until a cell is active (roving: then that cell is)
-            // (a nested grid's only while its holder's active cell holds it: Epic #89, E5.2)
-            tabIndex: view.active || !view.tabbable ? -1 : 0,
+            // what the features add: many rows selectable (R7), ranges of cells (Epic #88)
+            ...view.features.grid?.(view as GridView<unknown, unknown>),
+            // with navigation (Epic #144), the grid's tab stop until a cell is active (roving:
+            // then that cell is) (a nested grid's only while its holder's active cell holds it:
+            // Epic #89, E5.2); without it, none
+            ...(view.features.navigable
+                ? { tabIndex: view.active || !view.tabbable ? -1 : 0 }
+                : undefined),
             ...dataAttributes({ "grid-part": "grid", empty }),
             style: {
                 position: "relative",
@@ -931,7 +920,7 @@ export function emptyCellPropsOf<TRow, TNode>(
     const columns = Math.max(1, view.columnCount);
     return {
         ...dataAttributes({ "grid-part": "empty" }),
-        role: "gridcell",
+        role: cellRole(view),
         ...(columns > 1 ? { "aria-colspan": columns } : {}),
         style: { height: "100%", boxSizing: "border-box" },
     };

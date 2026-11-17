@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
     type ColSpanArgs,
     type Column,
-    createDataGridModel,
     type DataGridModelOptions,
     summaryRowAt,
     summaryRowIndex,
@@ -16,6 +15,7 @@ import {
     nextPosition,
     rowLine,
 } from "../../src/navigation/navigation";
+import { gridModel } from "../features";
 
 // Summary rows (Epic #86, E2.1): the model keeps how many there are at the top and at the bottom,
 // and their row indexes extend the grid's on both sides, the header's (-depth … -1) and the
@@ -37,7 +37,7 @@ const column = (
 const COLUMNS = Array.from({ length: 5 }, (_, i) => column(`c${i}`));
 
 function modelOf(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
+    return gridModel<Row>({
         columns: COLUMNS,
         rows: Array.from({ length: 10 }, (_, id) => ({ id })),
         summaryRows: { top: 2, bottom: 1 },
@@ -53,17 +53,17 @@ const at = (rowIndex: number, columnIndex: number) => ({
 describe("the summary rows' counts", () => {
     it("start with none, and take the counts given (a count left out is 0)", () => {
         expect(
-            createDataGridModel<Row>({ columns: COLUMNS }).get("summary-rows"),
+            gridModel<Row>({ columns: COLUMNS }).get("summary-rows"),
         ).toEqual({ top: 0, bottom: 0 });
         expect(
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: COLUMNS,
                 summaryRows: { bottom: 2 },
             }).get("summary-rows"),
         ).toEqual({ top: 0, bottom: 2 });
         // counts that are not whole numbers start without summary rows
         expect(
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: COLUMNS,
                 summaryRows: { top: 1.5 },
             }).get("summary-rows"),

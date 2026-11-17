@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-    createDataGridModel,
-    type DataGridModelOptions,
-    type GroupRow,
-    type RowMeta,
-} from "../../src";
+import type { DataGridModelOptions, GroupRow, RowMeta } from "../../src";
+import { gridModel } from "../features";
 
 // Row kinds (Epic #87, E3.1): a source says what each index is (`getRowMeta`): a group row, which
 // has no data row and is keyed by its group, or a data row at a depth. The model expands row
@@ -48,7 +44,7 @@ const SHOWN: readonly { meta: RowMeta; row?: Row }[] = [
 ];
 
 function setup(options: DataGridModelOptions<Row> = {}) {
-    return createDataGridModel<Row>({
+    return gridModel<Row>({
         columns: [
             { key: "id", width: 100 },
             { key: "amount", width: 100 },
@@ -92,7 +88,7 @@ describe("rows with kinds", () => {
     });
 
     it("has no kinds without getRowMeta", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             rows: [{ id: "x", amount: 1 }],
         });
         expect(model.get("row-meta-by", { rowIndex: 0 })).toBeUndefined();
@@ -208,7 +204,7 @@ describe("selecting a group row", () => {
         expect(single.is("row-selectable", { rowIndex: 0 })).toBe(false);
         const refused = single.run("selected-rows.toggle", { rowIndex: 0 });
         expect(refused.ok || refused.error.code).toBe("refused");
-        const bare = createDataGridModel<Row>({
+        const bare = gridModel<Row>({
             rowCount: 1,
             getRow: () => undefined,
             getRowMeta: () => ({
@@ -236,7 +232,7 @@ describe("selecting a group row", () => {
     });
 
     it("still refuses a range reaching a data row not loaded", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             rowCount: 3,
             getRow: (index) =>
                 index === 2 ? undefined : { id: `r${index}`, amount: 0 },
@@ -296,7 +292,7 @@ describe("selecting a group row", () => {
             },
             { meta: { group: group("b", ["r3"]) } },
         ];
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             rowCount: shown.length,
             getRow: (index) => shown[index]?.row,
             getRowMeta: (index) => shown[index]?.meta,

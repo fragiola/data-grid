@@ -9,7 +9,8 @@ import {
     withoutRootProps,
 } from "../../src";
 import { moveShownRowAt } from "../../src/local";
-import { selectAllState, selectAllToggled } from "../../src/selection";
+import { navigation } from "../../src/navigation";
+import { selectAllState, selectAllToggled } from "../../src/row-selection";
 
 // The adapters' shared decisions (Epic #123): what each framework's root and parts call. The
 // adapters' own tests drive them through the primitives; these pin the rules alone.
@@ -38,6 +39,7 @@ describe("bindGridRoot", () => {
         const root = bindGridRoot(() => ({
             columns,
             rows: [{ a: 1 }, { a: 2 }],
+            features: [navigation()],
             activePosition: { rowIndex: 0, columnIndex: 0 },
             onActivePositionChange,
         }));

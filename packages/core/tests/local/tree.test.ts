@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { type Column, createDataGridModel } from "../../src";
+import type { Column } from "../../src";
 import { createLocalRows, type GroupedRows, treeRows } from "../../src/local";
+import { gridModel } from "../features";
 
 // Tree data in memory (Epic #87, E3.3): rows with rows under them (`getSubRows`), flattened as
 // the grid shows them; parents are data rows that expand by their key; the filters keep a match's
@@ -207,7 +208,7 @@ describe("tree data in the local pipeline", () => {
             rowKey: byName,
         });
         if (!groups) throw new Error("no tree");
-        const model = createDataGridModel<File>({
+        const model = gridModel<File>({
             columns,
             rowCount: groups.rowCount,
             getRow: groups.getRow,

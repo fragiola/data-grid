@@ -4,10 +4,10 @@ import {
     type CellPosition,
     type Column,
     createDataGridEngine,
-    createDataGridModel,
     TAB_STOP_ATTRIBUTE,
 } from "../../src";
 import { sorting } from "../../src/sorting";
+import { FEATURES, gridModel } from "../features";
 import {
     cellElement,
     keydown,
@@ -41,7 +41,7 @@ function setup() {
     const field = cell(1, 1, '<input id="name" />');
     const plain = cell(2, 1);
     const { model, engine, viewport } = mountEngine(
-        { columns: COLUMNS, rowCount: 100, features: [sorting()] },
+        { columns: COLUMNS, rowCount: 100, features: [...FEATURES, sorting()] },
         { grid },
     );
     const key = (target: Element, name: string, init: KeyboardEventInit = {}) =>
@@ -95,7 +95,7 @@ describe("the tab order", () => {
         const inner = document.createElement("div");
         holder.append(inner);
         const innerEngine = createDataGridEngine(
-            createDataGridModel<Row>({ columns: COLUMNS, rows: [] }),
+            gridModel<Row>({ columns: COLUMNS, rows: [] }),
         );
         innerEngine.adapter.attach(inner);
         inner.innerHTML = '<button id="inside" tabindex="0">Inside</button>';

@@ -7,10 +7,9 @@ import {
     type DataGridModelOptions,
     FILL_HANDLE_ATTRIBUTE,
     type FillDrag,
-    fillHandlePart,
     type RangeFill,
 } from "../../src";
-import { repeatedFill } from "../../src/fill";
+import { fillHandlePart, repeatedFill } from "../../src/fill";
 import {
     cellElement,
     click,

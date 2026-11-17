@@ -4,7 +4,6 @@ import {
     type Column,
     type ColumnOrGroup,
     columnLeft,
-    createDataGridModel,
     headerCellBox,
     renderedWidth,
     rowDisplay,
@@ -12,6 +11,7 @@ import {
 } from "../../src";
 import { pinnedInset } from "../../src/engine/geometry";
 import { columnsError } from "../../src/header/header";
+import { gridModel } from "../features";
 import { mountEngine, type Row } from "./harness";
 
 // Pinned columns at the start (Epic #31, P1–P7; Epic #38): the leading `pinned: "start"` columns
@@ -135,7 +135,7 @@ describe("validation", () => {
         expect(
             columnsError([{ key: "a", width: 10, pinned: "middle" }]),
         ).toMatch(/invalid pin/);
-        const model = createDataGridModel<Row>({ columns: COLUMNS });
+        const model = gridModel<Row>({ columns: COLUMNS });
         const result = model.run("columns.set", {
             columns: [column("a"), column("b", true)],
         });

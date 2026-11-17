@@ -4,11 +4,11 @@ import {
     ariaRowCount,
     type Column,
     createDataGridEngine,
-    createDataGridModel,
     type DataGridEngine,
     type DataGridModel,
     type EngineEventMap,
 } from "../../src";
+import { gridModel } from "../features";
 import {
     cellElement,
     fakeResizeObserver,
@@ -783,7 +783,7 @@ describe("focus that should not activate", () => {
 describe("epic review regressions", () => {
     it("scrolls to the initial active cell, and to a cell asked for before attaching", () => {
         fakeResizeObserver();
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 1_000,
             getRow: (index) => ({ id: index }),
@@ -801,7 +801,7 @@ describe("epic review regressions", () => {
         expect(visible.end).toBeGreaterThan(500);
 
         const other = createDataGridEngine(
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: COLUMNS,
                 rowCount: 1_000,
                 getRow: (index) => ({ id: index }),

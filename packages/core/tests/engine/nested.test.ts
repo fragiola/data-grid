@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import {
-    type Column,
-    createDataGridEngine,
-    createDataGridModel,
-} from "../../src";
+import { type Column, createDataGridEngine } from "../../src";
+import { gridModel } from "../features";
 import {
     cellElement,
     fakeResizeObserver,
@@ -25,7 +22,7 @@ const COLUMNS: Column<Row>[] = [
 /** An engine on a viewport jsdom cannot lay out: a fixed client size, scroll offsets kept. */
 function grid(parent: Element, rowCount = 5) {
     fakeResizeObserver();
-    const model = createDataGridModel<Row>({
+    const model = gridModel<Row>({
         columns: COLUMNS,
         rowCount,
         getRow: (id) => ({ id }),
@@ -233,7 +230,7 @@ describe("a nested grid's tab stop (Epic #89, E5.2)", () => {
         const inner = grid(row);
         commit(inner.engine);
         expect(tabbable(inner.engine)).toBe(true);
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 5,
             getRow: (id) => ({ id }),
@@ -263,7 +260,7 @@ describe("a nested grid's tab stop (Epic #89, E5.2)", () => {
         outerHolder.append(middleViewport);
         const middleHolder = cellElement(middleViewport, 1, 0);
         const deep = grid(middleHolder);
-        const middleModel = createDataGridModel<Row>({
+        const middleModel = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 5,
             getRow: (id) => ({ id }),

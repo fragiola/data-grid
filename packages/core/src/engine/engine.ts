@@ -1,6 +1,9 @@
 import type { Axis } from "../axis/axis";
-import { parseTsv } from "../clipboard/clipboard";
-import type { DataGridFeatures, FeatureState } from "../feature/feature";
+import type {
+    DataGridFeatures,
+    EngineKit,
+    FeatureState,
+} from "../feature/feature";
 import { featureEngine, featuresOf } from "../feature/registry";
 import {
     columnPart,
@@ -22,13 +25,6 @@ import {
     siblingsOf,
 } from "../model/order";
 import {
-    pastedRange,
-    rangeText,
-    sameCellRange,
-    selectedArea,
-    spannedArea,
-} from "../model/range";
-import {
     cellKeysAt,
     groupExpanded,
     groupKeyAt,
@@ -43,9 +39,9 @@ import { summaryRowAt } from "../model/summary";
 import type {
     CellKeys,
     CellPosition,
-    CellRange,
     Column,
     ColumnWidths,
+    DataGridState,
     GridDirection,
     HeaderCellLayout,
     PinnedSide,
@@ -91,16 +87,13 @@ import {
     CELL_SELECTOR,
     CLICK_SLOP,
     COLUMN_RESIZER_ATTRIBUTE,
-    CTRL_KEYS,
     cellSelector,
     EDITOR_ATTRIBUTE,
     FILL_HANDLE_ATTRIBUTE,
     FOCUSABLE,
     GROUP_LABEL_ATTRIBUTE,
     GROUP_TOGGLE_ATTRIBUTE,
-    type HeldSelection,
     HOSTS,
-    holdSelection,
     inlineKey,
     isAltCharacter,
     isCellNode,
@@ -111,7 +104,6 @@ import {
     isGridControl,
     isPagelessControl,
     isResizer,
-    isSelectAll,
     KEYS,
     LINE_HEIGHT,
     maxContentWidths,
@@ -122,10 +114,7 @@ import {
     PAGE_KEYS,
     ROW_DRAG_HANDLE_ATTRIBUTE,
     rehostWithin,
-    releaseSelection,
     scrollerBefore,
-    selectedIn,
-    shortcutLetter,
     TAB_STOP_ATTRIBUTE,
     VIEWPORTS,
     WHEEL_GESTURE,
@@ -136,9 +125,7 @@ import {
     type DragEnd,
     dropTargetOf,
     edgeStep,
-    type FillHandleDrag,
-    fillTargetOf,
-    type RangeDrag,
+    type FeatureDrag,
     RESIZE_KEYS,
     RESIZE_SHIFT_STEP,
     RESIZE_STEP,
@@ -179,7 +166,6 @@ import type {
     EngineLayer,
     EngineQueryKey,
     EngineQueryMap,
-    FillDrag,
     GridView,
     RowMove,
     RowReorder,
@@ -248,15 +234,6 @@ export function createDataGridEngine<
     const model = gridModel as unknown as DataGridModel<TRow, TNode, []>;
     /** the model's installed features, composed once */
     const features = featuresOf(model);
-    /** the features' keys and clicks, made once with what the engine hands them */
-    const featureHandlers = featureEngine(
-        features,
-        model as unknown as DataGridModel<unknown, unknown>,
-        (target) =>
-            (headerCellOf(target)?.cell as
-                | HeaderCellLayout<unknown, unknown>
-                | undefined) ?? null,
-    );
     let options = initialOptions;
     let viewport: HTMLElement | null = null;
     /** the layers' elements: the header layer has one per header row */
@@ -357,13 +334,6 @@ export function createDataGridEngine<
     let columnResize: ColumnResize | null = null;
     let columnReorder: ColumnReorder | null = null;
     let rowReorder: RowReorder | null = null;
-    /** the fill a handle's drag is making (Epic #88, E4.4) */
-    let fill: FillDrag | null = null;
-    /**
-     * the cells a fill drags from now (`fillSource`), cells filling: worked out when the range,
-     * the active cell, the edit, the rows or the columns change, not per cell nor per press
-     */
-    let fillFrom: CellRange | null = fillSource();
     let drag: Drag<TRow, TNode> | null = null;
     /**
      * whether the grid's tab stop is in the page's tab order (`view.tabbable`, Epic #89, E5.2):
@@ -388,6 +358,61 @@ export function createDataGridEngine<
     };
     /** the last press the grid took (its drag, over or not): once it dragged, its click is its */
     let lastPress: Drag<TRow, TNode> | null = null;
+    /**
+     * what the engine lends its features' handlers (Epic #144): each read when it is called, the
+     * engine's state as it is then
+     */
+    const kit: EngineKit = {
+        viewport: () => viewport,
+        options: () => options,
+        direction: () => direction,
+        cellOf,
+        isCellElement,
+        bodyCellOf,
+        pressedBodyCellOf,
+        cellElement,
+        inViewport,
+        markedOf,
+        same,
+        keptAt,
+        pageSize,
+        visibleColumns: () => columnWindow.visible,
+        focusFirstVisibleCell,
+        scrollToCell: (position) => scrollToCell(scrollPayloadFor(position)),
+        followFocus: (move) => {
+            pendingFocus = true;
+            move();
+            flushFocus();
+        },
+        emit: (event, value) => emit(event as EngineEventKey, value as never),
+        refresh: () => {
+            viewStale = true;
+            update();
+        },
+        press: (event, next) => press(event, next),
+        capture: (next) => capture(next),
+        askFrame: (next) => askFrame(next),
+        drag: () => drag,
+        endDrag: (how) => endDrag(how),
+        stopDrag: () => {
+            stopDrag();
+        },
+        cellDragStep,
+        cellUnder: (current, known) =>
+            cellAtView(viewXOf(current.x), viewYOf(current.y), known),
+    };
+    /** the features' keys, presses and clicks, made once with what the engine hands them */
+    const featureHandlers = featureEngine(
+        features,
+        model as unknown as DataGridModel<unknown, unknown>,
+        {
+            headerCellOf: (target) =>
+                (headerCellOf(target)?.cell as
+                    | HeaderCellLayout<unknown, unknown>
+                    | undefined) ?? null,
+            engine: kit,
+        },
+    );
     /** the cell whose controls have the keys, and an entry waiting for its cell (Epic #52) */
     const interaction = createInteraction({
         getViewport: () => viewport,
@@ -418,30 +443,15 @@ export function createDataGridEngine<
     /** whether the wheel listener is on: only while an axis is scaled */
     let wheelOn = false;
     const viewListeners = new Set<() => void>();
-    const eventListeners: {
-        [K in EngineEventKey]: Set<(value: EngineEventMap[K]) => void>;
-    } = {
-        "row-window": new Set(),
-        "column-window": new Set(),
-        "rows-end-reached": new Set(),
-        interaction: new Set(),
-        "column-resize": new Set(),
-        "column-reorder": new Set(),
-        "row-reorder": new Set(),
-        "row-move": new Set(),
-        "column-auto-widths": new Set(),
-        "range-paste": new Set(),
-        fill: new Set(),
-        "range-fill": new Set(),
-        "edit-draft": new Set(),
-        "cell-edit": new Set(),
-    };
+    /** each event's listeners, by its name (a feature's events too: `fill`, `range-paste`, …) */
+    const eventListeners = new Map<string, Set<(value: unknown) => void>>();
 
     function emit<K extends EngineEventKey>(
         event: K,
         value: EngineEventMap[K],
     ) {
-        for (const listener of [...eventListeners[event]]) listener(value);
+        const listeners = eventListeners.get(event);
+        if (listeners) for (const listener of [...listeners]) listener(value);
     }
 
     /** Whether the keys taken at a body cell may still be there (`sameKnownKeys`). */
@@ -454,11 +464,13 @@ export function createDataGridEngine<
         return a !== null && sameCell(a, b, state.header.cellAt);
     }
 
-    /** Makes a cell active, unless it is already. */
-    function activate(position: CellPosition) {
-        if (!same(state.activePosition, position)) {
-            model.run("active-position.set", position);
-        }
+    /**
+     * Makes a cell active, unless it is already: the navigation's (Epic #144); without it, no
+     * cell is ever active. Returns whether it is.
+     */
+    function activate(position: CellPosition): boolean {
+        if (same(state.activePosition, position)) return true;
+        return featureHandlers.activate?.(position) === true;
     }
 
     function makeView(): GridView<TRow, TNode> {
@@ -484,14 +496,21 @@ export function createDataGridEngine<
             columnResize,
             columnReorder,
             reorderableRows: options.reorderableRows === true,
-            fillable: options.fillable === true,
-            fill,
-            fillSource: fillFrom,
             rowReorder,
             direction,
             headerRowsFor,
             features,
+            featureFields: featureView(),
         });
+    }
+
+    /** The view's fields the features' engines hold (a fill's drag), or `null` without any. */
+    function featureView(): Readonly<Record<string, unknown>> | null {
+        const fields = featureHandlers.view;
+        if (fields.length === 0) return null;
+        let merged = {};
+        for (const field of fields) merged = { ...merged, ...field() };
+        return merged;
     }
 
     /**
@@ -1204,13 +1223,14 @@ export function createDataGridEngine<
         };
     }
 
-    /** Makes the first cell in view active, to focus it; refused (or none), nothing to focus. */
+    /**
+     * Makes the first cell in view active, to focus it; refused (or none, or no navigation),
+     * nothing to focus.
+     */
     function focusFirstVisibleCell() {
         const first = firstVisibleCell();
         // refused: a middleware, a controlled parent
-        if (!first || !model.run("active-position.set", first).ok) {
-            pendingFocus = false;
-        }
+        if (!first || !activate(first)) pendingFocus = false;
     }
 
     /**
@@ -1407,7 +1427,7 @@ export function createDataGridEngine<
 
     /** A drag's state changed: a new view, and its event. */
     function publish<
-        K extends "column-resize" | "column-reorder" | "row-reorder" | "fill",
+        K extends "column-resize" | "column-reorder" | "row-reorder",
     >(event: K, value: EngineEventMap[K]) {
         viewStale = true;
         update();
@@ -1427,11 +1447,6 @@ export function createDataGridEngine<
     function setRowReorder(next: RowReorder | null) {
         rowReorder = next;
         publish("row-reorder", next);
-    }
-
-    function setFill(next: FillDrag | null) {
-        fill = next;
-        publish("fill", next);
     }
 
     /**
@@ -1486,31 +1501,6 @@ export function createDataGridEngine<
             y: event.clientY,
             frame: null,
         };
-        // a fill handle (Epic #88, E4.4): a drag at once, prevented (no focus, no text selection,
-        // never a range, an edit or a sort), held by the viewport (its cell may scroll away)
-        const fillHandle = options.fillable
-            ? markedOf(event.target, FILL_HANDLE_ATTRIBUTE)
-            : null;
-        const source = fillHandle && fillFrom;
-        const anchor = state.activePosition ?? state.selectedRange?.anchor;
-        if (source && anchor) {
-            event.preventDefault();
-            press(event, {
-                ...pressed,
-                kind: "fill",
-                dragged: true,
-                source,
-                sourceKeys: {
-                    anchor: cellKeysAt(state, source.anchor),
-                    focus: cellKeysAt(state, source.focus),
-                },
-                anchor,
-                cell: null,
-                element: viewport,
-            });
-            setFill({ source, target: null });
-            return true;
-        }
         const handle = options.reorderableRows
             ? markedOf(event.target, ROW_DRAG_HANDLE_ATTRIBUTE)
             : null;
@@ -1544,9 +1534,11 @@ export function createDataGridEngine<
                 siblings: null,
             });
         }
-        // a body cell's press, cells selectable (Epic #88): a range
-        const range = rangePress(event, pressed, viewport);
-        return range !== null && press(event, range);
+        // the features' presses (Epic #144): a fill handle's, a body cell's range
+        for (const featurePress of featureHandlers.pointerdown) {
+            if (featurePress(event)) return true;
+        }
+        return false;
     }
 
     /**
@@ -1559,55 +1551,6 @@ export function createDataGridEngine<
         listen(next, event.pointerType === "touch");
         if (next.dragged) capture(next);
         return true;
-    }
-
-    /**
-     * A press on a body cell, cells selectable (Epic #88, E4.1): a new range starts there (the
-     * last one cleared; the press is not prevented, so it focuses the cell, the active one and
-     * the range's anchor), or with Shift the range reaches the cell from its anchor (the active
-     * cell, without one), prevented (the active cell and focus stay); past the slop, the range
-     * follows the pointer (a touch's press drags nothing: it scrolls). Not on a control inside the
-     * cell, nor with Ctrl, ⌘ or Alt: `null`.
-     */
-    function rangePress(
-        event: PointerEvent,
-        press: Omit<
-            RangeDrag,
-            "kind" | "anchor" | "anchorKeys" | "focus" | "element"
-        >,
-        element: HTMLElement,
-    ): RangeDrag | null {
-        if (
-            !state.cellSelection ||
-            event.ctrlKey ||
-            event.metaKey ||
-            event.altKey
-        ) {
-            return null;
-        }
-        const cell = pressedBodyCellOf(event.target);
-        if (!cell) return null;
-        let anchor = cell;
-        if (event.shiftKey) {
-            event.preventDefault();
-            // refused (a middleware, cells no longer selectable): no range, no drag
-            const extended = model.check("selected-range.extend", cell);
-            if (!extended.ok) return null;
-            anchor = extended.value.anchor;
-            model.run("selected-range.extend", cell);
-        } else if (state.selectedRange) {
-            model.run("selected-range.clear", {});
-        }
-        // a touch dragged scrolls the grid: it selects no range
-        if (event.pointerType === "touch") return null;
-        return {
-            ...press,
-            kind: "range",
-            anchor,
-            anchorKeys: cellKeysAt(state, anchor),
-            focus: cell,
-            element,
-        };
     }
 
     /**
@@ -1697,15 +1640,15 @@ export function createDataGridEngine<
                 drag.y = event.clientY;
                 if (drag.kind === "row") startRowDrag(drag);
                 else if (drag.kind === "reorder") startReorder(drag);
-                else if (drag.kind === "range") startRangeDrag(drag);
+                else if (drag.kind === "feature") drag.start?.();
             }
             return;
         }
-        // a column's drags follow the pointer's x, a row's its y, a range's both
+        // a column's drags follow the pointer's x, a row's its y, a feature's both
         if (
             drag.kind === "row"
                 ? event.clientY === drag.y
-                : drag.kind === "range" || drag.kind === "fill"
+                : drag.kind === "feature"
                   ? event.clientX === drag.x && event.clientY === drag.y
                   : event.clientX === drag.x
         ) {
@@ -1748,13 +1691,12 @@ export function createDataGridEngine<
 
     /**
      * A drag's step to its pointer: a resize, a reorder's target (a column's, a row's), or a
-     * range's focus.
+     * feature's own (a range's focus, a fill's target).
      */
     function dragTo(current: Drag<TRow, TNode>) {
         if (current.kind === "resize") resizeTo(current);
-        else if (current.kind === "range" || current.kind === "fill") {
-            cellDragStep(current);
-        } else reorderStep(current);
+        else if (current.kind === "feature") current.step();
+        else reorderStep(current);
     }
 
     /** The drag's element lost the pointer (removed, or taken by the page). */
@@ -1837,7 +1779,7 @@ export function createDataGridEngine<
      * its columns change (the others' widths stay as they are now), and what lets the drag
      * resize lets it restore. A header cell's drag moves its column or group on a release only,
      * once, and not when it would land where it is; a row's tells the move the same way. A
-     * range's (Epic #88) reaches the cell under the release, and a cancel (Escape) clears it.
+     * feature's (a range's, a fill's: Epic #144) is told how it ended.
      */
     function endDrag(how: DragEnd) {
         const ended = stopDrag();
@@ -1858,25 +1800,8 @@ export function createDataGridEngine<
                     side: target.side,
                 });
             }
-        } else if (ended?.kind === "range" && ended.dragged) {
-            if (how === "cancel") model.run("selected-range.clear", {});
-            else if (how === "release") {
-                const cell = cellAtView(
-                    viewXOf(ended.x),
-                    viewYOf(ended.y),
-                    ended.focus,
-                );
-                if (cell) rangeTo(ended, cell);
-            }
-        } else if (ended?.kind === "fill") {
-            // released: the cell under it fills, once; cancelled or lost, nothing
-            const cell =
-                how === "release"
-                    ? cellAtView(viewXOf(ended.x), viewYOf(ended.y), ended.cell)
-                    : null;
-            const target = cell ? fillTargetOf(ended.source, cell) : null;
-            setFill(null);
-            if (target) fillRange(ended, target);
+        } else if (ended?.kind === "feature") {
+            ended.end(how);
         } else if (ended?.kind === "row" && ended.dragged) {
             const target =
                 how === "release"
@@ -2609,13 +2534,10 @@ export function createDataGridEngine<
         const editing = state.editingCell;
         if (!editing) return;
         if (focusCell) cellElement(editing)?.focus({ preventScroll: true });
-        if (move) {
+        // the move is the navigation's (Epic #144): without it, the edit ends where it is
+        if (move && featureHandlers.move) {
             pendingFocus = true;
-            model.run("active-position.move", {
-                direction: move,
-                pageSize: pageSize(),
-                visibleColumns: columnWindow.visible,
-            });
+            featureHandlers.move(move);
         }
         if (state.editingCell === editing) model.run("editing-cell.clear", {});
         if (move) flushFocus();
@@ -2624,8 +2546,8 @@ export function createDataGridEngine<
     /**
      * After a model change: an edit started (new keys) makes its draft (the cell's value) and
      * listens to the page's presses; one ended (committed, cancelled, the active cell moved, its
-     * row or column gone from its place) drops it, telling nothing. A range's drag and an
-     * interaction end with it.
+     * row or column gone from its place) drops it, telling nothing. An interaction ends with it
+     * (a feature's drag too: its own `changed`).
      */
     function followEdit() {
         const keys = state.editingKeys;
@@ -2649,8 +2571,6 @@ export function createDataGridEngine<
             editorProps: { [EDITOR_ATTRIBUTE]: `${engineName}-${editCount}` },
         };
         editorFocus = editCellAsked ? "anywhere" : "grid";
-        // a range's or a fill's drag ends, telling nothing
-        if (drag?.kind === "range" || drag?.kind === "fill") endDrag("lost");
         if (interaction.cell) interaction.leaveCell(false);
         listenEditPresses();
         emit("edit-draft", editDraft);
@@ -2775,23 +2695,20 @@ export function createDataGridEngine<
         }, 0);
     }
 
-    // ── cell ranges: the drag, the edge scroll, the keys, the clipboard (Epic #88) ─
-
-    /** A press on a body cell moved past the slop: the range follows the pointer, held by the viewport. */
-    function startRangeDrag(current: RangeDrag) {
-        current.dragged = true;
-        capture(current);
-        cellDragStep(current);
-    }
+    // ── a cell drag's frame: the edge scroll, the cell under the pointer (Epic #88) ─
 
     /**
-     * A frame of a range's drag (E4.1): the pointer's place in the view read once, the edge
-     * scroll on both axes in one move (near the body's top or bottom edge, or past it; near the
-     * scrolling columns' start or end edge, or past it, but never over a pinned strip: a range
-     * among the pinned columns scrolls nothing sideways), then the cell under the pointer; held
-     * near an edge, it scrolls on, a frame at a time.
+     * A frame of a feature's cell drag (a range's, a fill's: E4.1, E4.4): the pointer's place in
+     * the view read once, the edge scroll on both axes in one move (near the body's top or bottom
+     * edge, or past it; near the scrolling columns' start or end edge, or past it, but never over
+     * a pinned strip: a range among the pinned columns scrolls nothing sideways), then the cell
+     * under the pointer (`known` when it is that one); held near an edge, it scrolls on, a frame
+     * at a time.
      */
-    function cellDragStep(current: RangeDrag | FillHandleDrag) {
+    function cellDragStep(
+        current: FeatureDrag,
+        known: CellPosition | null,
+    ): CellPosition | null {
         const x = viewXOf(current.x);
         const y = viewYOf(current.y);
         const part = columnPartAt(x);
@@ -2799,14 +2716,8 @@ export function createDataGridEngine<
             rowEdgeStepAt(y),
             part === undefined ? columnEdgeStepAt(x) : 0,
         );
-        if (current.kind === "range") {
-            const cell = cellAtView(x, y, current.focus, part);
-            if (cell) rangeTo(current, cell);
-        } else {
-            const cell = cellAtView(x, y, current.cell, part);
-            if (cell) fillTo(current, cell);
-        }
         if (scrolled) askFrame(current);
+        return cellAtView(x, y, known, part);
     }
 
     /** The part of the view a pointer at `x` is over: a pinned strip, or the columns that scroll. */
@@ -2841,121 +2752,6 @@ export function createDataGridEngine<
     }
 
     /**
-     * A range's focus at the pointer's cell (`cellAtView`, its focus when unchanged): a
-     * `selected-range.set` when that cell changed, at most once a frame.
-     */
-    function rangeTo(current: RangeDrag, cell: CellPosition) {
-        if (cell === current.focus) return;
-        current.focus = cell;
-        model.run("selected-range.set", {
-            anchor: current.anchor,
-            focus: current.focus,
-        });
-    }
-
-    // ── fill: the handle's drag (Epic #88, E4.4) ─────────────────────────────
-
-    /**
-     * What a fill starts from: the selected range, else the active body cell, as its first and
-     * last cells, widened to the column spans it cuts (`spannedArea`); `null` without one, cells
-     * not filling, or while a cell is edited (its handle shows nothing then).
-     */
-    function fillSource(): CellRange | null {
-        const area =
-            options.fillable && !state.editingCell ? selectedArea(state) : null;
-        return area && spannedArea(state, area);
-    }
-
-    /**
-     * A fill's drag at the pointer's cell (`cellAtView`, the last one when unchanged): its
-     * target, a new state when it changed.
-     */
-    function fillTo(current: FillHandleDrag, cell: CellPosition) {
-        if (cell === current.cell) return;
-        current.cell = cell;
-        const target = fillTargetOf(current.source, cell);
-        if (
-            target === fill?.target ||
-            (target && fill?.target && sameCellRange(target, fill.target))
-        ) {
-            return;
-        }
-        setFill({ source: current.source, target });
-    }
-
-    /**
-     * A fill released past its source: told once (`range-fill`, the app writes the values), then,
-     * cells selectable, the range is the source and the target together, from the press's values
-     * (a selection changing during the drag ends it). Its anchor stays the active cell's corner of
-     * the source, on the same sides: the active cell moves only when it was at the source's bottom
-     * or end and the fill reached past that side (to the filled cells' last row or column), and
-     * an active cell between the source's edges (in a span it was widened to) takes its first
-     * side.
-     */
-    function fillRange(current: FillHandleDrag, target: CellRange) {
-        const { source, anchor: was } = current;
-        emit("range-fill", { source, target });
-        if (!state.cellSelection) return;
-        const first = source.anchor;
-        const last = source.focus;
-        const bottom = Math.max(last.rowIndex, target.focus.rowIndex);
-        const end = Math.max(last.columnIndex, target.focus.columnIndex);
-        const atBottom =
-            was.rowIndex === last.rowIndex && was.rowIndex !== first.rowIndex;
-        const atEnd =
-            was.columnIndex === last.columnIndex &&
-            was.columnIndex !== first.columnIndex;
-        const anchor = {
-            rowIndex: atBottom ? bottom : first.rowIndex,
-            columnIndex: atEnd ? end : first.columnIndex,
-        };
-        if (!same(state.activePosition, anchor)) {
-            model.run("active-position.set", anchor);
-            // refused, or snapped into a span: the selection stays as the model left it
-            if (!same(state.activePosition, anchor)) return;
-        }
-        model.run("selected-range.set", {
-            anchor,
-            focus: {
-                rowIndex: atBottom ? first.rowIndex : bottom,
-                columnIndex: atEnd ? first.columnIndex : end,
-            },
-        });
-    }
-
-    /** the document whose presses a range listens to (`onRangePress`), while there is one */
-    let rangePressDoc: Document | null = null;
-
-    /**
-     * A range listens to the page's presses while there is one and the viewport is attached
-     * (Epic #113); without one nothing listens.
-     */
-    function followRange() {
-        const doc = state.selectedRange ? viewport?.ownerDocument : undefined;
-        if (doc === (rangePressDoc ?? undefined)) return;
-        rangePressDoc?.removeEventListener("pointerdown", onRangePress, true);
-        rangePressDoc = doc ?? null;
-        rangePressDoc?.addEventListener("pointerdown", onRangePress, true);
-    }
-
-    /**
-     * A press outside the grid (its viewport, nested grids and scrollbars included) clears the
-     * range, through the command: a middleware can refuse it. The active cell stays.
-     */
-    function onRangePress(event: PointerEvent) {
-        const { target } = event;
-        if (
-            !viewport ||
-            !state.selectedRange ||
-            !isElement(target) ||
-            viewport.contains(target)
-        ) {
-            return;
-        }
-        model.run("selected-range.clear", {});
-    }
-
-    /**
      * Escape's last meaning (Epic #113): focus leaves the grid, the active position kept (Tab
      * comes back to it). A nested grid hands it to the outer cell holding it; else it is blurred.
      */
@@ -2968,124 +2764,6 @@ export function createDataGridEngine<
         } else {
             (target as HTMLElement).blur();
         }
-    }
-
-    /**
-     * The range's keys (E4.1), cells selectable: Ctrl/⌘+A on any of the grid's cells selects
-     * every body cell (once per press); on a body cell in navigation, Shift with an arrow, Home,
-     * End, PageUp or PageDown (Ctrl/⌘+Shift+Home/End: the grid's corners) moves the range's
-     * focus, the active cell staying where it is (the anchor), the focus scrolled into view;
-     * Escape clears a range. One command a key, which a middleware can refuse. Before the rows'
-     * selection keys: Shift+↑/↓ and Ctrl/⌘+A are the cells' while cells are selectable,
-     * Shift+Space stays the rows'.
-     */
-    function rangeKey(event: KeyboardEvent, target: Element): boolean {
-        if (!state.cellSelection) return false;
-        const ctrl = event.ctrlKey || event.metaKey;
-        if (event.key === "Escape" && !ctrl && state.selectedRange) {
-            event.preventDefault();
-            model.run("selected-range.clear", {});
-            return true;
-        }
-        if (isSelectAll(event) && isCellElement(target)) {
-            // handled even when refused: the page's text is never selected instead
-            event.preventDefault();
-            if (!event.repeat) model.run("selected-range.select-all", {});
-            return true;
-        }
-        if (!event.shiftKey || !bodyCellOf(target)) return false;
-        const move =
-            (ctrl ? CTRL_KEYS[event.key] : undefined) ??
-            KEYS[inlineKey(event.key, direction)];
-        if (!move) return false;
-        event.preventDefault();
-        const payload = { direction: move, pageSize: pageSize() };
-        // a move refused selects nothing; a controlled parent answers it later, scrolled to now
-        const asked = model.check("selected-range.extend", payload);
-        if (!asked.ok) return true;
-        model.run("selected-range.extend", payload);
-        scrollToCell(scrollPayloadFor(asked.value.focus));
-        return true;
-    }
-
-    /**
-     * The cells a copy or a paste is for (E4.2), cells selectable: the selected range, else the
-     * active body cell, when the event comes from one of the grid's cells itself (a field inside
-     * one keeps its own clipboard; a nested grid's cell is that grid's); else `null`.
-     */
-    function clipboardRange(event: ClipboardEvent): CellRange | null {
-        // the grid's own selection (`selectForClipboard`): the event comes from its node, in the
-        // cell
-        const held = clipboardSelection?.node;
-        const target =
-            held && isElement(event.target) && held.contains(event.target)
-                ? held.parentElement
-                : event.target;
-        if (
-            !state.cellSelection ||
-            event.defaultPrevented ||
-            !event.clipboardData ||
-            !isElement(target) ||
-            !isCellElement(target)
-        ) {
-            return null;
-        }
-        return selectedArea(state);
-    }
-
-    /** A copy in the grid (E4.2): its range's cells as TSV, on the clipboard. */
-    function copy(event: ClipboardEvent): boolean {
-        const range = clipboardRange(event);
-        endClipboardSelection();
-        if (!range) return false;
-        event.clipboardData?.setData("text/plain", rangeText(state, range));
-        event.preventDefault();
-        return true;
-    }
-
-    /** the selection a copy or a paste holds in a cell (`selectForClipboard`) */
-    let clipboardSelection: HeldSelection | null = null;
-
-    /**
-     * Ctrl/⌘+C or Ctrl/⌘+V on one of the grid's cells (E4.2), its keydown never prevented: the
-     * page's own `copy` or `paste` follows, which WebKit fires (a copy) only while something is
-     * selected, and Firefox fires at the selection, not at the focused cell (Epic #89). A node of
-     * the cell's own holds the selection (`holdSelection`) until the event (`copy`, `paste`) or,
-     * without one, the next task (`endClipboardSelection`, which puts the selection back); for a
-     * copy, text selected inside the cell is left to copy as it is. No permission, every engine.
-     */
-    function selectForClipboard(cell: Element, copying: boolean) {
-        const doc = cell.ownerDocument;
-        const selection = doc.getSelection();
-        if (!selection || (copying && selectedIn(selection, cell))) return;
-        endClipboardSelection();
-        clipboardSelection = holdSelection(cell, selection);
-        doc.defaultView?.setTimeout(endClipboardSelection, 0);
-    }
-
-    /** Puts the selection back as it was before `selectForClipboard`, and removes its node. */
-    function endClipboardSelection() {
-        const held = clipboardSelection;
-        if (!held) return;
-        clipboardSelection = null;
-        releaseSelection(held);
-    }
-
-    /**
-     * A paste in the grid (E4.2): the clipboard's text parsed, landing at the range's first cell
-     * (else the active cell), told as a `range-paste` event; nothing for no text.
-     */
-    function paste(event: ClipboardEvent): boolean {
-        const range = clipboardRange(event);
-        endClipboardSelection();
-        const values = range
-            ? parseTsv(event.clipboardData?.getData("text/plain") ?? "")
-            : [];
-        const pasted = range && pastedRange(state, range.anchor, values);
-        if (!pasted) return false;
-        event.preventDefault();
-        emit("range-paste", pasted);
-        return true;
     }
 
     // ── row reordering: the drag, the edge scroll, the keys (Epic #86, E2.3) ─
@@ -3229,10 +2907,7 @@ export function createDataGridEngine<
             rowIndex !== active.rowIndex &&
             loadedRowKey(after, rowIndex) === activeKey
         ) {
-            model.run("active-position.set", {
-                rowIndex,
-                columnIndex: active.columnIndex,
-            });
+            activate({ rowIndex, columnIndex: active.columnIndex });
         }
     }
 
@@ -3426,6 +3101,9 @@ export function createDataGridEngine<
                 // scroll would map to a far jump, so the engine makes the move, exact, instead
                 scrollToCell(scrollPayloadFor(cell));
             }
+            // without navigation (Epic #144), a control focused in a cell is the page's own: no
+            // cell is active, no interaction
+            if (!features.navigable) return;
             // a header cell spanning rows is already active on any of its rows
             activate(cell);
             // the edited cell's editor took focus (Epic #88): an edit, never an interaction
@@ -3456,78 +3134,12 @@ export function createDataGridEngine<
         ) {
             return;
         }
-        // a click on empty space focuses the container: that is no reason to activate a cell
-        if (pointerDown) return;
+        // a click on empty space focuses the container: that is no reason to activate a cell (nor
+        // anything without navigation: no cell takes focus from the grid)
+        if (pointerDown || !features.navigable) return;
         pendingFocus = true;
         if (state.activePosition) flushFocus();
         else focusFirstVisibleCell();
-    }
-
-    /**
-     * The selection's keys on a body cell (R6), rows being selectable: Shift+Space toggles its
-     * row, Shift+Up/Down (many rows) move and extend the selection to the row reached, Ctrl/⌘+A
-     * selects every row. Each goes through a command, so a middleware can refuse it.
-     */
-    function selectionKey(event: KeyboardEvent, target: Element): boolean {
-        const mode = state.rowSelection;
-        const position = mode ? bodyCellOf(target) : null;
-        if (!mode || !position) return false;
-        const rowIndex = position.rowIndex;
-        const ctrl = event.ctrlKey || event.metaKey;
-        if (event.key === " " && event.shiftKey && !ctrl) {
-            event.preventDefault();
-            // a held key repeats: it would toggle the row on and off
-            if (!event.repeat) model.run("selected-rows.toggle", { rowIndex });
-            return true;
-        }
-        if (mode !== "multiple") return false;
-        if (isSelectAll(event)) {
-            // handled even when refused: the page's text is never selected instead
-            event.preventDefault();
-            if (!event.repeat) model.run("selected-rows.select-all", {});
-            return true;
-        }
-        if (
-            !event.shiftKey ||
-            ctrl ||
-            (event.key !== "ArrowDown" && event.key !== "ArrowUp")
-        ) {
-            return false;
-        }
-        const down = event.key === "ArrowDown";
-        // up into the header: a plain move
-        if (!down && rowIndex === 0) return false;
-        event.preventDefault();
-        if (down && rowIndex === state.rowCount - 1) return true;
-        const move = {
-            direction: down ? "down" : "up",
-            visibleColumns: columnWindow.visible,
-        } as const;
-        // a move refused selects nothing
-        const asked = model.check("active-position.move", move);
-        if (!asked.ok) return true;
-        // Shift+arrows select: without an anchor that selects, the range starts from this row
-        // (it included). One selection command a key: a controlled parent answers each
-        if (!model.get("selection-anchor")?.selected) {
-            model.run("selection-anchor.set", { rowIndex });
-        }
-        pendingFocus = true;
-        model.run("active-position.move", move);
-        // extended to the row the move reached (a middleware may have redirected it), or, when a
-        // controlled parent answers the move later, to the row it was asked for
-        const moved = state.activePosition?.rowIndex;
-        const reached =
-            moved !== undefined && moved !== rowIndex
-                ? moved
-                : asked.value.rowIndex;
-        if (reached >= 0 && reached !== rowIndex) {
-            model.run("selected-rows.toggle", {
-                rowIndex: reached,
-                extend: true,
-            });
-        }
-        flushFocus();
-        return true;
     }
 
     /**
@@ -3594,10 +3206,7 @@ export function createDataGridEngine<
         event.preventDefault();
         pendingFocus = true;
         // the same column: the tree's (a parent's toggle is where its rows' is)
-        model.run("active-position.set", {
-            rowIndex: parentIndex,
-            columnIndex: position.columnIndex,
-        });
+        activate({ rowIndex: parentIndex, columnIndex: position.columnIndex });
         flushFocus();
         return true;
     }
@@ -3643,23 +3252,12 @@ export function createDataGridEngine<
     function keydown(event: KeyboardEvent): boolean {
         const target = event.target;
         const ctrl = event.ctrlKey || event.metaKey;
-        // Ctrl/⌘+C or Ctrl/⌘+V on one of its cells, something to copy or paste into (Epic #88):
-        // the page's own copy or paste follows, with a selection in the cell for WebKit to fire a
-        // copy and Firefox to fire either at the cell (`selectForClipboard`); the key is never
-        // the grid's
-        const clipboardKey = ctrl ? shortcutLetter(event) : "";
-        if (
-            (clipboardKey === "c" || clipboardKey === "v") &&
-            !event.shiftKey &&
-            !event.altKey &&
-            !event.defaultPrevented &&
-            state.cellSelection &&
-            isElement(target) &&
-            isCellElement(target) &&
-            selectedArea(state)
-        ) {
-            selectForClipboard(target, clipboardKey === "c");
-            return false;
+        // the features' keys before any guard, never taken (Epic #144): the clipboard's Ctrl/⌘+C
+        // and Ctrl/⌘+V on one of the grid's cells, the page's own copy or paste following
+        if (isElement(target) && isCellElement(target)) {
+            for (const featureKey of featureHandlers.beforeKeydown) {
+                featureKey(event, target);
+            }
         }
         // a key typed into a field inside a cell is the field's, a key from outside the grid (a
         // menu portalled out of a cell, whose events still bubble through the cell) is not ours,
@@ -3763,8 +3361,10 @@ export function createDataGridEngine<
         }
         if (reorderKey(event, target)) return true;
         if (rowMoveKey(event, target)) return true;
-        if (rangeKey(event, target)) return true;
-        if (selectionKey(event, target)) return true;
+        // the features' later keys (Epic #144): a range's, the rows' selection's
+        for (const featureKey of featureHandlers.laterKeydown) {
+            if (featureKey(event, target)) return true;
+        }
         // Escape with nothing else to end (a drag, an edit, controls, a range) gives focus up
         // (Epic #113): never prevented, so a dialog or a popover around the grid still closes
         if (event.key === "Escape" && !ctrl && !event.shiftKey) {
@@ -3779,26 +3379,11 @@ export function createDataGridEngine<
             });
             return true;
         }
-        const move =
-            (ctrl ? CTRL_KEYS[event.key] : undefined) ??
-            KEYS[inlineKey(event.key, direction)];
-        if (!move) return false;
-        event.preventDefault();
-        pendingFocus = true;
-        if (!state.activePosition) {
-            focusFirstVisibleCell();
-            return true;
+        // the features' last keys (Epic #144): the navigation's arrows, Home, End and pages
+        for (const featureKey of featureHandlers.lastKeydown) {
+            if (featureKey(event, target)) return true;
         }
-        // a move to another cell leaves the range (Epic #88: the model's rule, its anchor is the
-        // active cell)
-        model.run("active-position.move", {
-            direction: move,
-            pageSize: pageSize(),
-            visibleColumns: columnWindow.visible,
-        });
-        // the move may have been refused or landed where it was: focus stays where it is
-        flushFocus();
-        return true;
+        return false;
     }
 
     // ── measured heights (Epic #86, E2.2) ────────────────────────────────────
@@ -3935,6 +3520,22 @@ export function createDataGridEngine<
 
     const unsubscribeModel = model.subscribe(({ before, after }) => {
         state = after;
+        // the features' own first (Epic #144: a range's presses and drag, a fill's source), so
+        // the view the engine builds for the change shows theirs
+        for (const changed of featureHandlers.changed) {
+            changed(
+                before as DataGridState<unknown, unknown>,
+                after as DataGridState<unknown, unknown>,
+            );
+        }
+        followModel(before, after);
+    });
+
+    /** After a committed change of the model: the engine follows it (the features' before). */
+    function followModel(
+        before: DataGridState<TRow, TNode>,
+        after: DataGridState<TRow, TNode>,
+    ) {
         // the grids nested in its cells read which one holds them from the cells' indexes: told at
         // the commit that renders them, when the active cell, or what is at it, can have changed
         // (a sort, a move, rows inserted above: a new source; a new order; its row's data)
@@ -3953,22 +3554,9 @@ export function createDataGridEngine<
         ) {
             nestedStale = true;
         }
-        // what a fill drags from (E4.4), its handle's corner
-        if (
-            after.selectedRange !== before.selectedRange ||
-            after.activePosition !== before.activePosition ||
-            after.editingCell !== before.editingCell ||
-            after.source !== before.source ||
-            after.columns !== before.columns ||
-            after.rowsChanged !== before.rowsChanged
-        ) {
-            fillFrom = fillSource();
-        }
         if (before.direction !== after.direction) directionPending = true;
         // an edit started or ended (Epic #88): its draft follows
         if (after.editingCell !== before.editingCell) followEdit();
-        // a range listens to the page's presses while there is one (Epic #113)
-        if (after.selectedRange !== before.selectedRange) followRange();
         // the app moved the rows a move told it of: the active cell follows its row (E2.3)
         followMovedRow(before, after);
         const changedDetails = detailsChanged(before, after);
@@ -4069,30 +3657,6 @@ export function createDataGridEngine<
         }
         // a row's drag follows its row (E2.3), on the rows as laid out now
         if (drag?.kind === "row" && drag.dragged) followRowDrag(drag);
-        // cells no longer selectable, or other rows or columns at its anchor, end a range's drag
-        // (Epic #88): its indexes would point elsewhere. New rows or columns that keep the same
-        // keys there (rows growing at the end, a new `columns` array, a new getter) keep it
-        const shaped =
-            after.source !== before.source || after.columns !== before.columns;
-        if (
-            drag?.kind === "range" &&
-            (!after.cellSelection ||
-                (shaped && !keptAt(drag.anchor, drag.anchorKeys)))
-        ) {
-            stopDrag();
-        }
-        // and a fill's (E4.4), filling nothing: other rows or columns at its source's corners, or
-        // a selection changing (a key, the app): no longer the one it fills from
-        if (
-            drag?.kind === "fill" &&
-            ((shaped &&
-                (!keptAt(drag.source.anchor, drag.sourceKeys.anchor) ||
-                    !keptAt(drag.source.focus, drag.sourceKeys.focus))) ||
-                after.selectedRange !== before.selectedRange ||
-                after.activePosition !== before.activePosition)
-        ) {
-            endDrag("lost");
-        }
         // the physical scroll follows even when the total did not change (no remap moved it)
         if (anchored) followRowAnchor();
         if (anchor) followColumnAnchor();
@@ -4111,7 +3675,7 @@ export function createDataGridEngine<
             if (focusInside()) pendingFocus = true;
             scrollToCell(scrollPayloadFor(active));
         }
-    });
+    }
 
     // ── the adapter ──────────────────────────────────────────────────────────
 
@@ -4153,8 +3717,12 @@ export function createDataGridEngine<
             observer?.observe(element);
             // the controls the cells render, now and later (a commit, the app's own re-render):
             // kept out of the tab order outside interaction (only cells that changed are read)
+            // (with navigation only, Epic #144: without it the grid has no tab stop of its own, and
+            // its cells' controls are the page's own tab stops)
             const mutations =
-                defaultView && "MutationObserver" in defaultView
+                features.navigable &&
+                defaultView &&
+                "MutationObserver" in defaultView
                     ? new defaultView.MutationObserver(interaction.onMutations)
                     : null;
             mutations?.observe(element, {
@@ -4173,13 +3741,15 @@ export function createDataGridEngine<
                     "data-column-index",
                 ],
             });
-            interaction.manageCellsUnder(element);
+            if (features.navigable) interaction.manageCellsUnder(element);
             // the rows and details measured (E2.2), from the next frame on
             heights.observeRegistered();
             // an edit given to start with listens to the page's presses (Epic #88)
             listenEditPresses();
-            // a range given to start with listens to them too (Epic #113)
-            followRange();
+            // the features' listeners (Epic #144): a range's presses outside the grid
+            const featureDetaches = featureHandlers.attach.map((attach) =>
+                attach(element),
+            );
             // the wheel's listener follows the scaling (`listenToWheel`)
             element.addEventListener("scroll", onScroll, { passive: true });
             element.addEventListener("focusin", onFocusIn);
@@ -4226,20 +3796,14 @@ export function createDataGridEngine<
                 endDrag("lost");
                 // a move told is no longer followed (E2.3)
                 movedRow = null;
-                // a copy's or a paste's selection never outlives the viewport (Epic #88)
-                endClipboardSelection();
+                // the features' listeners go (a range's presses, a copy's held selection)
+                for (const featureDetach of featureDetaches) featureDetach();
                 editPressDoc?.removeEventListener(
                     "pointerdown",
                     onEditPress,
                     true,
                 );
                 editPressDoc = null;
-                rangePressDoc?.removeEventListener(
-                    "pointerdown",
-                    onRangePress,
-                    true,
-                );
-                rangePressDoc = null;
                 if (noEditorTimer !== null) {
                     doc.defaultView?.clearTimeout(noEditorTimer);
                     noEditorTimer = null;
@@ -4386,8 +3950,18 @@ export function createDataGridEngine<
         keydown,
         click,
         pointerdown,
-        copy,
-        paste,
+        copy: (event) => {
+            for (const featureCopy of featureHandlers.copy) {
+                if (featureCopy(event)) return true;
+            }
+            return false;
+        },
+        paste: (event) => {
+            for (const featurePaste of featureHandlers.paste) {
+                if (featurePaste(event)) return true;
+            }
+            return false;
+        },
         setOptions(next) {
             const changed =
                 next.maxScrollSize !== options.maxScrollSize ||
@@ -4397,16 +3971,20 @@ export function createDataGridEngine<
                 next.reorderableRows !== options.reorderableRows ||
                 next.fillable !== options.fillable;
             options = next;
-            fillFrom = fillSource();
-            // rows that stop moving end a row's drag, moving nothing; cells that stop filling, a fill's
+            // rows that stop moving end a row's drag, moving nothing (cells that stop filling, a
+            // fill's: the fill handle's own)
             if (!next.reorderableRows && drag?.kind === "row") endDrag("lost");
-            if (!next.fillable && drag?.kind === "fill") endDrag("lost");
+            for (const optionsChanged of featureHandlers.optionsChanged) {
+                optionsChanged(next);
+            }
             if (changed) relayout(true);
             updateTabStop();
         },
     };
 
-    const queries: { [K in EngineQueryKey]: () => EngineQueryMap[K] } = {
+    const queries: {
+        [K in Exclude<EngineQueryKey, "fill">]: () => EngineQueryMap[K];
+    } = {
         "row-window": () => rowWindow,
         "column-window": () => columnWindow,
         "scroll-position": () => ({
@@ -4424,7 +4002,11 @@ export function createDataGridEngine<
         "row-reorder": () => rowReorder,
         "column-auto-widths": () => autoWidths,
         "edit-draft": () => editDraft,
-        fill: () => fill,
+    };
+    /** the features' `get` keys (Epic #144: a fill's), after the engine's own */
+    const allQueries: Readonly<Record<string, () => unknown>> = {
+        ...featureHandlers.queries,
+        ...queries,
     };
 
     const actions: {
@@ -4463,19 +4045,23 @@ export function createDataGridEngine<
 
     return {
         get(key) {
-            return queries[key]();
+            // a feature's key not installed (`fill` without the fill handle) reads `undefined`
+            return allQueries[key]?.() as never;
         },
         run(action, payload) {
             const handler = actions[action] as (payload: unknown) => void;
             handler(payload);
         },
         subscribe(event, listener) {
-            const listeners = eventListeners[event] as Set<
-                (value: EngineEventMap[typeof event]) => void
-            >;
-            listeners.add(listener);
+            let listeners = eventListeners.get(event);
+            if (!listeners) {
+                listeners = new Set();
+                eventListeners.set(event, listeners);
+            }
+            const added = listener as (value: unknown) => void;
+            listeners.add(added);
             return () => {
-                listeners.delete(listener);
+                listeners.delete(added);
             };
         },
         destroy() {

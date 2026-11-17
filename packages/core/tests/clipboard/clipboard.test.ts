@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTsv, toTsv } from "../../src";
+import { parseTsv, toTsv } from "../../src/clipboard";
 
 // Tab-separated values (Epic #88, E4.2): what a range is on the clipboard, written and read as
 // the spreadsheets do.

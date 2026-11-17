@@ -15,7 +15,14 @@ const root = join(import.meta.dirname, "..");
  * The features: each one's entry point (its subpath, in every package that has it) and its
  * factory, exported by the core's built entry of that name.
  */
-export const FEATURES = [{ subpath: "sorting", factory: "sorting" }] as const;
+export const FEATURES = [
+    { subpath: "sorting", factory: "sorting" },
+    { subpath: "navigation", factory: "navigation" },
+    { subpath: "row-selection", factory: "rowSelection" },
+    { subpath: "range", factory: "cellRange" },
+    { subpath: "clipboard", factory: "clipboard" },
+    { subpath: "fill", factory: "fillHandle" },
+] as const;
 
 /** A feature as the guard reads it: its subpath and the markers its code holds. */
 export interface FeatureMarkers {

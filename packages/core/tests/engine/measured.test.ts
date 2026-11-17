@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     type Column,
-    createDataGridModel,
     rowCellsHeight,
     rowDetailBox,
     rowExpanded,
@@ -10,6 +9,7 @@ import {
 } from "../../src";
 import { createAxis } from "../../src/axis/axis";
 import { MeasuredHeights } from "../../src/engine/measure";
+import { gridModel } from "../features";
 import {
     isObserved,
     mountEngine,
@@ -586,7 +586,7 @@ describe("the heights an engine measured", () => {
 
 describe("the model's heights", () => {
     it("take 'auto' and estimates above 0", () => {
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             rowHeight: "auto",
             detailHeight: "auto",
             estimatedRowHeight: -1,

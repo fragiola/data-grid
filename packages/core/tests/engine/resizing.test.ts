@@ -6,12 +6,12 @@ import {
     type ColumnResize,
     columnResizerPart,
     createDataGridEngine,
-    createDataGridModel,
     headerCellPart,
     veto,
 } from "../../src";
 import { columnAxisOf } from "../../src/engine/view";
 import { sorting } from "../../src/sorting";
+import { FEATURES, gridModel } from "../features";
 import {
     cellElement,
     click,
@@ -98,7 +98,7 @@ function setup(columns: ColumnOrGroup<Row>[] = COLUMNS) {
     };
     const a = resizable(0, "a");
     const mounted = mountEngine(
-        { columns, rowCount: 100, features: [sorting()] },
+        { columns, rowCount: 100, features: [...FEATURES, sorting()] },
         { grid, width: 600 },
     );
     const { model, engine } = mounted;
@@ -428,7 +428,7 @@ describe("a drag on a resizer", () => {
         const holder = document.createElement("div");
         a.cell.append(holder);
         const inner = createDataGridEngine(
-            createDataGridModel<Row>({
+            gridModel<Row>({
                 columns: [{ key: "a", width: 100 }],
                 rows: [],
             }),

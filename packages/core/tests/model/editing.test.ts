@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type Column, createDataGridModel, type ModelOptions } from "../../src";
+import type { Column, ModelOptions } from "../../src";
 import { sorting } from "../../src/sorting";
+import { FEATURES, gridModel } from "../features";
 
 type Sorting = ReturnType<typeof sorting>;
 
@@ -34,8 +35,8 @@ const at = (rowIndex: number, columnIndex: number) => ({
 });
 
 function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
-    return createDataGridModel<Row, unknown, [Sorting]>({
-        features: [sorting()],
+    return gridModel<Row, unknown, [Sorting]>({
+        features: [...FEATURES, sorting()],
         columns: COLUMNS,
         rows,
         ...options,

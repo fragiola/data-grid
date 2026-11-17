@@ -2,20 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
     type CellRange,
     type Column,
-    createDataGridModel,
     type ModelOptions,
     veto,
 } from "../../src";
+import { pastedRange, rangeText } from "../../src/clipboard";
 import {
     inRange,
     keptRange,
-    pastedRange,
     rangeEdgesOf,
-    rangeText,
     sameCellRange,
-    valueText,
 } from "../../src/model/range";
+import { valueText } from "../../src/model/source";
 import { sorting } from "../../src/sorting";
+import { FEATURES, gridModel } from "../features";
 
 type Sorting = ReturnType<typeof sorting>;
 
@@ -36,8 +35,8 @@ const COLUMNS: Column<Row>[] = [
 ];
 
 function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
-    return createDataGridModel<Row, unknown, [Sorting]>({
-        features: [sorting()],
+    return gridModel<Row, unknown, [Sorting]>({
+        features: [...FEATURES, sorting()],
         columns: COLUMNS,
         rows: Array.from({ length: 10 }, (_, id) => ({ id })),
         cellSelection: "range",
@@ -405,7 +404,7 @@ describe("range helpers", () => {
     });
 
     it("copy a range as TSV, top to bottom, through getCopyText, rows not loaded empty", () => {
-        const { state } = createDataGridModel<Row>({
+        const { state } = gridModel<Row>({
             columns: [
                 ...COLUMNS,
                 {
@@ -429,7 +428,7 @@ describe("range helpers", () => {
     });
 
     it("copy a span's value at its first column in the range, the columns it covers empty", () => {
-        const { state } = createDataGridModel<Row>({
+        const { state } = gridModel<Row>({
             columns: [
                 { key: "a", width: 100, getValue: () => "A" },
                 {
@@ -449,7 +448,7 @@ describe("range helpers", () => {
     });
 
     it("copy a group row's cells as their values", () => {
-        const { state } = createDataGridModel<Row>({
+        const { state } = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 2,
             getRow: (index) => ({ id: index }),

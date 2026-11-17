@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-    createDataGridModel,
-    DEFAULT_DETAIL_HEIGHT,
-    type RowKey,
-    veto,
-} from "../../src";
+import { DEFAULT_DETAIL_HEIGHT, type RowKey, veto } from "../../src";
+import { gridModel } from "../features";
 
 // Expanded rows (M1): the model keeps their keys and derives the rows shown expanded, by index.
 
@@ -19,7 +15,7 @@ const orders: Order[] = Array.from({ length: 10 }, (_, i) => ({
 }));
 
 function grid(options: { expandedRowKeys?: readonly RowKey[] } = {}) {
-    return createDataGridModel<Order>({
+    return gridModel<Order>({
         columns: [{ key: "id", width: 100 }],
         rows: orders,
         rowKey: (row) => row.id,
@@ -115,7 +111,7 @@ describe("expanded rows", () => {
     });
 
     it("are keyed by index without a rowKey", () => {
-        const model = createDataGridModel<Order>({
+        const model = gridModel<Order>({
             columns: [{ key: "id", width: 100 }],
             rows: orders,
         });
@@ -131,7 +127,7 @@ describe("expanded rows", () => {
 
     it("never expand a row not loaded: its key is unknown", () => {
         const cache = new Map<number, Order>([[1, { id: "a", total: 1 }]]);
-        const model = createDataGridModel<Order>({
+        const model = gridModel<Order>({
             columns: [{ key: "id", width: 100 }],
             rowCount: 1_000_000,
             getRow: (index) => cache.get(index),
@@ -168,7 +164,7 @@ describe("expanded rows", () => {
             id: `r${index}`,
             total: 0,
         }));
-        const model = createDataGridModel<Order>({
+        const model = gridModel<Order>({
             columns: [{ key: "id", width: 100 }],
             rowCount: 1_000_000,
             getRow,
@@ -191,7 +187,7 @@ describe("expanded rows", () => {
             index === 5 ? undefined : { id: `r${index}`, total: 0 },
         );
         const rowKey = (row: Order) => row.id;
-        const model = createDataGridModel<Order>({
+        const model = gridModel<Order>({
             columns: [{ key: "id", width: 100 }],
             rowCount: 1_000,
             getRow,
@@ -211,7 +207,7 @@ describe("expanded rows", () => {
             id: `r${index}`,
             total: 0,
         }));
-        const model = createDataGridModel<Order>({
+        const model = gridModel<Order>({
             columns: [{ key: "id", width: 100 }],
             rowCount: 1_000_000,
             getRow,
@@ -227,7 +223,7 @@ describe("expanded rows", () => {
     });
 
     it("collapse every row showing a key, when the data repeats it", () => {
-        const model = createDataGridModel<Order>({
+        const model = gridModel<Order>({
             columns: [{ key: "id", width: 100 }],
             rows: [
                 { id: "a", total: 0 },

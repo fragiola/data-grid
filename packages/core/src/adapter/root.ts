@@ -7,14 +7,18 @@ import { createDataGridEngine } from "../engine/engine";
 import type {
     CellEdit,
     DataGridEngine,
-    RangeFill,
+    DataGridEngineOptions,
     RowMove,
 } from "../engine/types";
 import type { DataGridFeatures, FeatureKeys } from "../feature/feature";
 import {
+    bindFeatureEvents,
     featureControlledProps,
+    featureEngineOptions,
+    featureFollowers,
     featureOptions,
     featuresOf,
+    type GridFeatures,
 } from "../feature/registry";
 import { sameEditingCell } from "../model/editing";
 import { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "../model/expansion";
@@ -25,11 +29,7 @@ import {
     DEFAULT_ROW_HEIGHT,
 } from "../model/model";
 import { keptOrder, sameOrder } from "../model/order";
-import { keptRange, sameCellRange } from "../model/range";
 import type {
-    CellPosition,
-    CellRange,
-    CellSelection,
     ColumnOrder,
     ColumnOrGroup,
     ColumnWidths,
@@ -37,14 +37,10 @@ import type {
     DetailHeight,
     EditingCell,
     GridDirection,
-    RangePaste,
-    ResultOf,
     RowHeight,
     RowKey,
     RowKeyGetter,
     RowMetaGetter,
-    RowSelectable,
-    RowSelection,
 } from "../model/types";
 import { keptWidths, sameWidths } from "../model/widths";
 import { sameKeys } from "../utils/utils";
@@ -124,14 +120,6 @@ export interface GridRootOptions<TRow, TNode> {
         | undefined;
     /** a summary row's height in pixels (default 35) */
     summaryRowHeight?: number | undefined;
-    /** the active cell, controlled (`null` for none); pair it with `onActivePositionChange` */
-    activePosition?: CellPosition | null | undefined;
-    /** the active cell to start with, uncontrolled */
-    defaultActivePosition?: CellPosition | null | undefined;
-    /** the active cell changed (or, controlled, asks to) */
-    onActivePositionChange?:
-        | ((position: CellPosition | null) => void)
-        | undefined;
     /**
      * the expanded rows' keys (a row's `rowKey`, else its index), controlled; pair it with
      * `onExpandedRowKeysChange`. An expanded row shows its `DataGrid.RowDetail`
@@ -167,24 +155,6 @@ export interface GridRootOptions<TRow, TNode> {
     /** a measured detail's height until it is measured, in pixels (default 300) */
     estimatedDetailHeight?: number | undefined;
     /**
-     * how rows are selected: one at a time or many (default: not at all). Selected rows carry
-     * `data-selected` and `aria-selected`; Shift+Space, Shift+Up/Down and Ctrl/⌘+A select
-     */
-    rowSelection?: RowSelection | undefined;
-    /** whether a loaded row can be selected (default: every row can) */
-    isRowSelectable?: RowSelectable<TRow> | undefined;
-    /**
-     * the selected rows' keys (a row's `rowKey`, else its index), controlled; pair it with
-     * `onSelectedRowKeysChange`
-     */
-    selectedRowKeys?: readonly RowKey[] | undefined;
-    /** the selected rows' keys to start with, uncontrolled */
-    defaultSelectedRowKeys?: readonly RowKey[] | undefined;
-    /** the selection changed (or, controlled, asks to): a row was toggled, or a command ran */
-    onSelectedRowKeysChange?:
-        | ((selectedRowKeys: readonly RowKey[]) => void)
-        | undefined;
-    /**
      * the cell being edited (Epic #88): the active one, of a column `editable` for its row;
      * controlled (`null` for none), paired with `onEditingCellChange`
      */
@@ -203,44 +173,6 @@ export interface GridRootOptions<TRow, TNode> {
      * and the row. Write it into your rows: the grid writes no data
      */
     onCellEdit?: ((edit: CellEditEvent<TRow>) => void) | undefined;
-    /**
-     * how cells are selected (Epic #88): a range of body cells (default: not at all). Shift
-     * with the navigation keys, a press dragged across cells and Shift+click select one; its
-     * cells carry `data-selected-cell` and `aria-selected`, its edges' cells
-     * `data-range-edge`; Ctrl/⌘+C copies it as TSV and Ctrl/⌘+V pastes into it
-     * (`onRangePaste`)
-     */
-    cellSelection?: CellSelection | undefined;
-    /**
-     * the selected range of cells (`{ anchor, focus }`, body cells), controlled (`null` for
-     * none); pair it with `onSelectedRangeChange`
-     */
-    selectedRange?: CellRange | null | undefined;
-    /** the selected range to start with, uncontrolled */
-    defaultSelectedRange?: CellRange | null | undefined;
-    /** the selected range changed (or, controlled, asks to): a key, a drag, a click or a command */
-    onSelectedRangeChange?: ((range: CellRange | null) => void) | undefined;
-    /**
-     * values were pasted into the grid (Ctrl/⌘+V on one of its cells, `cellSelection` set): the
-     * range they land in, from the selected range's first cell (else the active cell), and
-     * the values parsed from the clipboard's text (TSV), as many as land. The app writes them
-     * into its rows: the grid writes nothing
-     */
-    onRangePaste?: ((paste: RangePaste) => void) | undefined;
-    /**
-     * asked before `onRangePaste`, with the same paste: `false` refuses it (`onRangePaste` is
-     * not called), as a middleware would
-     */
-    onBeforeRangePaste?:
-        | ((paste: RangePaste) => boolean | undefined)
-        | undefined;
-    /**
-     * a fill handle was dropped (Epic #88): the range (or the active cell) and the cells it
-     * fills, below it or to its end. Given, cells fill: a `useFillHandle` element at the
-     * range's corner drags one. The app writes the values (`repeatedFill` in
-     * `@fragiola/data-grid/fill` repeats the source's); the grid writes no data
-     */
-    onFill?: ((fill: RangeFill) => void) | undefined;
     /**
      * the resized columns' widths in pixels, by column key, controlled; pair it with
      * `onColumnWidthsChange`. On screen a column is the first of: its width here (when it is
@@ -346,9 +278,6 @@ export const GRID_ROOT_PROPS = [
     "headerRowHeight",
     "summaryRows",
     "summaryRowHeight",
-    "activePosition",
-    "defaultActivePosition",
-    "onActivePositionChange",
     "expandedRowKeys",
     "defaultExpandedRowKeys",
     "onExpandedRowKeysChange",
@@ -357,22 +286,10 @@ export const GRID_ROOT_PROPS = [
     "onExpandedGroupKeysChange",
     "detailHeight",
     "estimatedDetailHeight",
-    "rowSelection",
-    "isRowSelectable",
-    "selectedRowKeys",
-    "defaultSelectedRowKeys",
-    "onSelectedRowKeysChange",
     "editingCell",
     "defaultEditingCell",
     "onEditingCellChange",
     "onCellEdit",
-    "cellSelection",
-    "selectedRange",
-    "defaultSelectedRange",
-    "onSelectedRangeChange",
-    "onRangePaste",
-    "onBeforeRangePaste",
-    "onFill",
     "columnWidths",
     "defaultColumnWidths",
     "onColumnWidthsChange",
@@ -434,20 +351,6 @@ export interface GridRoot<
      * also tells the app a value to start with the grid did not take as given.
      */
     sync(): void;
-}
-
-/** What `selected-rows.toggle` returns: the keys, and the anchor it leaves. */
-type ToggleResult = ResultOf<"selected-rows.toggle">;
-
-/** Whether two active positions are the same cell (or both none). */
-export function samePosition(
-    a: CellPosition | null | undefined,
-    b: CellPosition | null | undefined,
-): boolean {
-    return (
-        (a ?? null) === (b ?? null) ||
-        (a?.rowIndex === b?.rowIndex && a?.columnIndex === b?.columnIndex)
-    );
 }
 
 /** Whether the model's source is the one these props give: the same rows, or count and getter. */
@@ -520,29 +423,16 @@ export function bindGridRoot<
         headerRowHeight: initial.headerRowHeight,
         summaryRows: initial.summaryRows,
         summaryRowHeight: initial.summaryRowHeight,
-        activePosition:
-            initial.activePosition !== undefined
-                ? initial.activePosition
-                : initial.defaultActivePosition,
         expandedRowKeys:
             initial.expandedRowKeys ?? initial.defaultExpandedRowKeys,
         expandedGroupKeys:
             initial.expandedGroupKeys ?? initial.defaultExpandedGroupKeys,
         detailHeight: initial.detailHeight,
         estimatedDetailHeight: initial.estimatedDetailHeight,
-        rowSelection: initial.rowSelection,
-        isRowSelectable: initial.isRowSelectable,
-        selectedRowKeys:
-            initial.selectedRowKeys ?? initial.defaultSelectedRowKeys,
         editingCell:
             initial.editingCell !== undefined
                 ? initial.editingCell
                 : initial.defaultEditingCell,
-        cellSelection: initial.cellSelection,
-        selectedRange:
-            initial.selectedRange !== undefined
-                ? initial.selectedRange
-                : initial.defaultSelectedRange,
         columnWidths: initial.columnWidths ?? initial.defaultColumnWidths,
         columnOrder: initial.columnOrder ?? initial.defaultColumnOrder,
         collapsedGroupKeys:
@@ -559,21 +449,6 @@ export function bindGridRoot<
             V
         >,
     ) => bindControlled(model, flags, controlledProp(props, spec));
-    const position = bind<CellPosition | null>({
-        prefix: "active-position.",
-        prop: (props) => props.activePosition,
-        onChange: (props) => props.onActivePositionChange,
-        read: (state) => state.activePosition,
-        same: samePosition,
-        fromCommand: (command, value) =>
-            command === "active-position.clear"
-                ? null
-                : (value as CellPosition),
-        apply: (value) => {
-            if (value === null) model.run("active-position.clear");
-            else model.run("active-position.set", value);
-        },
-    });
     const expanded = bind<readonly RowKey[]>({
         prefix: "expanded-rows.",
         prop: (props) => props.expandedRowKeys,
@@ -595,41 +470,6 @@ export function bindGridRoot<
             model.run("row-groups.set", { groupKeys });
         },
     });
-    const selection = bind<readonly RowKey[]>({
-        prefix: "selected-rows.",
-        // the keys follow the prop while rows are selectable; off, the model keeps the keys it
-        // had (no row shows them) and the prop waits until it is on again
-        prop: (props) =>
-            props.rowSelection ? props.selectedRowKeys : undefined,
-        onChange: (props) => props.onSelectedRowKeysChange,
-        // an uncontrolled selection to start with that single mode trimmed (its last key kept):
-        // the app is told the keys the grid holds
-        start: (props) =>
-            props.rowSelection ? props.defaultSelectedRowKeys : undefined,
-        read: (state) => state.selectedRowKeys,
-        same: sameRowKeys,
-        fromCommand: (command, value) =>
-            command === "selected-rows.toggle"
-                ? (value as ToggleResult).rowKeys
-                : (value as readonly RowKey[]),
-        apply: (rowKeys) => {
-            model.run("selected-rows.set", { rowKeys });
-        },
-        // the parent answers the keys; where a range starts is the grid's: a toggle's anchor is
-        // kept as the model would have left it
-        vetoed: (command, value) => {
-            if (command !== "selected-rows.toggle") return;
-            const { anchor } = value as ToggleResult;
-            if (anchor) {
-                model.run("selection-anchor.set", {
-                    rowIndex: anchor.rowIndex,
-                    selected: anchor.selected,
-                });
-            } else {
-                model.run("selection-anchor.clear", {});
-            }
-        },
-    });
     const editing = bind<EditingCell | null>({
         prefix: "editing-cell.",
         prop: (props) => props.editingCell,
@@ -643,27 +483,6 @@ export function bindGridRoot<
         apply: (value) => {
             if (value === null) model.run("editing-cell.clear", {});
             else model.run("editing-cell.set", value);
-        },
-    });
-    const range = bind<CellRange | null>({
-        prefix: "selected-range.",
-        // the range follows the prop while cells are selectable; off, there is none
-        prop: (props) =>
-            props.cellSelection ? props.selectedRange : undefined,
-        onChange: (props) => props.onSelectedRangeChange,
-        // a range to start with the body could not hold (cells outside it) starts inside it: the
-        // app is told the range the grid holds
-        start: (props) =>
-            props.cellSelection ? props.defaultSelectedRange : undefined,
-        read: (state) => state.selectedRange,
-        same: sameCellRange,
-        fromCommand: (command, value) =>
-            command === "selected-range.clear" ? null : (value as CellRange),
-        // kept inside the body, as at mount, and the parent told the range as it settled
-        apply: (value) => {
-            const kept = keptRange(model.state, value);
-            if (kept) model.run("selected-range.set", kept);
-            else model.run("selected-range.clear", {});
         },
     });
     const widths = bind<ColumnWidths>({
@@ -716,9 +535,10 @@ export function bindGridRoot<
             });
         },
     });
+    const installedFeatures = featuresOf(model);
     const engine = createDataGridEngine<TRow, TNode>(
         model,
-        engineOptions(initial),
+        engineOptions(installedFeatures, initial),
     );
     // subscribed before the viewport attaches, so the first windows are reported too
     engine.subscribe("row-window", (rows) => props().onRowWindowChange?.(rows));
@@ -734,19 +554,19 @@ export function bindGridRoot<
         const row = model.get("row-by", { index: edit.rowIndex });
         if (row !== undefined) props().onCellEdit?.({ ...edit, row });
     });
-    // a fill (Epic #88): told
-    engine.subscribe("range-fill", (filled) => props().onFill?.(filled));
-    // a paste (Epic #88): asked first, then told
-    engine.subscribe("range-paste", (paste) => {
-        const { onBeforeRangePaste, onRangePaste } = props();
-        if (onBeforeRangePaste?.(paste) === false) return;
-        onRangePaste?.(paste);
-    });
-    // the features' controlled props (Epic #141), bound after the core's, in their order
-    const features = featureControlledProps<GridRootProps<TRow, TNode>>(
-        featuresOf(model),
+    // the features' events (Epic #144: a fill, a paste), told to their props
+    bindFeatureEvents(
+        installedFeatures,
+        engine as unknown as DataGridEngine<unknown, unknown>,
+        props,
+    );
+    // the features' controlled props (Epic #141), bound after the core's, in their order; the
+    // ones followed first (the active position, Epic #144) with the layout inputs
+    const featureSpecs = featureControlledProps<GridRootProps<TRow, TNode>>(
+        installedFeatures,
         model as unknown as DataGridModel<unknown, unknown>,
-    ).map((spec) =>
+    );
+    const featurePieces = featureSpecs.map((spec) =>
         bind(
             spec as ControlledProp<
                 GridRootProps<TRow, TNode>,
@@ -755,21 +575,33 @@ export function bindGridRoot<
             >,
         ),
     );
+    const firstPieces = featurePieces.filter(
+        (_, index) => featureSpecs[index]?.first === true,
+    );
     // followed before the data props, in this order: the layout inputs, then the active position
-    const layout: readonly Controlled[] = [widths, order, collapsed, position];
+    const layout: readonly Controlled[] = [
+        widths,
+        order,
+        collapsed,
+        ...firstPieces,
+    ];
     // settled (and started) in this order: the layout inputs first, so a position the order or a
-    // collapse moved settles in the same pass; then the selection, as its value to start with is
-    // told; the features' last
+    // collapse moved settles in the same pass; the features' last (the selections, the sort)
     const controlled: readonly Controlled[] = [
         ...layout,
         editing,
-        selection,
-        range,
         expanded,
         groups,
-        ...features,
+        ...featurePieces.filter((piece) => !firstPieces.includes(piece)),
     ];
-    const data = dataGroups(model);
+    // the core's data props, then the features' (a selection's mode, Epic #144)
+    const data: readonly PropsGroup<TRow, TNode>[] = [
+        ...dataGroups(model),
+        ...featureFollowers<GridRootProps<TRow, TNode>>(
+            installedFeatures,
+            model as unknown as DataGridModel<unknown, unknown>,
+        ),
+    ];
     const options: PropsGroup<TRow, TNode> = {
         inputs: (props) => [
             props.overscan?.rows,
@@ -777,10 +609,11 @@ export function bindGridRoot<
             props.maxScrollSize,
             props.endReachedThreshold,
             props.onRowMove !== undefined,
-            props.onFill !== undefined,
             props.ownTabStop,
+            ...Object.values(featureEngineOptions(installedFeatures, props)),
         ],
-        run: (props) => engine.adapter.setOptions(engineOptions(props)),
+        run: (props) =>
+            engine.adapter.setOptions(engineOptions(installedFeatures, props)),
     };
     const ran = new Map<PropsGroup<TRow, TNode>, readonly unknown[]>();
     const follow = (
@@ -846,8 +679,13 @@ function sameFeatures(a: DataGridFeatures, b: DataGridFeatures): boolean {
 }
 
 /** The engine's options a root's props give. */
-function engineOptions<TRow, TNode>(props: GridRootProps<TRow, TNode>) {
+function engineOptions<TRow, TNode>(
+    features: GridFeatures,
+    props: GridRootProps<TRow, TNode>,
+): DataGridEngineOptions {
     return {
+        // the features' first (the fill handle's `fillable`, Epic #144)
+        ...featureEngineOptions(features, props),
         overscan: {
             rows: props.overscan?.rows,
             columns: props.overscan?.columns,
@@ -856,8 +694,6 @@ function engineOptions<TRow, TNode>(props: GridRootProps<TRow, TNode>) {
         endReachedThreshold: props.endReachedThreshold,
         // the rows move while the app takes their moves
         reorderableRows: props.onRowMove !== undefined,
-        // cells fill while the app takes their fills
-        fillable: props.onFill !== undefined,
         ownTabStop: props.ownTabStop,
     };
 }
@@ -964,33 +800,6 @@ function dataGroups<TRow, TNode>(
                 // a count left out (the prop removed) is 0
                 if (top !== held.top || bottom !== held.bottom) {
                     model.run("summary-rows.set", { top, bottom });
-                }
-            },
-        },
-        {
-            inputs: (props) => [props.rowSelection, props.isRowSelectable],
-            run: ({ rowSelection, isRowSelectable }) => {
-                const { state } = model;
-                if (
-                    rowSelection !== state.rowSelection ||
-                    isRowSelectable !== state.isRowSelectable
-                ) {
-                    // a prop removed turns it off
-                    model.run("row-selection.set", {
-                        rowSelection: rowSelection ?? null,
-                        isRowSelectable: isRowSelectable ?? null,
-                    });
-                }
-            },
-        },
-        {
-            inputs: (props) => [props.cellSelection],
-            run: ({ cellSelection }) => {
-                // a prop removed turns it off (Epic #88): the range goes
-                if (cellSelection !== model.state.cellSelection) {
-                    model.run("cell-selection.set", {
-                        cellSelection: cellSelection ?? null,
-                    });
                 }
             },
         },

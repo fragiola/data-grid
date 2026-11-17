@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
     type Column,
     type ColumnOrGroup,
-    createDataGridModel,
     type ModelOptions,
     veto,
 } from "../../src";
 import { sorting } from "../../src/sorting";
+import { FEATURES, gridModel } from "../features";
 
 type Sorting = ReturnType<typeof sorting>;
 
@@ -44,8 +44,8 @@ const COLUMNS: ColumnOrGroup<Row>[] = [
 ];
 
 function grid(options: ModelOptions<Row, unknown, [Sorting]> = {}) {
-    return createDataGridModel<Row, unknown, [Sorting]>({
-        features: [sorting()],
+    return gridModel<Row, unknown, [Sorting]>({
+        features: [...FEATURES, sorting()],
         columns: COLUMNS,
         rowCount: 10,
         getRow: (id) => ({ id }),

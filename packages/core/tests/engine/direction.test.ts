@@ -5,9 +5,9 @@ import {
     type Column,
     type ColumnOrGroup,
     createDataGridEngine,
-    createDataGridModel,
     inlineStart,
 } from "../../src";
+import { gridModel } from "../features";
 import {
     cellElement,
     keydown,
@@ -96,8 +96,8 @@ function translateX(layer: HTMLElement): number {
 
 describe("the model", () => {
     it("keeps the direction given: none by default (the page's), an option, a command", () => {
-        expect(createDataGridModel<Row>().get("direction")).toBeUndefined();
-        const model = createDataGridModel<Row>({ direction: "rtl" });
+        expect(gridModel<Row>().get("direction")).toBeUndefined();
+        const model = gridModel<Row>({ direction: "rtl" });
         expect(model.get("direction")).toBe("rtl");
         const before = model.state;
         expect(model.run("direction.set", { direction: "rtl" }).ok).toBe(true);
@@ -356,7 +356,7 @@ describe("the page's direction", () => {
         page.append(viewport);
         const grid = document.createElement("div");
         viewport.append(grid);
-        const model = createDataGridModel<Row>({
+        const model = gridModel<Row>({
             columns: COLUMNS,
             rowCount: 100,
             getRow: (id) => ({ id }),

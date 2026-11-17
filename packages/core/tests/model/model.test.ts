@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-    type Column,
-    type CommandEvent,
-    createDataGridModel,
-    veto,
-} from "../../src";
+import { type Column, type CommandEvent, veto } from "../../src";
+import { gridModel } from "../features";
 
 interface Person {
     id: number;
@@ -29,7 +25,7 @@ const columns: Column<Person>[] = [
 ];
 
 function model() {
-    return createDataGridModel<Person>({
+    return gridModel<Person>({
         columns,
         rows: people,
         rowKey: (row) => row.id,
@@ -65,7 +61,7 @@ describe("the model", () => {
 
     it("reads rows from a getter, where a row not loaded is undefined but still counted", () => {
         const loaded = new Map([[5, people[0]]]);
-        const grid = createDataGridModel<Person>({
+        const grid = gridModel<Person>({
             columns,
             rowCount: 1_000_000,
             getRow: (index) => loaded.get(index),
@@ -161,7 +157,7 @@ describe("the model", () => {
     });
 
     it("lets a move reach a row that is not loaded: its place exists before its data", () => {
-        const grid = createDataGridModel<Person>({
+        const grid = gridModel<Person>({
             columns,
             rowCount: 10,
             getRow: () => undefined,
@@ -266,7 +262,7 @@ describe("robustness", () => {
 
     it("keeps an initial active position inside the grid, or drops one that is no cell", () => {
         const at = (rowIndex: number, columnIndex: number) =>
-            createDataGridModel<Person>({
+            gridModel<Person>({
                 columns,
                 rows: people,
                 activePosition: { rowIndex, columnIndex },
@@ -533,7 +529,7 @@ describe("rows.changed", () => {
         });
         expect(grid.state).toBe(state);
         expect(listener).not.toHaveBeenCalled();
-        const empty = createDataGridModel<Person>({ columns, rows: [] });
+        const empty = gridModel<Person>({ columns, rows: [] });
         expect(empty.run("rows.changed")).toEqual({
             ok: true,
             value: { start: 0, end: 0 },

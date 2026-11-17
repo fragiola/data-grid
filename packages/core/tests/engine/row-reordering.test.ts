@@ -10,6 +10,7 @@ import {
     veto,
 } from "../../src";
 import { sorting } from "../../src/sorting";
+import { FEATURES } from "../features";
 import {
     cellElement,
     keydown,
@@ -62,7 +63,7 @@ function setup(
             ],
             rowCount: 1_000,
             rowKey: (row) => `r${row.id}`,
-            features: [sorting()],
+            features: [...FEATURES, sorting()],
             ...modelOptions,
         },
         { grid, reorderableRows: true, ...options },
@@ -820,7 +821,7 @@ describe("the parts", () => {
         const sorted = viewOf(
             stateOf({
                 columns: [{ key: "a", width: 100, sortable: true }],
-                features: [sorting()],
+                features: [...FEATURES, sorting()],
                 sortColumns: [{ columnKey: "a", direction: "ascending" }],
             }),
             { reorderableRows: true },

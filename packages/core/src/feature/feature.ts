@@ -1,12 +1,23 @@
 import type { ControlledProp } from "../adapter/controlled";
-import type { HeaderCellState } from "../engine/parts";
-import type { GridView } from "../engine/types";
+import type { DragEnd, FeatureDrag } from "../engine/drag";
+import type { CellShare, HeaderCellState, RowShare } from "../engine/parts";
+import type {
+    DataGridEngine,
+    DataGridEngineOptions,
+    GridView,
+} from "../engine/types";
 import type { DataGridModel } from "../model/model";
 import type {
+    CellKeys,
+    CellPosition,
     CommandResult,
     DataGridState,
+    GridDirection,
     HeaderCellLayout,
+    RowMeta,
 } from "../model/types";
+import type { Direction } from "../navigation/navigation";
+import type { Range } from "../viewport/window";
 
 // The feature contract (Epic #141): a minimal core, and every optional capability a feature the
 // app installs on its grid, once, at creation (`features: [sorting()]`). A feature is a plain
@@ -82,6 +93,97 @@ export interface FeatureEngineContext<TTypes extends FeatureTypes> {
     readonly headerCellOf: (
         target: EventTarget | null,
     ) => HeaderCellLayout<unknown, unknown> | null;
+    /** the engine's own means, for the keys, presses and drags a feature handles (Epic #144) */
+    readonly engine: EngineKit;
+}
+
+/**
+ * What an engine lends its features (Epic #144): its DOM questions, its scroll, its focus and its
+ * drags, so a feature's keys and presses act as the engine's own would. Read at the time of the
+ * event: nothing here is a snapshot.
+ */
+export interface EngineKit {
+    /** the viewport attached, or `null` */
+    readonly viewport: () => HTMLElement | null;
+    /** the engine's options in effect */
+    readonly options: () => DataGridEngineOptions;
+    /** the direction in effect (the arrows mirror right to left) */
+    readonly direction: () => GridDirection;
+    /** this grid's cell an event happened in (a nested grid's cell is that grid's), or `null` */
+    readonly cellOf: (target: EventTarget | null) => CellPosition | null;
+    /** whether an element is one of this grid's cells (or header cells) itself */
+    readonly isCellElement: (element: Element) => boolean;
+    /** the body cell an element is itself (not a control inside it), or `null` */
+    readonly bodyCellOf: (element: Element) => CellPosition | null;
+    /**
+     * the body cell a press happened in, not on a control inside it, a resizer or a handle, or
+     * `null`
+     */
+    readonly pressedBodyCellOf: (
+        target: EventTarget | null,
+    ) => CellPosition | null;
+    /** this grid's element of a cell, or `null` */
+    readonly cellElement: (position: CellPosition) => HTMLElement | null;
+    /** whether an event comes from this grid itself, not from a grid nested in one of its cells */
+    readonly inViewport: (target: EventTarget | null) => boolean;
+    /** this grid's element marked with `attribute` an event happened in, and the mark's value */
+    readonly markedOf: (
+        target: EventTarget | null,
+        attribute: string,
+    ) => { readonly element: HTMLElement; readonly value: string } | null;
+    /** whether a position is the cell `b` (a header cell spanning rows is one on each of them) */
+    readonly same: (a: CellPosition | null, b: CellPosition) => boolean;
+    /** whether the keys at a body cell may still be the ones taken there (`sameKnownKeys`) */
+    readonly keptAt: (
+        position: CellPosition,
+        keys: CellKeys | undefined,
+    ) => boolean;
+    /** a page of rows for the keys: the rows in view less one, at least one */
+    readonly pageSize: () => number;
+    /** the columns in view */
+    readonly visibleColumns: () => Range;
+    /**
+     * makes the first cell in view active, to focus it (where focus lands when the grid itself
+     * takes it); refused, or none, nothing is focused
+     */
+    readonly focusFirstVisibleCell: () => void;
+    /** scrolls a cell into view (a body row's, a column's), as the keys do */
+    readonly scrollToCell: (position: CellPosition) => void;
+    /**
+     * runs `move` with focus following the active cell: the cell it leaves active takes focus
+     * once rendered (a move refused, or landing where it was: focus stays)
+     */
+    readonly followFocus: (move: () => void) => void;
+    /** tells the engine's listeners of an event (`fill`, `range-fill`, `range-paste`, …) */
+    readonly emit: (event: string, value: unknown) => void;
+    /** something a feature's view fields show changed (`FeatureEngine.view`): a new view */
+    readonly refresh: () => void;
+    /** takes a press as a drag (`FeatureDrag`), held by its element at once when it drags */
+    readonly press: (event: PointerEvent, drag: FeatureDrag) => true;
+    /** the drag's element holds the pointer from now on (a press past the slop) */
+    readonly capture: (drag: FeatureDrag) => void;
+    /** the drag's next frame, once (`false` without animation frames) */
+    readonly askFrame: (drag: FeatureDrag) => boolean;
+    /** the drag on now, if any (a feature's own, a resize's, …) */
+    readonly drag: () => { readonly kind: string } | null;
+    /** ends the drag on now, telling it how (its `end`) */
+    readonly endDrag: (how: DragEnd) => void;
+    /** stops following the drag on now, telling it nothing */
+    readonly stopDrag: () => void;
+    /**
+     * a cell drag's frame: the edge scroll near the body's and the scrolling columns' edges
+     * (another frame asked while it scrolls), then the body cell under the pointer (`known` when
+     * it is that one), or `null` without rows or columns
+     */
+    readonly cellDragStep: (
+        drag: FeatureDrag,
+        known: CellPosition | null,
+    ) => CellPosition | null;
+    /** the body cell under a drag's pointer (`known` when it is that one), or `null` */
+    readonly cellUnder: (
+        drag: FeatureDrag,
+        known: CellPosition | null,
+    ) => CellPosition | null;
 }
 
 /**
@@ -101,6 +203,64 @@ export interface FeatureEngine {
      * (a primary button, the press not moved past the click slop)
      */
     readonly click?: ((event: MouseEvent) => boolean) | undefined;
+    /**
+     * a key on one of the grid's own cells before any of the engine's guards, which it never
+     * takes (the page's own copy and paste follow Ctrl/⌘+C and Ctrl/⌘+V)
+     */
+    readonly beforeKeydown?:
+        | ((event: KeyboardEvent, target: Element) => void)
+        | undefined;
+    /**
+     * a key on one of the grid's cells after the engine's own cell keys (the row groups', an
+     * edit's start, the interaction's Enter and F2, a column's and a row's moves): the
+     * selections' keys
+     */
+    readonly laterKeydown?:
+        | ((event: KeyboardEvent, target: Element) => boolean)
+        | undefined;
+    /**
+     * a key nothing else took, the last (after Escape gave focus up): the navigation's arrows,
+     * Home, End and the page keys
+     */
+    readonly lastKeydown?:
+        | ((event: KeyboardEvent, target: Element) => boolean)
+        | undefined;
+    /**
+     * a primary press in the grid none of the engine's own took (a resizer, a header cell's or
+     * a row's drag), after the consumer's handlers: `true` takes it (`EngineKit.press` for a drag)
+     */
+    readonly pointerdown?: ((event: PointerEvent) => boolean) | undefined;
+    /** the root element's `copy` event, after the consumer's handlers: `true` takes it */
+    readonly copy?: ((event: ClipboardEvent) => boolean) | undefined;
+    /** the root element's `paste` event, after the consumer's handlers: `true` takes it */
+    readonly paste?: ((event: ClipboardEvent) => boolean) | undefined;
+    /** after a committed change of the model, the engine laid out for it */
+    readonly changed?:
+        | ((
+              before: DataGridState<unknown, unknown>,
+              after: DataGridState<unknown, unknown>,
+          ) => void)
+        | undefined;
+    /** the viewport attached: what it listens to from now on; returns what detaching undoes */
+    readonly attach?: ((viewport: HTMLElement) => () => void) | undefined;
+    /** the engine's options changed (`setOptions`) */
+    readonly optionsChanged?:
+        | ((options: DataGridEngineOptions) => void)
+        | undefined;
+    /**
+     * the view's fields it holds itself (not the model's: a fill's drag), compared by identity:
+     * one changing renders a new view (`EngineKit.refresh` asks for one)
+     */
+    readonly view?: (() => Readonly<Record<string, unknown>>) | undefined;
+    /** its `engine.get` keys */
+    readonly queries?: Readonly<Record<string, () => unknown>> | undefined;
+    /**
+     * the active cell made active (a click, a Tab, a control taking focus, an edit), the
+     * navigation's: `false` when refused. Without a feature having it, no cell is ever active
+     */
+    readonly activate?: ((position: CellPosition) => boolean) | undefined;
+    /** the active cell moved a step (an edit's Enter and Tab), the navigation's */
+    readonly move?: ((direction: Direction) => void) | undefined;
 }
 
 /**
@@ -133,6 +293,27 @@ export interface FeatureRoot<TTypes extends FeatureTypes> {
               FeatureState<TTypes>,
               unknown
           >[])
+        | undefined;
+    /**
+     * its plain props followed onto the model (a mode, a filter): each group run when one of its
+     * inputs changed, after the core's data props
+     */
+    readonly follow?:
+        | ((model: FeatureEngineContext<TTypes>["model"]) => readonly {
+              readonly inputs: (props: TTypes["props"]) => readonly unknown[];
+              readonly run: (props: TTypes["props"]) => void;
+          }[])
+        | undefined;
+    /** the engine's options its props give (`fillable`), with the core's */
+    readonly engineOptions?:
+        | ((props: TTypes["props"]) => Partial<DataGridEngineOptions>)
+        | undefined;
+    /** what its props are told of the engine's events (`onFill`), subscribed once */
+    readonly events?:
+        | ((
+              engine: DataGridEngine<unknown, unknown>,
+              props: () => TTypes["props"],
+          ) => void)
         | undefined;
 }
 
@@ -193,16 +374,63 @@ export interface FeatureSpec<TTypes extends FeatureTypes> {
           ) => FeatureState<TTypes>)
         | undefined;
     /**
-     * the keys of its state an engine's view carries (compared by identity: one changing
-     * renders a new view), for its part contributions to read
+     * the keys of its state an engine's view carries, or of the fields its engine holds
+     * (`FeatureEngine.view`), compared by identity (one changing renders a new view), for its
+     * part contributions to read
      */
-    readonly view?: readonly (keyof TTypes["state"] & string)[] | undefined;
+    readonly view?:
+        | readonly ((keyof TTypes["state"] & string) | (string & {}))[]
+        | undefined;
     /**
      * whether the rows are in an order of the app's that a row move would not keep (a sort):
      * then rows do not move
      */
     readonly rowsOrdered?:
         | ((state: FeatureState<TTypes>) => boolean)
+        | undefined;
+    /**
+     * after every command (its handler, then `sourceChanged`): its state kept to the core's rules
+     * (a range left when the active cell leaves its anchor); the same object when nothing changed
+     */
+    readonly stateChanged?:
+        | ((
+              after: FeatureState<TTypes>,
+              before: FeatureState<TTypes>,
+          ) => FeatureState<TTypes>)
+        | undefined;
+    /**
+     * its cells are navigated by keys (Epic #144, APG grid): with it installed the grid has the
+     * grid's roles (`grid`, `gridcell`), the active cell is its tab stop and the controls inside
+     * cells are kept out of the tab order. Without any, a grid has the table's roles and no tab
+     * stop of its own
+     */
+    readonly navigable?: boolean | undefined;
+    /** what it adds to a body row's part: it fills `share`'s fields (nothing allocated per row) */
+    readonly row?:
+        | ((
+              view: GridView<unknown, unknown> & TTypes["state"],
+              rowIndex: number,
+              meta: RowMeta | undefined,
+              share: RowShare,
+          ) => void)
+        | undefined;
+    /**
+     * what it adds to a body cell's part (`span`: its columns): it fills `share`'s fields
+     * (nothing allocated per cell)
+     */
+    readonly cell?:
+        | ((
+              view: GridView<unknown, unknown> & TTypes["state"],
+              cell: CellPosition,
+              span: number,
+              share: CellShare,
+          ) => void)
+        | undefined;
+    /** what it adds to the grid's element (`aria-multiselectable`) */
+    readonly grid?:
+        | ((
+              view: GridView<unknown, unknown> & TTypes["state"],
+          ) => PartAttributes | undefined)
         | undefined;
     /** what it adds to a header cell's part */
     readonly headerCell?:

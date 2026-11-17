@@ -1,5 +1,4 @@
-import { keySet, toggledKey } from "../utils/utils";
-import { fail, ok } from "./result";
+import { fail, ok } from "../model/result";
 import {
     dataRowAt,
     groupExpanded,
@@ -7,7 +6,7 @@ import {
     type RowsState,
     rowKeyAt,
     rowMetaAt,
-} from "./source";
+} from "../model/source";
 import type {
     CommandFailure,
     CommandResult,
@@ -17,7 +16,9 @@ import type {
     RowMeta,
     RowSelection,
     SelectionAnchor,
-} from "./types";
+} from "../model/types";
+import { keySet, toggledKey } from "../utils/utils";
+import type { RowSelectionState as SelectionSlice } from "./types";
 
 // Selected rows (R1–R5): the model keeps their keys, the app's state, and nothing derived from
 // them. Whether a row is selected is its key in a `Set` built once per key list: O(1) a row,
@@ -35,12 +36,13 @@ export const ROW_SELECTIONS: readonly RowSelection[] = ["single", "multiple"];
 /** What tells whether a row is selected, or can be: the model's state, or a view. */
 type RowSelectionState<TRow> = RowsState<TRow> &
     Pick<
-        DataGridState<TRow>,
+        SelectionSlice<TRow>,
         "rowSelection" | "selectedRowKeys" | "isRowSelectable"
     >;
 
 type Selecting<TRow> = RowSelectionState<TRow> &
-    Pick<DataGridState<TRow>, "selectionAnchor" | "expandedGroupKeys">;
+    Pick<SelectionSlice<TRow>, "selectionAnchor"> &
+    Pick<DataGridState<TRow>, "expandedGroupKeys">;
 
 /** Whether two anchors are the same key, at the same index, giving the same state. */
 export function sameAnchor(

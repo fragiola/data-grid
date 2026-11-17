@@ -28,39 +28,8 @@ export function inlineKey(key: string, direction: GridDirection): string {
     return key === "ArrowRight" ? "ArrowLeft" : key;
 }
 
-/** A key with Ctrl (or ⌘) held: Ctrl+Home and Ctrl+End reach the grid's ends. */
-export const CTRL_KEYS: Record<string, Direction> = {
-    Home: "grid-start",
-    End: "grid-end",
-};
-
 /** The pixels a wheel "line" or "page" stands for (`deltaMode` 1 and 2). */
 export const LINE_HEIGHT = 40;
-
-/**
- * The Latin letter a shortcut is pressed with (Epic #89): its key's own, else, on a layout whose
- * letters are not Latin (Cyrillic, Greek), its key's place on the keyboard (`code`), as the
- * system's shortcuts read it.
- */
-export function shortcutLetter(event: KeyboardEvent): string {
-    const key = event.key.toLowerCase();
-    if (key.length === 1 && key >= "a" && key <= "z") return key;
-    return event.code.startsWith("Key")
-        ? event.code.slice(3).toLowerCase()
-        : key;
-}
-
-/**
- * Whether a key is Ctrl/⌘+A, without Shift: select all (the cells, the rows), its letter read as
- * the system's shortcuts read it (`shortcutLetter`: on a Cyrillic or a Greek layout too).
- */
-export function isSelectAll(event: KeyboardEvent): boolean {
-    return (
-        (event.ctrlKey || event.metaKey) &&
-        !event.shiftKey &&
-        shortcutLetter(event) === "a"
-    );
-}
 
 /**
  * Whether a key is part of a composition (an IME): `isComposing`, or the key code browsers give
@@ -483,66 +452,4 @@ export function hiddenWithin(element: Element, cell: Element): boolean {
         }
     }
     return false;
-}
-
-/**
- * The style of the node a copy or a paste selects (`holdSelection`, Epic #88): out of the
- * cell's layout, unseen, and selectable whatever the cell's `user-select`.
- */
-const CLIPBOARD_NODE_STYLE: readonly (readonly [string, string])[] = [
-    ["position", "absolute"],
-    ["width", "1px"],
-    ["height", "1px"],
-    ["overflow", "hidden"],
-    ["opacity", "0"],
-    ["pointer-events", "none"],
-    ["user-select", "text"],
-    ["-webkit-user-select", "text"],
-];
-
-/** The page's selection held in a cell's own node (`holdSelection`), and its ranges before. */
-export interface HeldSelection {
-    readonly node: Element;
-    readonly ranges: readonly ReturnType<Selection["getRangeAt"]>[];
-}
-
-/** Whether `selection` is text selected inside `cell` itself (its content, its editor). */
-export function selectedIn(selection: Selection, cell: Element): boolean {
-    return (
-        !selection.isCollapsed &&
-        cell.contains(selection.anchorNode) &&
-        cell.contains(selection.focusNode)
-    );
-}
-
-/**
- * Selects a node of the cell's own, hidden and selectable, in place of the page's selection
- * (collapsed, as the grid keeps it, or text selected elsewhere on the page, which would take a
- * copy or a paste): the clipboard's events then come to the cell (Epic #89). Returns what puts
- * the selection back (`releaseSelection`).
- */
-export function holdSelection(
-    cell: Element,
-    selection: Selection,
-): HeldSelection {
-    const ranges = Array.from({ length: selection.rangeCount }, (_, index) =>
-        selection.getRangeAt(index),
-    );
-    const node = cell.ownerDocument.createElement("span");
-    node.textContent = "\u200b";
-    node.setAttribute("aria-hidden", "true");
-    for (const [property, value] of CLIPBOARD_NODE_STYLE) {
-        node.style.setProperty(property, value);
-    }
-    cell.append(node);
-    selection.selectAllChildren(node);
-    return { node, ranges };
-}
-
-/** Puts the selection back as it was before `holdSelection`, and removes its node. */
-export function releaseSelection({ node, ranges }: HeldSelection): void {
-    const selection = node.ownerDocument.getSelection();
-    selection?.removeAllRanges();
-    for (const range of ranges) selection?.addRange(range);
-    node.remove();
 }
