@@ -1055,9 +1055,10 @@ search, paging); sorting is the first.
 - **Typed keys**: `DataGridModel<TRow, TNode, TFeatures>`' key maps are the core's merged with
   the features' (`FeatureKeys`, `GridCommands`, `GridQueries`, `GridQuestions`, `ModelState`),
   inferred from `features` (`const` type parameters). `[]` is a grid without features, exact;
-  the default `DataGridFeatures` is a grid of any features (open key maps), what a model with
-  features is assignable to (`use` compares its middleware both ways; `CommandEvent.command` is
-  a string). Root props: `GridRootProps<TRow, TNode, TFeatures>` (`sortColumns` compiles only with
+  the default `DataGridFeatures` is a grid of any features, what a model with features is
+  assignable to: its `run`/`get`/`is` check the core's keys, its middleware also sees a command
+  no type names (`FeatureCommandContext`; `use` compares its middleware both ways), and
+  `CommandEvent.command` is a string. Root props: `GridRootProps<TRow, TNode, TFeatures>` (`sortColumns` compiles only with
   `sorting()`). The adapters' hooks, composables, inject functions and refs take the features as
   a type argument (`useDataGrid<Person, typeof features>()`, `createDataGridRef<…>()`); any ref
   fits a root. Type fixtures: `tests/types/features.ts(x)` in every package.
