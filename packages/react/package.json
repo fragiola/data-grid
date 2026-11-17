@@ -71,6 +71,30 @@
             "import": "./dist/editing.js",
             "default": "./dist/editing.js"
         },
+        "./column-resize": {
+            "@fragiola/source": "./src/column-resize/index.ts",
+            "types": "./dist/column-resize.d.ts",
+            "import": "./dist/column-resize.js",
+            "default": "./dist/column-resize.js"
+        },
+        "./column-reorder": {
+            "@fragiola/source": "./src/column-reorder/index.ts",
+            "types": "./dist/column-reorder.d.ts",
+            "import": "./dist/column-reorder.js",
+            "default": "./dist/column-reorder.js"
+        },
+        "./column-pinning": {
+            "@fragiola/source": "./src/column-pinning/index.ts",
+            "types": "./dist/column-pinning.d.ts",
+            "import": "./dist/column-pinning.js",
+            "default": "./dist/column-pinning.js"
+        },
+        "./column-group-collapse": {
+            "@fragiola/source": "./src/column-group-collapse/index.ts",
+            "types": "./dist/column-group-collapse.d.ts",
+            "import": "./dist/column-group-collapse.js",
+            "default": "./dist/column-group-collapse.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -123,6 +147,26 @@
                 "types": "./dist/editing.d.ts",
                 "import": "./dist/editing.js",
                 "default": "./dist/editing.js"
+            },
+            "./column-resize": {
+                "types": "./dist/column-resize.d.ts",
+                "import": "./dist/column-resize.js",
+                "default": "./dist/column-resize.js"
+            },
+            "./column-reorder": {
+                "types": "./dist/column-reorder.d.ts",
+                "import": "./dist/column-reorder.js",
+                "default": "./dist/column-reorder.js"
+            },
+            "./column-pinning": {
+                "types": "./dist/column-pinning.d.ts",
+                "import": "./dist/column-pinning.js",
+                "default": "./dist/column-pinning.js"
+            },
+            "./column-group-collapse": {
+                "types": "./dist/column-group-collapse.d.ts",
+                "import": "./dist/column-group-collapse.js",
+                "default": "./dist/column-group-collapse.js"
             },
             "./package.json": "./package.json"
         }

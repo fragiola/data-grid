@@ -14,6 +14,7 @@ import {
 import {
     cellAt,
     FEATURES,
+    type Features,
     renderCounting,
     root,
     scrollRoot,
@@ -66,7 +67,7 @@ stubViewportSize(400, 235);
 
 /** A group's label and its toggle, as an app writes them. */
 function GroupContent({ cell }: { cell: HeaderCellInfo<Row> }) {
-    const { model } = useDataGrid<Row>();
+    const { model } = useDataGrid<Row, Features>();
     const { state } = useHeaderCell(cell);
     const label = useGroupLabel(cell);
     return (
@@ -91,7 +92,7 @@ function GroupContent({ cell }: { cell: HeaderCellInfo<Row> }) {
 }
 
 type GridProps = Pick<
-    RootProps<Row>,
+    RootProps<Row, Features>,
     | "collapsedGroupKeys"
     | "defaultCollapsedGroupKeys"
     | "onCollapsedGroupKeysChange"

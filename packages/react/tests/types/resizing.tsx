@@ -7,8 +7,8 @@ import {
     type ColumnWidths,
     DataGrid,
     type HeaderCellInfo,
-    useColumnResizer,
 } from "../../src";
+import { columnResize, useColumnResizer } from "../../src/column-resize";
 
 interface Person {
     id: string;
@@ -22,9 +22,12 @@ const columns: Column<Person>[] = [
 ];
 declare const people: Person[];
 
+const features = [columnResize()] as const;
+
 export function People({ widths }: { widths: ColumnWidths }) {
     return (
         <DataGrid.Root
+            features={features}
             columns={columns}
             rows={people}
             columnWidths={widths}
@@ -39,6 +42,7 @@ export function People({ widths }: { widths: ColumnWidths }) {
 export function Wrong() {
     return (
         <DataGrid.Root
+            features={features}
             columns={columns}
             rows={people}
             // @ts-expect-error: widths are numbers, by column key
