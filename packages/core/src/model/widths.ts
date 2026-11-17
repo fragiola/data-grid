@@ -268,3 +268,22 @@ export function autoWidthsOf(
     });
     return entries.length === 0 ? NO_WIDTHS : Object.fromEntries(entries);
 }
+
+/** A measured content width as a column's width (A3, A5): rounded up, within its limits. */
+export function fittedWidth(column: SizedColumn, measured: number): number {
+    return withinLimits(column, Math.ceil(measured));
+}
+
+/**
+ * The columns of a span: a column's or a group's header cell (`header.cellByKey`), a column's
+ * with the ones its header span covers (E1.2).
+ */
+export function columnsOf<TColumn>(
+    state: { readonly columns: readonly TColumn[] },
+    span: { readonly columnIndex: number; readonly columnSpan: number },
+): readonly TColumn[] {
+    return state.columns.slice(
+        span.columnIndex,
+        span.columnIndex + span.columnSpan,
+    );
+}

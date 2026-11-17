@@ -61,7 +61,6 @@ import {
     summaryRowIndex,
 } from "./summary";
 import type {
-    Column,
     ColumnOrGroup,
     CommandContext,
     CommandListener,
@@ -91,7 +90,7 @@ import type {
     RowKeyGetter,
     RowSource,
 } from "./types";
-import { columnWidth, NO_WIDTHS } from "./widths";
+import { columnsOf, columnWidth, NO_WIDTHS } from "./widths";
 
 // The model (D3): the grid's data and rules, the single source of truth. Every change is a
 // command through the middleware chain; reads are `get`/`is` keys. It loads and runs in plain
@@ -287,20 +286,6 @@ export function validRowKeys(
     return keys
         ? ok(keys)
         : invalid("a row key must be a string or a finite number");
-}
-
-/**
- * The columns of a span: a column's or a group's header cell (`header.cellByKey`), a column's
- * with the ones its header span covers (E1.2).
- */
-function columnsOf<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    span: { readonly columnIndex: number; readonly columnSpan: number },
-): readonly Column<TRow, TNode>[] {
-    return state.columns.slice(
-        span.columnIndex,
-        span.columnIndex + span.columnSpan,
-    );
 }
 
 /**

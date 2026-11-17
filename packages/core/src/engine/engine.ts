@@ -41,10 +41,10 @@ import type {
 import {
     autoWidthsOf,
     columnTraits,
+    fittedWidth,
     hasEngineSized,
     NO_WIDTHS,
     sameWidths,
-    withinLimits,
 } from "../model/widths";
 import { sameCell } from "../navigation/navigation";
 import { clamp, indexAfterMove, isIndex } from "../utils/utils";
@@ -1745,14 +1745,6 @@ export function createDataGridEngine<
             },
         );
         return measured;
-    }
-
-    /** A measured content width as a column's width: rounded up, within its limits. */
-    function fittedWidth(
-        column: Column<TRow, TNode>,
-        measured: number,
-    ): number {
-        return withinLimits(column, Math.ceil(measured));
     }
 
     /**

@@ -19,6 +19,7 @@ import type {
     HeaderLayout,
     ReorderSide,
 } from "../model/types";
+import { columnsOf } from "../model/widths";
 import { lowerBound } from "../utils/utils";
 import {
     hasReorderable,
@@ -416,12 +417,7 @@ const REORDER = defineFeature<ColumnReorderTypes>({
             const units = cells.map((cell) =>
                 cell.group || cell.columnSpan === 1
                     ? [cell.key]
-                    : state.columns
-                          .slice(
-                              cell.columnIndex,
-                              cell.columnIndex + cell.columnSpan,
-                          )
-                          .map((column) => column.key),
+                    : columnsOf(state, cell).map((column) => column.key),
             );
             const [moved = [columnKey]] = units.splice(index, 1);
             units.splice(to, 0, moved);

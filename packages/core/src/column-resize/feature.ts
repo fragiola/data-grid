@@ -16,12 +16,13 @@ import { columnPart, pinnedEndFrom } from "../header/header";
 import { done, fail, invalid } from "../model/result";
 import type { Column, ColumnWidths, HeaderCellLayout } from "../model/types";
 import {
+    columnsOf,
+    fittedWidth,
     hasEngineSized,
     isFlex,
     isResizable,
     NO_WIDTHS,
     sameWidths,
-    withinLimits,
 } from "../model/widths";
 import { resizeEdge } from "./parts";
 import type {
@@ -73,17 +74,6 @@ function withWidths(state: State, columnWidths: ColumnWidths) {
     return done(next, next.columnWidths);
 }
 
-/** The columns of a span: a column's or a group's header cell (`header.cellByKey`). */
-function columnsOf(
-    state: State,
-    span: { readonly columnIndex: number; readonly columnSpan: number },
-): readonly Column<unknown, unknown>[] {
-    return state.columns.slice(
-        span.columnIndex,
-        span.columnIndex + span.columnSpan,
-    );
-}
-
 /** A header cell's resize: resizable (one of its columns), and being resized by a drag. */
 function headerCellPart(
     view: GridView<unknown, unknown>,
@@ -98,14 +88,6 @@ function headerCellPart(
             resizing: resize?.columnKey === cell.key,
         },
     };
-}
-
-/** A measured content width as a column's width: rounded up, within its limits. */
-function fittedWidth(
-    column: Column<unknown, unknown>,
-    measured: number,
-): number {
-    return withinLimits(column, Math.ceil(measured));
 }
 
 /** A drag on a column resizer (W4): it drags from its press. */
