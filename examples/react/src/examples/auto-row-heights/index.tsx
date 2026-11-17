@@ -2,8 +2,12 @@
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { hash, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 /** A person with notes of their own: one to four sentences, and a few skills. */
 interface Profile extends Person {
@@ -84,6 +88,7 @@ export default function AutoRowHeights() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowKey={(row) => row.id}

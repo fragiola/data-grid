@@ -12,6 +12,7 @@ import {
 } from "@fragiola/data-grid-react";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
 import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronRight, Search } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -20,6 +21,9 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const ROWS = people(500);
 
@@ -234,6 +238,7 @@ export default function RowGrouping() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowHeight={38}

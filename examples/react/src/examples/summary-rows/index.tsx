@@ -6,11 +6,15 @@ import {
     type SummaryPosition,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { Search } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { Input } from "#/components/atoms/fields";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const all = people(500);
 
@@ -115,6 +119,7 @@ export default function SummaryRows() {
                 />
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowKey={(row) => row.id}

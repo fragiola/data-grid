@@ -12,6 +12,7 @@ import {
     useFillHandle,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useState } from "react";
 import {
@@ -27,6 +28,9 @@ import {
     TextEditor,
 } from "../editing/editors";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 // Everything a sheet does, together: cells edited in place, ranges selected, copied as TSV and
 // pasted, filled from a handle, rows sorted, the first column pinned and the others resized. The
@@ -174,6 +178,7 @@ export default function AllFeatures() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 gridRef={gridRef}
                 columns={columns}

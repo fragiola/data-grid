@@ -11,10 +11,14 @@ import {
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { sortColumnsOf, sorting } from "@fragiola/data-grid-react/sorting";
 import { useState } from "react";
 import { type Task, tasks } from "../_kit/tasks";
 import { TextEditor } from "../editing/editors";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 // React Data Grid has a renderer for each piece (`renderCheckbox`, `renderSortStatus`,
 // `renderCell`, `renderRow`). Here there is nothing else: the checkbox, the sort indicator, a
@@ -121,6 +125,7 @@ export default function CustomRenderers() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowKey={(row) => row.id}
@@ -183,7 +188,7 @@ export default function CustomRenderers() {
 
 /** A header cell with the app's own sort status: a triangle, and the column's place in the sort. */
 function HeaderCell({ cell }: { cell: HeaderCellInfo<Task> }) {
-    const { sortColumns } = useGridView();
+    const sortColumns = sortColumnsOf(useGridView());
     return (
         <DataGrid.HeaderCell
             cell={cell}

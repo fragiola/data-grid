@@ -7,6 +7,7 @@ import {
     type RowKey,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import {
     AtSign,
     Building2,
@@ -41,6 +42,9 @@ import {
     SortLabel,
 } from "./state";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const SORT_LABELS: Record<SortKey, string> = {
     name: "Company",
@@ -315,6 +319,7 @@ export default function Companies() {
                     </span>
                 </div>
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rowKey={(row) => row.id}
                     rowHeight={44}

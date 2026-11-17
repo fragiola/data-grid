@@ -12,6 +12,7 @@ import {
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp, Download } from "lucide-react";
 import { createContext, type ReactNode, use, useMemo, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -29,6 +30,9 @@ import {
     TextEditor,
 } from "../editing/editors";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 // React Data Grid's "common features" in one grid: a selection column, columns pinned at the
 // start and at the end, every column sortable and resizable, cells edited in place, a summary
@@ -320,6 +324,7 @@ export default function CommonFeatures() {
             </div>
             <SelectableIds value={selectableIds}>
                 <DataGrid.Root
+                    features={FEATURES}
                     {...local.props}
                     columns={columns}
                     rowKey={(row) => row.id}

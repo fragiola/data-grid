@@ -9,6 +9,7 @@ import {
     useRowDragHandle,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import {
     ArrowDown,
     ArrowUp,
@@ -21,6 +22,9 @@ import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
 import { type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const backlog = tasks(200);
 
@@ -117,6 +121,7 @@ export default function RowReordering() {
                 </Clickable.Button>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 {...local.props}
                 columns={columns}
                 rowKey={(row) => row.id}

@@ -11,12 +11,16 @@ import {
     useDataGridRef,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp, GripVertical, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { formatMoney, type Person, people } from "../_kit/data";
 import { activeHeaderKey, describeMove } from "./announce";
 import * as styles from "./styles";
+
+// sorting is a feature the grid installs: without it, a sortable column never sorts
+const FEATURES = [sorting()];
 
 const all = people(1_000);
 
@@ -223,6 +227,7 @@ export default function ColumnReorderingExample() {
                 </Clickable.Button>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rowKey={(row) => row.id}
                 rowHeight={36}
