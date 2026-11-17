@@ -147,9 +147,10 @@ const pages = Math.ceil(TOTAL / PAGE_SIZE);
 function exportSelection() {
     // the server gets the selection as the app keeps it, not ten thousand keys
     const what = describe(selection.value);
+    const total = count.value;
     api.fetchQuery(`export ${what}`, () => ({
         rows: [],
-        total: count.value,
+        total,
     })).then(() => {
         exported.value = `Exported ${what}`;
     });
