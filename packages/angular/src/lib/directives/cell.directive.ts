@@ -8,9 +8,8 @@ import {
 import {
     type CellState,
     cellContent,
+    cellEditOf,
     cellPartOf,
-    type DataGridEngine,
-    type EditCellRenderProps,
 } from "@fragiola/data-grid";
 import {
     type CellContext,
@@ -67,13 +66,12 @@ export class DataGridCell<TRow = unknown> implements CellContext {
         const cell = this.dataGridCell() as CellInfo;
         const { column } = cell;
         if (this.part().state.editing && column.renderEditCell) {
-            const view = this.grid.view();
-            const props = view.features.editCell?.(
-                view,
+            const props = cellEditOf(
+                this.grid.view(),
                 cell,
                 this.grid.draft(),
-                this.grid.engine as DataGridEngine<unknown, unknown>,
-            ) as EditCellRenderProps<unknown, DataGridNode> | null | undefined;
+                this.grid.engine,
+            );
             return props ? column.renderEditCell(props) : null;
         }
         // a group row's renderer or value, a loaded row's (the core's rule)

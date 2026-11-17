@@ -10,6 +10,7 @@ export {
     bodyPropsOf,
     CELLS_AREA,
     cellContent,
+    cellEditOf,
     cellPartOf,
     cellProps,
     columnResizerPartOf,

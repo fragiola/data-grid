@@ -1,12 +1,10 @@
 import {
     type CellState,
     cellContent,
+    cellEditOf,
     cellPartOf,
-    type DataGridEngine,
-    type EditCellRenderProps,
-    type GridView,
 } from "@fragiola/data-grid";
-import { computed, defineComponent, h, type VNodeChild } from "vue";
+import { computed, defineComponent, h } from "vue";
 import { layerRef, useEngineValue } from "../composables/internal";
 import { type CellInfo, useGridView, useRootGrid } from "../context";
 import { renderCellElement } from "../utils/cell-element";
@@ -34,7 +32,7 @@ export interface CellSlots<TRow = unknown> extends RenderSlot<CellState> {
 
 /**
  * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft (the editor
- * props editing gives, `GridFeatures.editCell`: none without it). The one cell following the
+ * props editing gives, `cellEditOf`: none without it). The one cell following the
  * draft, so a keystroke renders it alone.
  */
 const EditCell = defineComponent({
@@ -44,17 +42,8 @@ const EditCell = defineComponent({
         const { engine } = useRootGrid();
         const view = useGridView();
         const draft = useEngineValue(() => engine, "edit-draft", null);
-        const edit = computed(
-            () =>
-                view.value.features.editCell?.(
-                    view.value as GridView<unknown, unknown>,
-                    props.cell as CellInfo,
-                    draft.value,
-                    engine as DataGridEngine<unknown, unknown>,
-                ) as
-                    | EditCellRenderProps<unknown, VNodeChild>
-                    | null
-                    | undefined,
+        const edit = computed(() =>
+            cellEditOf(view.value, props.cell as CellInfo, draft.value, engine),
         );
         return () => {
             const editor = edit.value;

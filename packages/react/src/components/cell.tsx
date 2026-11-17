@@ -1,9 +1,8 @@
 import {
     type CellState,
     cellContent,
+    cellEditOf,
     type DataGridEngine,
-    type EditCellRenderProps,
-    type GridView,
 } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import { type CellInfo, useRootGrid } from "../context";
@@ -49,18 +48,18 @@ export function Cell<TRow>(props: CellProps<TRow>) {
 
 /**
  * An edited cell's editor (Epic #88): its column's `renderEditCell`, given the draft (the editor
- * props editing gives, `GridFeatures.editCell`: none without it). The one cell subscribing to the
+ * props editing gives, `cellEditOf`: none without it). The one cell subscribing to the
  * draft, so a keystroke renders it alone.
  */
 function EditCell<TRow>({ cell }: { cell: CellInfo<TRow> }) {
     const { engine } = useRootGrid();
     const draft = useEngineValue(engine, "edit-draft", null);
-    const view = useGridView<TRow>();
-    const props = view.features.editCell?.(
-        view as GridView<unknown, unknown>,
-        cell as CellInfo<unknown>,
+    // the root that provides the engine was given the row type the cell has
+    const props = cellEditOf(
+        useGridView<TRow>(),
+        cell,
         draft,
-        engine as DataGridEngine<unknown, unknown>,
-    ) as EditCellRenderProps<TRow, ReactNode> | null | undefined;
+        engine as DataGridEngine<TRow, ReactNode>,
+    );
     return props ? cell.column.renderEditCell?.(props) : null;
 }
