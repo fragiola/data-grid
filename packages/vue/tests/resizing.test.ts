@@ -20,8 +20,8 @@ import {
     type RootProps,
     type RowInfo,
     typedDataGrid,
-    useColumnResizer,
 } from "../src";
+import { useColumnResizer } from "../src/column-resize";
 import {
     cellAt,
     FEATURES,

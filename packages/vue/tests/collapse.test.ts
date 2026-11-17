@@ -21,6 +21,8 @@ import {
 import {
     cellAt,
     click,
+    FEATURES,
+    type Features,
     h,
     renderGrid,
     root,
@@ -39,7 +41,7 @@ interface Row {
     id: number;
 }
 
-const G = typedDataGrid<Row>();
+const G = typedDataGrid<Row, Features>();
 
 const rows: Row[] = Array.from({ length: 30 }, (_, id) => ({ id }));
 
@@ -84,7 +86,7 @@ const GroupContent = defineComponent({
         },
     },
     setup(props) {
-        const { model } = useDataGrid<Row>();
+        const { model } = useDataGrid<Row, Features>();
         const { state } = useHeaderCell(() => props.cell);
         const label = useGroupLabel(() => props.cell);
         return () =>
@@ -110,7 +112,7 @@ const GroupContent = defineComponent({
 });
 
 type GridProps = Pick<
-    RootProps<Row>,
+    RootProps<Row, Features>,
     | "collapsedGroupKeys"
     | "defaultCollapsedGroupKeys"
     | "onCollapsedGroupKeysChange"
@@ -122,6 +124,7 @@ function grid({ table = false, ...props }: GridProps = {}) {
     return h(
         G.Root,
         {
+            features: FEATURES,
             columns: COLUMNS,
             rows,
             rowHeight: 20,

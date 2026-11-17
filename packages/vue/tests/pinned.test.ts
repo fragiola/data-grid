@@ -13,6 +13,8 @@ import {
 } from "../src";
 import {
     cellAt,
+    FEATURES,
+    type Features,
     h,
     renderGrid,
     scrollRoot,
@@ -30,7 +32,7 @@ interface Row {
     id: number;
 }
 
-const G = typedDataGrid<Row>();
+const G = typedDataGrid<Row, Features>();
 
 const rows: Row[] = Array.from({ length: 100 }, (_, id) => ({ id }));
 
@@ -93,7 +95,7 @@ function grid({
     const tag = tags(table);
     return h(
         G.Root,
-        { columns: cells, rows, rowHeight: 20 },
+        { features: FEATURES, columns: cells, rows, rowHeight: 20 },
         {
             default: () => [
                 h(
@@ -297,7 +299,7 @@ describe("pinned cells", () => {
         const { container } = renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows, rowHeight: 20 },
+                { features: FEATURES, columns, rows, rowHeight: 20 },
                 {
                     default: () => [
                         h(G.Grid, null, {

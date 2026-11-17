@@ -123,6 +123,10 @@ describe("@fragiola/data-grid-vue", () => {
                         "@fragiola/data-grid/clipboard",
                         "@fragiola/data-grid/fill",
                         "@fragiola/data-grid/editing",
+                        "@fragiola/data-grid/column-resize",
+                        "@fragiola/data-grid/column-reorder",
+                        "@fragiola/data-grid/column-pinning",
+                        "@fragiola/data-grid/column-group-collapse",
                     ],
                     file,
                 ).toContain(specifier);
