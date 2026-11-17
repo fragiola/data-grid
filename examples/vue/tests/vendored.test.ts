@@ -2,10 +2,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// The Fragiola UI theme (the base stylesheet, the palettes) and `cn` are vendored into
-// examples/react by its scripts/vendor-fragiola.ts; this app copies them, so the Vue examples wear
-// the React examples' classes. A copy is the original with its first line (the vendoring header)
-// replaced. The kit's demo data is framework-free: copied whole.
+// The Fragiola UI theme (the base stylesheet, the palettes), `cn` and the class families
+// (framework-neutral `tv` strings) are vendored into examples/react by its
+// scripts/vendor-fragiola.ts; this app copies them, so the Vue kit wears the React kit's classes.
+// A copy is the original with its first line (the vendoring header) replaced. The kit's demo data
+// and app policy are framework-free: copied whole.
 
 const here = join(import.meta.dirname, "..");
 const react = join(here, "..", "react");
@@ -17,13 +18,22 @@ function listFiles(dir: string): string[] {
     });
 }
 
+const FAMILIES = ["choice", "field", "menu", "popup"];
+
 const COPIES = [
     ...listFiles(join(here, "src/styles")),
     join(here, "src/lib/cn.ts"),
+    ...FAMILIES.map((name) => join(here, `src/components/families/${name}.ts`)),
 ].map((file) => relative(here, file));
 
-/** The kit files copied as they are. */
-const KIT = ["src/examples/_kit/data.ts"];
+/** The original of a copy: the same path, but `field` is a `.tsx` there (no JSX, see its header). */
+const originalOf = (file: string) =>
+    file === "src/components/families/field.ts" ? `${file}x` : file;
+
+/** The kit files copied as they are: every module of examples/react's `_kit`. */
+const KIT = readdirSync(join(react, "src/examples/_kit")).map(
+    (name) => `src/examples/_kit/${name}`,
+);
 
 const body = (source: string) => source.slice(source.indexOf("\n") + 1);
 const read = (root: string, file: string) =>
@@ -33,9 +43,9 @@ describe("the files copied from examples/react", () => {
     it.each(COPIES)("%s", (file) => {
         const copy = read(here, file);
         expect(copy.split("\n")[0]).toContain(
-            `Copied from examples/react/${file}`,
+            `Copied from examples/react/${originalOf(file)}`,
         );
-        expect(body(copy)).toBe(body(read(react, file)));
+        expect(body(copy)).toBe(body(read(react, originalOf(file))));
     });
 
     it.each(KIT)("%s", (file) => {

@@ -1056,8 +1056,12 @@ examples/shared/    src/meta/<slug>.ts         every example's metadata, whateve
 examples/react/     src/examples/<slug>/       the site's React examples (the embed app, Vite)
                     src/components, lib, …     Fragiola UI, vendored (scripts/vendor-fragiola.ts)
                     playwright.config.ts       the shared specs against this embed
-examples/vue/       src/examples/<slug>/       the site's Vue examples (the embed app, Vite, SFCs);
-                    playwright.config.ts       the shared specs its examples have, against its embed
+examples/vue/       src/examples/<slug>/       the site's Vue examples, every React one under the same
+                                               id (the embed app, Vite, SFCs; its README)
+                    src/components, hooks      the Vue kit: Fragiola UI's pieces over Reka UI (its
+                                               families copied from examples/react)
+                    src/lib, styles            `cn` and the theme, copied from examples/react
+                    playwright.config.ts       the shared specs against this embed
 site/               docs/                      the pages fragiola.com/data-grid serves
                     export.ts, contract.ts     `pnpm site:export` and its validation, every framework
                     dev.ts, dev-proxy.ts       `pnpm site:dev`: one port, one dev server per framework
@@ -1365,8 +1369,7 @@ repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: th
 (`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
 and one examples app per framework of `site/project.json`'s `frameworks` (`examples/<framework>`,
 package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest:
-`examples/react`, and `examples/vue`, with `hello-grid` and `unstyled` for now, the rest in
-Epic #126). What every framework's examples share (the metadata, the themes, the
+`examples/react` and `examples/vue`, each with every example, Epic #126). What every framework's examples share (the metadata, the themes, the
 embed's messages, the manifest builder, the loader generator and every Playwright spec) lives
 once in `examples/shared` (`examples-shared`, private, imports no framework); an example keeps
 its id in every framework, and a spec for an example a framework lacks is skipped there, unless

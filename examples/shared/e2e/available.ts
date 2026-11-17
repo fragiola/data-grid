@@ -12,7 +12,7 @@ import { FRAMEWORKS, type Framework, isFramework } from "../src/framework.ts";
  * The frameworks whose app has every example: for them, a spec never skips. A framework joins
  * once its app has them all.
  */
-export const COMPLETE_FRAMEWORKS: readonly Framework[] = ["react"];
+export const COMPLETE_FRAMEWORKS: readonly Framework[] = ["react", "vue"];
 
 /** The framework of `EXAMPLES_FRAMEWORK`; anything else throws (a config that forgot to set it). */
 export function frameworkOf(value: string | undefined): Framework {
