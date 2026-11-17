@@ -1,10 +1,14 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatMoney, formatNumber, type Person, person } from "../_kit/data";
 import { createFakeApi } from "../_kit/fake-api";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const TOTAL = 1_000;
 const PAGE = 50;
@@ -49,6 +53,7 @@ export default function InfiniteLoading() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}

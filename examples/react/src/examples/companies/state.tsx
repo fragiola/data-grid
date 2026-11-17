@@ -6,8 +6,12 @@ import {
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
-import { useSelectAll } from "@fragiola/data-grid-react/selection";
-import { sortColumnsOf } from "@fragiola/data-grid-react/sorting";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowSelection,
+    useSelectAll,
+} from "@fragiola/data-grid-react/row-selection";
+import { sortColumnsOf, sorting } from "@fragiola/data-grid-react/sorting";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -16,6 +20,10 @@ import * as styles from "./styles";
 
 // The cells that read the grid's state: the selection is the grid's (the app keeps the keys it
 // answers), the sort too. The columns stay the same objects: only these cells re-render.
+
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), row selection
+export const FEATURES = [sorting(), navigation(), rowSelection()];
 
 export type SortKey = "name" | "domain" | "employees" | "arr" | "country";
 
@@ -43,7 +51,7 @@ export function SelectCell({
     rowIndex: number;
     name: string;
 }) {
-    const { model } = useDataGrid();
+    const { model } = useDataGrid<Company, typeof FEATURES>();
     // the view moves with the selection: the box follows
     useGridView();
     return (

@@ -8,7 +8,11 @@ import {
     useGroupToggle,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
-import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowSelection,
+    useSelectAll,
+} from "@fragiola/data-grid-react/row-selection";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronRight, FileText, Folder, Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -21,8 +25,11 @@ import { type Entry, FILES, formatSize } from "./files";
 import { useLazyTree } from "./lazy";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), row selection
+const FEATURES = [sorting(), navigation(), rowSelection()];
+// the server's tree sorts nothing: navigation and row selection only
+const LAZY_FEATURES = [navigation(), rowSelection()];
 
 const columns: Column<Entry>[] = [
     { key: "select", width: 44, pinned: "start" },
@@ -223,6 +230,7 @@ function Lazy() {
     const tree = useLazyTree(api);
     return (
         <DataGrid.Root
+            features={LAZY_FEATURES}
             {...tree}
             columns={columns}
             rowHeight={34}

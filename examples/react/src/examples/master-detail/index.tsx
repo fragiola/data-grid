@@ -6,12 +6,16 @@ import {
     DataGrid,
     useDataGrid,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { ChevronRight } from "lucide-react";
 import type * as React from "react";
 import { useId, useState } from "react";
 import { Switch } from "#/components/ui/switch";
 import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 interface Item {
     product: string;
@@ -213,6 +217,7 @@ function Summary({ order }: { order: Order }) {
 function Items({ order }: { order: Order }) {
     return (
         <DataGrid.Root
+            features={FEATURES}
             columns={itemColumns}
             rows={order.items}
             rowHeight={ITEM_ROW}
@@ -357,6 +362,7 @@ export default function MasterDetail() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={orderColumns}
                 rows={orders}
                 rowKey={(row) => row.id}

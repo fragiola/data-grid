@@ -9,7 +9,11 @@ import {
     useDataGridRef,
     useRowWindow,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const ROWS = 1_000;
 const COLUMNS = 100;
@@ -42,6 +46,7 @@ export default function ResizableGrid() {
             <Readout gridRef={gridRef} />
             <div className={styles.stage}>
                 <DataGrid.Root
+                    features={FEATURES}
                     gridRef={gridRef}
                     columns={columns}
                     rowCount={ROWS}

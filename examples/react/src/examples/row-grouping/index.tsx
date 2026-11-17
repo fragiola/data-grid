@@ -11,7 +11,11 @@ import {
     useGroupToggle,
 } from "@fragiola/data-grid-react";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
-import { useSelectAll } from "@fragiola/data-grid-react/selection";
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowSelection,
+    useSelectAll,
+} from "@fragiola/data-grid-react/row-selection";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronRight, Search } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -22,8 +26,9 @@ import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop), row selection
+const FEATURES = [sorting(), navigation(), rowSelection()];
 
 const ROWS = people(500);
 
@@ -82,7 +87,7 @@ const NO_KEYS: readonly RowKey[] = [];
 
 /** A person's checkbox: the grid toggles the row. */
 function SelectRow({ rowIndex, name }: { rowIndex: number; name: string }) {
-    const { model } = useDataGrid<Person>();
+    const { model } = useDataGrid<Person, typeof FEATURES>();
     // the view moves with the selection: the box follows
     useGridView();
     return (
@@ -107,7 +112,7 @@ function SelectGroup({
     rowIndex: number;
     group: GroupRow;
 }) {
-    const { model } = useDataGrid<Person>();
+    const { model } = useDataGrid<Person, typeof FEATURES>();
     const status = useSelectAll(group.rowKeys ?? NO_KEYS).status;
     return (
         <Checkbox.Root

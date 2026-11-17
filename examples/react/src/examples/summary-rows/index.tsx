@@ -6,6 +6,7 @@ import {
     type SummaryPosition,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { Search } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
@@ -13,8 +14,9 @@ import { Input } from "#/components/atoms/fields";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop)
+const FEATURES = [sorting(), navigation()];
 
 const all = people(500);
 

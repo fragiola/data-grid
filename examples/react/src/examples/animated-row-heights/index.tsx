@@ -1,10 +1,14 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useEffect, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const ROWS = tasks(500);
 
@@ -76,6 +80,7 @@ export default function AnimatedRowHeights() {
                 ))}
             </fieldset>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={ROWS}
                 rowKey={(row) => row.id}

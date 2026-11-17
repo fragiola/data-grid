@@ -5,8 +5,12 @@ import {
     type ColumnOrGroup,
     DataGrid,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { measurement, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const rows = people(1_000);
 
@@ -105,6 +109,7 @@ export default function PinnedColumns() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}

@@ -6,11 +6,15 @@ import {
     DataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { formatNumber, measurement } from "../_kit/data";
 import { createFakeApi, type FakeApi } from "../_kit/fake-api";
 import * as styles from "./styles";
 import { createTileCache, type TileCache } from "./tiles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const ROWS = 100_000;
 const COLUMNS = 2_000;
@@ -83,6 +87,7 @@ export default function WindowedColumns() {
         <div className={styles.frame}>
             <div className={styles.layout}>
                 <DataGrid.Root
+                    features={FEATURES}
                     columns={columns}
                     rowCount={ROWS}
                     getRow={getRow}

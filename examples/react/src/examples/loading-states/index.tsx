@@ -1,6 +1,7 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import {
     useCallback,
@@ -14,6 +15,9 @@ import { Clickable } from "#/components/atoms/clickable";
 import { Switch } from "#/components/ui/switch";
 import { formatMoney, type Person, person } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const COUNT = 40;
 /** the skeleton rows the first load shows: about a screen's worth */
@@ -171,6 +175,7 @@ export default function LoadingStates() {
                 </div>
             ) : null}
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rowCount={rowCount}
                 getRow={getRow}

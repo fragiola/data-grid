@@ -7,9 +7,13 @@ import {
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { type KeyboardEvent, useState } from "react";
 import { type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const rows = people(1_000);
 
@@ -96,6 +100,7 @@ export default function CustomNavigation() {
                 ))}
             </fieldset>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}
@@ -111,7 +116,7 @@ export default function CustomNavigation() {
 
 /** The grid, whose cells (header cells too) handle the keys before the grid sees them. */
 function Grid({ mode }: { mode: Mode }) {
-    const { model } = useDataGrid<Person>();
+    const { model } = useDataGrid<Person, typeof FEATURES>();
     const { direction } = useGridView();
     const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
         if (event.altKey || event.ctrlKey || event.metaKey) return;

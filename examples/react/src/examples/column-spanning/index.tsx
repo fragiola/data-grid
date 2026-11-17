@@ -1,6 +1,7 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import {
     bookingAt,
     FIRST_HOUR,
@@ -10,6 +11,9 @@ import {
     time,
 } from "./bookings";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 /**
  * An hour of the day: a booking starting at it spans the hours it takes (the grid renders no
@@ -64,6 +68,7 @@ export default function ColumnSpanning() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rooms}
                 rowKey={(row) => row.id}

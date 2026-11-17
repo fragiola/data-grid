@@ -9,6 +9,7 @@ import {
     useRowDragHandle,
 } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import {
     ArrowDown,
@@ -23,8 +24,9 @@ import { Input } from "#/components/atoms/fields";
 import { type Task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop)
+const FEATURES = [sorting(), navigation()];
 
 const backlog = tasks(200);
 

@@ -5,10 +5,14 @@ import {
     type Column,
     DataGrid,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
 import { formatMoney, formatNumber, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const rows = people(5_000);
 
@@ -93,6 +97,7 @@ export default function KeyboardNavigation() {
                 </span>
             </div>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}

@@ -6,12 +6,16 @@ import {
     DataGrid,
     useDataGridRef,
 } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { ArrowDownToLine, ArrowUpToLine, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { ContextMenu } from "#/components/ui/context-menu";
 import { type Task, task, tasks } from "../_kit/tasks";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const columns: Column<Task>[] = [
     { key: "id", name: "#", width: 72 },
@@ -45,7 +49,7 @@ export default function ContextMenuExample() {
             columnIndex: cell.columnIndex,
         };
     }
-    const gridRef = useDataGridRef<Task>();
+    const gridRef = useDataGridRef<Task, typeof FEATURES>();
     const gridElement = useRef<HTMLDivElement>(null);
 
     /**
@@ -124,6 +128,7 @@ export default function ContextMenuExample() {
                     }}
                 >
                     <DataGrid.Root
+                        features={FEATURES}
                         gridRef={gridRef}
                         columns={columns}
                         rows={rows}

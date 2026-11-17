@@ -26,8 +26,9 @@ const ALLOWED = [
     /^react-dom$/,
     // the core's extras only: its main entry's types and helpers come through the React package,
     // which is what an app installs
-    /^@fragiola\/data-grid\/(local|selection|fill)$/,
-    /^@fragiola\/data-grid-react(\/(local|selection|sorting))?$/,
+    /^@fragiola\/data-grid\/local$/,
+    // the features (Epic #141, #144): each one's React entry, the core's re-exported
+    /^@fragiola\/data-grid-react(\/(local|sorting|navigation|row-selection|range|clipboard|fill))?$/,
     /^lucide-react$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,

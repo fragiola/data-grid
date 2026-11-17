@@ -2,12 +2,14 @@
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { hash, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
 
-// sorting is a feature the grid installs: without it, a sortable column never sorts
-const FEATURES = [sorting()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), cell
+// navigation (the keys, the active cell, the tab stop)
+const FEATURES = [sorting(), navigation()];
 
 /** A person with notes of their own: one to four sentences, and a few skills. */
 interface Profile extends Person {

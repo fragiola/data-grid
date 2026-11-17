@@ -1,8 +1,12 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { navigation } from "@fragiola/data-grid-react/navigation";
 import { hash, type Person, people } from "../_kit/data";
 import * as styles from "./styles";
+
+// cell navigation is a feature the grid installs: the keys, the active cell and the tab stop
+const FEATURES = [navigation()];
 
 const rows = people(100_000);
 
@@ -40,6 +44,7 @@ export default function VariableRowHeight() {
     return (
         <div className={styles.frame}>
             <DataGrid.Root
+                features={FEATURES}
                 columns={columns}
                 rows={rows}
                 rowKey={(row) => row.id}
