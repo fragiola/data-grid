@@ -4,7 +4,14 @@
 // `min`/`max`) and `Textarea` are bare controls; `Input.Template.Simple` is a whole field: label,
 // row, input, description and error, linked by id.
 
-import { defineComponent, h, inject, mergeProps, type PropType } from "vue";
+import {
+    defineComponent,
+    h,
+    inject,
+    mergeProps,
+    type PropType,
+    type VNodeChild,
+} from "vue";
 import { field } from "#/components/families/field";
 import { FIELD_CONTROL_ID, Field } from "#/components/ui/field";
 import { cn } from "#/lib/cn";
@@ -90,7 +97,8 @@ const Textarea = defineComponent({
     },
 });
 
-type Sides = { start?: string; end?: string };
+/** what goes on a side: text or a node (an icon), as React's `ReactNode` */
+type Sides = { start?: VNodeChild; end?: VNodeChild };
 
 const Simple = defineComponent({
     name: "InputTemplateSimple",
@@ -150,7 +158,7 @@ const Simple = defineComponent({
                                             ? h(
                                                   "span",
                                                   { class: field.inset() },
-                                                  props.inset.start,
+                                                  [props.inset.start],
                                               )
                                             : null,
                                         h(InputControl, {
@@ -161,7 +169,7 @@ const Simple = defineComponent({
                                             ? h(
                                                   "span",
                                                   { class: field.inset() },
-                                                  props.inset.end,
+                                                  [props.inset.end],
                                               )
                                             : null,
                                     ],
