@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type CellInfo, useGroupToggle } from "@fragiola/data-grid-vue";
+import type { CellInfo } from "@fragiola/data-grid-vue";
+import { useGroupToggle } from "@fragiola/data-grid-vue/row-grouping";
 import { ChevronRight, FileText, Folder } from "@lucide/vue";
 import type { Entry } from "./files";
 import * as styles from "./styles";

@@ -6,6 +6,7 @@ import {
     type LocalRowsResult,
 } from "../src/local";
 import { type Column, DATA_GRID, type DataGridNode } from "../src/public-api";
+import { DataGridGroupToggle } from "../src/row-grouping";
 import { DataGridRowSelection } from "../src/row-selection";
 import { TEST_FEATURES } from "./grid";
 import {
@@ -59,7 +60,12 @@ let latest: LocalRowsResult<File> | undefined;
 
 // the first column's cell: the toggle and the name; the others the cell's own content
 @Component({
-    imports: [DATA_GRID, DataGridRowSelection, DataGridLocalRows],
+    imports: [
+        DATA_GRID,
+        DataGridRowSelection,
+        DataGridLocalRows,
+        DataGridGroupToggle,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         {{ tick() ? "" : "" }}

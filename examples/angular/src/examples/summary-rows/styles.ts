@@ -1,4 +1,5 @@
-import type { RowInfo, SummaryRowInfo } from "@fragiola/data-grid-angular";
+import type { RowInfo } from "@fragiola/data-grid-angular";
+import type { SummaryRowInfo } from "@fragiola/data-grid-angular/summary-rows";
 import { cn } from "#/lib/cn";
 
 export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";

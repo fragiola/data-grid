@@ -1,11 +1,6 @@
+import { spansOf } from "../model/bounds";
 import { type BodyShape, isBodyCell, rangeBounds } from "../model/range";
 import { dataRowAt, rowCellValue, rowMetaAt, valueText } from "../model/source";
-import {
-    cellCovering,
-    hasColumnSpans,
-    type SpansState,
-    spanPartStart,
-} from "../model/spans";
 import type {
     CellPosition,
     CellRange,
@@ -13,6 +8,7 @@ import type {
     Column,
     GroupRow,
     RangePaste,
+    SpansState,
 } from "../model/types";
 import { toTsv } from "./clipboard";
 
@@ -52,7 +48,8 @@ export function rangeText<TRow>(
 ): string {
     const { columns: cells, source } = state;
     const { rows, columns } = rangeBounds(range);
-    const spans = hasColumnSpans(cells);
+    // under column spans (`cellSpans()`) only
+    const spans = spansOf(state);
     /** the cell the walk is at (one for every row) */
     const cell = { columnIndex: 0, columnSpan: 1 };
     const lines: string[][] = [];
@@ -77,10 +74,10 @@ export function rangeText<TRow>(
             columnIndex++
         ) {
             if (args && columnIndex >= reach) {
-                cellCovering(
+                spans?.covering(
                     cells,
                     args,
-                    Math.max(reach, spanPartStart(cells, columnIndex)),
+                    Math.max(reach, spans.partStart(cells, columnIndex)),
                     columnIndex,
                     cell,
                 );

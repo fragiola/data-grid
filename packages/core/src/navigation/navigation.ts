@@ -1,5 +1,4 @@
-import type { CellSpan } from "../model/spans";
-import type { CellPosition, SummaryRowCounts } from "../model/types";
+import type { CellPosition, CellSpan, SummaryRowCounts } from "../model/types";
 import { clamp } from "../utils/utils";
 import type { Range } from "../viewport/window";
 

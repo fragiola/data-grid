@@ -5,7 +5,6 @@ import type {
     GridCellInfo,
     GridHandle,
     GridRowInfo,
-    GridSummaryCellInfo,
     GridView,
     HeaderCellLayout,
     HeaderRowView,
@@ -61,18 +60,6 @@ export type HeaderCellInfo<TRow = unknown> = HeaderCellLayout<TRow, VNodeChild>;
 /** A header row, as `DataGrid.HeaderRows` hands it to its slot: its index and its cells. */
 export type HeaderRowInfo<TRow = unknown> = HeaderRowView<TRow, VNodeChild>;
 
-/**
- * A summary row (Epic #86), as `DataGrid.SummaryRows` hands it to its slot: its row index, its
- * position and its index among its position's rows.
- */
-export type SummaryRowInfo = SummaryRowView;
-
-/** A summary row's cell, as `DataGrid.SummaryCells` hands it to its slot. */
-export type SummaryCellInfo<TRow = unknown> = GridSummaryCellInfo<
-    TRow,
-    VNodeChild
->;
-
 /** What a `DataGrid.Root` provides: its model and engine, and the view the engine reports. */
 export interface GridContext extends DataGridContextValue {
     /** the view: a part re-renders when it changes (a new window, new sizes), never per scroll */
@@ -90,12 +77,15 @@ export const HeaderRowKey: InjectionKey<
     (() => HeaderRowInfo | undefined) | null
 > = Symbol("DataGridHeaderRow");
 
-/** The summary rows' position a part renders in (`DataGrid.Summary`, `DataGrid.SummaryRows`). */
+/**
+ * The summary rows' position a part renders in (`Summary`, `SummaryRows`: the summary rows
+ * feature's, `/summary-rows`); a root provides none, so a grid nested in one starts outside.
+ */
 export const SummaryKey: InjectionKey<(() => SummaryPosition) | null> =
     Symbol("DataGridSummary");
 
-/** The summary row a part renders in (`DataGrid.SummaryRow`, `DataGrid.SummaryCells`). */
-export const SummaryRowKey: InjectionKey<(() => SummaryRowInfo) | null> =
+/** The summary row a part renders in (`SummaryRow`, `SummaryCells`, from `/summary-rows`). */
+export const SummaryRowKey: InjectionKey<(() => SummaryRowView) | null> =
     Symbol("DataGridSummaryRow");
 
 /**

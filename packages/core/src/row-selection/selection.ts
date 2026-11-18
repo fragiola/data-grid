@@ -10,13 +10,13 @@ import {
 import type {
     CommandFailure,
     CommandResult,
-    DataGridState,
     GroupRow,
     RowKey,
     RowMeta,
     RowSelection,
     SelectionAnchor,
 } from "../model/types";
+import type { RowGroupingState } from "../row-grouping/types";
 import { keySet, toggledKey } from "../utils/utils";
 import type { RowSelectionState as SelectionSlice } from "./types";
 
@@ -42,7 +42,7 @@ type RowSelectionState<TRow> = RowsState<TRow> &
 
 type Selecting<TRow> = RowSelectionState<TRow> &
     Pick<SelectionSlice<TRow>, "selectionAnchor"> &
-    Pick<DataGridState<TRow>, "expandedGroupKeys">;
+    Partial<RowGroupingState>;
 
 /** Whether two anchors are the same key, at the same index, giving the same state. */
 export function sameAnchor(

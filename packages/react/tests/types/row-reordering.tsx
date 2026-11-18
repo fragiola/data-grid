@@ -12,9 +12,12 @@ import {
     type RowReorder,
     useDataGrid,
     useRow,
-    useRowDragHandle,
 } from "../../src";
 import { useLocalRows } from "../../src/local";
+import { rowReorder, useRowDragHandle } from "../../src/row-reorder";
+
+// a row's move is row reorder's prop (Epic #151)
+const reordering = [rowReorder()] as const;
 
 interface Task {
     id: string;
@@ -30,6 +33,7 @@ export function Tasks() {
         <DataGrid.Root
             columns={columns}
             rows={tasks}
+            features={reordering}
             onRowMove={({ fromIndex, toIndex, rowKey }) => {
                 const key: RowKey = rowKey;
                 void key;
@@ -45,11 +49,23 @@ export function Tasks() {
     );
 }
 
+export function Unmoving() {
+    return (
+        <DataGrid.Root
+            columns={columns}
+            rows={tasks}
+            // @ts-expect-error: without row reorder, no row moves
+            onRowMove={() => undefined}
+        />
+    );
+}
+
 export function Wrong() {
     return (
         <DataGrid.Root
             columns={columns}
             rows={tasks}
+            features={reordering}
             // @ts-expect-error: a move's indexes are numbers
             onRowMove={(move: Omit<RowMove, "toIndex"> & { toIndex: string }) =>
                 move.toIndex
@@ -84,7 +100,8 @@ export function Row({ row }: { row: RowInfo<Task> }) {
 
 export function Engine() {
     const { engine } = useDataGrid<Task>();
-    const reorder: RowReorder | null = engine.get("row-reorder");
+    // row reorder's: `undefined` without it
+    const reorder: RowReorder | null | undefined = engine.get("row-reorder");
     if (reorder && reorder.targetIndex !== null) {
         const side: ReorderSide = reorder.side;
         void side;

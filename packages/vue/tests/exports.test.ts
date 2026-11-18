@@ -127,6 +127,11 @@ describe("@fragiola/data-grid-vue", () => {
                         "@fragiola/data-grid/column-reorder",
                         "@fragiola/data-grid/column-pinning",
                         "@fragiola/data-grid/column-group-collapse",
+                        "@fragiola/data-grid/row-expansion",
+                        "@fragiola/data-grid/row-grouping",
+                        "@fragiola/data-grid/row-reorder",
+                        "@fragiola/data-grid/spans",
+                        "@fragiola/data-grid/summary-rows",
                     ],
                     file,
                 ).toContain(specifier);
@@ -135,7 +140,7 @@ describe("@fragiola/data-grid-vue", () => {
     });
 });
 
-// Each feature's entry (Epic #141, #144): the core's same entry, re-exported whole, plus the
+// Each feature's entry (Epic #141, #144, #151): the core's same entry, re-exported whole, plus the
 // feature's composables; the main entry has none of them.
 const FEATURE_ENTRIES = {
     sorting: [],
@@ -145,6 +150,23 @@ const FEATURE_ENTRIES = {
     clipboard: [],
     fill: ["useFillHandle"],
     editing: ["useCellEdit"],
+    // the row features (Epic #151): their primitives and composables left the main entry
+    "row-expansion": ["RowDetail", "useRowDetail"],
+    "row-grouping": ["useGroupToggle"],
+    "row-reorder": ["useRowDragHandle"],
+    spans: [],
+    "summary-rows": [
+        "Summary",
+        "SummaryCell",
+        "SummaryCells",
+        "SummaryRow",
+        "SummaryRows",
+        "typedSummaryRows",
+        "useSummaryCell",
+        "useSummaryCells",
+        "useSummaryRow",
+        "useSummaryRows",
+    ],
 } as const;
 
 describe("the features' entries", () => {

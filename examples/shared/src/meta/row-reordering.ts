@@ -8,6 +8,7 @@ export default {
     order: 6,
     features: [
         "onRowMove",
+        "rowReorder()",
         "useRowDragHandle",
         "data-dragging",
         "data-drop-target",

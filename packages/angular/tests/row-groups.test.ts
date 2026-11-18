@@ -18,6 +18,7 @@ import {
     type DataGridNode,
     type RowKey,
 } from "../src/public-api";
+import { DataGridGroupToggle } from "../src/row-grouping";
 import { DataGridRowSelection } from "../src/row-selection";
 import { TEST_FEATURES } from "./grid";
 import {
@@ -84,7 +85,12 @@ const CELL = `
 `;
 
 @Component({
-    imports: [DATA_GRID, DataGridRowSelection, DataGridLocalRows],
+    imports: [
+        DATA_GRID,
+        DataGridRowSelection,
+        DataGridLocalRows,
+        DataGridGroupToggle,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [features]="features" dataGridRowSelection [columns]="columns" [rowHeight]="20" [rowSelection]="rowSelection()" [dataGridLocalRows]="local">

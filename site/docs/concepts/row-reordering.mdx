@@ -11,9 +11,52 @@ reader hears are yours.
 
 <Example id="row-reordering" />
 
+## Install row reorder
+
+Moving rows is a [feature](/docs/concepts/features): `rowReorder()` from the `/row-reorder`
+entry, which holds the handle's hook too (`useRowDragHandle`; Angular: `DataGridRowDragHandle`,
+`injectRowDragHandle` and the root's `DataGridRowReorder` for `(rowMove)`). Without it, a row's
+handle drags nothing, Ctrl/⌘+Shift+↑/↓ moves nothing, and `onRowMove` does not compile.
+`model.is("row-movable", { rowIndex })` tells whether a row may move by its own rules (loaded, the
+rows without kinds); a handle's `reorderable` also tells whether the grid's rows move now.
+
+<Framework name="react">
+
+```tsx title="backlog.tsx"
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { rowReorder, useRowDragHandle } from "@fragiola/data-grid-react/row-reorder";
+
+const features = [navigation(), rowReorder()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="backlog.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowReorder, useRowDragHandle } from "@fragiola/data-grid-vue/row-reorder";
+
+const features = [navigation(), rowReorder()] as const;
+const DataGrid = typedDataGrid<Task, typeof features>();
+</script>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+`rowReorder()` and `DataGridRowReorder` come from `@fragiola/data-grid-angular/row-reorder`:
+the rows move while the root carries `dataGridRowReorder` (`(rowMove)="…"`), and
+`[dataGridRowReorder]="false"` stops them (an output cannot tell whether it has a listener).
+
+</Framework>
+
 ## Turning it on
 
-Give `DataGrid.Root` an `onRowMove`: while it has one, the rows move. Each move is
+Give `DataGrid.Root` an `onRowMove`, `rowReorder()` installed: while it has one, the rows move. Each move is
 `{ fromIndex, toIndex, rowKey }`: the row's index before the move, the index it takes once moved
 (your rows without it, it put back there), and its key (`rowKey`, else its index). Apply it to
 your rows: `moveRow` from `@fragiola/data-grid/local` does it for an array.
@@ -24,6 +67,7 @@ import { moveRow } from "@fragiola/data-grid/local";
 const [tasks, setTasks] = useState(initialTasks);
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={tasks}
     rowKey={(task) => task.id}
@@ -57,7 +101,8 @@ move a row from any of its cells. `state.reorderable` says whether a press on it
 `state.dragging` whether it is dragging.
 
 ```tsx title="handle.tsx"
-import { type CellInfo, useRowDragHandle } from "@fragiola/data-grid-react";
+import type { CellInfo } from "@fragiola/data-grid-react";
+import { useRowDragHandle } from "@fragiola/data-grid-react/row-reorder";
 
 function Handle({ cell }: { cell: CellInfo<Task> }) {
     const { state, props } = useRowDragHandle(cell);
@@ -124,6 +169,7 @@ const [tasks, setTasks] = useState(initialTasks);
 const local = useLocalRows(tasks, columns);
 
 <DataGrid.Root
+    features={features}
     {...local.props}
     columns={columns}
     rowKey={(task) => task.id}
@@ -178,6 +224,7 @@ const [message, setMessage] = useState("");
 
 <span role="status">{message}</span>
 <DataGrid.Root
+    features={features}
     columns={columns}
     rows={tasks}
     onRowMove={(move) => {

@@ -11,6 +11,7 @@ import {
     type RootProps,
     useDataGrid,
 } from "../src";
+import { Summary } from "../src/summary-rows";
 import {
     FEATURES,
     type Features,
@@ -773,9 +774,9 @@ describe("the empty state", () => {
             >
                 <DataGrid.Grid>
                     <DataGrid.Header />
-                    <DataGrid.Summary position="top" />
+                    <Summary position="top" />
                     <DataGrid.Body />
-                    <DataGrid.Summary position="bottom" />
+                    <Summary position="bottom" />
                     <DataGrid.Empty />
                 </DataGrid.Grid>
             </DataGrid.Root>,
@@ -1421,9 +1422,9 @@ describe("layering (Epic #89, E5.2)", () => {
             >
                 <DataGrid.Grid style={{ zIndex: 9 }}>
                     <DataGrid.Header style={{ zIndex: 50 }} />
-                    <DataGrid.Summary position="top" />
+                    <Summary position="top" />
                     <DataGrid.Body />
-                    <DataGrid.Summary position="bottom" />
+                    <Summary position="bottom" />
                 </DataGrid.Grid>
             </DataGrid.Root>,
         );

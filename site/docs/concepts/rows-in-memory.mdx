@@ -62,7 +62,8 @@ as `DataGrid.Root` wants its columns: the hook works again when they change.
 
 The rows are filtered, then searched, then sorted, then grouped (with `groupBy`,
 [Row grouping](/docs/concepts/row-grouping)) or shown as a tree (with `getSubRows`,
-[Tree data](/docs/concepts/tree-data)), then paged. Each stage is worked out again only
+[Tree data](/docs/concepts/tree-data)), then paged. Grouped, `props` carry the expanded groups
+too (`expandedGroupKeys`, `onExpandedGroupKeysChange`): install `rowGrouping()` with them. Each stage is worked out again only
 when its own inputs change: turning a page sorts nothing again, a new sort filters nothing
 again, and expanding a group groups nothing again.
 
@@ -116,7 +117,7 @@ give it `filter`: it receives the cell's value, the filter value and the row.
 ## Moving rows
 
 The hook never changes the rows you give it. When people [move rows](/docs/concepts/row-reordering),
-`moveRow(move)` returns your rows with a move the grid told (`onRowMove`) applied: the moved row
+`moveRow(move)` returns your rows with a move the grid told (`onRowMove`, with `rowReorder()`) applied: the moved row
 goes beside the row it lands next to on screen, a filtered or paged grid's included. Set it as your
 rows. It is stable (a function that never changes, reading your latest rows), and two moves told
 before a render apply one after the other. The grid moves no row while it is sorted, nor while

@@ -4,23 +4,28 @@
 // silently shadow a core name of the same spelling: tests/exports.test.ts fails on one.
 export * from "@fragiola/data-grid";
 export type {
+    CellContext,
     CellInfo,
     CellTemplateProps,
     DataGridContextValue,
     DataGridRef,
     HeaderCellInfo,
     HeaderRowInfo,
+    RowContext,
     RowInfo,
-    SummaryCellInfo,
-    SummaryRowInfo,
+    SummaryContext,
+    SummaryRowContext,
     TypedBy,
 } from "./lib/context";
 // Private to the package's own entry points (the fill handle's element, `/fill`; an editor's
-// template, `/editing`), as Angular's `ɵ` names are: not the app's API, they may change in any
-// release.
+// template, `/editing`; the row features' parts, Epic #151), as Angular's `ɵ` names are: not the
+// app's API, they may change in any release.
 export {
     DATA_GRID_CELL as ɵDATA_GRID_CELL,
+    DATA_GRID_SUMMARY as ɵDATA_GRID_SUMMARY,
+    DATA_GRID_SUMMARY_ROW as ɵDATA_GRID_SUMMARY_ROW,
     injectGrid as ɵinjectGrid,
+    injectRowContext as ɵinjectRowContext,
 } from "./lib/context";
 export { DATA_GRID } from "./lib/data-grid";
 export { DataGridBind } from "./lib/directives/bind.directive";
@@ -34,10 +39,6 @@ export {
 export { DataGridEmpty } from "./lib/directives/empty.directive";
 export { DataGridGrid } from "./lib/directives/grid.directive";
 export { DataGridGroupLabel } from "./lib/directives/group-label.directive";
-export {
-    DataGridGroupToggle,
-    type GroupToggleContext,
-} from "./lib/directives/group-toggle.directive";
 export { DataGridHeader } from "./lib/directives/header.directive";
 export { DataGridHeaderCell } from "./lib/directives/header-cell.directive";
 export {
@@ -57,28 +58,9 @@ export {
 } from "./lib/directives/root.directive";
 export { DataGridRow } from "./lib/directives/row.directive";
 export {
-    DataGridRowDetail,
-    type RowDetailContext,
-} from "./lib/directives/row-detail.directive";
-export { DataGridRowDragHandle } from "./lib/directives/row-drag-handle.directive";
-export {
     DataGridRows,
     type RowsContext,
 } from "./lib/directives/rows.directive";
-export {
-    DataGridSummary,
-    type SummaryTemplateContext,
-} from "./lib/directives/summary.directive";
-export { DataGridSummaryCell } from "./lib/directives/summary-cell.directive";
-export {
-    DataGridSummaryCells,
-    type SummaryCellsContext,
-} from "./lib/directives/summary-cells.directive";
-export { DataGridSummaryRow } from "./lib/directives/summary-row.directive";
-export {
-    DataGridSummaryRows,
-    type SummaryRowsContext,
-} from "./lib/directives/summary-rows.directive";
 export { DataGridTemplate } from "./lib/directives/template.directive";
 export { createDataGridRef } from "./lib/inject/create-data-grid-ref";
 export { injectCell } from "./lib/inject/inject-cell";
@@ -86,23 +68,22 @@ export { injectCells } from "./lib/inject/inject-cells";
 export { injectColumnWindow } from "./lib/inject/inject-column-window";
 export { injectDataGrid, injectGridView } from "./lib/inject/inject-data-grid";
 export { injectGroupLabel } from "./lib/inject/inject-group-label";
-export { injectGroupToggle } from "./lib/inject/inject-group-toggle";
 export { injectHeaderCell } from "./lib/inject/inject-header-cell";
 export { injectHeaderCells } from "./lib/inject/inject-header-cells";
 export { injectHeaderRows } from "./lib/inject/inject-header-rows";
 export { injectRow } from "./lib/inject/inject-row";
-export { injectRowDetail } from "./lib/inject/inject-row-detail";
-export { injectRowDragHandle } from "./lib/inject/inject-row-drag-handle";
 export { injectRowWindow } from "./lib/inject/inject-row-window";
 export { injectRows } from "./lib/inject/inject-rows";
-export { injectSummaryCell } from "./lib/inject/inject-summary-cell";
-export { injectSummaryCells } from "./lib/inject/inject-summary-cells";
-export { injectSummaryRow } from "./lib/inject/inject-summary-row";
-export { injectSummaryRows } from "./lib/inject/inject-summary-rows";
-export type {
-    PartInjectResult,
-    ValueOrSignal,
+export {
+    type PartInjectResult,
+    partResult as ɵpartResult,
+    type ValueOrSignal,
+    valueNow as ɵvalueNow,
 } from "./lib/inject/internal";
+export {
+    cellBinding as ɵcellBinding,
+    withTableSpans as ɵwithTableSpans,
+} from "./lib/utils/cell-binding";
 export {
     type ContextOf,
     contextOf,
@@ -111,5 +92,10 @@ export {
     type TemplateContext,
     templateContent,
 } from "./lib/utils/content";
-export { bindPart as ɵbindPart } from "./lib/utils/helpers";
+export {
+    beforeInputs as ɵbeforeInputs,
+    bindPart as ɵbindPart,
+    injectHost as ɵinjectHost,
+} from "./lib/utils/helpers";
 export { structuralView as ɵstructuralView } from "./lib/utils/structural";
+export { keyedTemplateViews as ɵkeyedTemplateViews } from "./lib/utils/views";

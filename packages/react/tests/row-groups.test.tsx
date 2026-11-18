@@ -1,14 +1,9 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import {
-    type CellInfo,
-    type Column,
-    DataGrid,
-    type RowKey,
-    useGroupToggle,
-} from "../src";
+import { type CellInfo, type Column, DataGrid, type RowKey } from "../src";
 import { groupKeyOf, type LocalRowsResult, useLocalRows } from "../src/local";
+import { useGroupToggle } from "../src/row-grouping";
 import {
     cellAt,
     FEATURES,

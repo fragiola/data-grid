@@ -11,6 +11,7 @@ import {
     buildView,
     columnAxisOf,
     createHeaderRows,
+    detailRowsOf,
     rowAxisOf,
     type ViewInputs,
     withDetails,
@@ -82,7 +83,11 @@ export function inputsOf(
         state,
         rowWindow: windowOf(10, 20),
         columnWindow: windowOf(2, 5),
-        rowAxis: withDetails(rowAxisOf(state), state),
+        rowAxis: withDetails(
+            rowAxisOf(state),
+            state,
+            detailRowsOf(features, state),
+        ),
         // a resize's widths over the declared ones (Epic #148: `columnResize()`'s)
         columnAxis: columnAxisOf(
             state,
@@ -101,8 +106,7 @@ export function inputsOf(
         interaction: null,
         tabbable: true,
         emptyShown: false,
-        reorderableRows: false,
-        rowReorder: null,
+        heldRow: null,
         featureFields: null,
         direction: "ltr",
         headerRowsFor: createHeaderRows<Row, unknown>(),

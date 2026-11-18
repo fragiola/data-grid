@@ -8,8 +8,9 @@ export default {
     order: 5,
     features: [
         "summaryRows",
-        "DataGrid.Summary",
-        "DataGrid.SummaryCells",
+        "summaryRows()",
+        "Summary",
+        "SummaryCells",
         "colSpan",
         "pinned",
         "useLocalRows",

@@ -58,6 +58,11 @@ describe("the primitives' entry", () => {
             "column-reorder",
             "column-pinning",
             "column-group-collapse",
+            "row-expansion",
+            "row-grouping",
+            "row-reorder",
+            "spans",
+            "summary-rows",
         ]) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(

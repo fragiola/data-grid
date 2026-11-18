@@ -14,6 +14,7 @@ import type { DataGridModel } from "../model/model";
 import type {
     CellKeys,
     CellPosition,
+    CellSpans,
     Column,
     ColumnWidths,
     CommandResult,
@@ -241,6 +242,16 @@ export interface EngineKit {
      * it would give the columns over those overrides
      */
     readonly autoWidths: (overrides?: ColumnWidths) => ColumnWidths;
+    /** the rows' axis on screen (Epic #151): each one's height (its detail's included) and offset */
+    readonly rowAxis: () => Axis;
+    /** where a pointer's y is in the view, from its top inside its border (a layout read) */
+    readonly viewY: (clientY: number) => number;
+    /** the virtual row offset under a pointer at `y` in the view, kept over the body */
+    readonly rowOffsetAt: (y: number) => number;
+    /** the edge scroll's step for a pointer at `y` over the body (0 for none) */
+    readonly rowEdgeStep: (y: number) => number;
+    /** whether a feature keeps the rows in an order of the app's (a sort): then rows do not move */
+    readonly rowsOrdered: () => boolean;
 }
 
 /**
@@ -397,6 +408,12 @@ export interface FeatureEngine {
               after: DataGridState<unknown, unknown>,
           ) => boolean)
         | undefined;
+    /**
+     * the body row it keeps rendered out of the rendered rows, or `null` (Epic #151: a row's
+     * drag, its handle holding the pointer while the edge scroll takes it away); the first one
+     * not `null` is kept
+     */
+    readonly heldRow?: (() => number | null) | undefined;
     /** the engine is destroyed: what its creation set up goes (a middleware) */
     readonly destroy?: (() => void) | undefined;
     /** the viewport attached: what it listens to from now on; returns what detaching undoes */
@@ -586,6 +603,20 @@ export interface FeatureSpec<TTypes extends FeatureTypes> {
           ) => PinnedColumns)
         | undefined;
     /**
+     * the rows showing a detail, ascending (Epic #151: row expansion's expanded rows), the same
+     * list while they stay: the core lays their details out on the rows' axis (their sizes and
+     * measuring are the core's); the first feature having it gives them. Without it, none
+     */
+    readonly rowDetails?:
+        | ((state: FeatureState<TTypes>) => readonly number[])
+        | undefined;
+    /**
+     * the body cells' column spans (Epic #151: `cellSpans()`'s): a column's `colSpan` asked, the
+     * cells it covers left out; the first feature having it gives them. Without it, every body
+     * cell is one column
+     */
+    readonly cellSpans?: CellSpans | undefined;
+    /**
      * after every command (its handler, then `sourceChanged`): its state kept to the core's rules
      * (a range left when the active cell leaves its anchor); the same object when nothing changed
      */
@@ -602,6 +633,11 @@ export interface FeatureSpec<TTypes extends FeatureTypes> {
      * stop of its own
      */
     readonly navigable?: boolean | undefined;
+    /**
+     * its rows form a tree (Epic #151: row grouping's): with navigation, a grid whose rows have
+     * kinds (`getRowMeta`) is a `treegrid`; without any, a `grid`
+     */
+    readonly tree?: boolean | undefined;
     /** what it adds to a body row's part: it fills `share`'s fields (nothing allocated per row) */
     readonly row?:
         | ((

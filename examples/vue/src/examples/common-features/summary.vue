@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { DataGrid, type SummaryPosition } from "@fragiola/data-grid-vue";
+import type { SummaryPosition } from "@fragiola/data-grid-vue";
+import * as DataGrid from "@fragiola/data-grid-vue/summary-rows";
 import * as styles from "./styles";
 import { SUMMARIES, type Totals } from "./summaries";
 
 // A position's summary row: sticky, opaque, the app's figure in each cell. It never reads the
-// row type: the plain `DataGrid` parts do.
+// row type: the summary rows' plain parts do (`@fragiola/data-grid-vue/summary-rows`).
 
 defineProps<{ position: SummaryPosition; totals: Totals }>();
 </script>

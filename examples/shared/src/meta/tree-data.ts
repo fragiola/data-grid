@@ -10,6 +10,7 @@ export default {
         "useLocalRows",
         "getSubRows",
         "getRowMeta",
+        "rowGrouping()",
         "useGroupToggle",
         "treegrid",
         "rowSelection",

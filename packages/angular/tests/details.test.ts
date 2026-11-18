@@ -16,7 +16,8 @@ import {
     injectDataGrid,
     type RowKey,
 } from "../src/public-api";
-import { type TestProps, TestRootProps } from "./grid";
+import { DataGridRowDetail } from "../src/row-expansion";
+import { type TestFeatures, type TestProps, TestRootProps } from "./grid";
 import { click, render, settled, stubViewportSize } from "./helpers";
 
 // Row details (Epic #41, M1–M4): the root maps the expansion (controlled or not) and
@@ -67,7 +68,7 @@ stubViewportSize(400, 235);
 })
 class Toggle {
     readonly rowIndex = input.required<number>();
-    private readonly grid = injectDataGrid<Row>();
+    private readonly grid = injectDataGrid<Row, TestFeatures>();
     toggle() {
         this.grid.model.run("expanded-rows.toggle", {
             rowIndex: this.rowIndex(),
@@ -87,7 +88,7 @@ class TestRef {
 
 /** The grid of divs: a toggle in each row's first cell, the row's detail after its cells. */
 @Component({
-    imports: [DATA_GRID, TestRootProps, Toggle],
+    imports: [DATA_GRID, TestRootProps, Toggle, DataGridRowDetail],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()">
@@ -122,7 +123,7 @@ class DivGrid {
 
 /** The table grid, its detail with the app's attributes, style, class and ref. */
 @Component({
-    imports: [DATA_GRID, TestRootProps, TestRef],
+    imports: [DATA_GRID, TestRootProps, TestRef, DataGridRowDetail],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()">

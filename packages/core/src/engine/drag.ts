@@ -1,4 +1,4 @@
-import type { ReorderSide, RowKey } from "../model/types";
+import type { ReorderSide } from "../model/types";
 import { keptIfSame } from "../utils/utils";
 
 // The engine's drags (Epics #86, #88): what each one keeps while the pointer moves, and the pure
@@ -30,21 +30,6 @@ export interface PointerDrag {
 }
 
 /**
- * A drag of a row by its handle (Epic #86, E2.3): a press that drags once it moves past a click's
- * slop, the row followed by its key.
- */
-export interface RowDrag extends PointerDrag {
-    readonly kind: "row";
-    readonly rowIndex: number;
-    readonly rowKey: RowKey;
-    /**
-     * the pointer's y in the view, as last read (a layout read: at the drag's start, once a frame
-     * and on the release, never during a model change)
-     */
-    viewY: number;
-}
-
-/**
  * A feature's drag (Epic #144: a range's, a fill handle's): a press it takes (`FeatureEngine.
  * pointerdown`) that the engine follows as its own, past the slop and once a frame, both axes,
  * telling it each step and how it ends.
@@ -71,7 +56,8 @@ export interface FeatureDrag extends PointerDrag {
     readonly click?: ((event: MouseEvent) => void) | undefined;
 }
 
-export type Drag = RowDrag | FeatureDrag;
+/** The drag the engine follows: a feature's (since Epic #151, a row's too: row reorder's). */
+export type Drag = FeatureDrag;
 
 /**
  * How a drag ends: a release, a cancel (Escape, `pointercancel`) or a loss (the capture lost, a

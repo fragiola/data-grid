@@ -1,6 +1,6 @@
 ---
 title: Features
-description: A small core and the features your app installs on a grid (the keys, sorting, selections, ranges, editing, the columns' features), each typed and opt-in.
+description: A small core and the features your app installs on a grid (keys, sorting, selections, ranges, editing, column and row features), each typed and opt-in.
 ---
 
 The grid's core renders, scrolls and virtualizes. What an app may not need is a **feature**: a
@@ -20,6 +20,11 @@ creates it.
 | `columnReorder()` | `/column-reorder` | | columns and groups moved by a drag or the keys ([Column reordering](/docs/concepts/column-reordering)) |
 | `columnPinning()` | `/column-pinning` | | columns pinned at the start or the end ([Pinned columns](/docs/concepts/pinned-columns)) |
 | `columnGroupCollapse()` | `/column-group-collapse` | | collapsible column groups ([Collapsible groups](/docs/concepts/collapsible-groups)) |
+| `rowExpansion()` | `/row-expansion` | | rows that expand into a detail, `RowDetail` ([Master-detail](/docs/guides/master-detail)) |
+| `rowGrouping()` | `/row-grouping` | | group rows and a tree's parents that expand, the group toggle, the `treegrid` role ([Row grouping](/docs/concepts/row-grouping)) |
+| `rowReorder()` | `/row-reorder` | | rows moved by their drag handles or the keys ([Row reordering](/docs/concepts/row-reordering)) |
+| `cellSpans()` | `/spans` | | a column's `colSpan` in the body ([Column spanning](/docs/concepts/column-spanning)) |
+| `summaryRows()` | `/summary-rows` | | rows of figures under the header and at the bottom, `Summary` ([Summary rows](/docs/concepts/summary-rows)) |
 
 A feature another one needs is installed with it: a grid missing one throws when it is created,
 naming it (`feature "cellRange" requires feature "navigation": install it too`). Their order in
@@ -106,7 +111,11 @@ A feature's inputs are a directive of its own, on the root's element: `DataGridS
 `DataGridFill` the fill (`dataGridFill (fill)="…"`), `DataGridEditing` the edit
 (`[dataGridEditing]="columns" [(editingCell)]="…" (cellEdit)="…"`), `DataGridColumnResize`
 `[(columnWidths)]`, `DataGridColumnReorder` `[(columnOrder)]`, `DataGridColumnGroupCollapse`
-`[(collapsedGroupKeys)]`. A feature you give no input (`columnPinning()`) needs no directive.
+`[(collapsedGroupKeys)]`, `DataGridRowExpansion` `[(expandedRowKeys)]` and the details' heights,
+`DataGridRowGrouping` `[(expandedGroupKeys)]`, `DataGridRowReorder` `(rowMove)` (present, the rows
+move; `[dataGridRowReorder]="false"` stops them), `DataGridSummaryRowsRoot`
+(`dataGridSummaryRows`) `[summaryRows]` and `[summaryRowHeight]`. A feature you give no input
+(`columnPinning()`, `cellSpans()`) needs no directive.
 
 </Framework>
 
@@ -115,8 +124,16 @@ Each package re-exports the core's features from an entry of the same name
 `@fragiola/data-grid-angular/sorting`), so an app installs one package. The core's own is
 `@fragiola/data-grid/sorting`. A feature's hooks are in its entry too: `useSelectAll` in
 `/row-selection`, `useFillHandle` in `/fill`, `useCellEdit` in `/editing`, `useColumnResizer` in
-`/column-resize` (Angular: `injectSelectAll`, `injectFillHandle` and `*dataGridFillHandle`,
-`injectCellEdit` and `*dataGridCellEdit`, `injectColumnResizer` and `*dataGridColumnResizer`).
+`/column-resize`, `RowDetail` and `useRowDetail` in `/row-expansion`, `useGroupToggle` in
+`/row-grouping`, `useRowDragHandle` in `/row-reorder`, `Summary`, `SummaryRows`, `SummaryRow`,
+`SummaryCells`, `SummaryCell` and their hooks in `/summary-rows` (Angular: `injectSelectAll`,
+`injectFillHandle` and `*dataGridFillHandle`, `injectCellEdit` and `*dataGridCellEdit`,
+`injectColumnResizer` and `*dataGridColumnResizer`, the row detail's, the group toggle's, the
+drag handle's and the summary's directives and inject functions in their entries,
+`SUMMARY_ROWS` the summary's). A primitive of a feature is never in the `DataGrid` namespace,
+which holds the core's parts only. The core's `SummaryRowsProps` (the feature's root props) is
+`SummaryRowsFeatureProps` in the adapters, whose `SummaryRowsProps` is the component's; Vue's
+`/summary-rows` has `typedSummaryRows<TRow>()` for typed summary cells.
 
 ## Fixed when the grid is created
 
@@ -153,8 +170,22 @@ But a column's `resizable`, `reorderable` and `pinned`, and a group's `collapsib
 - a collapsible group shows its expanded children, and stays so;
 - their props and commands do not compile.
 
+Nor do its rows expand, group, span, move or sum up. The row model stays: the rows as given (a
+row's kind too, `getRowMeta`: a group row renders as a row, at its depth), their sizes and
+measured heights, the windows. But:
+
+- no row expands and no detail renders (the details' heights are `rowExpansion()`'s props);
+- no group expands: a group toggle and the keys do nothing, the grid is a `grid` (never a
+  `treegrid`) and its rows carry no `aria-level`, `aria-expanded`, `aria-setsize` or
+  `aria-posinset`;
+- a column's `colSpan` is never asked: every body cell is one column (a header's spans stay);
+- the grid has no summary rows;
+- a row's drag handle drags nothing and Ctrl/⌘+Shift+↑/↓ moves nothing;
+- their props, commands and primitives do not compile, nor import from the main entry.
+
 Rows in memory hand the root their sort (`useLocalRows`, `injectLocalRows`,
-`[dataGridLocalRows]`), so [install `sorting()`](/docs/concepts/rows-in-memory) with them.
+`[dataGridLocalRows]`), so [install `sorting()`](/docs/concepts/rows-in-memory) with them, and
+`rowGrouping()` when they group (their props carry the expanded groups).
 
 ## Typed by the features
 
@@ -265,6 +296,9 @@ part optional:
 | `columnLayout` | its say in the columns' layout: `arrangement(state)` gives each sibling list an order (`arrange`) and the collapsed groups (`collapsed`), and `changed(after, before)` tells a state that lays them out otherwise (the columns laid out again, the active cell following its column: `columnReorder()`, `columnGroupCollapse()`) |
 | `columnWidths(state)` | the widths it gives columns over their declared sizing (`columnResize()`'s) |
 | `pinnedColumns(columns, axis, viewportWidth)` | the columns pinned in effect and the strips' widths (`columnPinning()`'s): without it, none |
+| `rowDetails(state)` | the rows showing a detail, ascending (`rowExpansion()`'s): the core lays their details out on the rows' axis, sizes and measures them; without it, none, and the axis is the rows' own |
+| `cellSpans` | the body cells' column spans, a reader the core keeps on its state at creation (`state.cellSpans`, asked through `spansOf`): the navigation, the ranges and the clipboard ask the same (`cellSpans()`'s) |
+| `tree` | its rows form a tree: with navigation, a grid whose rows have kinds is a `treegrid` (`rowGrouping()`'s) |
 | `root` | the props a root takes for it, controlled or not (`defineControlled`) |
 
 In an engine, a feature's keys run at a place of their own in the grid's: `beforeKeydown` before
@@ -283,12 +317,18 @@ a scroll (`fixed`, a resize) and take the click that ends it (`click`, a handle'
 feature's engine also hears the columns laid out again before the view is built for it
 (`columnsFollowed`: a drag follows its column), says when a new layout of the same columns keeps
 the view on its first column by key (`columnAnchored`: a collapse), and is told when the engine is
-destroyed (`destroy`). Its `engine.get` keys and `engine.run` actions are its own:
-`column-resize`, `column-reorder` and `fit-columns` are the column features'.
+destroyed (`destroy`). A feature may keep a body row rendered out of the rendered rows
+(`heldRow`: a row's drag, its handle holding the pointer). The rows' means are lent too
+(`rowAxis`, `viewY`, `rowOffsetAt`, `rowEdgeStep`, `rowsOrdered`): a row's drag is a `FeatureDrag`
+along y, as a column's is along x, and a row's move (Ctrl/⌘+Shift+↑/↓) and a row group's keys are
+`keydown`s on body cells. Its `engine.get` keys and `engine.run` actions are its own:
+`column-resize`, `column-reorder` and `fit-columns` are the column features', `row-reorder` row
+reorder's.
 
 A root's controlled piece (`defineControlled`) may be a layout input (`first: "layout"`: a
 column's widths, order or collapsed groups): it settles first of all, then the active position,
-so a position a layout moved settles in the same pass.
+so a position a layout moved settles in the same pass. The others settle after it, in the
+features' order (the expanded rows and row groups among them).
 
 Features read each other only through keys (`model.get("cell-selection")`), never each other's
 code. Two features of one name, a feature it `requires` missing, or a key another one already has

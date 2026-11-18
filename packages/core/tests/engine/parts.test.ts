@@ -5,9 +5,9 @@ import {
     cellPart,
     type HeaderCellLayout,
     headerCellPart,
-    rowDetailPart,
     rowPart,
 } from "../../src";
+import { rowDetailPart } from "../../src/row-expansion";
 import { sorting } from "../../src/sorting";
 import { FEATURES } from "../features";
 import { COLUMNS, column, type Row, stateOf, viewOf } from "./views";

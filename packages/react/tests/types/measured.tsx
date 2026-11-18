@@ -7,6 +7,10 @@ import {
     type RowHeight,
     useDataGrid,
 } from "../../src";
+import { rowExpansion } from "../../src/row-expansion";
+
+// a detail's height is row expansion's prop (Epic #151)
+const expanding = [rowExpansion()] as const;
 
 interface Note {
     id: string;
@@ -23,10 +27,22 @@ export function Notes() {
         <DataGrid.Root
             columns={columns}
             rows={notes}
+            features={expanding}
             rowHeight={height}
             estimatedRowHeight={48}
             detailHeight={detail}
             estimatedDetailHeight={200}
+        />
+    );
+}
+
+export function NoDetails() {
+    return (
+        <DataGrid.Root
+            columns={columns}
+            rows={notes}
+            // @ts-expect-error: without row expansion, no detail height
+            detailHeight={200}
         />
     );
 }

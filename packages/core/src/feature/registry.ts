@@ -62,6 +62,8 @@ export interface GridFeatures {
         | undefined;
     /** whether a feature navigates the cells by keys (the grid's roles, its tab stop) */
     readonly navigable: boolean;
+    /** whether a feature makes the rows a tree (the `treegrid` role, with navigation) */
+    readonly tree: boolean;
     /** the state keys an engine's view carries for the features */
     readonly viewKeys: readonly string[];
     /** what the features add to a body row's part */
@@ -113,6 +115,12 @@ export interface GridFeatures {
     readonly columnWidths: DataGridFeature["columnWidths"];
     /** the columns pinned in effect (pinning's), or none: every column scrolls */
     readonly pinnedColumns: DataGridFeature["pinnedColumns"];
+    /** the rows showing a detail (row expansion's), or none */
+    readonly rowDetails:
+        | ((state: FeatureState) => readonly number[])
+        | undefined;
+    /** the body cells' column spans (`cellSpans()`'s), or none: every body cell is one column */
+    readonly cellSpans: DataGridFeature["cellSpans"];
     /** the root props the features add */
     readonly rootProps: readonly string[];
     /** a cell's editor props while it is edited (the first feature having them: editing's) */
@@ -146,6 +154,7 @@ export interface GridFeatureEngine {
     readonly columnsFollowed: Hooks<"columnsFollowed">;
     readonly columnAnchored: Hooks<"columnAnchored">;
     readonly destroy: Hooks<"destroy">;
+    readonly heldRow: Hooks<"heldRow">;
     readonly attach: Hooks<"attach">;
     readonly optionsChanged: Hooks<"optionsChanged">;
     readonly view: Hooks<"view">;
@@ -260,6 +269,7 @@ export function composeFeatures(
                   }
                 : undefined,
         navigable: features.some((feature) => feature.navigable === true),
+        tree: features.some((feature) => feature.tree === true),
         viewKeys: features.flatMap((feature) => feature.view ?? []),
         row:
             rows.length === 0
@@ -336,6 +346,9 @@ export function composeFeatures(
             ?.columnWidths,
         pinnedColumns: features.find((feature) => feature.pinnedColumns)
             ?.pinnedColumns,
+        cellSpans: features.find((feature) => feature.cellSpans)?.cellSpans,
+        rowDetails: features.find((feature) => feature.rowDetails)
+            ?.rowDetails as GridFeatures["rowDetails"],
         rootProps: features.flatMap((feature) => feature.root?.props ?? []),
         editCell: features.find((feature) => feature.editCell)?.editCell,
     };
@@ -433,6 +446,7 @@ export function featureEngine(
         columnsFollowed: hooks("columnsFollowed"),
         columnAnchored: hooks("columnAnchored"),
         destroy: hooks("destroy"),
+        heldRow: hooks("heldRow"),
         attach: hooks("attach"),
         optionsChanged: hooks("optionsChanged"),
         view: hooks("view"),

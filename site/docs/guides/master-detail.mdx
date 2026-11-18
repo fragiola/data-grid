@@ -9,6 +9,49 @@ indexes, so the windows, `getRow` and `rows.changed` work as before.
 
 <Example id="master-detail" />
 
+## Install row expansion
+
+Expanding rows is a [feature](/docs/concepts/features): `rowExpansion()` from the
+`/row-expansion` entry, which holds the detail's part too (`RowDetail` and `useRowDetail`;
+Angular: `DataGridRowDetail`, `injectRowDetail` and the root's `DataGridRowExpansion`). Without
+it, no row expands and no detail renders: the expansion's commands, keys and props
+(`expandedRowKeys`, `detailHeight`, `estimatedDetailHeight`) do not compile. A detail's place on
+the rows' axis, its size and its measuring stay the core's.
+
+<Framework name="react">
+
+```tsx title="orders.tsx"
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { RowDetail, rowExpansion } from "@fragiola/data-grid-react/row-expansion";
+
+const features = [navigation(), rowExpansion()];
+```
+
+</Framework>
+
+<Framework name="vue">
+
+```vue title="orders.vue"
+<script setup lang="ts">
+import { typedDataGrid } from "@fragiola/data-grid-vue";
+import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { RowDetail, rowExpansion } from "@fragiola/data-grid-vue/row-expansion";
+
+const features = [navigation(), rowExpansion()] as const;
+const DataGrid = typedDataGrid<Order, typeof features>();
+</script>
+```
+
+</Framework>
+
+<Framework name="angular">
+
+`rowExpansion()` and `DataGridRowExpansion` (`dataGridRowExpansion`: `[(expandedRowKeys)]`,
+`[defaultExpandedRowKeys]`, `[detailHeight]`, `[estimatedDetailHeight]`) come from
+`@fragiola/data-grid-angular/row-expansion`, with the detail's directive and `injectRowDetail`.
+
+</Framework>
+
 ## Expanding rows
 
 The grid keeps which rows are expanded, by their key (`rowKey`, else their index). Keyed by row,
@@ -20,7 +63,7 @@ carries `aria-expanded`:
 
 ```tsx title="expander.tsx"
 function Expander({ rowIndex }: { rowIndex: number }) {
-    const { model } = useDataGrid<Order>();
+    const { model } = useDataGrid<Order, typeof features>();
     const expanded = model.is("row-expanded", { rowIndex });
     return (
         <button
@@ -48,14 +91,20 @@ it, and `expandedRowKeys` with `onExpandedRowKeysChange` controls it.
 
 ## The detail area
 
-Give `Root` a `detailHeight`, a number or a function of the row, and render
-`DataGrid.RowDetail` inside each `Row`, after its cells:
+Give `Root` a `detailHeight`, a number or a function of the row, and render `RowDetail` inside
+each `Row`, after its cells:
 
 ```tsx title="orders.tsx"
 // a function defined once: a new one on every render would lay the rows out again each time
 const detailHeight = (order: Order) => 40 + order.items.length * 24;
 
-<DataGrid.Root columns={columns} rows={orders} rowKey={(order) => order.id} detailHeight={detailHeight}>
+<DataGrid.Root
+    features={features}
+    columns={columns}
+    rows={orders}
+    rowKey={(order) => order.id}
+    detailHeight={detailHeight}
+>
     <DataGrid.Grid aria-label="Orders">
         <DataGrid.Header />
         <DataGrid.Body>
@@ -63,9 +112,9 @@ const detailHeight = (order: Order) => 40 + order.items.length * 24;
                 {(row) => (
                     <DataGrid.Row row={row}>
                         <DataGrid.Cells />
-                        <DataGrid.RowDetail>
+                        <RowDetail>
                             {row.row ? <OrderItems order={row.row} /> : null}
-                        </DataGrid.RowDetail>
+                        </RowDetail>
                     </DataGrid.Row>
                 )}
             </DataGrid.Rows>

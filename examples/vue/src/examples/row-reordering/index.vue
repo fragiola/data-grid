@@ -7,6 +7,7 @@ import {
 import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowReorder } from "@fragiola/data-grid-vue/row-reorder";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDown, ArrowUp, RotateCcw, Search } from "@lucide/vue";
 import { computed, h, shallowRef, type VNodeChild } from "vue";
@@ -18,8 +19,13 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
-// scrolls)
-const features = [sorting(), navigation(), columnPinning()] as const;
+// scrolls), row reordering (a row's drag handle and keys)
+const features = [
+    sorting(),
+    navigation(),
+    columnPinning(),
+    rowReorder(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

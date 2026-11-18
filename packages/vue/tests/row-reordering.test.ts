@@ -24,9 +24,9 @@ import {
     type RowMove,
     type RowState,
     typedDataGrid,
-    useRowDragHandle,
 } from "../src";
 import { useLocalRows } from "../src/local";
+import { useRowDragHandle } from "../src/row-reorder";
 import { type SortColumn, sorting } from "../src/sorting";
 import {
     FEATURES as ALL,

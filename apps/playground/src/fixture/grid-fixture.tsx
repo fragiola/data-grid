@@ -21,9 +21,7 @@ import {
     useDataGridRef,
     useGridView,
     useGroupLabel,
-    useGroupToggle,
     useHeaderCell,
-    useRowDragHandle,
 } from "@fragiola/data-grid-react";
 import { clipboard } from "@fragiola/data-grid-react/clipboard";
 import { columnGroupCollapse } from "@fragiola/data-grid-react/column-group-collapse";
@@ -42,8 +40,29 @@ import {
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { cellRange } from "@fragiola/data-grid-react/range";
+import {
+    RowDetail,
+    rowExpansion,
+} from "@fragiola/data-grid-react/row-expansion";
+import {
+    rowGrouping,
+    useGroupToggle,
+} from "@fragiola/data-grid-react/row-grouping";
+import {
+    rowReorder,
+    useRowDragHandle,
+} from "@fragiola/data-grid-react/row-reorder";
 import { rowSelection } from "@fragiola/data-grid-react/row-selection";
 import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
+import { cellSpans } from "@fragiola/data-grid-react/spans";
+import {
+    Summary,
+    SummaryCell,
+    SummaryCells,
+    SummaryRow,
+    SummaryRows,
+    summaryRows,
+} from "@fragiola/data-grid-react/summary-rows";
 import {
     Profiler,
     type ReactElement,
@@ -60,7 +79,8 @@ import { createRoot } from "react-dom/client";
 /**
  * the features the fixture installs: sorting (Epic #141), cell navigation, row selection, cell
  * ranges, the clipboard and the fill handle (Epic #144), cell editing (Epic #146), column
- * resizing, reordering, pinning and collapsible groups (Epic #148)
+ * resizing, reordering, pinning and collapsible groups (Epic #148), column spans, row grouping,
+ * row expansion, summary rows and row reordering (Epic #151)
  */
 export const FEATURES = [
     sorting(),
@@ -74,6 +94,11 @@ export const FEATURES = [
     columnReorder(),
     columnPinning(),
     columnGroupCollapse(),
+    cellSpans(),
+    rowGrouping(),
+    rowExpansion(),
+    summaryRows(),
+    rowReorder(),
 ];
 
 /** Their types: the model's keys and the root's props (`window.grid`'s too). */
@@ -917,7 +942,7 @@ export function HeaderRow({
  * A position's summary rows, as an app writes them: after the header (top) or last (bottom),
  * opaque and above the rows that scroll under them; nothing while the grid has none there.
  */
-export function SummaryRows({
+export function FixtureSummaryRows({
     position,
     table,
     render,
@@ -928,27 +953,27 @@ export function SummaryRows({
 }) {
     const tag = tags(table);
     return (
-        <DataGrid.Summary
+        <Summary
             position={position}
             render={render}
             style={{ background: "white" }}
         >
-            <DataGrid.SummaryRows>
+            <SummaryRows>
                 {(row) => (
-                    <DataGrid.SummaryRow row={row} render={tag.summaryRow}>
-                        <DataGrid.SummaryCells<FixtureRow>>
+                    <SummaryRow row={row} render={tag.summaryRow}>
+                        <SummaryCells<FixtureRow>>
                             {(cell) => (
-                                <DataGrid.SummaryCell
+                                <SummaryCell
                                     cell={cell}
                                     render={tag.summaryCell}
                                     style={pinnedStyle}
                                 />
                             )}
-                        </DataGrid.SummaryCells>
-                    </DataGrid.SummaryRow>
+                        </SummaryCells>
+                    </SummaryRow>
                 )}
-            </DataGrid.SummaryRows>
-        </DataGrid.Summary>
+            </SummaryRows>
+        </Summary>
     );
 }
 
@@ -1300,7 +1325,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                 <HeaderRow table={table} resize={resize} />
                             )}
                         </DataGrid.Header>
-                        <SummaryRows
+                        <FixtureSummaryRows
                             position="top"
                             table={table}
                             render={tag.summaryTop}
@@ -1367,7 +1392,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                             )}
                                         </DataGrid.Cells>
                                         {details ? (
-                                            <DataGrid.RowDetail
+                                            <RowDetail
                                                 render={tag.detail}
                                                 style={{ background: "white" }}
                                             >
@@ -1392,7 +1417,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                                                         }}
                                                     />
                                                 ) : null}
-                                            </DataGrid.RowDetail>
+                                            </RowDetail>
                                         ) : null}
                                     </DataGrid.Row>
                                 )}
@@ -1401,7 +1426,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
                         <DataGrid.Empty render={tag.empty}>
                             <div style={EMPTY_CONTENT}>No rows</div>
                         </DataGrid.Empty>
-                        <SummaryRows
+                        <FixtureSummaryRows
                             position="bottom"
                             table={table}
                             render={tag.summaryBottom}

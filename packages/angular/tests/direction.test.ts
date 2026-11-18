@@ -7,6 +7,7 @@ import {
     type GridDirection,
     injectDataGrid,
 } from "../src/public-api";
+import { DataGridRowDetail, DataGridRowExpansion } from "../src/row-expansion";
 import { TEST_FEATURES } from "./grid";
 import {
     cellAt,
@@ -52,12 +53,12 @@ stubViewportSize(500, 235);
 /** The grid: every part, each row's detail, an empty state; in a page of `page`'s direction. */
 @Component({
     selector: "test-direction-grid",
-    imports: [DATA_GRID],
+    imports: [DATA_GRID, DataGridRowDetail, DataGridRowExpansion],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [style.direction]="page() ?? null">
             <div dataGridRoot [features]="testFeatures" [columns]="cells()" [rows]="rows" [rowHeight]="20"
-                [direction]="direction()" [defaultExpandedRowKeys]="expanded() ? [0] : undefined">
+                [direction]="direction()" dataGridRowExpansion [defaultExpandedRowKeys]="expanded() ? [0] : undefined">
                 @if (table()) {
                     <table dataGridGrid>
                         <thead *dataGridHeader>

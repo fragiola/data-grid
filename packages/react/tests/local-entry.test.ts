@@ -54,6 +54,11 @@ const EXTRAS = [
     "column-reorder",
     "column-pinning",
     "column-group-collapse",
+    "row-expansion",
+    "row-grouping",
+    "row-reorder",
+    "spans",
+    "summary-rows",
 ];
 
 describe("the primitives' entry", () => {

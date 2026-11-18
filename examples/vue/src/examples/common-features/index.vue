@@ -11,6 +11,7 @@ import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
+import { summaryRows } from "@fragiola/data-grid-vue/summary-rows";
 import { Download } from "@lucide/vue";
 import { computed, h, provide, shallowRef, type VNodeChild } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
@@ -45,7 +46,8 @@ interface Job extends BudgetedTask {
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, cell editing, column
-// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls)
+// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls), summary
+// rows
 const features = [
     sorting(),
     navigation(),
@@ -53,6 +55,7 @@ const features = [
     editing(),
     columnResize(),
     columnPinning(),
+    summaryRows(),
 ] as const;
 
 const DataGrid = typedDataGrid<Job, typeof features>();

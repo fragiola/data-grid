@@ -95,6 +95,36 @@
             "import": "./dist/column-group-collapse.js",
             "default": "./dist/column-group-collapse.js"
         },
+        "./row-expansion": {
+            "@fragiola/source": "./src/row-expansion/index.ts",
+            "types": "./dist/row-expansion.d.ts",
+            "import": "./dist/row-expansion.js",
+            "default": "./dist/row-expansion.js"
+        },
+        "./row-grouping": {
+            "@fragiola/source": "./src/row-grouping/index.ts",
+            "types": "./dist/row-grouping.d.ts",
+            "import": "./dist/row-grouping.js",
+            "default": "./dist/row-grouping.js"
+        },
+        "./row-reorder": {
+            "@fragiola/source": "./src/row-reorder/index.ts",
+            "types": "./dist/row-reorder.d.ts",
+            "import": "./dist/row-reorder.js",
+            "default": "./dist/row-reorder.js"
+        },
+        "./spans": {
+            "@fragiola/source": "./src/spans/index.ts",
+            "types": "./dist/spans.d.ts",
+            "import": "./dist/spans.js",
+            "default": "./dist/spans.js"
+        },
+        "./summary-rows": {
+            "@fragiola/source": "./src/summary-rows/index.ts",
+            "types": "./dist/summary-rows.d.ts",
+            "import": "./dist/summary-rows.js",
+            "default": "./dist/summary-rows.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -168,6 +198,31 @@
                 "types": "./dist/column-group-collapse.d.ts",
                 "import": "./dist/column-group-collapse.js",
                 "default": "./dist/column-group-collapse.js"
+            },
+            "./row-expansion": {
+                "types": "./dist/row-expansion.d.ts",
+                "import": "./dist/row-expansion.js",
+                "default": "./dist/row-expansion.js"
+            },
+            "./row-grouping": {
+                "types": "./dist/row-grouping.d.ts",
+                "import": "./dist/row-grouping.js",
+                "default": "./dist/row-grouping.js"
+            },
+            "./row-reorder": {
+                "types": "./dist/row-reorder.d.ts",
+                "import": "./dist/row-reorder.js",
+                "default": "./dist/row-reorder.js"
+            },
+            "./spans": {
+                "types": "./dist/spans.d.ts",
+                "import": "./dist/spans.js",
+                "default": "./dist/spans.js"
+            },
+            "./summary-rows": {
+                "types": "./dist/summary-rows.d.ts",
+                "import": "./dist/summary-rows.js",
+                "default": "./dist/summary-rows.js"
             },
             "./package.json": "./package.json"
         }

@@ -390,28 +390,16 @@ export function rowWidth<TRow, TNode>(
 }
 
 /**
- * A detail's ARIA (M4): one cell of its row spanning every column, so expanding a row changes no
- * row count or index.
- */
-export function ariaRowDetail<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-): { readonly "aria-colindex": number; readonly "aria-colspan"?: number } {
-    return {
-        "aria-colindex": 1,
-        ...(view.columnCount > 1 ? { "aria-colspan": view.columnCount } : {}),
-    };
-}
-
-/**
  * The grid's role: with navigation (Epic #144, the APG grid pattern), `treegrid` when its rows
- * have kinds (Epic #87, `getRowMeta`: rows in a tree, group rows), else `grid`; without it, the
- * APG table pattern's `table` (a `grid` promises keyboard navigation).
+ * have kinds (Epic #87, `getRowMeta`: rows in a tree, group rows) and row grouping makes them a
+ * tree (Epic #151), else `grid`; without it, the APG table pattern's `table` (a `grid` promises
+ * keyboard navigation).
  */
 export function gridRole<TRow, TNode>(
     view: GridView<TRow, TNode>,
 ): "grid" | "treegrid" | "table" {
     if (!view.features.navigable) return "table";
-    return view.source.getRowMeta ? "treegrid" : "grid";
+    return view.features.tree && view.source.getRowMeta ? "treegrid" : "grid";
 }
 
 /**

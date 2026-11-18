@@ -10,13 +10,13 @@ import {
     type CellInfo,
     type Column,
     type RenderSlotProps,
-    type RowDetailState,
     type RowInfo,
     type RowKey,
     type RowState,
     typedDataGrid,
     useDataGrid,
 } from "../src";
+import { RowDetail, type RowDetailState } from "../src/row-expansion";
 import {
     click,
     FEATURES,
@@ -38,7 +38,10 @@ interface Row {
     total: number;
 }
 
-const G = typedDataGrid<Row, Features>();
+const G = {
+    ...typedDataGrid<Row, Features>(),
+    RowDetail,
+};
 
 const rows: Row[] = Array.from({ length: 50 }, (_, i) => ({
     id: `r${i}`,

@@ -8,6 +8,17 @@ import {
     type SummaryRowCounts,
     useDataGrid,
 } from "../../src";
+import {
+    Summary,
+    SummaryCell,
+    SummaryCells,
+    SummaryRow,
+    SummaryRows,
+    summaryRows,
+} from "../../src/summary-rows";
+
+// the summary rows' keys and props are the feature's (Epic #151)
+const summarized = [summaryRows()] as const;
 
 interface Person {
     id: string;
@@ -46,7 +57,9 @@ export const noRow: Column<Person> = {
 };
 
 export function Totals() {
-    const { model } = useDataGrid<Person>();
+    const { model } = useDataGrid<Person, typeof summarized>();
+    // @ts-expect-error: without the feature, none of its keys
+    useDataGrid<Person>().model.run("summary-rows.set", { top: 1 });
     const counts: SummaryRowCounts = model.get("summary-rows");
     const position: SummaryPosition | undefined = model.get("summary-row-by", {
         rowIndex: -2,
@@ -57,33 +70,34 @@ export function Totals() {
     void counts;
     void position;
     return (
-        <DataGrid.Root<Person>
+        <DataGrid.Root
             columns={[age]}
             rows={people}
+            features={summarized}
             summaryRows={{ bottom: 1 }}
             summaryRowHeight={30}
         >
             <DataGrid.Grid>
                 <DataGrid.Header />
-                <DataGrid.Summary position="top" />
+                <Summary position="top" />
                 <DataGrid.Body />
-                <DataGrid.Summary
+                <Summary
                     position="bottom"
                     render={<tfoot />}
                     className={(state) => state.position}
                 >
-                    <DataGrid.SummaryRows>
+                    <SummaryRows>
                         {(row) => (
-                            <DataGrid.SummaryRow
+                            <SummaryRow
                                 row={row}
                                 render={<tr />}
                                 className={(state) =>
                                     state.active ? "active" : ""
                                 }
                             >
-                                <DataGrid.SummaryCells<Person>>
+                                <SummaryCells<Person>>
                                     {(cell) => (
-                                        <DataGrid.SummaryCell
+                                        <SummaryCell
                                             cell={cell}
                                             render={<td />}
                                             style={(state) => ({
@@ -94,14 +108,20 @@ export function Totals() {
                                             })}
                                         />
                                     )}
-                                </DataGrid.SummaryCells>
-                            </DataGrid.SummaryRow>
+                                </SummaryCells>
+                            </SummaryRow>
                         )}
-                    </DataGrid.SummaryRows>
-                </DataGrid.Summary>
+                    </SummaryRows>
+                </Summary>
                 {/* @ts-expect-error: a position is top or bottom */}
-                <DataGrid.Summary position="middle" />
+                <Summary position="middle" />
             </DataGrid.Grid>
         </DataGrid.Root>
     );
 }
+
+// without the feature, its props do not compile
+export const bare = (
+    // @ts-expect-error: summaryRows is the summary rows feature's
+    <DataGrid.Root columns={[age]} rows={people} summaryRows={{ top: 1 }} />
+);

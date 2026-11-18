@@ -4,7 +4,12 @@ import {
     computed,
     input,
 } from "@angular/core";
-import { injectDataGrid, injectGridView } from "@fragiola/data-grid-angular";
+import {
+    type DataGridFeature,
+    injectDataGrid,
+    injectGridView,
+} from "@fragiola/data-grid-angular";
+import type { RowExpansionTypes } from "@fragiola/data-grid-angular/row-expansion";
 import { LucideChevronRight } from "@lucide/angular";
 import type { Order } from "./orders";
 import * as styles from "./styles";
@@ -33,8 +38,12 @@ export class Expander {
     readonly order = input.required<Order>();
     readonly rowIndex = input.required<number>();
 
-    // expands or collapses an order: the app's control, the grid's state (M1)
-    private readonly grid = injectDataGrid<Order>();
+    // expands or collapses an order: the app's control, the grid's state (M1); the model typed by
+    // the feature this part reads (row expansion, installed by the grid)
+    private readonly grid = injectDataGrid<
+        Order,
+        [DataGridFeature<RowExpansionTypes>]
+    >();
     private readonly view = injectGridView();
     protected readonly expanded = computed(() => {
         this.view();

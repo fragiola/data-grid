@@ -7,9 +7,9 @@ import {
     cellPart,
     type ModelOptions,
     type RangePaste,
-    summaryCellPart,
     veto,
 } from "../../src";
+import { summaryCellPart } from "../../src/summary-rows";
 import type { Features } from "../features";
 import {
     cellElement,

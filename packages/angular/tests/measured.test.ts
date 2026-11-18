@@ -14,7 +14,9 @@ import {
     type GridDirection,
     type RowHeight,
 } from "../src/public-api";
-import { type TestProps, TestRootProps } from "./grid";
+import { DataGridRowDetail } from "../src/row-expansion";
+import { SUMMARY_ROWS } from "../src/summary-rows";
+import { SUMMARY_FEATURES, type TestProps, TestRootProps } from "./grid";
 import { cellAt, render, rowAt, settled, stubViewportSize } from "./helpers";
 
 // Measured heights (Epic #86, E2.2): with `rowHeight: "auto"` a loaded row has no height of its
@@ -82,7 +84,7 @@ afterAll(() => {
 
 /** The grid: rows with the consumer's style, cells with theirs (every inset the grid drops), a detail after the cells. */
 @Component({
-    imports: [DATA_GRID, TestRootProps],
+    imports: [DATA_GRID, TestRootProps, DataGridRowDetail],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()">
@@ -249,10 +251,10 @@ describe("measured rows", () => {
 
 /** A root of the given sizes, held by its `gridRef`. */
 @Component({
-    imports: [DATA_GRID],
+    imports: [DATA_GRID, SUMMARY_ROWS],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div dataGridRoot [rows]="rows" [columns]="columns" [gridRef]="gridRef"
+        <div dataGridRoot dataGridSummaryRows [features]="summaryFeatures" [rows]="rows" [columns]="columns" [gridRef]="gridRef"
             [rowHeight]="sizes().rowHeight" [estimatedRowHeight]="sizes().estimatedRowHeight"
             [summaryRowHeight]="sizes().summaryRowHeight">
             <div dataGridGrid></div>
@@ -260,6 +262,7 @@ describe("measured rows", () => {
     `,
 })
 class Sized {
+    readonly summaryFeatures = SUMMARY_FEATURES;
     readonly rows = rows;
     readonly columns = columns;
     readonly gridRef = createDataGridRef<Row>();
@@ -329,7 +332,7 @@ describe("measured details", () => {
 });
 
 describe("the sizes a root sends", () => {
-    it("are the three sizes together for a grid of given heights, as before; the rest on their own", async () => {
+    it("are the row and header heights together for a grid of given heights, as before; the rest on their own (Epic #151: a feature's after the core's)", async () => {
         const { component, fixture } = await render(Sized);
         const sent: unknown[] = [];
         component.gridRef.current?.model.use((ctx, next) => {
@@ -338,9 +341,7 @@ describe("the sizes a root sends", () => {
         });
         component.sizes.set({ rowHeight: 30 });
         await settled(fixture);
-        expect(sent).toEqual([
-            { rowHeight: 30, headerRowHeight: 35, detailHeight: 300 },
-        ]);
+        expect(sent).toEqual([{ rowHeight: 30, headerRowHeight: 35 }]);
         component.sizes.set({ rowHeight: 30 });
         await settled(fixture);
         expect(sent).toHaveLength(1);
@@ -351,8 +352,8 @@ describe("the sizes a root sends", () => {
         });
         await settled(fixture);
         expect(sent.slice(1)).toEqual([
-            { summaryRowHeight: 40 },
             { estimatedRowHeight: 50 },
+            { summaryRowHeight: 40 },
         ]);
     });
 });

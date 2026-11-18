@@ -15,7 +15,13 @@ import {
     type DataGridNode,
     DataGridRoot,
 } from "../src/public-api";
-import { renderTestGrid, TEST_FEATURES, type TestFeatures } from "./grid";
+import { SUMMARY_ROWS } from "../src/summary-rows";
+import {
+    renderTestGrid,
+    SUMMARY_FEATURES,
+    TEST_FEATURES,
+    type TestFeatures,
+} from "./grid";
 import {
     cellAt,
     keyDown,
@@ -263,10 +269,10 @@ describe("summary rows", () => {
     // attributes are bindings from the template's `let state` or the part's exported state
     it("follow the primitive contract: render, ref, className and style functions, forwarded props", async () => {
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, SUMMARY_ROWS],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [summaryRows]="{ top: 1 }">
+                <div dataGridRoot dataGridSummaryRows [features]="summaryFeatures" [rows]="rows" [columns]="columns" [summaryRows]="{ top: 1 }">
                     <div dataGridGrid>
                         <!-- structural keys win -->
                         <div *dataGridSummary="'top'; let state" data-testid="summary"
@@ -286,6 +292,7 @@ describe("summary rows", () => {
             `,
         })
         class Contract {
+            readonly summaryFeatures = SUMMARY_FEATURES;
             readonly rows = rows;
             readonly columns = columns;
         }
@@ -321,7 +328,7 @@ describe("summary rows", () => {
         const own = summaryCell(container, 20, 0);
         expect(own).toBeEmptyDOMElement();
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, SUMMARY_ROWS],
             template: `
                 <div dataGridRoot [rows]="rows" [columns]="columns">
                     <ng-template dataGridSummaryCells let-cell></ng-template>
@@ -374,10 +381,10 @@ describe("summary rows", () => {
             },
         ];
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, SUMMARY_ROWS],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [summaryRows]="{ top: 1 }">
+                <div dataGridRoot dataGridSummaryRows [features]="summaryFeatures" [rows]="rows" [columns]="columns" [summaryRows]="{ top: 1 }">
                     <div dataGridGrid>
                         <div *dataGridSummary="'top'">
                             <ng-template dataGridSummaryRows let-row>
@@ -393,6 +400,7 @@ describe("summary rows", () => {
             `,
         })
         class Live {
+            readonly summaryFeatures = SUMMARY_FEATURES;
             readonly rows = rows;
             readonly columns = live;
             readonly note = signal("a");
@@ -415,10 +423,10 @@ describe("summary rows", () => {
 
 describe("a summary cell's controls", () => {
     @Component({
-        imports: [DATA_GRID],
+        imports: [DATA_GRID, SUMMARY_ROWS],
         changeDetection: ChangeDetectionStrategy.OnPush,
         template: `
-            <div dataGridRoot [features]="features" [rows]="visible()" [columns]="columns" [rowHeight]="20"
+            <div dataGridRoot dataGridSummaryRows [features]="features" [rows]="visible()" [columns]="columns" [rowHeight]="20"
                 [summaryRows]="{ bottom: 1 }" [summaryRowHeight]="30">
                 <div dataGridGrid>
                     <div *dataGridHeader>

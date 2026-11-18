@@ -193,11 +193,6 @@ export interface GridView<TRow = unknown, TNode = unknown> {
     /** a row's key: `rowKey`, else its index */
     readonly rowKey: RowKeyGetter<TRow> | undefined;
     /**
-     * the expanded row groups' keys (Epic #87): a group row, or a row that expands, shows its
-     * rows while its key is here (`source.getRowMeta` says which rows expand)
-     */
-    readonly expandedGroupKeys: readonly RowKey[];
-    /**
      * the cell whose controls have the keys (Enter or F2 on it, a click on one of them; Escape
      * leaves), at its element's position (a header cell's top row and first column); `null` in
      * navigation
@@ -214,10 +209,11 @@ export interface GridView<TRow = unknown, TNode = unknown> {
      * its row counts in ARIA while the grid has no rows (Epic #89, E5.3)
      */
     readonly emptyShown: boolean;
-    /** the rows move by their drag handles and the keys (`reorderableRows`, E2.3) */
-    readonly reorderableRows: boolean;
-    /** the row a drag is moving, and where it would land (E2.3), or `null` */
-    readonly rowReorder: RowReorder | null;
+    /**
+     * the body row a feature keeps rendered out of the rendered rows (Epic #151: the row a drag
+     * is moving, its handle holding the pointer), or `null`
+     */
+    readonly heldRow: number | null;
 }
 
 /** A column (or a group) a person is resizing with the pointer, and its width on screen. */
@@ -349,8 +345,11 @@ export interface EngineQueryMap {
      * `undefined` without it; its view's `columnReorder`)
      */
     "column-reorder": ColumnReorder | null | undefined;
-    /** the row a drag is moving, or `null` (see `GridView.rowReorder`) */
-    "row-reorder": RowReorder | null;
+    /**
+     * the row a drag is moving, or `null` (`rowReorder()`'s, Epic #151: `undefined` without it;
+     * its view's `rowReorder`)
+     */
+    "row-reorder": RowReorder | null | undefined;
     /**
      * the widths the engine gives columns without an override, by key (Epic #80, A6): an
      * `autoSize` column's automatic width and the flex columns' shares of the view. Never
@@ -376,7 +375,8 @@ export type FeatureQueryKey =
     | "fill"
     | "edit-draft"
     | "column-resize"
-    | "column-reorder";
+    | "column-reorder"
+    | "row-reorder";
 
 /** What `engine.run` does: screen actions (no dot: they are not model commands). */
 export interface EngineActionMap {

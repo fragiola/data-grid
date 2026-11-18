@@ -8,7 +8,12 @@ import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
 import { cellRange } from "../src/range";
+import { rowExpansion } from "../src/row-expansion";
+import { rowGrouping } from "../src/row-grouping";
+import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { cellSpans } from "../src/spans";
+import { summaryRows } from "../src/summary-rows";
 
 // The features every test of a behaviour they took over installs (Epics #144, #146, #148):
 // navigation, row selection, cell ranges, the clipboard, the fill handle, cell editing and the
@@ -27,6 +32,11 @@ export const FEATURES = [
     columnReorder(),
     columnPinning(),
     columnGroupCollapse(),
+    cellSpans(),
+    rowGrouping(),
+    rowExpansion(),
+    summaryRows(),
+    rowReorder(),
 ] as const;
 
 /** Their types. */

@@ -2,7 +2,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     ariaRowCount,
-    ariaRowDetail,
     ariaRowIndex,
     type Column,
     type RowKey,
@@ -11,6 +10,7 @@ import {
     rowExpanded,
     rowTop,
 } from "../../src";
+import { ariaRowDetail } from "../../src/row-expansion";
 import {
     cellElement,
     keydown as keydownFrom,

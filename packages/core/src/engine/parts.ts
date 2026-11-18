@@ -1,36 +1,22 @@
 import type { PartAttributes } from "../feature/feature";
-import {
-    dataRowAt,
-    depthOf,
-    groupExpanded,
-    groupKeyAt,
-    rowMetaAt,
-} from "../model/source";
-import { activeInCell } from "../model/spans";
+import { activeInCell } from "../model/bounds";
+import { depthOf, rowMetaAt } from "../model/source";
 import type {
     CellPosition,
-    DataGridState,
     GroupRow,
     HeaderCellLayout,
     PinnedSide,
     ReorderSide,
-    RowKey,
     RowMeta,
     SummaryPosition,
-    SummaryRowView,
 } from "../model/types";
 import { sameCell } from "../navigation/navigation";
-import {
-    type COLUMN_RESIZER_ATTRIBUTE,
-    GROUP_TOGGLE_ATTRIBUTE,
-    ROW_DRAG_HANDLE_ATTRIBUTE,
-} from "./dom";
+import type { COLUMN_RESIZER_ATTRIBUTE } from "./dom";
 import {
     cellSpan,
     columnLeft,
     columnPinning,
     rowCellsHeight,
-    rowDetailBox,
     rowExpanded,
     spanInRow,
 } from "./geometry";
@@ -55,7 +41,7 @@ export interface RowState {
     readonly selected: boolean;
     /**
      * a drag is moving it (its handle's, Epic #86, E2.3); `undefined` while the grid's rows do not
-     * move (`reorderableRows` off)
+     * move (`reorderableRows` off; row reorder's, `@fragiola/data-grid/row-reorder`)
      */
     readonly dragging: boolean | undefined;
     /**
@@ -223,43 +209,6 @@ export interface ColumnResizerState {
     readonly edge: "start" | "end";
 }
 
-/** The state of a row's drag handle (Epic #86, E2.3): the element the app renders in its row. */
-export interface RowDragHandleState {
-    readonly rowIndex: number;
-    /**
-     * a press on it drags its row: the grid's rows move (`reorderableRows`), the grid is not
-     * sorted and the row is loaded; else it does nothing (render it disabled, or none)
-     */
-    readonly reorderable: boolean;
-    /** a drag on it is moving its row */
-    readonly dragging: boolean;
-}
-
-/**
- * The state of a row group's toggle (Epic #87): the control the app renders in a group row (or a
- * row that expands), which expands and collapses it.
- */
-export interface GroupToggleState {
-    readonly rowIndex: number;
-    /** the key it expands by (a group row's group key, a row's own key), `undefined` when it does not */
-    readonly groupKey: RowKey | undefined;
-    /** its row expands: a click on it toggles; else it does nothing (render none) */
-    readonly expandable: boolean;
-    /** its row shows its rows */
-    readonly expanded: boolean;
-    /** its row's depth, 0 at the top */
-    readonly depth: number;
-}
-
-/** The state of a row's detail. */
-export interface RowDetailState {
-    readonly rowIndex: number;
-    /** its row is expanded: the detail renders only meanwhile */
-    readonly expanded: boolean;
-    /** its height: the detail height the grid was given for this row (0 while collapsed) */
-    readonly height: number;
-}
-
 /**
  * A row's kind as its caller read it (Epic #87: `rowMetaAt`; an adapter's row info carries it),
  * so a part reads `getRowMeta` no more.
@@ -275,6 +224,14 @@ export interface RowRead {
 export interface RowShare {
     selected: boolean;
     ariaSelected: boolean | undefined;
+    /** a row heading a row group: whether it shows its rows (row grouping's, Epic #151) */
+    groupExpanded: boolean | undefined;
+    /** a `treegrid`'s row ARIA (row grouping's, Epic #151) */
+    ariaTree: AriaTreeRow | undefined;
+    /** a drag is moving it (row reorder's, Epic #151) */
+    dragging: boolean | undefined;
+    /** a drag would drop its row beside it, on this side (row reorder's, Epic #151) */
+    dropTarget: ReorderSide | null | undefined;
 }
 
 /**
@@ -291,7 +248,14 @@ export interface CellShare {
 }
 
 /** The share a row's part is made with (reset per row). */
-const ROW_SHARE: RowShare = { selected: false, ariaSelected: undefined };
+const ROW_SHARE: RowShare = {
+    selected: false,
+    ariaSelected: undefined,
+    groupExpanded: undefined,
+    ariaTree: undefined,
+    dragging: undefined,
+    dropTarget: undefined,
+};
 /** The share a cell's part is made with (reset per cell). */
 const CELL_SHARE: CellShare = {
     selected: undefined,
@@ -323,18 +287,6 @@ export interface AriaTreeRow {
     readonly "aria-expanded"?: boolean;
     readonly "aria-setsize"?: number;
     readonly "aria-posinset"?: number;
-}
-
-/** A row group's toggle's state and its attributes (Epic #87): marked with its row's index. */
-export interface GroupTogglePart {
-    readonly state: GroupToggleState;
-    /** `undefined` for a row that does not expand: render no toggle */
-    readonly attributes:
-        | {
-              readonly "aria-expanded": boolean;
-              readonly [GROUP_TOGGLE_ATTRIBUTE]: number;
-          }
-        | undefined;
 }
 
 /** A body cell's state, its `tabIndex`, its `aria-colspan` and its `aria-selected`. */
@@ -402,25 +354,6 @@ export interface ColumnResizerPart {
 }
 
 /**
- * A row's drag handle's state and its attributes: marked with its row's index for the engine, and
- * hidden from assistive technologies (a pointer's way to move the row: the keys move it from its
- * cells, Ctrl/⌘+Shift+↑/↓).
- */
-export interface RowDragHandlePart {
-    readonly state: RowDragHandleState;
-    readonly attributes: {
-        readonly "aria-hidden": true;
-        readonly [ROW_DRAG_HANDLE_ATTRIBUTE]: number;
-    };
-}
-
-/** A row's detail's state, and its box while its row is expanded (`rowDetailBox`). */
-export interface RowDetailPart {
-    readonly state: RowDetailState;
-    readonly box: ReturnType<typeof rowDetailBox>;
-}
-
-/**
  * Whether a cell (at its element's position) is the one a view's state holds, if any: the one
  * whose controls have the keys (`interaction`), the one being edited (editing's `editingCell`).
  */
@@ -438,8 +371,6 @@ export function rowPart<TRow, TNode>(
     loaded: boolean,
     read?: RowRead,
 ): RowPart {
-    const reorder = view.rowReorder;
-    const moves = view.reorderableRows;
     // the row read once (Epic #87: its kind, as the caller read it, nothing asked of a grid
     // without them)
     const tree = view.source.getRowMeta !== undefined;
@@ -448,23 +379,21 @@ export function rowPart<TRow, TNode>(
         : tree
           ? rowMetaAt(view.source, rowIndex)
           : undefined;
-    // its data row, only when its key needs it
-    const row = meta?.expandable
-        ? dataRowAt(view.source, rowIndex, meta)
-        : undefined;
-    // what the features add (row selection's: selected), from a grid without them
+    // what the features add (row selection's: selected; row grouping's: expanded, its tree's
+    // ARIA), from a grid without them
     const share = ROW_SHARE;
     share.selected = false;
     share.ariaSelected = undefined;
+    share.groupExpanded = undefined;
+    share.ariaTree = undefined;
+    share.dragging = undefined;
+    share.dropTarget = undefined;
     view.features.row?.(
         view as GridView<unknown, unknown>,
         rowIndex,
         meta,
         share,
     );
-    const groupKey = meta && groupKeyAt(view, rowIndex, meta, row);
-    const expanded =
-        groupKey === undefined ? undefined : groupExpanded(view, groupKey);
     const depth = tree ? depthOf(meta) : undefined;
     return {
         state: {
@@ -473,62 +402,14 @@ export function rowPart<TRow, TNode>(
             active: view.active?.rowIndex === rowIndex,
             expanded: rowExpanded(view, rowIndex),
             selected: share.selected,
-            dragging: moves ? reorder?.rowIndex === rowIndex : undefined,
-            dropTarget: moves
-                ? reorder?.targetIndex === rowIndex
-                    ? reorder.side
-                    : null
-                : undefined,
+            dragging: share.dragging,
+            dropTarget: share.dropTarget,
             depth,
             group: meta?.group,
-            groupExpanded: expanded,
+            groupExpanded: share.groupExpanded,
         },
         ariaSelected: share.ariaSelected,
-        ariaTree:
-            depth === undefined
-                ? undefined
-                : {
-                      "aria-level": depth + 1,
-                      ...(expanded === undefined
-                          ? {}
-                          : { "aria-expanded": expanded }),
-                      ...(meta?.setSize === undefined
-                          ? {}
-                          : { "aria-setsize": meta.setSize }),
-                      ...(meta?.posInSet === undefined
-                          ? {}
-                          : { "aria-posinset": meta.posInSet }),
-                  },
-    };
-}
-
-/**
- * A row group's toggle (Epic #87): whether its row expands and is expanded, and the attributes
- * that mark it for the engine (a click on it runs `row-groups.toggle`) with its `aria-expanded`.
- */
-export function groupTogglePart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-    read?: RowRead,
-): GroupTogglePart {
-    const meta = read ? read.meta : rowMetaAt(view.source, rowIndex);
-    const groupKey = groupKeyAt(view, rowIndex, meta);
-    const expanded = groupExpanded(view, groupKey);
-    return {
-        state: {
-            rowIndex,
-            groupKey,
-            expandable: groupKey !== undefined,
-            expanded,
-            depth: depthOf(meta),
-        },
-        attributes:
-            groupKey === undefined
-                ? undefined
-                : {
-                      "aria-expanded": expanded,
-                      [GROUP_TOGGLE_ATTRIBUTE]: rowIndex,
-                  },
+        ariaTree: share.ariaTree,
     };
 }
 
@@ -617,51 +498,6 @@ export function cellBox<TRow, TNode>(
     };
 }
 
-/** A summary row's state (E2.1). */
-export function summaryRowPart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    row: SummaryRowView,
-): { readonly state: SummaryRowState } {
-    return {
-        state: {
-            rowIndex: row.rowIndex,
-            position: row.position,
-            summaryIndex: row.summaryIndex,
-            active: view.active?.rowIndex === row.rowIndex,
-        },
-    };
-}
-
-/**
- * A summary row's cell's state, its `tabIndex` and its `aria-colspan` (E2.1): a body cell's
- * (`cellPart`), on its summary row.
- */
-export function summaryCellPart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: CellPosition & {
-        readonly position: SummaryPosition;
-        readonly summaryIndex: number;
-    },
-): SummaryCellPart {
-    const part = cellPart(view, {
-        rowIndex: cell.rowIndex,
-        columnIndex: cell.columnIndex,
-        loaded: true,
-    });
-    return {
-        ...part,
-        // a summary row's cells are never selected (Epic #88): the range is the body's
-        ariaSelected: undefined,
-        state: {
-            ...part.state,
-            selected: undefined,
-            fillTarget: undefined,
-            position: cell.position,
-            summaryIndex: cell.summaryIndex,
-        },
-    };
-}
-
 /**
  * A header cell's state, its `tabIndex` and what its features add (Epic #141): a column spanning
  * header rows is active on any of them.
@@ -702,58 +538,4 @@ export function headerCellPart<TRow, TNode>(
               attributes: share.attributes,
           }
         : { state, tabIndex, attributes: undefined };
-}
-
-/**
- * Whether a grid's rows move now (E2.3): they move (`reorderableRows`), no feature keeps them in
- * an order of the app's (`rowsOrdered`: sorted, a move would not stay where it was dropped) and
- * its rows have no kinds (Epic #87: grouped, a row's place is its group's; moving rows between
- * groups is the app's).
- */
-export function rowsMove(
-    reorderableRows: boolean | undefined,
-    rowsOrdered: boolean,
-    source: DataGridState<unknown>["source"],
-): boolean {
-    return (
-        reorderableRows === true &&
-        !rowsOrdered &&
-        source.getRowMeta === undefined
-    );
-}
-
-/**
- * A row's drag handle's state and attributes (E2.3): it drags its row while rows move
- * (`rowsMove`) and the row is loaded.
- */
-export function rowDragHandlePart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-    loaded: boolean,
-): RowDragHandlePart {
-    return {
-        state: {
-            rowIndex,
-            reorderable:
-                loaded &&
-                rowsMove(view.reorderableRows, view.rowsOrdered, view.source),
-            dragging: view.rowReorder?.rowIndex === rowIndex,
-        },
-        attributes: {
-            "aria-hidden": true,
-            [ROW_DRAG_HANDLE_ATTRIBUTE]: rowIndex,
-        },
-    };
-}
-
-/** A row's detail's state (0 tall while collapsed), and its box while its row is expanded. */
-export function rowDetailPart<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    rowIndex: number,
-): RowDetailPart {
-    const box = rowDetailBox(view, rowIndex);
-    return {
-        state: { rowIndex, expanded: box !== null, height: box?.height ?? 0 },
-        box,
-    };
 }

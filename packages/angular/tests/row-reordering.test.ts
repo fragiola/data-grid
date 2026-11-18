@@ -26,6 +26,7 @@ import {
     type RowMove,
     type RowState,
 } from "../src/public-api";
+import { DataGridRowDragHandle, DataGridRowReorder } from "../src/row-reorder";
 import { DataGridSorting, type SortColumn, sorting } from "../src/sorting";
 import { TEST_FEATURES, type TestFeatures } from "./grid";
 import {
@@ -78,12 +79,18 @@ interface GridProps {
 const CELL = `@if (cell.columnIndex === 0) {<span [dataGridRowDragHandle]="cell" #handle="dataGridRowDragHandle" [attr.data-testid]="'handle-' + cell.rowIndex">{{ handle.state()?.reorderable ? "⋮" : "" }}</span>{{ cell.value }}} @else {<ng-container *dataGridCellContent />}`;
 
 @Component({
-    imports: [DATA_GRID, DataGridNavigation, DataGridSorting],
+    imports: [
+        DATA_GRID,
+        DataGridNavigation,
+        DataGridSorting,
+        DataGridRowReorder,
+        DataGridRowDragHandle,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="columns" [rows]="rows()" [rowKey]="rowKey" [rowHeight]="20" [headerRowHeight]="20"
             [gridRef]="gridRef()"
-            [reorderableRows]="!!props().onRowMove" (rowMove)="props().onRowMove?.($event)"
+            [dataGridRowReorder]="!!props().onRowMove" (rowMove)="props().onRowMove?.($event)"
             dataGridNavigation [activePosition]="props().activePosition" (activePositionChange)="props().onActivePositionChange?.($event)"
             [features]="features" dataGridSorting [sortColumns]="props().sortColumns">
             @if (table()) {

@@ -14,6 +14,8 @@ import {
 } from "../src";
 import { useFillHandle } from "../src/fill";
 import { groupKeyOf, useLocalRows } from "../src/local";
+import { RowDetail } from "../src/row-expansion";
+import { typedSummaryRows } from "../src/summary-rows";
 import {
     FEATURES,
     type Features,
@@ -43,7 +45,11 @@ interface Item {
     children?: Item[];
 }
 
-const G = typedDataGrid<Item, Features>();
+const G = {
+    ...typedDataGrid<Item, Features>(),
+    RowDetail,
+    ...typedSummaryRows<Item>(),
+};
 
 const TEAMS = ["A", "B", "C", "D"];
 const items: Item[] = Array.from({ length: 2_000 }, (_, id) => ({

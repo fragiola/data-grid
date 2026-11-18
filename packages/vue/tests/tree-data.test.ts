@@ -12,9 +12,9 @@ import {
     type Column,
     type RowInfo,
     typedDataGrid,
-    useGroupToggle,
 } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { useGroupToggle } from "../src/row-grouping";
 import {
     cellAt,
     click,

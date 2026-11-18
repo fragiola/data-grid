@@ -6,8 +6,13 @@ import {
     DataGrid,
     useDataGrid,
 } from "@fragiola/data-grid-react";
+
 import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    RowDetail,
+    rowExpansion,
+} from "@fragiola/data-grid-react/row-expansion";
 import { ChevronRight } from "lucide-react";
 import type * as React from "react";
 import { useId, useState } from "react";
@@ -16,8 +21,8 @@ import { formatMoney, hash, person } from "../_kit/data";
 import * as styles from "./styles";
 
 // the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
-// columns (without it, every column scrolls)
-const FEATURES = [navigation(), columnPinning()];
+// columns (without it, every column scrolls), row details (without it, no row expands)
+const FEATURES = [navigation(), columnPinning(), rowExpansion()];
 
 interface Item {
     product: string;
@@ -108,7 +113,7 @@ const ITEMS_WIDTH = itemColumns.reduce((sum, column) => sum + column.width, 2);
 
 /** Expands or collapses an order: the app's control, the grid's state (M1). */
 function useToggle(rowIndex: number) {
-    const { model } = useDataGrid<Order>();
+    const { model } = useDataGrid<Order, typeof FEATURES>();
     return {
         expanded: model.is("row-expanded", { rowIndex }),
         toggle: () => model.run("expanded-rows.toggle", { rowIndex }),
@@ -279,7 +284,7 @@ function backToOrder(
 }
 
 function Orders() {
-    const { model } = useDataGrid<Order>();
+    const { model } = useDataGrid<Order, typeof FEATURES>();
     return (
         <DataGrid.Grid aria-label="Orders" className={styles.grid}>
             <DataGrid.Header className={styles.header}>
@@ -320,7 +325,7 @@ function Orders() {
                                     />
                                 )}
                             </DataGrid.Cells>
-                            <DataGrid.RowDetail
+                            <RowDetail
                                 className={styles.detail}
                                 onKeyDown={(event) =>
                                     backToOrder(event, {
@@ -336,7 +341,7 @@ function Orders() {
                                         <Items order={row.row} />
                                     </div>
                                 ) : null}
-                            </DataGrid.RowDetail>
+                            </RowDetail>
                         </DataGrid.Row>
                     )}
                 </DataGrid.Rows>

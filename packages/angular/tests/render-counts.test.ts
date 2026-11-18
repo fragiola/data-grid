@@ -21,6 +21,8 @@ import {
     type DataGridNode,
     type RowKey,
 } from "../src/public-api";
+import { DataGridRowDetail } from "../src/row-expansion";
+import { SUMMARY_ROWS } from "../src/summary-rows";
 import { type TestProps, TestRootProps } from "./grid";
 import {
     render,
@@ -174,7 +176,14 @@ abstract class Counted {
 }
 
 @Component({
-    imports: [DATA_GRID, DataGridCellEdit, DataGridFillHandle, TestRootProps],
+    imports: [
+        DATA_GRID,
+        DataGridCellEdit,
+        DataGridFillHandle,
+        DataGridRowDetail,
+        SUMMARY_ROWS,
+        TestRootProps,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `<div dataGridRoot [columns]="props().columns" [testProps]="props()">${body}</div>`,
 })
@@ -190,6 +199,8 @@ const TEAM_KEYS: readonly RowKey[] = TEAMS.map((team) =>
         DATA_GRID,
         DataGridCellEdit,
         DataGridFillHandle,
+        DataGridRowDetail,
+        SUMMARY_ROWS,
         TestRootProps,
         DataGridLocalRows,
     ],
@@ -218,6 +229,8 @@ const getSubRows = (row: Item) => row.children;
         DATA_GRID,
         DataGridCellEdit,
         DataGridFillHandle,
+        DataGridRowDetail,
+        SUMMARY_ROWS,
         TestRootProps,
         DataGridLocalRows,
     ],

@@ -1,8 +1,12 @@
-import { headerRowCount } from "../header/header";
+import { headerRowCount, isHeaderRow } from "../header/header";
 import { type GridBounds, isRowOf } from "../navigation/navigation";
 import { isIndex } from "../utils/utils";
-import { coveringCell, hasColumnSpans, spanAt } from "./spans";
-import type { CellPosition, DataGridState } from "./types";
+import type {
+    CellPosition,
+    CellSpans,
+    DataGridState,
+    SpansState,
+} from "./types";
 
 // What positions in a grid are bounded by, and a position as its cell's: the model's rules for the
 // active position (the core's) and the moves of the navigation and the cell ranges (Epic #144).
@@ -21,10 +25,68 @@ export function boundsOf<TRow, TNode>(
         headerDepth: state.header.depth,
         summaryRows: state.summaryRows,
         headerCellAt: state.header.cellAt,
-        cellSpanAt: hasColumnSpans(state.columns)
-            ? (rowIndex, columnIndex) => spanAt(state, rowIndex, columnIndex)
-            : undefined,
+        cellSpanAt: spansCellAt(state),
     };
+}
+
+/**
+ * The body cells' column spans in effect (Epic #151: `cellSpans()`'s), or `null` without them or
+ * without a column that spans: then every body cell is one column, and nothing is asked.
+ */
+export function spansOf<TRow, TNode>(
+    state: Pick<DataGridState<TRow, TNode>, "cellSpans" | "columns">,
+): CellSpans | null {
+    const spans = state.cellSpans;
+    return spans?.hasSpans(state.columns) ? spans : null;
+}
+
+/** The body cell covering a position under column spans, or `undefined` without them. */
+function spansCellAt<TRow, TNode>(
+    state: DataGridState<TRow, TNode>,
+): GridBounds["cellSpanAt"] {
+    const spans = spansOf(state);
+    return spans
+        ? (rowIndex, columnIndex) => spans.spanAt(state, rowIndex, columnIndex)
+        : undefined;
+}
+
+/**
+ * Whether the active position is in a body cell (E1.2): on its row, its column one the cell's
+ * span (from `columnIndex`, `columnSpan` columns) holds. What the navigation's `cell-active`
+ * question and a cell's part both ask.
+ */
+export function activeInCell(
+    active: CellPosition | null,
+    rowIndex: number,
+    columnIndex: number,
+    columnSpan: number,
+): boolean {
+    return (
+        active !== null &&
+        active.rowIndex === rowIndex &&
+        active.columnIndex >= columnIndex &&
+        active.columnIndex < columnIndex + columnSpan
+    );
+}
+
+/**
+ * The cell covering a position, at its own position (G4, E1.2): a header cell's top row and
+ * first column (`header.cellAt`), a body or summary row cell's first column under a span
+ * (`spansOf`) on its row; `undefined` for a header position no cell covers. What the model snaps
+ * an active position to and the engine finds a cell's element by.
+ */
+export function coveringCell<TRow, TNode>(
+    state: SpansState<TRow, TNode>,
+    position: CellPosition,
+): CellPosition | undefined {
+    const { rowIndex, columnIndex } = position;
+    if (isHeaderRow(rowIndex, state.header)) {
+        return state.header.cellAt(rowIndex, columnIndex);
+    }
+    const spans = spansOf(state);
+    if (!spans) return position;
+    const start = spans.spanAt(state, rowIndex, columnIndex).columnIndex;
+    return start === columnIndex ? position : { rowIndex, columnIndex: start };
 }
 
 /**

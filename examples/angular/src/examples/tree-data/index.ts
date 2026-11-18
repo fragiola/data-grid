@@ -4,6 +4,10 @@ import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { DataGridLocalRows } from "@fragiola/data-grid-angular/local";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import {
+    DataGridRowGrouping,
+    rowGrouping,
+} from "@fragiola/data-grid-angular/row-grouping";
+import {
     DataGridRowSelection,
     rowSelection,
 } from "@fragiola/data-grid-angular/row-selection";
@@ -32,6 +36,7 @@ let ids = 0;
     selector: "example-tree-data",
     imports: [
         DATA_GRID,
+        DataGridRowGrouping,
         DataGridLocalRows,
         ClickableButton,
         FIELDS,
@@ -64,6 +69,7 @@ let ids = 0;
                     <div
                         dataGridRoot
                         [features]="lazyFeatures"
+                        dataGridRowGrouping
                         [columns]="columns"
                         [rowCount]="tree().rowCount"
                         [getRow]="tree().getRow"
@@ -131,15 +137,22 @@ export default class TreeData {
     protected readonly NONE = NONE;
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), row selection, pinned columns
-    // (without it, every column scrolls)
+    // (without it, every column scrolls), row grouping (a folder expands)
     readonly features = [
         sorting(),
         navigation(),
         rowSelection(),
         columnPinning(),
+        rowGrouping(),
     ];
-    // the server's tree sorts nothing: navigation, row selection and the pinned columns only
-    readonly lazyFeatures = [navigation(), rowSelection(), columnPinning()];
+    // the server's tree sorts nothing: navigation, row selection, the pinned columns and row
+    // grouping only
+    readonly lazyFeatures = [
+        navigation(),
+        rowSelection(),
+        columnPinning(),
+        rowGrouping(),
+    ];
 
     readonly lazy = signal(false);
     readonly lazyLabel = `tree-data-lazy-${++ids}`;

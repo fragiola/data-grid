@@ -1,8 +1,5 @@
-import type {
-    CellInfo,
-    RowDragHandleState,
-    RowInfo,
-} from "@fragiola/data-grid-angular";
+import type { CellInfo, RowInfo } from "@fragiola/data-grid-angular";
+import type { RowDragHandleState } from "@fragiola/data-grid-angular/row-reorder";
 import { cn } from "#/lib/cn";
 
 export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";

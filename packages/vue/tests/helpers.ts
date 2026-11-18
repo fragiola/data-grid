@@ -10,7 +10,12 @@ import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
 import { cellRange } from "../src/range";
+import { rowExpansion } from "../src/row-expansion";
+import { rowGrouping } from "../src/row-grouping";
+import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { cellSpans } from "../src/spans";
+import { summaryRows } from "../src/summary-rows";
 
 // What the Vue tests share (the React tests' helpers, for Vue): a grid root's size (jsdom lays
 // nothing out), mounting a grid, counting renders (D9), the parts by their `data-grid-part` and
@@ -18,9 +23,10 @@ import { rowSelection } from "../src/row-selection";
 // keys, selections, ranges, clipboard and fill install (Epic #144).
 
 /**
- * Every feature these behaviours were before Epics #144, #146 and #148 (navigation, row
+ * Every feature these behaviours were before Epics #144, #146, #148 and #151 (navigation, row
  * selection, cell ranges, the clipboard, the fill handle, cell editing, column resizing,
- * reordering, pinning and collapsible groups): a test of them installs them (`features: FEATURES`
+ * reordering, pinning and collapsible groups, column spans, row grouping, row expansion, summary
+ * rows and row reorder): a test of them installs them (`features: FEATURES`
  * on `Root`, `typedDataGrid<TRow, Features>()`), and behaves as it did.
  */
 export const FEATURES = [
@@ -34,6 +40,11 @@ export const FEATURES = [
     columnReorder(),
     columnPinning(),
     columnGroupCollapse(),
+    cellSpans(),
+    rowGrouping(),
+    rowExpansion(),
+    summaryRows(),
+    rowReorder(),
 ] as const;
 
 /** The type of `FEATURES`, for `typedDataGrid`, `RootProps` and the refs. */

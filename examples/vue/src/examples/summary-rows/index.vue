@@ -4,6 +4,8 @@ import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
+import { cellSpans } from "@fragiola/data-grid-vue/spans";
+import { summaryRows } from "@fragiola/data-grid-vue/summary-rows";
 import { Search } from "@lucide/vue";
 import { computed, h, type VNodeChild } from "vue";
 import { Input } from "#/components/atoms/fields";
@@ -19,8 +21,14 @@ const searchInset = {
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
-// scrolls)
-const features = [sorting(), navigation(), columnPinning()] as const;
+// scrolls), column spans (without it, a column's colSpan is not asked), summary rows
+const features = [
+    sorting(),
+    navigation(),
+    columnPinning(),
+    cellSpans(),
+    summaryRows(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.

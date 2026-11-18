@@ -2,6 +2,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { type Column, DataGrid, type GridDirection, useDataGrid } from "../src";
+import { RowDetail } from "../src/row-expansion";
 import {
     cellAt,
     FEATURES,
@@ -74,7 +75,7 @@ function Grid({
                                         />
                                     )}
                                 </DataGrid.Cells>
-                                <DataGrid.RowDetail>detail</DataGrid.RowDetail>
+                                <RowDetail>detail</RowDetail>
                             </DataGrid.Row>
                         )}
                     </DataGrid.Rows>

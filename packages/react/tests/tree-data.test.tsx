@@ -1,7 +1,8 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { type CellInfo, type Column, DataGrid, useGroupToggle } from "../src";
+import { type CellInfo, type Column, DataGrid } from "../src";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { useGroupToggle } from "../src/row-grouping";
 import { cellAt, FEATURES, root, rowAt, stubViewportSize } from "./helpers";
 
 // Tree data in React (Epic #87, E3.3): `useLocalRows` with `getSubRows` hands the root a tree whose

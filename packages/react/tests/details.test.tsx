@@ -1,17 +1,16 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { type Column, DataGrid, type RowKey, useDataGrid } from "../src";
 import {
-    type Column,
-    DataGrid,
+    RowDetail,
+    type RowDetailProps,
     type RowDetailState,
-    type RowKey,
-    useDataGrid,
-} from "../src";
-import { FEATURES, stubViewportSize, tags } from "./helpers";
+} from "../src/row-expansion";
+import { FEATURES, type Features, stubViewportSize, tags } from "./helpers";
 
 // Row details (Epic #41, M1–M4): `Root` maps the expansion (controlled or not) and `detailHeight`
-// onto the model; `DataGrid.RowDetail` renders inside its row, after its cells, only while the
+// onto the model; `RowDetail` renders inside its row, after its cells, only while the
 // row is expanded: one cell spanning every column, sticky at the view's start (the engine writes
 // its `left`), below the row's own height. A grid without expanded rows renders as before.
 
@@ -53,13 +52,13 @@ type GridProps = {
     defaultExpandedRowKeys?: readonly RowKey[];
     onExpandedRowKeysChange?: (keys: readonly RowKey[]) => void;
     detailHeight?: number | ((row: Row) => number);
-    detail?: Partial<DataGrid.RowDetailProps>;
+    detail?: Partial<RowDetailProps>;
     withDetail?: boolean;
 };
 
 /** A button that toggles its row, as an app's expander cell would. */
 function Toggle({ rowIndex }: { rowIndex: number }) {
-    const { model } = useDataGrid<Row>();
+    const { model } = useDataGrid<Row, Features>();
     return (
         <button
             type="button"
@@ -112,16 +111,13 @@ function Grid({
                                     )}
                                 </DataGrid.Cells>
                                 {withDetail ? (
-                                    <DataGrid.RowDetail
-                                        render={tag.cell}
-                                        {...detail}
-                                    >
+                                    <RowDetail render={tag.cell} {...detail}>
                                         <p
                                             data-testid={`detail-${row.rowIndex}`}
                                         >
                                             {row.row?.id}
                                         </p>
-                                    </DataGrid.RowDetail>
+                                    </RowDetail>
                                 ) : null}
                             </DataGrid.Row>
                         )}
@@ -141,7 +137,7 @@ const detailOf = (container: HTMLElement, rowIndex: number) =>
         `[data-grid-part="row-detail"][data-row-index="${rowIndex}"]`,
     );
 
-describe("DataGrid.RowDetail", () => {
+describe("RowDetail", () => {
     it("renders nothing, and changes nothing, while no row is expanded", () => {
         const { container } = render(<Grid />);
         expect(

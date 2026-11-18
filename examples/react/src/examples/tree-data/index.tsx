@@ -5,11 +5,15 @@ import {
     type Column,
     DataGrid,
     type RowKey,
-    useGroupToggle,
 } from "@fragiola/data-grid-react";
+
 import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowGrouping,
+    useGroupToggle,
+} from "@fragiola/data-grid-react/row-grouping";
 import {
     rowSelection,
     useSelectAll,
@@ -28,10 +32,22 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
-// every column scrolls)
-const FEATURES = [sorting(), navigation(), rowSelection(), columnPinning()];
-// the server's tree sorts nothing: navigation, row selection and the pinned columns only
-const LAZY_FEATURES = [navigation(), rowSelection(), columnPinning()];
+// every column scrolls), row groups (without it, nothing expands)
+const FEATURES = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    columnPinning(),
+    rowGrouping(),
+];
+// the server's tree sorts nothing: navigation, row selection, the pinned columns and the tree's
+// groups only
+const LAZY_FEATURES = [
+    navigation(),
+    rowSelection(),
+    columnPinning(),
+    rowGrouping(),
+];
 
 const columns: Column<Entry>[] = [
     { key: "select", width: 44, pinned: "start" },
