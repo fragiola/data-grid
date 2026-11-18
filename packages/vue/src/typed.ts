@@ -20,25 +20,7 @@ import type {
 } from "./components/header-rows";
 import type { RootProps, RootSlots } from "./components/root";
 import type { RowProps, RowSlots } from "./components/row";
-import type { RowDetailProps, RowDetailSlots } from "./components/row-detail";
 import type { RowsProps, RowsSlots } from "./components/rows";
-import type { SummaryProps, SummarySlots } from "./components/summary";
-import type {
-    SummaryCellProps,
-    SummaryCellSlots,
-} from "./components/summary-cell";
-import type {
-    SummaryCellsProps,
-    SummaryCellsSlots,
-} from "./components/summary-cells";
-import type {
-    SummaryRowProps,
-    SummaryRowSlots,
-} from "./components/summary-row";
-import type {
-    SummaryRowsProps,
-    SummaryRowsSlots,
-} from "./components/summary-rows";
 import * as parts from "./parts";
 import type { DataGridComponent } from "./utils/primitive";
 
@@ -60,12 +42,6 @@ export interface TypedDataGrid<TRow, TFeatures extends DataGridFeatures = []> {
     Row: DataGridComponent<RowProps<TRow>, RowSlots>;
     Cells: DataGridComponent<CellsProps, CellsSlots<TRow>>;
     Cell: DataGridComponent<CellProps<TRow>, CellSlots<TRow>>;
-    RowDetail: DataGridComponent<RowDetailProps, RowDetailSlots>;
-    Summary: DataGridComponent<SummaryProps, SummarySlots>;
-    SummaryRows: DataGridComponent<SummaryRowsProps, SummaryRowsSlots>;
-    SummaryRow: DataGridComponent<SummaryRowProps, SummaryRowSlots>;
-    SummaryCells: DataGridComponent<SummaryCellsProps, SummaryCellsSlots<TRow>>;
-    SummaryCell: DataGridComponent<SummaryCellProps<TRow>, SummaryCellSlots>;
 }
 
 /**

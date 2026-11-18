@@ -1,10 +1,10 @@
+import type { SummaryCellState } from "@fragiola/data-grid";
 import {
-    type SummaryCellState,
     summaryCellContent,
     summaryCellPartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/summary-rows";
 import { layerRef } from "../composables/internal";
-import { type SummaryCellInfo, useGridView, useRootGrid } from "../context";
+import { useGridView, useRootGrid } from "../context";
 import { renderCellElement } from "../utils/cell-element";
 import {
     type DataGridComponent,
@@ -13,6 +13,7 @@ import {
     type SlotFunction,
 } from "../utils/primitive";
 import type { RenderSlot } from "../utils/render";
+import type { SummaryCellInfo } from "./info";
 
 export interface SummaryCellProps<TRow = unknown> extends PrimitiveProps {
     cell: SummaryCellInfo<TRow>;

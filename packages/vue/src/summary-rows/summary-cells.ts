@@ -1,12 +1,12 @@
 import { Fragment, h } from "vue";
-import { useSummaryCells } from "../composables/use-summary-cells";
-import type { SummaryCellInfo } from "../context";
 import {
     type DataGridComponent,
     definePrimitive,
     type SlotFunction,
 } from "../utils/primitive";
+import type { SummaryCellInfo } from "./info";
 import { SummaryCell } from "./summary-cell";
+import { useSummaryCells } from "./use-summary-cells";
 
 export type SummaryCellsProps = Record<never, never>;
 

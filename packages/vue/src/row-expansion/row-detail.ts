@@ -1,8 +1,8 @@
+import { PINNED_KEYS } from "@fragiola/data-grid";
 import {
-    PINNED_KEYS,
     type RowDetailState,
     rowDetailPartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/row-expansion";
 import { layerRef } from "../composables/internal";
 import { useGridView, useRootGrid, useRowContext } from "../context";
 import {

@@ -1,8 +1,10 @@
-import { type SummaryRowState, summaryRowPartOf } from "@fragiola/data-grid";
+import type { SummaryRowState } from "@fragiola/data-grid";
+import { summaryRowPartOf } from "@fragiola/data-grid/summary-rows";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
-import { type SummaryRowInfo, useGridView } from "../context";
+import type { PartComposableResult } from "../composables/internal";
+import { useGridView } from "../context";
 import { vueProps } from "../utils/render";
-import type { PartComposableResult } from "./internal";
+import type { SummaryRowInfo } from "./info";
 
 /**
  * A summary row's state, and the props for its element (Epic #86): ARIA (`role="row"`, its

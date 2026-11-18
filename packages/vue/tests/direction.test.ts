@@ -8,6 +8,7 @@ import {
     typedDataGrid,
     useDataGrid,
 } from "../src";
+import { RowDetail } from "../src/row-expansion";
 import {
     cellAt,
     click,
@@ -30,7 +31,10 @@ interface Row {
     id: number;
 }
 
-const G = typedDataGrid<Row, Features>();
+const G = {
+    ...typedDataGrid<Row, Features>(),
+    RowDetail,
+};
 
 const rows: Row[] = Array.from({ length: 100 }, (_, id) => ({ id }));
 

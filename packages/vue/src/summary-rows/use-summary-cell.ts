@@ -1,8 +1,10 @@
-import { type SummaryCellState, summaryCellPartOf } from "@fragiola/data-grid";
+import type { SummaryCellState } from "@fragiola/data-grid";
+import { summaryCellPartOf } from "@fragiola/data-grid/summary-rows";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
-import { type SummaryCellInfo, useGridView } from "../context";
+import type { PartComposableResult } from "../composables/internal";
+import { useGridView } from "../context";
 import { vueProps } from "../utils/render";
-import type { PartComposableResult } from "./internal";
+import type { SummaryCellInfo } from "./info";
 
 /**
  * A summary row's cell's state, and the props for its element (Epic #86): a body cell's (the

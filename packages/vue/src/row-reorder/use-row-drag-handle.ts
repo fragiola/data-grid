@@ -1,11 +1,11 @@
 import {
     type RowDragHandleState,
     rowDragHandlePartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/row-reorder";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
+import type { PartComposableResult } from "../composables/internal";
 import { useGridView } from "../context";
 import { vueProps } from "../utils/render";
-import type { PartComposableResult } from "./internal";
 
 /**
  * A row's drag handle (Epic #86): the state and props of an element the app renders in a row (a

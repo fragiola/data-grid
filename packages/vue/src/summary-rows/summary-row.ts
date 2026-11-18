@@ -1,16 +1,8 @@
-import {
-    LAYER_KEYS,
-    type SummaryRowState,
-    summaryRowPartOf,
-} from "@fragiola/data-grid";
+import { LAYER_KEYS, type SummaryRowState } from "@fragiola/data-grid";
+import { summaryRowPartOf } from "@fragiola/data-grid/summary-rows";
 import { h, provide } from "vue";
 import { layerRef } from "../composables/internal";
-import {
-    type SummaryRowInfo,
-    SummaryRowKey,
-    useGridView,
-    useRootGrid,
-} from "../context";
+import { SummaryRowKey, useGridView, useRootGrid } from "../context";
 import {
     type DataGridComponent,
     definePrimitive,
@@ -18,6 +10,7 @@ import {
     type SlotFunction,
 } from "../utils/primitive";
 import { type RenderSlot, renderElement } from "../utils/render";
+import type { SummaryRowInfo } from "./info";
 import { SummaryCells } from "./summary-cells";
 
 export interface SummaryRowProps extends PrimitiveProps {

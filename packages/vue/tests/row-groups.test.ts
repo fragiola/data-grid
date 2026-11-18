@@ -11,9 +11,9 @@ import {
     type RowInfo,
     type RowKey,
     typedDataGrid,
-    useGroupToggle,
 } from "../src";
 import { groupKeyOf, type LocalRowsResult, useLocalRows } from "../src/local";
+import { useGroupToggle } from "../src/row-grouping";
 import {
     cellAt,
     click,

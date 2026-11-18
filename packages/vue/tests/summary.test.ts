@@ -10,14 +10,17 @@ import {
     type Column,
     type DataGridContextValue,
     type RenderSlotProps,
-    type SummaryCellInfo,
     type SummaryCellState,
-    type SummaryRowInfo,
     type SummaryRowState,
-    type SummaryState,
     typedDataGrid,
     useDataGrid,
 } from "../src";
+import {
+    type SummaryCellInfo,
+    type SummaryRowInfo,
+    type SummaryState,
+    typedSummaryRows,
+} from "../src/summary-rows";
 import {
     cellAt,
     FEATURES,
@@ -41,7 +44,10 @@ interface Row {
     amount: number;
 }
 
-const G = typedDataGrid<Row, Features>();
+const G = {
+    ...typedDataGrid<Row, Features>(),
+    ...typedSummaryRows<Row>(),
+};
 
 const rows: Row[] = Array.from({ length: 20 }, (_, id) => ({
     id,

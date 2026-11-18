@@ -41,35 +41,4 @@ export {
     type RootState,
 } from "./components/root";
 export { Row, type RowProps, type RowSlots } from "./components/row";
-export {
-    RowDetail,
-    type RowDetailProps,
-    type RowDetailSlots,
-} from "./components/row-detail";
 export { Rows, type RowsProps, type RowsSlots } from "./components/rows";
-export {
-    Summary,
-    type SummaryProps,
-    type SummarySlots,
-    type SummaryState,
-} from "./components/summary";
-export {
-    SummaryCell,
-    type SummaryCellProps,
-    type SummaryCellSlots,
-} from "./components/summary-cell";
-export {
-    SummaryCells,
-    type SummaryCellsProps,
-    type SummaryCellsSlots,
-} from "./components/summary-cells";
-export {
-    SummaryRow,
-    type SummaryRowProps,
-    type SummaryRowSlots,
-} from "./components/summary-row";
-export {
-    SummaryRows,
-    type SummaryRowsProps,
-    type SummaryRowsSlots,
-} from "./components/summary-rows";

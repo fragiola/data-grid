@@ -1,12 +1,12 @@
+import type { RowMeta } from "@fragiola/data-grid";
 import {
     type GroupToggleState,
     groupTogglePartOf,
-    type RowMeta,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/row-grouping";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
+import type { PartComposableResult } from "../composables/internal";
 import { useGridView } from "../context";
 import { vueProps } from "../utils/render";
-import type { PartComposableResult } from "./internal";
 
 /**
  * A row group's toggle (Epic #87): the state and props of a control the app renders in a group

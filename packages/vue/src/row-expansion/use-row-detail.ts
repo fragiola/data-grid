@@ -1,8 +1,11 @@
-import { type RowDetailState, rowDetailPartOf } from "@fragiola/data-grid";
+import {
+    type RowDetailState,
+    rowDetailPartOf,
+} from "@fragiola/data-grid/row-expansion";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
+import type { PartComposableResult } from "../composables/internal";
 import { type RowInfo, useGridView } from "../context";
 import { vueProps } from "../utils/render";
-import type { PartComposableResult } from "./internal";
 
 /**
  * A row's detail (M3): its state, and the props for its element (render it only while

@@ -16,6 +16,7 @@ import {
     typedDataGrid,
     useRow,
 } from "../src";
+import { RowDetail } from "../src/row-expansion";
 import {
     cellAt,
     FEATURES,
@@ -50,7 +51,10 @@ const columns: Column<Row, VNodeChild>[] = Array.from(
     }),
 );
 
-const G = typedDataGrid<Row, Features>();
+const G = {
+    ...typedDataGrid<Row, Features>(),
+    RowDetail,
+};
 
 /** A row's content height in these tests: 20 to 50 by index. */
 const heightOf = (rowIndex: number) => 20 + (rowIndex % 4) * 10;
@@ -426,7 +430,7 @@ describe("measured details", () => {
 });
 
 describe("the sizes a root sends", () => {
-    it("are the three sizes together for a grid of given heights, as before; the rest on their own", async () => {
+    it("are the two sizes together for a grid of given heights, as before; the rest on their own", async () => {
         const gridRef = createDataGridRef<Row>();
         const sizes = shallowRef<{
             rowHeight: number;
@@ -450,9 +454,8 @@ describe("the sizes a root sends", () => {
         });
         sizes.value = { rowHeight: 30 };
         await settled();
-        expect(sent).toEqual([
-            { rowHeight: 30, headerRowHeight: 35, detailHeight: 300 },
-        ]);
+        // a detail's height is row expansion's prop (Epic #151): sent on its own, when it changes
+        expect(sent).toEqual([{ rowHeight: 30, headerRowHeight: 35 }]);
         sizes.value = { rowHeight: 30 };
         await settled();
         expect(sent).toHaveLength(1);
@@ -462,9 +465,10 @@ describe("the sizes a root sends", () => {
             estimatedRowHeight: 50,
         };
         await settled();
+        // the core's estimate, then the summary rows' height (the feature's, after the core's)
         expect(sent.slice(1)).toEqual([
-            { summaryRowHeight: 40 },
             { estimatedRowHeight: 50 },
+            { summaryRowHeight: 40 },
         ]);
     });
 });

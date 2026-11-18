@@ -1,8 +1,8 @@
+import type { SummaryPosition } from "@fragiola/data-grid";
 import {
-    type SummaryPosition,
     type SummaryState,
     summaryPartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/summary-rows";
 import { h, provide } from "vue";
 import { SummaryKey, useGridView } from "../context";
 import {
@@ -14,7 +14,7 @@ import {
 import { type RenderSlot, renderElement } from "../utils/render";
 import { SummaryRows } from "./summary-rows";
 
-export type { SummaryState } from "@fragiola/data-grid";
+export type { SummaryState } from "@fragiola/data-grid/summary-rows";
 
 export interface SummaryProps extends PrimitiveProps {
     /** under the header (`"top"`), or at the view's bottom edge (`"bottom"`) */

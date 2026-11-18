@@ -10,7 +10,8 @@ import {
     type MaybeRefOrGetter,
     toValue,
 } from "vue";
-import { SummaryKey, type SummaryRowInfo, useGridView } from "../context";
+import { SummaryKey, useGridView } from "../context";
+import type { SummaryRowInfo } from "./info";
 
 /**
  * A position's summary rows (Epic #86), the first one first: `position`'s, else the ones of the

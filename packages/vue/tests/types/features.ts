@@ -17,8 +17,13 @@ import { editing } from "../../src/editing";
 import { fillHandle } from "../../src/fill";
 import { navigation } from "../../src/navigation";
 import { cellRange } from "../../src/range";
+import { RowDetail, rowExpansion } from "../../src/row-expansion";
+import { rowGrouping } from "../../src/row-grouping";
+import { rowReorder } from "../../src/row-reorder";
 import { rowSelection } from "../../src/row-selection";
 import { type SortColumn, sorting } from "../../src/sorting";
+import { cellSpans } from "../../src/spans";
+import { Summary, summaryRows } from "../../src/summary-rows";
 
 interface Person {
     name: string;
@@ -224,6 +229,67 @@ h(Editing.Root, {
     onCellEdit: (edit) => edit.row.name,
 });
 
+// the row features' props (Epic #151): only with them installed
+export const bareRows: PropsOf<typeof Bare.Root>[] = [
+    {
+        columns,
+        rows: people,
+        // @ts-expect-error
+        expandedRowKeys: [],
+    },
+    {
+        columns,
+        rows: people,
+        // @ts-expect-error
+        detailHeight: 100,
+    },
+    {
+        columns,
+        rows: people,
+        // @ts-expect-error
+        expandedGroupKeys: [],
+    },
+    {
+        columns,
+        rows: people,
+        // @ts-expect-error
+        summaryRows: { top: 1 },
+    },
+    {
+        columns,
+        rows: people,
+        // @ts-expect-error
+        onRowMove: () => {},
+    },
+];
+const rowFeatures = [
+    rowExpansion(),
+    rowGrouping(),
+    summaryRows(),
+    rowReorder(),
+    cellSpans(),
+] as const;
+const Rows = typedDataGrid<Person, typeof rowFeatures>();
+h(Rows.Root, {
+    columns,
+    rows: people,
+    features: rowFeatures,
+    expandedRowKeys: [],
+    onExpandedRowKeysChange: (keys) => keys.length,
+    detailHeight: (row) => row.name.length,
+    defaultExpandedGroupKeys: [],
+    summaryRows: { top: 1 },
+    summaryRowHeight: 30,
+    onRowMove: (move) => move.toIndex,
+});
+// their primitives are their entries' (the main namespace has none)
+// @ts-expect-error
+void DataGrid.RowDetail;
+// @ts-expect-error
+void DataGrid.Summary;
+void RowDetail;
+void Summary;
+
 // their keys, through the composables' model
 export const FeatureKeys = defineComponent(() => {
     const plain = useDataGrid<Person>();
@@ -246,5 +312,14 @@ export const FeatureKeys = defineComponent(() => {
     selection.model.run("selected-rows.set", { rowKeys: [] });
     selection.model.is("row-selected", { rowIndex: 0 });
     useDataGrid<Person, typeof ranged>().model.get("selected-range");
+    // @ts-expect-error
+    plain.model.run("expanded-rows.toggle", { rowIndex: 0 });
+    // @ts-expect-error
+    plain.model.run("summary-rows.set", { top: 1 });
+    const rowed = useDataGrid<Person, typeof rowFeatures>();
+    rowed.model.run("expanded-rows.toggle", { rowIndex: 0 });
+    rowed.model.run("row-groups.toggle", { groupKey: "g" });
+    rowed.model.get("cell-span-by", { rowIndex: 0, columnIndex: 0 });
+    rowed.model.is("row-movable", { rowIndex: 0 });
     return () => null;
 });

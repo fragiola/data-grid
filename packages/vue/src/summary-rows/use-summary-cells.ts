@@ -1,4 +1,4 @@
-import { summaryCellsOf } from "@fragiola/data-grid";
+import { summaryCellsOf } from "@fragiola/data-grid/summary-rows";
 import {
     type ComputedRef,
     computed,
@@ -6,12 +6,8 @@ import {
     type MaybeRefOrGetter,
     toValue,
 } from "vue";
-import {
-    type SummaryCellInfo,
-    type SummaryRowInfo,
-    SummaryRowKey,
-    useGridView,
-} from "../context";
+import { SummaryRowKey, useGridView } from "../context";
+import type { SummaryCellInfo, SummaryRowInfo } from "./info";
 
 /**
  * The cells a summary row renders, with their columns: one per rendered column, but a cell

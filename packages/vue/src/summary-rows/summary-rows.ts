@@ -1,13 +1,13 @@
 import type { SummaryPosition } from "@fragiola/data-grid";
 import { Fragment, h } from "vue";
-import { useSummaryRows } from "../composables/use-summary-rows";
-import type { SummaryRowInfo } from "../context";
 import {
     type DataGridComponent,
     definePrimitive,
     type SlotFunction,
 } from "../utils/primitive";
+import type { SummaryRowInfo } from "./info";
 import { SummaryRow } from "./summary-row";
+import { useSummaryRows } from "./use-summary-rows";
 
 export interface SummaryRowsProps {
     /** whose rows: without it, the `DataGrid.Summary` around's */

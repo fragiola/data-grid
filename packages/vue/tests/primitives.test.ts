@@ -27,6 +27,7 @@ import {
     typedDataGrid,
     useDataGrid,
 } from "../src";
+import { typedSummaryRows } from "../src/summary-rows";
 import {
     click,
     FEATURES,
@@ -51,7 +52,10 @@ interface Person {
     age: number;
 }
 
-const G = typedDataGrid<Person, Features>();
+const G = {
+    ...typedDataGrid<Person, Features>(),
+    ...typedSummaryRows<Person>(),
+};
 
 const people: Person[] = Array.from({ length: 1_000 }, (_, i) => ({
     id: i,

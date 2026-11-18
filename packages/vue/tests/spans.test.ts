@@ -9,6 +9,7 @@ import {
     type RowInfo,
     typedDataGrid,
 } from "../src";
+import { cellSpans } from "../src/spans";
 import {
     cellAt,
     headerAt,
@@ -26,7 +27,10 @@ interface Row {
     id: number;
 }
 
-const G = typedDataGrid<Row>();
+/** Column spans are a feature (Epic #151): these grids install it. */
+const SPANS = [cellSpans()] as const;
+
+const G = typedDataGrid<Row, typeof SPANS>();
 
 const rows: Row[] = Array.from({ length: 20 }, (_, id) => ({ id }));
 
@@ -92,7 +96,7 @@ function grid({
         );
     return h(
         G.Root,
-        { columns, rows, rowHeight: 20 },
+        { features: SPANS, columns, rows, rowHeight: 20 },
         {
             default: () => [
                 h(
@@ -200,7 +204,7 @@ describe("a render function (the epic review)", () => {
         renderGrid(() =>
             h(
                 G.Root,
-                { columns, rows, rowHeight: 20 },
+                { features: SPANS, columns, rows, rowHeight: 20 },
                 {
                     default: () => [
                         h(G.Grid, null, {
