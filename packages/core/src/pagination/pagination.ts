@@ -5,7 +5,6 @@ import {
     type FeatureState,
 } from "../feature/feature";
 import { done, fail } from "../model/result";
-import { rowCountOf } from "../model/source";
 import type { CommandFailure } from "../model/types";
 import type { PageInfo, PaginationProps, PaginationTypes } from "./types";
 
@@ -57,7 +56,7 @@ function invalid(message: string): CommandFailure {
 
 /** The rows the pages are counted from: the total given, else the grid's own. */
 function rowCountIn(state: State): number {
-    return state.totalRowCount ?? rowCountOf(state.source);
+    return state.totalRowCount ?? state.rowCount;
 }
 
 /** The pages there are in a state. */
