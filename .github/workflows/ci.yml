@@ -1,12 +1,20 @@
 # CI: the Fragiola project jobs, with the Playwright suites split out of Checks.
 #
 #   Checks   Biome, TypeScript, the unit tests and the build (with the .d.ts check).
-#   E2E      the Playwright suites, in parallel jobs, each in Chromium, Firefox and WebKit (Epic
-#            #89): the playground, and one job per examples app (a matrix over the examples/*
-#            apps that exist, each running the shared specs of examples/shared/e2e). The
-#            playground's dev server serves the packages from source, so its job builds nothing;
-#            an examples suite builds the embed against the packages' dist, so its job builds the
-#            packages.
+#   Changes  the E2E suites the pull request can affect (scripts/e2e-suites.ts, a `git diff`
+#            against the base; Epic #162): none for docs only (site/docs, *.md, AGENTS.md);
+#            packages/react or examples/react: the playground and examples react; packages/vue
+#            or examples/vue: examples vue; packages/angular or examples/angular: examples
+#            angular; anything else (the core, examples/shared, the playground, the lockfile,
+#            root configs, .github, scripts, site) and a manual run: every suite.
+#   E2E      the Playwright suites it selects, each in Chromium, Firefox and WebKit (Epic #89),
+#            in Playwright's image (mcr.microsoft.com/playwright, the tag of @playwright/test:
+#            no browser install) and split in shards (Epic #162): the playground in 4, and each
+#            examples app in 3 (a matrix of the examples/* apps × shard, each running the
+#            shared specs of examples/shared/e2e). The playground's dev server serves the
+#            packages from source, so its jobs build nothing; an examples suite builds the embed
+#            against the packages' dist, so its jobs build the packages. A failure uploads the
+#            shard's report (playwright-report-<suite>-<shard>).
 #   Site export       fragiola.com builds /data-grid from `pnpm site:export` (contract v1.2,
 #                     fragiola/www CONTRACT.md), built and validated the way www's deploy runs
 #                     it: it fails on anything www would reject.
@@ -62,10 +70,51 @@ jobs:
       # a report, never a gate (Epic #62): the bundle sizes in the job summary
       - run: pnpm size
 
-  e2e:
-    name: E2E (playground)
+  # The E2E suites this change can affect (scripts/e2e-suites.ts): none for the docs, an
+  # adapter's own for its package or examples app, every suite for anything else and for a manual
+  # run. Also the frameworks that have an examples app (every examples/<framework> with a
+  # playwright.config.ts; examples/shared has none): adding an app adds its jobs.
+  changes:
+    name: Changes
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    outputs:
+      playground: ${{ steps.suites.outputs.playground }}
+      examples: ${{ steps.suites.outputs.examples }}
+    steps:
+      # a pull request checks out its merge commit: its first parent is the base it merges into
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - id: suites
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            node scripts/e2e-suites.ts --diff HEAD^1
+          else
+            node scripts/e2e-suites.ts --all
+          fi
+
+  # The E2E jobs run in Playwright's image, whose browsers and system libraries match
+  # @playwright/test (its tag follows the version; site/tests/ci-workflow.test.ts checks it), so
+  # they install nothing. Each suite is split in shards (`--shard`, balanced per test under
+  # fullyParallel); together they run every test in the three browsers.
+  e2e:
+    name: E2E (playground ${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.playground == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
 
@@ -78,47 +127,31 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        working-directory: apps/playground
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
       - name: Run Playwright
-        run: pnpm --filter playground run e2e
+        working-directory: apps/playground
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/4
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-playground
+          name: playwright-report-playground-${{ matrix.shard }}
           path: apps/playground/playwright-report/
           retention-days: 14
 
-  # The frameworks that have an examples app: every examples/<framework> with a playwright.config.ts
-  # (examples/shared, the specs every framework runs, has none). Adding an app adds its job.
-  examples-apps:
-    name: Examples apps
-    if: github.event_name != 'push'
-    runs-on: ubuntu-latest
-    outputs:
-      frameworks: ${{ steps.list.outputs.frameworks }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: list
-        run: |
-          frameworks=$(ls examples/*/playwright.config.ts | cut -d/ -f2 | jq -Rnc '[inputs]')
-          echo "frameworks=$frameworks" >> "$GITHUB_OUTPUT"
-          echo "examples apps: $frameworks"
-
   e2e-examples:
-    name: E2E (examples ${{ matrix.framework }})
-    needs: examples-apps
-    if: github.event_name != 'push'
+    name: E2E (examples ${{ matrix.framework }} ${{ matrix.shard }}/3)
+    needs: changes
+    if: needs.changes.outputs.examples != '[]' && needs.changes.outputs.examples != ''
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     strategy:
       fail-fast: false
       matrix:
-        framework: ${{ fromJson(needs.examples-apps.outputs.frameworks) }}
+        framework: ${{ fromJson(needs.changes.outputs.examples) }}
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -135,18 +168,15 @@ jobs:
       - name: Build the packages
         run: pnpm --filter "./packages/*" build
 
-      - name: Install Playwright browsers
-        working-directory: examples/${{ matrix.framework }}
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
       - name: Run Playwright
-        run: pnpm --filter examples-${{ matrix.framework }} run e2e
+        working-directory: examples/${{ matrix.framework }}
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/3
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-examples-${{ matrix.framework }}
+          name: playwright-report-examples-${{ matrix.framework }}-${{ matrix.shard }}
           path: examples/${{ matrix.framework }}/playwright-report/
           retention-days: 14
 
