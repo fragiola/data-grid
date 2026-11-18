@@ -240,7 +240,7 @@ export default class ServerSide {
     readonly loading = computed(() => this.answer().loading);
     /** the team a filter holds: a list of one, the team chosen from the select */
     readonly team = computed(() => {
-        const team = this.columnFilters()["team"];
+        const { team } = this.columnFilters() as { readonly team?: unknown };
         return Array.isArray(team) && typeof team[0] === "string"
             ? team[0]
             : "";
