@@ -2,8 +2,9 @@
 // when the main entry of a package (`packages/*/dist/index.js`, or ng-packagr's
 // `dist/fesm2022/<package>.mjs`), or a chunk it imports, holds a feature's code: one of the
 // markers a feature names (its command, `get` and `is` keys, read from the built feature itself)
-// or an import of a feature's entry point (`@fragiola/data-grid…/sorting`). Run by `pnpm build`,
-// after the packages built.
+// or an import of a feature's entry point (`@fragiola/data-grid…/sorting`). The `/local` entries
+// too (Epic #153): the pipeline runs the installed features' stages from the state it hands the
+// root, and never ships a feature. Run by `pnpm build`, after the packages built.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,6 +33,9 @@ export const FEATURES = [
     { subpath: "row-reorder", factory: "rowReorder" },
     { subpath: "spans", factory: "cellSpans" },
     { subpath: "summary-rows", factory: "summaryRows" },
+    { subpath: "filtering", factory: "filtering" },
+    { subpath: "search", factory: "search" },
+    { subpath: "pagination", factory: "pagination" },
 ] as const;
 
 /** A feature as the guard reads it: its subpath and the markers its code holds. */
@@ -120,6 +124,16 @@ export function featureLeaks(
     return leaks;
 }
 
+/** A package's `/local` entry, relative to its `dist`: tsdown's or ng-packagr's. */
+export function localEntryOf(
+    dist: string,
+    packageName: string,
+): string | undefined {
+    if (existsSync(join(dist, "local.js"))) return "local.js";
+    const fesm = `fesm2022/${packageName.replace(/^@/, "").replace("/", "-")}-local.mjs`;
+    return existsSync(join(dist, fesm)) ? fesm : undefined;
+}
+
 /** A package's main entry, relative to its `dist`: tsdown's or ng-packagr's. */
 export function mainEntryOf(
     dist: string,
@@ -154,15 +168,24 @@ async function main() {
         for (const leak of featureLeaks(main, read, features)) {
             problems.push(`packages/${pkg}/dist/${leak}`);
         }
+        // the local pipeline holds no feature either (Epic #153)
+        const local = localEntryOf(dist, name);
+        if (!local) {
+            problems.push(`packages/${pkg}: no built /local entry`);
+            continue;
+        }
+        for (const leak of featureLeaks(local, read, features)) {
+            problems.push(`packages/${pkg}/dist/${leak}`);
+        }
     }
     if (problems.length > 0) {
         console.error(
-            `A main entry ships a feature's code (a feature must stay in its own entry):\n${problems.join("\n")}`,
+            `A main or /local entry ships a feature's code (a feature must stay in its own entry):\n${problems.join("\n")}`,
         );
         process.exit(1);
     }
     console.log(
-        `check-features: no package's main entry ships ${features.map((feature) => feature.subpath).join(", ")}`,
+        `check-features: no package's main or /local entry ships ${features.map((feature) => feature.subpath).join(", ")}`,
     );
 }
 
