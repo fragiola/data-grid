@@ -8,7 +8,8 @@ import { createRoot } from "react-dom/client";
 // navigation (Epic #144) it is the APG table pattern: `role="table"`, `cell`, no tab stop on the
 // grid nor its cells, and the arrow keys move nothing. Without the column features (Epic #148)
 // its first column, pinned, resizable and reorderable, scrolls with the others and neither moves
-// nor resizes. As a table (`?kind=table`) or as divs (the default). `e2e/bare.spec.ts` drives
+// nor resizes. Without the row features (Epic #151) its second column's `colSpan` is not asked:
+// every cell is one column. As a table (`?kind=table`) or as divs (the default). `e2e/bare.spec.ts` drives
 // both.
 
 interface BareRow {
@@ -34,6 +35,8 @@ const columns: Column<BareRow>[] = Array.from(
                   reorderable: true,
               }
             : {}),
+        // and without column spans (Epic #151), a spanning one's cells are one column each
+        ...(columnIndex === 1 ? { colSpan: () => 2 } : {}),
         getValue: (row: BareRow) => `${row.id}:${columnIndex}`,
     }),
 );

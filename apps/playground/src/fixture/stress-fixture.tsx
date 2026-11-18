@@ -18,8 +18,16 @@ import { fillHandle, repeatedFill } from "@fragiola/data-grid-react/fill";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { cellRange } from "@fragiola/data-grid-react/range";
+import {
+    RowDetail,
+    rowExpansion,
+} from "@fragiola/data-grid-react/row-expansion";
+import { rowGrouping } from "@fragiola/data-grid-react/row-grouping";
+import { rowReorder } from "@fragiola/data-grid-react/row-reorder";
 import { rowSelection } from "@fragiola/data-grid-react/row-selection";
 import { sorting } from "@fragiola/data-grid-react/sorting";
+import { cellSpans } from "@fragiola/data-grid-react/spans";
+import { summaryRows } from "@fragiola/data-grid-react/summary-rows";
 import { Profiler, StrictMode, useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -30,6 +38,7 @@ import {
     FillHandle,
     type FixtureFeatures,
     type FixtureRow,
+    FixtureSummaryRows,
     HeaderRow,
     PickEditor,
     pinnedStyle,
@@ -37,7 +46,6 @@ import {
     ROW_DROP_CSS,
     RowHandle,
     SelectBox,
-    SummaryRows,
     TextEditor,
     tags,
 } from "./grid-fixture.tsx";
@@ -45,7 +53,8 @@ import {
 /**
  * the features the fixture installs: every migrated one, sorting (Epic #141), cell navigation,
  * row selection, cell ranges, the clipboard and the fill handle (Epic #144), cell editing (Epic
- * #146), column resizing, reordering, pinning and collapsible groups (Epic #148)
+ * #146), column resizing, reordering, pinning and collapsible groups (Epic #148), column spans,
+ * row grouping, row expansion, summary rows and row reordering (Epic #151)
  */
 const FEATURES: FixtureFeatures = [
     sorting(),
@@ -59,6 +68,11 @@ const FEATURES: FixtureFeatures = [
     columnReorder(),
     columnPinning(),
     columnGroupCollapse(),
+    cellSpans(),
+    rowGrouping(),
+    rowExpansion(),
+    summaryRows(),
+    rowReorder(),
 ];
 
 // The combined stress fixture (Epic #89, E5.3): every feature on at once, over 1,000,000 rows and
@@ -418,7 +432,7 @@ function StressFixture({
                                 )}
                             </DataGrid.HeaderRows>
                         </DataGrid.Header>
-                        <SummaryRows
+                        <FixtureSummaryRows
                             position="top"
                             table={table}
                             render={tag.summaryTop}
@@ -457,7 +471,7 @@ function StressFixture({
                                                 </DataGrid.Cell>
                                             )}
                                         </DataGrid.Cells>
-                                        <DataGrid.RowDetail
+                                        <RowDetail
                                             render={tag.detail}
                                             style={{ background: "white" }}
                                         >
@@ -469,12 +483,12 @@ function StressFixture({
                                             <button type="button">
                                                 detail button
                                             </button>
-                                        </DataGrid.RowDetail>
+                                        </RowDetail>
                                     </DataGrid.Row>
                                 )}
                             </DataGrid.Rows>
                         </DataGrid.Body>
-                        <SummaryRows
+                        <FixtureSummaryRows
                             position="bottom"
                             table={table}
                             render={tag.summaryBottom}

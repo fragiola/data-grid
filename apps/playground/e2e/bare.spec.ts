@@ -186,5 +186,14 @@ for (const kind of KINDS) {
             await settle(page);
             await expect(first).toHaveCount(0);
         });
+
+        test("ignores a column's colSpan: every body cell is one column", async ({
+            page,
+        }) => {
+            await open(page, kind);
+            await expect(page.locator("[aria-colspan]")).toHaveCount(0);
+            await expect(cell(page, 0, 1)).toHaveText("0:1");
+            await expect(cell(page, 0, 2)).toHaveText("0:2");
+        });
     });
 }
