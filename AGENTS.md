@@ -1341,6 +1341,20 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
 | `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
 | `pnpm site:dev --base /data-grid --port <n>` | every framework's examples app with hot reload, under `<base>/embed/<framework>/` on one port (a Node proxy, `site/dev-proxy.ts`, in front of one dev server per framework), the base `www` proxies in dev |
 
+## CI
+
+`.github/workflows/ci.yml` (its comment header describes every job) runs on pull requests and on
+a manual run: Checks, Site export, and the E2E suites (Epic #162). A `Changes` job picks the suites
+a pull request can affect (`scripts/e2e-suites.ts`, a `git diff` against the base, tested by
+`site/tests/e2e-suites.test.ts`): none for docs only (`site/docs/**`, `*.md`, `AGENTS.md`);
+`packages/react` or `examples/react`: the playground and examples react; `packages/vue` or
+`examples/vue`: examples vue; `packages/angular` or `examples/angular`: examples angular; any
+other path, and a manual run: every suite. Only those may skip: a new rule names what it skips,
+never what it runs. The E2E jobs run in `mcr.microsoft.com/playwright:v<version>-noble` (`--user
+1001`), its tag the version of `@playwright/test` (`site/tests/ci-workflow.test.ts`): upgrading
+Playwright changes both. Each suite is sharded (`--shard`, balanced per test under
+`fullyParallel`), the playground in 4 and each examples app in 3, every browser in every shard.
+
 ## Repository layout
 
 ```
@@ -1834,7 +1848,7 @@ once in `examples/shared` (`examples-shared`, private, imports no framework); an
 its id in every framework, and a spec for an example a framework lacks is skipped there, unless
 that framework ships them all (`COMPLETE_FRAMEWORKS` in `examples/shared/e2e/available.ts`: React,
 Vue and Angular). CI's
-examples e2e is a matrix over the `examples/*` apps with a `playwright.config.ts`. `www` owns the shell,
+examples e2e is a matrix over the `examples/*` apps with a `playwright.config.ts` (× shard, below). `www` owns the shell,
 the gallery chrome, the code panel and search. A page's `title` is at most 60 characters and
 never repeats "Data Grid"; its `description` is 50–160 characters, plain words, no `: ` (YAML);
 a page body has no `#` and never skips a heading level; `pnpm site:export` checks all of it. Examples import internal modules through `#/…`
