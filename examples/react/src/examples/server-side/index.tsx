@@ -171,7 +171,10 @@ export default function ServerSide() {
                         setPageIndex(0);
                     }}
                     pageIndex={pageIndex}
-                    onPageIndexChange={setPageIndex}
+                    onPageIndexChange={(next) =>
+                        // the model keeps any page: the pages the server's total makes hold it
+                        setPageIndex(Math.min(next, pages - 1))
+                    }
                     pageSize={PAGE_SIZE}
                     totalRowCount={page.total}
                     className={styles.root}

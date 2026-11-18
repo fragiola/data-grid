@@ -42,10 +42,18 @@ export function createServerQuery<Q, A>(
             const asked = { query };
             last = asked;
             set({ ...state, loading: true });
-            fetch(query).then((answer) => {
-                // an answer to a query the app has moved on from is dropped
-                if (last === asked) set({ answer, loading: false });
-            });
+            fetch(query).then(
+                (answer) => {
+                    // an answer to a query the app has moved on from is dropped
+                    if (last === asked) set({ answer, loading: false });
+                },
+                () => {
+                    // a failed query keeps the last answer, and may be asked again
+                    if (last !== asked) return;
+                    last = null;
+                    set({ ...state, loading: false });
+                },
+            );
         },
         subscribe(listener) {
             listeners.add(listener);

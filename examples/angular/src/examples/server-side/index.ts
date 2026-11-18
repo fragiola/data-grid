@@ -143,7 +143,7 @@ const columns: Column<Person, DataGridNode>[] = [
                     (searchTextChange)="searchFor($event)"
                     dataGridPagination
                     [pageIndex]="pageIndex()"
-                    (pageIndexChange)="pageIndex.set($event)"
+                    (pageIndexChange)="goTo($event)"
                     [pageSize]="PAGE_SIZE"
                     [totalRowCount]="page().total"
                     [attr.aria-busy]="loading() || null"
@@ -292,6 +292,11 @@ export default class ServerSide {
     protected filterBy(next: ColumnFilters) {
         this.columnFilters.set(next);
         this.pageIndex.set(0);
+    }
+
+    protected goTo(next: number) {
+        // the model keeps any page: the pages the server's total makes hold it
+        this.pageIndex.set(Math.min(next, this.pages() - 1));
     }
 
     protected searchFor(next: string) {

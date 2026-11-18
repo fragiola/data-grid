@@ -63,7 +63,8 @@ It returns:
 The options are where it starts: `pageSize` (none: a single page of every row),
 `defaultSortColumns`, `defaultFilters`, `defaultSearch`, `defaultPageIndex`. A filter, the
 search or the sort changing goes back to the first page. `features` is read once, as the root
-reads its own.
+reads its own. The hook controls the state it hands the root: with `pagination()` installed,
+the page size is its `pageSize` option (`page.setSize`), never the root's `defaultPageSize`.
 
 Keep `rows` and `columns` the same arrays between renders (outside the component, or memoised),
 as `DataGrid.Root` wants its columns: the hook works again when they change.

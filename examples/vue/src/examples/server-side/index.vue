@@ -154,7 +154,8 @@ function searchFor(next: string) {
 }
 
 function goTo(next: number) {
-    pageIndex.value = next;
+    // the model keeps any page: the pages the server's total makes hold it
+    pageIndex.value = Math.min(next, pages.value - 1);
 }
 
 const rowKey = (row: Person) => row.id;
