@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type CellInfo, useRowDragHandle } from "@fragiola/data-grid-vue";
+import type { CellInfo } from "@fragiola/data-grid-vue";
+import { useRowDragHandle } from "@fragiola/data-grid-vue/row-reorder";
 import { GripVertical } from "@lucide/vue";
 import type { Task } from "../_kit/tasks";
 import * as styles from "./styles";

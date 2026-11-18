@@ -2,6 +2,7 @@
 import { useDataGrid, useGridView } from "@fragiola/data-grid-vue";
 import { ChevronRightIcon } from "@lucide/vue";
 import { computed } from "vue";
+import type { Features } from "./features";
 import type { Order } from "./orders";
 import * as styles from "./styles";
 
@@ -11,7 +12,7 @@ import * as styles from "./styles";
 const props = defineProps<{ order: Order; rowIndex: number }>();
 
 // expands or collapses an order: the app's control, the grid's state (M1)
-const { model } = useDataGrid<Order>();
+const { model } = useDataGrid<Order, Features>();
 const view = useGridView();
 const expanded = computed(() => {
     void view.value;

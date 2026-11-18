@@ -5,6 +5,8 @@ import {
     typedDataGrid,
     useDataGrid,
 } from "@fragiola/data-grid-vue";
+import { RowDetail } from "@fragiola/data-grid-vue/row-expansion";
+import type { Features } from "./features";
 import OrderItems from "./order-items.vue";
 import OrderSummary from "./order-summary.vue";
 import type { Order } from "./orders";
@@ -12,9 +14,9 @@ import * as styles from "./styles";
 
 // The orders grid, under its `Root`: it reads the grid's model to toggle an order from its cell.
 
-const DataGrid = typedDataGrid<Order>();
+const DataGrid = typedDataGrid<Order, Features>();
 
-const { model } = useDataGrid<Order>();
+const { model } = useDataGrid<Order, Features>();
 
 /** Enter or Space on an order's expander cell toggles it (and is not the browser's scroll). */
 function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
@@ -70,7 +72,7 @@ function backToOrder(event: KeyboardEvent, at: CellPosition) {
                             @keydown="onCellKey($event, cell)"
                         />
                     </DataGrid.Cells>
-                    <DataGrid.RowDetail
+                    <RowDetail
                         :class="styles.detail"
                         @keydown="
                             backToOrder($event, {
@@ -84,7 +86,7 @@ function backToOrder(event: KeyboardEvent, at: CellPosition) {
                             <OrderSummary :order="row.row" />
                             <OrderItems :order="row.row" />
                         </div>
-                    </DataGrid.RowDetail>
+                    </RowDetail>
                 </DataGrid.Row>
             </DataGrid.Rows>
         </DataGrid.Body>

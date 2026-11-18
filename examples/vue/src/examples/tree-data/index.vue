@@ -2,6 +2,7 @@
 import { type RowKey, typedDataGrid } from "@fragiola/data-grid-vue";
 import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { rowGrouping } from "@fragiola/data-grid-vue/row-grouping";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Search } from "@lucide/vue";
@@ -23,12 +24,13 @@ const searchInset = {
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
-// every column scrolls)
+// every column scrolls), row grouping (a group's toggle and keys; without it, nothing expands)
 const features = [
     sorting(),
     navigation(),
     rowSelection(),
     columnPinning(),
+    rowGrouping(),
 ] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type

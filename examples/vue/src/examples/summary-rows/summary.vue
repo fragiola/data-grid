@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type SummaryPosition, typedDataGrid } from "@fragiola/data-grid-vue";
+import type { SummaryPosition } from "@fragiola/data-grid-vue";
+import { typedSummaryRows } from "@fragiola/data-grid-vue/summary-rows";
 import type { Person } from "../_kit/data";
 import * as styles from "./styles";
 import { SUMMARIES, type Totals } from "./totals";
@@ -7,7 +8,7 @@ import { SUMMARIES, type Totals } from "./totals";
 // A position's summary rows: sticky, opaque, above the rows that scroll under them. Each cell
 // shows the app's figure for its column, read here as it renders.
 
-const DataGrid = typedDataGrid<Person>();
+const DataGrid = typedSummaryRows<Person>();
 
 defineProps<{ position: SummaryPosition; totals: Totals }>();
 </script>

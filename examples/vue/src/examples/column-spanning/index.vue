@@ -2,6 +2,7 @@
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
 import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { cellSpans } from "@fragiola/data-grid-vue/spans";
 import { h, type VNodeChild } from "vue";
 import {
     bookingAt,
@@ -14,8 +15,9 @@ import {
 import * as styles from "./styles";
 
 // the features the grid installs: cell navigation (the keys, the active cell, the tab stop), pinned
-// columns (without it, every column scrolls)
-const features = [navigation(), columnPinning()] as const;
+// columns (without it, every column scrolls), column spans (without it, a column's colSpan is not
+// asked)
+const features = [navigation(), columnPinning(), cellSpans()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.
