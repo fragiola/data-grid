@@ -22,6 +22,8 @@ test("a text filter in a header cell filters the rows, and never sorts", async (
     }
     // a click on the filter is the field's: no sort
     await expect(header(page, "Task")).not.toHaveAttribute("aria-sort");
+    // the filters are the grid's model's (Epic #153): a filtered column's header cell says so
+    await expect(header(page, "Task")).toHaveAttribute("data-filtered", "");
     // the arrows are the field's too; Escape gives the keys back to the header cell
     await page.keyboard.press("ArrowLeft");
     await expect(field).toBeFocused();
@@ -51,6 +53,7 @@ test("select filters combine, and Clear filters brings every row back", async ({
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear filters" }).click();
     await expect(count(page)).toHaveText("1000 of 1000 tasks");
+    await expect(header(page, "Priority")).not.toHaveAttribute("data-filtered");
 });
 
 test("the filters hide, and the header is one line again", async ({ page }) => {

@@ -2,8 +2,9 @@ import { expect, type Page, test } from "@playwright/test";
 import { openExample } from "../helpers";
 import { header, values } from "./helpers";
 
-// The external mode (Epic #47): the app sends the sort, a filter, a search and the page to a
-// pretend server, and the grid shows the page that comes back.
+// The external mode (Epic #47; on the features since Epic #153: sorting, filtering, search and
+// pagination hold the state, no rows in memory): the app sends the sort, a filter, a search and
+// the page to a pretend server, and the grid shows the page that comes back.
 
 /** The newest request the app sent. */
 const lastRequest = (page: Page) =>
@@ -35,6 +36,9 @@ test("sends a filter, a search and the page, back to the first page on a filter"
     );
     await expect(page.getByTestId("count")).not.toHaveText("Loading…");
     for (const team of await values(page, 3)) expect(team).toBe("Design");
+    // the grid's model holds the filter: its column's header cell says so
+    await expect(header(page, "Team")).toHaveAttribute("data-filtered", "");
+    await expect(header(page, "City")).not.toHaveAttribute("data-filtered");
     await page
         .getByRole("textbox", { name: "Search every column" })
         .fill("ana");
