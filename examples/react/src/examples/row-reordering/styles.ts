@@ -1,9 +1,9 @@
 import type {
     CellState,
     HeaderCellState,
-    RowDragHandleState,
     RowState,
 } from "@fragiola/data-grid-react";
+import type { RowDragHandleState } from "@fragiola/data-grid-react/row-reorder";
 import { cn } from "#/lib/cn";
 
 export const frame = "flex h-full min-h-0 flex-col gap-2 p-3";

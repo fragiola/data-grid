@@ -10,6 +10,7 @@ export default {
         "useLocalRows",
         "groupBy",
         "aggregates",
+        "rowGrouping()",
         "useGroupToggle",
         "renderGroupCell",
         "treegrid",

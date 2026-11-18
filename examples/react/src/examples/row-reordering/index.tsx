@@ -6,11 +6,15 @@ import {
     DataGrid,
     headerCellContent,
     type RowMove,
-    useRowDragHandle,
 } from "@fragiola/data-grid-react";
+
 import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowReorder,
+    useRowDragHandle,
+} from "@fragiola/data-grid-react/row-reorder";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import {
     ArrowDown,
@@ -27,8 +31,8 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
-// scrolls)
-const FEATURES = [sorting(), navigation(), columnPinning()];
+// scrolls), row reordering (without it, a handle drags nothing)
+const FEATURES = [sorting(), navigation(), columnPinning(), rowReorder()];
 
 const backlog = tasks(200);
 

@@ -8,11 +8,15 @@ import {
     type RowKey,
     useDataGrid,
     useGridView,
-    useGroupToggle,
 } from "@fragiola/data-grid-react";
+
 import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import {
+    rowGrouping,
+    useGroupToggle,
+} from "@fragiola/data-grid-react/row-grouping";
 import {
     rowSelection,
     useSelectAll,
@@ -29,8 +33,14 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
-// every column scrolls)
-const FEATURES = [sorting(), navigation(), rowSelection(), columnPinning()];
+// every column scrolls), row groups (without it, nothing expands)
+const FEATURES = [
+    sorting(),
+    navigation(),
+    rowSelection(),
+    columnPinning(),
+    rowGrouping(),
+];
 
 const ROWS = people(500);
 

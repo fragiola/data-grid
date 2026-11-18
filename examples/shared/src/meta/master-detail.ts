@@ -7,7 +7,8 @@ export default {
     category: "real-world",
     order: 3,
     features: [
-        "DataGrid.RowDetail",
+        "rowExpansion()",
+        "RowDetail",
         "expanded-rows.toggle",
         "detailHeight",
         'detailHeight="auto"',

@@ -9,6 +9,7 @@ import {
     useDataGrid,
     useGridView,
 } from "@fragiola/data-grid-react";
+
 import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import {
     columnResize,
@@ -22,6 +23,14 @@ import {
     useSelectAll,
 } from "@fragiola/data-grid-react/row-selection";
 import { sorting } from "@fragiola/data-grid-react/sorting";
+import {
+    Summary,
+    SummaryCell,
+    SummaryCells,
+    SummaryRow,
+    SummaryRows,
+    summaryRows,
+} from "@fragiola/data-grid-react/summary-rows";
 import { ArrowDown, ArrowUp, Download } from "lucide-react";
 import { createContext, type ReactNode, use, useMemo, useState } from "react";
 import { Clickable } from "#/components/atoms/clickable";
@@ -42,7 +51,8 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, cell editing, column
-// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls)
+// resizing (its handles, keys and fits), pinned columns (without it, every column scrolls), summary
+// rows (without it, a grid has none)
 const FEATURES = [
     sorting(),
     navigation(),
@@ -50,6 +60,7 @@ const FEATURES = [
     editing(),
     columnResize(),
     columnPinning(),
+    summaryRows(),
 ];
 
 // React Data Grid's "common features" in one grid: a selection column, columns pinned at the
@@ -372,7 +383,7 @@ export default function CommonFeatures() {
                                 </DataGrid.HeaderCells>
                             </DataGrid.HeaderRow>
                         </DataGrid.Header>
-                        <Summary position="top" totals={totals} />
+                        <Totals position="top" totals={totals} />
                         <DataGrid.Body>
                             <DataGrid.Rows<Job>>
                                 {(row) => (
@@ -393,7 +404,7 @@ export default function CommonFeatures() {
                             </DataGrid.Rows>
                         </DataGrid.Body>
                         {/* after the body: it stays at the view's bottom edge */}
-                        <Summary position="bottom" totals={totals} />
+                        <Totals position="bottom" totals={totals} />
                     </DataGrid.Grid>
                 </DataGrid.Root>
             </SelectableIds>
@@ -436,7 +447,7 @@ function HeaderCell({ cell }: { cell: HeaderCellInfo<Job> }) {
 }
 
 /** A position's summary row: sticky, opaque, the app's figure in each cell. */
-function Summary({
+function Totals({
     position,
     totals,
 }: {
@@ -444,16 +455,13 @@ function Summary({
     totals: Totals;
 }) {
     return (
-        <DataGrid.Summary position={position} className={styles.summary}>
-            <DataGrid.SummaryRows>
+        <Summary position={position} className={styles.summary}>
+            <SummaryRows>
                 {(row) => (
-                    <DataGrid.SummaryRow
-                        row={row}
-                        className={styles.summaryRow}
-                    >
-                        <DataGrid.SummaryCells<Job>>
+                    <SummaryRow row={row} className={styles.summaryRow}>
+                        <SummaryCells<Job>>
                             {(cell) => (
-                                <DataGrid.SummaryCell
+                                <SummaryCell
                                     cell={cell}
                                     className={styles.summaryCell}
                                 >
@@ -461,12 +469,12 @@ function Summary({
                                         totals,
                                         cell.position,
                                     )}
-                                </DataGrid.SummaryCell>
+                                </SummaryCell>
                             )}
-                        </DataGrid.SummaryCells>
-                    </DataGrid.SummaryRow>
+                        </SummaryCells>
+                    </SummaryRow>
                 )}
-            </DataGrid.SummaryRows>
-        </DataGrid.Summary>
+            </SummaryRows>
+        </Summary>
     );
 }
