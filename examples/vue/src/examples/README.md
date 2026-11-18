@@ -45,8 +45,9 @@ examples/vue/src/
   `editing()` from their subpaths; their props (`:active-position`, `row-selection`,
   `cell-selection`, `@fill`, `:on-cell-edit`)
   are the root's only with them installed. A part reading a feature's keys types its model by
-  that feature (`useDataGrid<Task, [DataGridFeature<RowSelectionTypes>]>()`). `useLocalRows(...).props` hands the root its sort: an example that
-  binds them installs sorting too. The sort a view shows is `sortColumnsOf(view)`.
+  that feature (`useDataGrid<Task, [DataGridFeature<RowSelectionTypes>]>()`). `useLocalRows(..., { features })` runs the stages of the features
+  it is given (sorting, filtering, search, pagination) and its `props` hand the root their state:
+  an example that binds them installs those features too. The sort a view shows is `sortColumnsOf(view)`.
 - **React's components are sibling SFCs**, its hooks composables or `setup` code: `useState` is a
   `ref`, `useMemo` a `computed`, an effect a `watch` or `onMounted`/`onBeforeUnmount`, a context a
   `provide`/`inject` key in a sibling `.ts`.

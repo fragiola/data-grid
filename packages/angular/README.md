@@ -82,7 +82,9 @@ The same primitives as `@fragiola/data-grid-react`, mapped onto Angular:
   `templateContent(template, props)`), which `*dataGridCellContent` renders.
 - Every hook is an injection function (`injectRow`, `injectCell`, `injectRowWindow`, …)
   returning signals; `createDataGridRef()` makes a handle on a grid.
-- `/local` (`injectLocalRows`, `[dataGridLocalRows]`) is an opt-in entry point.
+- `/local` (`injectLocalRows`, `[dataGridLocalRows]`) is an opt-in entry point; its `features`
+  option (the root's list) says which stages run (`sorting()`, `filtering()`, `search()`,
+  `pagination()`), and the root's model holds their state.
 - The features are opt-in too: the root installs them (`[features]="[navigation(), sorting()]"`,
   fixed once created), and a feature's inputs and outputs are its own directive's on the root's
   element, from its entry point (each re-exports the core's of the same name):
@@ -95,6 +97,9 @@ The same primitives as `@fragiola/data-grid-react`, mapped onto Angular:
   | `/clipboard` | `clipboard()` (needs `cellRange()`) | `dataGridClipboard [beforeRangePaste]`, `(rangePaste)` |
   | `/fill` | `fillHandle()` (needs `cellRange()`) | `dataGridFill (fill)` (cells fill while it is on; `[dataGridFill]="false"` turns them off); `*dataGridFillHandle`, `injectFillHandle` |
   | `/sorting` | `sorting()` | `dataGridSorting [(sortColumns)]`, `[defaultSortColumns]` |
+  | `/filtering` | `filtering()` | `dataGridFiltering [(columnFilters)]`, `[defaultColumnFilters]` |
+  | `/search` | `search()` | `dataGridSearch [(searchText)]`, `[defaultSearchText]` |
+  | `/pagination` | `pagination()` | `dataGridPagination [(pageIndex)]`, `[(pageSize)]`, `[totalRowCount]` |
 
   Without navigation the grid is the ARIA table (`table`, `cell`, `columnheader`): no tab stop on
   it nor on a cell, and the arrow keys do nothing.
