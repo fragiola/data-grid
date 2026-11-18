@@ -7,7 +7,7 @@ import {
     signal,
 } from "@angular/core";
 import { formatNumber } from "../_kit/data";
-import { api } from "./server";
+import { peopleApi as api } from "../_kit/people-server";
 import * as styles from "./styles";
 
 // What the app asked the server, newest first.

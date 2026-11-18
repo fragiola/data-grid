@@ -95,6 +95,7 @@ export default class Sorting {
     // cell navigation (the keys, the active cell, the tab stop)
     readonly features = [sorting(), navigation()];
     readonly local = injectLocalRows(all, this.columns, {
+        features: this.features,
         defaultSortColumns: [{ columnKey: "team", direction: "ascending" }],
     });
 

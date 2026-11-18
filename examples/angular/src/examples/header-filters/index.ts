@@ -4,6 +4,7 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import { filtering } from "@fragiola/data-grid-angular/filtering";
 import {
     DataGridLocalRows,
     injectLocalRows,
@@ -125,8 +126,12 @@ export default class HeaderFilters {
     readonly columns = columns;
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop)
-    readonly features = [sorting(), navigation()];
-    readonly local = injectLocalRows(ROWS, columns);
+    // and filtering (the column filters): `injectLocalRows` applies them to the rows, the
+    // grid's model holds them
+    readonly features = [sorting(), filtering(), navigation()];
+    readonly local = injectLocalRows(ROWS, columns, {
+        features: this.features,
+    });
     readonly shown = signal(true);
     readonly shownLabel = `header-filters-shown-${++ids}`;
 

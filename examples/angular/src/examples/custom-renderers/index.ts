@@ -167,7 +167,9 @@ export default class CustomRenderers {
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), row selection, cell editing
     readonly features = [sorting(), navigation(), rowSelection(), editing()];
-    readonly local = injectLocalRows(this.rows, this.columns);
+    readonly local = injectLocalRows(this.rows, this.columns, {
+        features: this.features,
+    });
 
     readonly rowKey = (row: Task) => row.id;
 

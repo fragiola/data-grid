@@ -214,7 +214,9 @@ export default class ColumnReordering {
         columnReorder(),
         columnPinning(),
     ];
-    readonly local = injectLocalRows(all, columns);
+    readonly local = injectLocalRows(all, columns, {
+        features: this.features,
+    });
 
     constructor() {
         injectMoveAnnouncements(this.gridRef, this.moving, (message) =>

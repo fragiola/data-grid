@@ -11,12 +11,12 @@ import {
     DataGridRowSelection,
     rowSelection,
 } from "@fragiola/data-grid-angular/row-selection";
-import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { FIELDS } from "#/components/atoms/fields";
 import { SWITCH } from "#/components/ui/switch";
 import { columns } from "./columns";
+import { MEMORY_FEATURES } from "./features";
 import { FileGrid } from "./file-grid";
 import { MemoryTree } from "./memory-tree";
 import { ServerTree } from "./server-tree";
@@ -135,16 +135,8 @@ export default class TreeData {
     protected readonly styles = styles;
     protected readonly columns = columns;
     protected readonly NONE = NONE;
-    // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
-    // cell navigation (the keys, the active cell, the tab stop), row selection, pinned columns
-    // (without it, every column scrolls), row grouping (a folder expands)
-    readonly features = [
-        sorting(),
-        navigation(),
-        rowSelection(),
-        columnPinning(),
-        rowGrouping(),
-    ];
+    // the features the grid in memory installs (`./features.ts`, shared with the tree in memory)
+    readonly features = MEMORY_FEATURES;
     // the server's tree sorts nothing: navigation, row selection, the pinned columns and row
     // grouping only
     readonly lazyFeatures = [

@@ -156,7 +156,9 @@ export default class AutoRowHeights {
     // (the local rows' sort needs it, or no column sorts), cell navigation (the keys, the active
     // cell, the tab stop), pinned columns (without it, every column scrolls)
     readonly features = [sorting(), navigation(), columnPinning()];
-    readonly local = injectLocalRows(rows, this.columns);
+    readonly local = injectLocalRows(rows, this.columns, {
+        features: this.features,
+    });
 
     readonly rowKey = (row: Profile) => row.id;
 }

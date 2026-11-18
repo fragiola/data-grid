@@ -395,7 +395,9 @@ export default class CommonFeatures {
         columnPinning(),
         summaryRows(),
     ];
-    readonly local = injectLocalRows(this.jobs, this.columns);
+    readonly local = injectLocalRows(this.jobs, this.columns, {
+        features: this.features,
+    });
     /**
      * The rows "select all" covers: the ones that can be selected, worked out again as the jobs
      * change (an edit can complete one).
