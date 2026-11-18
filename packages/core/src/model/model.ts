@@ -16,37 +16,14 @@ import {
     layoutColumns,
 } from "../header/header";
 import { keptRow, sameCell } from "../navigation/navigation";
-import {
-    clamp,
-    isIndex,
-    isWidth,
-    keySet,
-    sameKeys,
-    toggledKey,
-} from "../utils/utils";
+import { clamp, isIndex, isWidth } from "../utils/utils";
 import { overlaps } from "../viewport/window";
 import { boundsOf, cellPosition } from "./bounds";
-import {
-    DEFAULT_DETAIL_HEIGHT,
-    expandedRowsOf,
-    holdsRow,
-    isRowKey,
-    newRowsOf,
-    type RowKeyHints,
-    sameRowKeys,
-    uniqueRowKeys,
-    withExpandedRows,
-    withRow,
-} from "./expansion";
+import { DEFAULT_DETAIL_HEIGHT, uniqueRowKeys } from "./expansion";
 import { followedColumn } from "./layout";
-import { done, fail, invalid, noRow, notOneOf, ok, veto } from "./result";
+import { done, fail, invalid, notOneOf, ok, veto } from "./result";
 import {
     dataRowAt,
-    groupAt,
-    groupKeyAt,
-    isGroupExpanded,
-    loadedKeyAt,
-    loadedRowKey,
     rowAt,
     rowCellValue,
     rowCountOf,
@@ -54,12 +31,7 @@ import {
     rowLoaded,
     rowMetaAt,
 } from "./source";
-import {
-    NO_SUMMARY_ROWS,
-    summaryRowAt,
-    summaryRowCounts,
-    summaryRowIndex,
-} from "./summary";
+import { NO_SUMMARY_ROWS, summaryRowAt, summaryRowIndex } from "./summary";
 import type {
     ColumnOrGroup,
     CommandContext,
@@ -170,14 +142,6 @@ type Handlers<TRow, TNode> = {
     ) => Applied<TRow, TNode, ResultOf<C, TRow, TNode>>;
 };
 
-/** The refusal of a toggle given neither a row's index nor its key. */
-const TOGGLE_BY =
-    "toggle a rowIndex, or a rowKey (a string or a finite number)";
-
-/** The refusal of a row group's toggle given neither a row's index nor a key. */
-const TOGGLE_GROUP_BY =
-    "toggle a rowIndex, or a groupKey (a string or a finite number)";
-
 /** The grid's directions. */
 const GRID_DIRECTIONS: readonly GridDirection[] = ["ltr", "rtl"];
 
@@ -221,7 +185,7 @@ function keptActiveRow<TRow, TNode>(
  * left): on the same row where it can be (`keptActiveRow`), and column. A feature's state keeps
  * to its own rules (`stateChanged`: a range's, an edit's).
  */
-function reconcile<TRow, TNode>(
+export function reconcile<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     before: DataGridState<TRow, TNode> = state,
 ): DataGridState<TRow, TNode> {
@@ -249,13 +213,13 @@ function reconcile<TRow, TNode>(
 /**
  * The state with its rows from `source` (`data.set`, and a new model): the active cell kept
  * inside them (following its row from `state`'s, unless `follow` is false: a new model's position
- * is given for its rows), the expanded rows looked for where the new source may hold them.
+ * is given for its rows). A feature keeps its own state to them (`sourceChanged`: the expanded
+ * rows looked for where the new source may hold them).
  */
 function withSource<TRow, TNode>(
     state: DataGridState<TRow, TNode>,
     source: RowSource<TRow>,
     rowKey: RowKeyGetter<TRow> | undefined,
-    hints: RowKeyHints,
     follow = true,
 ): DataGridState<TRow, TNode> {
     const sourced = {
@@ -264,8 +228,7 @@ function withSource<TRow, TNode>(
         rowCount: rowCountOf(source),
         rowKey,
     };
-    const next = reconcile(sourced, follow ? state : sourced);
-    return withExpandedRows(next, hints, newRowsOf(state, next));
+    return reconcile(sourced, follow ? state : sourced);
 }
 
 /** A source's own copy of where rows come from: the rows or the getter, and their kinds. */
@@ -349,7 +312,7 @@ function validSize(size: unknown): boolean {
 }
 
 /** A row's or a detail's height: a size, a function, or `"auto"` (measured, E2.2). */
-function validHeight(height: unknown): boolean {
+export function validHeight(height: unknown): boolean {
     return height === "auto" || validSize(height);
 }
 
@@ -357,27 +320,12 @@ function validHeight(height: unknown): boolean {
  * What a measured height starts from: a size above 0 (a window of rows of no height would hold
  * them all).
  */
-function validEstimate(size: unknown): size is number {
+export function validEstimate(size: unknown): size is number {
     return isWidth(size) && size > 0;
 }
 
-/** The state with the expanded row groups' keys (a set: the same keys reordered change nothing). */
-function withGroupKeys<TRow, TNode>(
-    state: DataGridState<TRow, TNode>,
-    keys: readonly RowKey[],
-): Applied<TRow, TNode, readonly RowKey[]> {
-    const next = sameKeys(keys, state.expandedGroupKeys)
-        ? state
-        : { ...state, expandedGroupKeys: keys };
-    return done(next, next.expandedGroupKeys);
-}
-
-/**
- * The commands' handlers. `hints` (where expanded keys were last seen) is a cache they share: a
- * dry run may fill it, and every use checks it first.
- */
+/** The commands' handlers. */
 function createHandlers<TRow, TNode>(
-    hints: RowKeyHints,
     features: GridFeatures,
 ): Handlers<TRow, TNode> {
     return {
@@ -418,7 +366,6 @@ function createHandlers<TRow, TNode>(
                 // the rows' kinds belong to the source they come with (by index): left out, none
                 sourceOf(payload),
                 "rowKey" in payload ? payload.rowKey : state.rowKey,
-                hints,
             );
             return done(next, { rowCount: next.rowCount });
         },
@@ -438,20 +385,17 @@ function createHandlers<TRow, TNode>(
                 start: Math.min(start ?? 0, state.rowCount),
                 end: Math.min(end ?? state.rowCount, state.rowCount),
             };
-            // no row in it: nothing to tell. Rows that arrived may be expanded ones
+            // no row in it: nothing to tell. Rows that arrived may be expanded ones (a feature
+            // keeps its state to them: `sourceChanged`)
             const next =
                 range.start < range.end
-                    ? withExpandedRows(
-                          {
-                              ...state,
-                              rowsChanged: {
-                                  revision: state.rowsChanged.revision + 1,
-                                  ...range,
-                              },
+                    ? {
+                          ...state,
+                          rowsChanged: {
+                              revision: state.rowsChanged.revision + 1,
+                              ...range,
                           },
-                          hints,
-                          range,
-                      )
+                      }
                     : state;
             // the active row's new data may span over its column (E1.2)
             const active = next.activePosition;
@@ -460,89 +404,6 @@ function createHandlers<TRow, TNode>(
                     ? withSnappedActive(next)
                     : next,
                 range,
-            );
-        },
-        "expanded-rows.set": (state, { rowKeys }) => {
-            const keys = validRowKeys(rowKeys);
-            if (!keys.ok) return keys;
-            const next = sameRowKeys(keys.value, state.expandedRowKeys)
-                ? state
-                : withExpandedRows(
-                      { ...state, expandedRowKeys: keys.value },
-                      hints,
-                  );
-            return done(next, next.expandedRowKeys);
-        },
-        "expanded-rows.toggle": (state, payload) => {
-            let key: RowKey;
-            if (payload.rowIndex !== undefined) {
-                // its key is unknown until it loads; a group row has no detail (Epic #87)
-                const found = loadedKeyAt(state, payload.rowIndex, (rowIndex) =>
-                    fail(
-                        "refused",
-                        groupAt(state.source, rowIndex)
-                            ? `row ${rowIndex} is a group row: it has no detail`
-                            : `row ${rowIndex} is not loaded`,
-                    ),
-                );
-                if (!found.ok) return found;
-                key = found.value;
-            } else if (isRowKey(payload.rowKey)) {
-                key = payload.rowKey;
-            } else {
-                return invalid(TOGGLE_BY);
-            }
-            const expanded = keySet(state.expandedRowKeys).has(key);
-            const keys = toggledKey(state.expandedRowKeys, key);
-            let expandedRows: readonly number[];
-            if (payload.rowIndex !== undefined) {
-                // the toggled row alone changes: the others are where they were
-                const index = payload.rowIndex;
-                hints.set(key, index);
-                // collapsed: every row showing the key goes (a key the data repeats included)
-                expandedRows = expanded
-                    ? state.expandedRows.filter(
-                          (entry) => loadedRowKey(state, entry) !== key,
-                      )
-                    : withRow(state.expandedRows, index);
-            } else {
-                expandedRows = expandedRowsOf(
-                    { ...state, expandedRowKeys: keys },
-                    hints,
-                    { start: 0, end: state.rowCount },
-                );
-            }
-            return done(
-                { ...state, expandedRowKeys: keys, expandedRows },
-                keys,
-            );
-        },
-        "row-groups.set": (state, { groupKeys }) => {
-            const keys = validRowKeys(groupKeys, "groupKeys");
-            if (!keys.ok) return keys;
-            return withGroupKeys(state, keys.value);
-        },
-        "row-groups.toggle": (state, payload) => {
-            let key: RowKey | undefined;
-            if (payload.rowIndex !== undefined) {
-                if (!isIndex(payload.rowIndex, state.rowCount)) {
-                    return noRow(payload.rowIndex);
-                }
-                key = groupKeyAt(state, payload.rowIndex);
-                if (key === undefined) {
-                    return fail(
-                        "refused",
-                        `row ${payload.rowIndex} does not expand (no group row, nor a loaded row that expands)`,
-                    );
-                }
-            } else if (isRowKey(payload.groupKey)) {
-                key = payload.groupKey;
-            } else {
-                return invalid(TOGGLE_GROUP_BY);
-            }
-            return withGroupKeys(
-                state,
-                toggledKey(state.expandedGroupKeys, key),
             );
         },
         "direction.set": (state, { direction }) => {
@@ -556,28 +417,6 @@ function createHandlers<TRow, TNode>(
                     : { ...state, direction: next },
                 next,
             );
-        },
-        "summary-rows.set": (state, payload) => {
-            const counts = summaryRowCounts(payload, state.summaryRows);
-            if (!counts) {
-                return invalid(
-                    "top and bottom must be whole numbers, 0 or more",
-                );
-            }
-            const next =
-                counts === state.summaryRows
-                    ? state
-                    : reconcile({ ...state, summaryRows: counts }, state);
-            return done(next, next.summaryRows);
-        },
-        "summary-rows.changed": (state) => {
-            const { top, bottom } = state.summaryRows;
-            // no summary row: nothing to draw again
-            const next =
-                top + bottom > 0
-                    ? { ...state, summaryRevision: state.summaryRevision + 1 }
-                    : state;
-            return done(next, next.summaryRevision);
         },
         "sizes.set": (
             state,
@@ -676,9 +515,7 @@ export function createDataGridModel<
     options: ModelOptions<TRow, TNode, TFeatures> = {},
 ): DataGridModel<TRow, TNode, TFeatures> {
     const features = composeFeatures(options.features ?? []);
-    const hints: RowKeyHints = new Map();
     const handlers: Handlers<TRow, TNode> = createHandlers<TRow, TNode>(
-        hints,
         features,
     );
     for (const [name, handler] of features.commands) {
@@ -708,26 +545,22 @@ export function createDataGridModel<
             ? options.estimatedRowHeight
             : DEFAULT_ROW_HEIGHT,
         headerRowHeight: options.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT,
-        // counts that are not whole numbers start without summary rows
-        summaryRows:
-            summaryRowCounts(options.summaryRows, NO_SUMMARY_ROWS) ??
-            NO_SUMMARY_ROWS,
-        summaryRowHeight: options.summaryRowHeight ?? DEFAULT_ROW_HEIGHT,
+        // the row bands and a size (D7): the summary rows feature's options give them (Epic #151)
+        summaryRows: NO_SUMMARY_ROWS,
+        summaryRowHeight: DEFAULT_ROW_HEIGHT,
         summaryRevision: 0,
         // a feature's to set (navigation, Epic #144): none without it
         activePosition: null,
         rowsChanged: { revision: 0, start: 0, end: 0 },
-        expandedRowKeys: uniqueRowKeys(options.expandedRowKeys ?? []) ?? [],
-        expandedGroupKeys: uniqueRowKeys(options.expandedGroupKeys ?? []) ?? [],
-        expandedRows: [],
-        detailHeight: options.detailHeight ?? DEFAULT_DETAIL_HEIGHT,
-        estimatedDetailHeight: validEstimate(options.estimatedDetailHeight)
-            ? options.estimatedDetailHeight
-            : DEFAULT_DETAIL_HEIGHT,
+        // a size (D7): row expansion's options give them (Epic #151)
+        detailHeight: DEFAULT_DETAIL_HEIGHT,
+        estimatedDetailHeight: DEFAULT_DETAIL_HEIGHT,
         direction:
             options.direction && GRID_DIRECTIONS.includes(options.direction)
                 ? options.direction
                 : undefined,
+        // the column spans in effect (Epic #151: `cellSpans()`'s), for the model's life
+        ...(features.cellSpans ? { cellSpans: features.cellSpans } : {}),
     };
     // each feature's slice, from its options (the columns laid out as declared), then the columns
     // as the features lay them out (Epic #148: an order, collapsed groups to start with)
@@ -750,7 +583,6 @@ export function createDataGridModel<
                   },
         ),
         options.rowKey,
-        hints,
         // the position given is for these rows
         false,
     );
@@ -947,15 +779,8 @@ export function createDataGridModel<
         },
         "row-height": () => state.rowHeight,
         "header-row-height": () => state.headerRowHeight,
-        "summary-rows": () => state.summaryRows,
-        "summary-row-height": () => state.summaryRowHeight,
-        "summary-row-by": ({ rowIndex }) => summaryRowAt(state, rowIndex),
         direction: () => state.direction,
-        "expanded-row-keys": () => state.expandedRowKeys,
-        "expanded-group-keys": () => state.expandedGroupKeys,
         "row-meta-by": ({ rowIndex }) => rowMetaAt(state.source, rowIndex),
-        "expanded-rows": () => state.expandedRows,
-        "detail-height": () => state.detailHeight,
     };
 
     const questions: {
@@ -963,10 +788,6 @@ export function createDataGridModel<
     } = {
         // a group row (Epic #87) has nothing to wait for
         "row-loaded": ({ rowIndex }) => rowLoaded(state.source, rowIndex),
-        "row-expanded": ({ rowIndex }) =>
-            holdsRow(state.expandedRows, rowIndex),
-        "row-group-expanded": ({ rowIndex }) =>
-            isGroupExpanded(state, rowIndex),
     };
 
     for (const [kind, own, added] of [
@@ -1083,12 +904,6 @@ export const COMMANDS = [
     "columns.set",
     "data.set",
     "rows.changed",
-    "expanded-rows.set",
-    "expanded-rows.toggle",
-    "row-groups.set",
-    "row-groups.toggle",
     "direction.set",
-    "summary-rows.set",
-    "summary-rows.changed",
     "sizes.set",
 ] satisfies (keyof CommandMap<unknown>)[];

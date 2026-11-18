@@ -1,29 +1,23 @@
 import { type Axis, createAxis, withExtraSizes } from "../axis/axis";
 import type { FeatureState } from "../feature/feature";
+import type { GridFeatures } from "../feature/registry";
 import {
     headerCellsIn,
     headerRowCount,
     isHeaderRow,
     pinnedEndFrom,
 } from "../header/header";
-import { holdsRow, holdsRowIn } from "../model/expansion";
+import { coveringCell, spansOf } from "../model/bounds";
+import { holdsRow, holdsRowIn, NO_DETAILS } from "../model/expansion";
 import { rowAt } from "../model/source";
-import {
-    type CellSpan,
-    cellCovering,
-    coveringCell,
-    hasColumnSpans,
-    rowSpanArgs,
-    type SpansState,
-    spanAt,
-    spanPartStart,
-} from "../model/spans";
 import { summaryRowIndexes } from "../model/summary";
 import type {
     CellPosition,
+    CellSpan,
     ColumnWidths,
     DataGridState,
     HeaderLayout,
+    SpansState,
 } from "../model/types";
 import { columnWidth, NO_WIDTHS } from "../model/widths";
 import { clamp, memo } from "../utils/utils";
@@ -33,7 +27,7 @@ import {
     type Range,
     sameRange,
 } from "../viewport/window";
-import type { GridView, HeaderRowView, RowSpans } from "./types";
+import type { GridView, HeaderRowView } from "./types";
 
 // The view (D9), as pure functions: the axes a state lays out, the view a render shows built from
 // the state, the windows and the sizes, and whether a new one differs from the last (scrolling
@@ -51,15 +45,16 @@ export function rowAxisOf<TRow, TNode>(
 }
 
 /**
- * The rows' axis with the expanded rows' details on top of their own heights (M2): a measured
- * detail (`"auto"`, E2.2) its height in `measured`, else its estimate.
+ * The rows' axis with the details of `rows` (the expanded rows, ascending) on top of their own
+ * heights (M2): a measured detail (`"auto"`, E2.2) its height in `measured`, else its estimate.
  */
 export function withDetails<TRow, TNode>(
     base: Axis,
     state: DataGridState<TRow, TNode>,
+    rows: readonly number[],
     measured?: { heightAt(index: number): number | undefined },
 ): Axis {
-    if (state.expandedRows.length === 0) return base;
+    if (rows.length === 0) return base;
     const { detailHeight, source } = state;
     const sizeOf =
         typeof detailHeight === "number"
@@ -73,8 +68,19 @@ export function withDetails<TRow, TNode>(
                 };
     return withExtraSizes(
         base,
-        state.expandedRows.map((index) => ({ index, size: sizeOf(index) })),
+        rows.map((index) => ({ index, size: sizeOf(index) })),
     );
+}
+
+/**
+ * The rows showing a detail, ascending (Epic #151: row expansion's, through its `rowDetails`
+ * contribution point): none without it.
+ */
+export function detailRowsOf<TRow, TNode>(
+    features: GridFeatures,
+    state: DataGridState<TRow, TNode>,
+): readonly number[] {
+    return features.rowDetails?.(state as FeatureState) ?? NO_DETAILS;
 }
 
 /**
@@ -217,58 +223,6 @@ export function createHeaderRows<TRow, TNode>(): HeaderRowsFor<TRow, TNode> {
     );
 }
 
-/**
- * The body cells of the rows a view renders where columns span (E1.2): for each loaded row with a
- * span, the columns its cells start at (`columns`, ascending, less the ones a span covers, plus a
- * span reaching into them from a column not rendered) and the spans over 1. `null` without one:
- * every row renders `columns`. Asked of the rendered rows only, along one walk per row
- * (`cellCovering`, from each cell to the next rendered column); a row without a span allocates
- * nothing.
- */
-export function rowSpansOf<TRow, TNode>(
-    state: SpansState<TRow, TNode>,
-    rows: readonly number[],
-    columns: readonly number[],
-): ReadonlyMap<number, RowSpans> | null {
-    if (!hasColumnSpans(state.columns)) return null;
-    let found: Map<number, RowSpans> | null = null;
-    /** the cell the walk is at (one for every row) */
-    const cell = { columnIndex: 0, columnSpan: 1 };
-    for (const rowIndex of rows) {
-        const args = rowSpanArgs(state, rowIndex);
-        if (!args) continue;
-        /** from the first span on: the columns the cells start at, and the spans */
-        let starts: number[] | null = null;
-        let spans: Map<number, number> | null = null;
-        /** where the next cell starts at the earliest: the end of the last one */
-        let reach = 0;
-        for (let at = 0; at < columns.length; at++) {
-            const columnIndex = columns[at] ?? 0;
-            if (columnIndex < reach) continue;
-            // a new part starts its cells again: nothing between it and the last part is asked
-            // (the columns between the rendered ones and the end part)
-            const from = Math.max(
-                reach,
-                spanPartStart(state.columns, columnIndex),
-            );
-            cellCovering(state.columns, args, from, columnIndex, cell);
-            if (cell.columnSpan > 1) {
-                // every column before the first span is a cell of its own
-                starts ??= columns.slice(0, at);
-                spans ??= new Map();
-                spans.set(cell.columnIndex, cell.columnSpan);
-            }
-            starts?.push(cell.columnIndex);
-            reach = cell.columnIndex + cell.columnSpan;
-        }
-        if (starts && spans) {
-            found ??= new Map();
-            found.set(rowIndex, { columns: starts, spans });
-        }
-    }
-    return found;
-}
-
 /** What a view is built from: the model's state, the windows, and the view's own measures. */
 export interface ViewInputs<TRow, TNode>
     extends Pick<
@@ -288,8 +242,7 @@ export interface ViewInputs<TRow, TNode>
         | "interaction"
         | "tabbable"
         | "emptyShown"
-        | "reorderableRows"
-        | "rowReorder"
+        | "heldRow"
         | "direction"
         | "features"
     > {
@@ -320,6 +273,8 @@ export function buildView<TRow, TNode>({
     } = measures;
     const active = state.activePosition;
     const columnCount = state.columns.length;
+    // the column spans in effect (`cellSpans()`), with a column that spans
+    const spans = spansOf(state);
     const endFrom = pinnedEndFrom(columnCount, endCount);
     const extraColumn = activeColumn(
         active,
@@ -327,14 +282,14 @@ export function buildView<TRow, TNode>({
         pinnedCount,
         columnWindow.rendered,
         endFrom,
-        active && hasColumnSpans(state.columns)
-            ? spanAt(state, active.rowIndex, active.columnIndex)
+        active && spans
+            ? spans.spanAt(state, active.rowIndex, active.columnIndex)
             : undefined,
     );
     const rowsOfHeader = headerRowCount(state);
     const { start, end } = columnWindow.rendered;
-    // the active body row (a summary row is always rendered), and the row a drag is moving
-    // (E2.3): its handle holds the pointer while the edge scroll takes it out of the window
+    // the active body row (a summary row is always rendered), and the row a feature holds (a
+    // row's drag, E2.3: its handle holds the pointer while the edge scroll takes it away)
     const rows = indexes(
         rowWindow.rendered.start,
         rowWindow.rendered.end,
@@ -342,9 +297,9 @@ export function buildView<TRow, TNode>({
             ? active.rowIndex
             : null,
     );
-    const dragged = measures.rowReorder?.rowIndex;
+    const dragged = measures.heldRow;
     if (
-        dragged !== undefined &&
+        dragged !== null &&
         dragged < state.rowCount &&
         !rows.includes(dragged)
     ) {
@@ -364,14 +319,15 @@ export function buildView<TRow, TNode>({
         rows,
         columns,
         // the summary rows' cells span too (E2.1)
-        rowSpans: rowSpansOf(
-            state,
-            summaryRows.top + summaryRows.bottom > 0 &&
-                hasColumnSpans(state.columns)
-                ? [...rows, ...summaryRowIndexes(state)]
-                : rows,
-            columns,
-        ),
+        rowSpans: spans
+            ? spans.rowSpans(
+                  state,
+                  summaryRows.top + summaryRows.bottom > 0
+                      ? [...rows, ...summaryRowIndexes(state)]
+                      : rows,
+                  columns,
+              )
+            : null,
         renderedRows: rowWindow.rendered,
         renderedColumns: columnWindow.rendered,
         rowBase: rowAxis.offsetOf(rowWindow.rendered.start),
@@ -397,9 +353,8 @@ export function buildView<TRow, TNode>({
         source: state.source,
         active,
         rowsOrdered: measures.features.rowsOrdered(state as FeatureState),
-        expandedRows: state.expandedRows,
+        expandedRows: detailRowsOf(measures.features, state),
         rowKey: state.rowKey,
-        expandedGroupKeys: state.expandedGroupKeys,
         givenDirection: state.direction,
         measuredRows: state.rowHeight === "auto",
         measuredDetails: state.detailHeight === "auto",
@@ -437,12 +392,10 @@ const VIEW_KEYS = [
     "pinnedEndColumnCount",
     "expandedRows",
     "rowKey",
-    "expandedGroupKeys",
     "interaction",
     "tabbable",
     "emptyShown",
-    "reorderableRows",
-    "rowReorder",
+    "heldRow",
     "direction",
     "givenDirection",
     "measuredRows",
@@ -467,7 +420,7 @@ export function viewChanged<TRow, TNode>(
     for (const key of next.features.viewKeys) {
         if (shared[key] !== fresh[key]) return true;
     }
-    const { expandedRows, renderedRows, active, rowReorder } = next;
+    const { expandedRows, renderedRows, active, heldRow } = next;
     // the visible area matters only to an empty grid, and its width to the details on
     // screen (as wide as the view): a resize alone renders nothing else
     return (
@@ -475,11 +428,10 @@ export function viewChanged<TRow, TNode>(
             (current.viewportWidth !== next.viewportWidth ||
                 current.viewportBodyHeight !== next.viewportBodyHeight)) ||
         (current.viewportWidth !== next.viewportWidth &&
-            // an expanded row it renders (its rendered rows, the active row, a dragged row)
+            // an expanded row it renders (its rendered rows, the active row, a held row)
             (holdsRowIn(expandedRows, renderedRows.start, renderedRows.end) ||
                 (active !== null && holdsRow(expandedRows, active.rowIndex)) ||
-                (rowReorder !== null &&
-                    holdsRow(expandedRows, rowReorder.rowIndex))))
+                (heldRow !== null && holdsRow(expandedRows, heldRow))))
     );
 }
 
@@ -489,7 +441,7 @@ export function viewChanged<TRow, TNode>(
  */
 export function elementPosition<TRow, TNode>(
     position: CellPosition,
-    state: SpansState<TRow, TNode> & Pick<DataGridState<TRow, TNode>, "header">,
+    state: SpansState<TRow, TNode>,
 ): CellPosition {
     const cell = coveringCell(state, position);
     return !cell || cell === position

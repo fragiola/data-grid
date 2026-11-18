@@ -47,7 +47,7 @@ bare.get("sort-columns");
 bare.is("column-sortable", { columnKey: "age" });
 // @ts-expect-error: its options neither
 createDataGridModel({ columns, rows, sortColumns: [] });
-bare.run("summary-rows.changed");
+bare.run("rows.changed");
 
 // with it, they do, typed
 const sorted = createDataGridModel({
@@ -67,7 +67,7 @@ sorted.run("sort-columns.set", {
 // @ts-expect-error: a payload of the wrong shape
 sorted.run("sort-columns.toggle", { column: "age" });
 // the core's keys are still there, the row type still flows
-sorted.run("summary-rows.changed");
+sorted.run("rows.changed");
 const person: Person | undefined = sorted.get("row-by", { index: 0 });
 
 // a middleware narrows a feature's commands too, and one written for any grid fits it
@@ -96,7 +96,7 @@ const anyFeatures: DataGridModel<Person> = sorted;
 anyFeatures.run("active-positon.clear");
 // @ts-expect-error
 anyFeatures.get("nope");
-anyFeatures.run("summary-rows.changed");
+anyFeatures.run("rows.changed");
 const noFeatures: DataGridModel<Person> = bare;
 // a middleware written for a grid without features fits one with them
 declare const coreOnly: Middleware<Person, unknown, []>;

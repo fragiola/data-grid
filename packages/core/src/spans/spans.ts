@@ -1,26 +1,21 @@
-import {
-    isHeaderRow,
-    keptSpan,
-    partEnd,
-    partStart,
-    pinnedPartsOf,
-} from "../header/header";
+import type { RowSpans } from "../engine/types";
+import { keptSpan, partEnd, partStart, pinnedPartsOf } from "../header/header";
+import { dataRowAt, rowMetaAt } from "../model/source";
+import { summaryRowAt } from "../model/summary";
+import type {
+    CellSpan,
+    CellSpans,
+    ColSpanArgs,
+    Column,
+    SpansState,
+} from "../model/types";
 import { lowerBound } from "../utils/utils";
-import { dataRowAt, rowMetaAt } from "./source";
-import { summaryRowAt } from "./summary";
-import type { CellPosition, ColSpanArgs, Column, DataGridState } from "./types";
 
-// Column spans (Epic #85, E1.2): a column's `colSpan` makes one of its cells cover the columns
+// Column spans (Epic #85, E1.2; `cellSpans()`'s since Epic #151): a column's `colSpan` makes one of its cells cover the columns
 // after it, within its part (pinned at the start, at the end, or not). Pure, and asked only for
 // the cells a render or a move needs: a body cell's span depends on its row, so nothing is
 // worked out for every row. A row's cells partition each part from its start: a column a span
 // covers is never asked.
-
-/** A cell's columns in its row: its first column, and how many it spans. */
-export interface CellSpan {
-    readonly columnIndex: number;
-    readonly columnSpan: number;
-}
 
 /** What a grid's columns ask of the spans: worked out once per list. */
 interface SpanColumns {
@@ -50,7 +45,7 @@ function spanColumnsOf<TRow, TNode>(
 }
 
 /** Whether a column of the grid has a `colSpan`: without one, every cell is one column. */
-export function hasColumnSpans<TRow, TNode>(
+function hasColumnSpans<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
 ): boolean {
     return spanColumnsOf(columns).indexes.length > 0;
@@ -60,7 +55,7 @@ export function hasColumnSpans<TRow, TNode>(
  * The first column of the part holding `columnIndex` among the grid's columns (`partStart` over
  * their pinned parts): where a row's cells start again.
  */
-export function spanPartStart<TRow, TNode>(
+function spanPartStart<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
     columnIndex: number,
 ): number {
@@ -88,40 +83,12 @@ function columnSpanOf<TRow, TNode>(
 }
 
 /**
- * What a body cell's span is read from: the columns and the rows (the summary rows', E2.1, with
- * the header's depth and the row count their indexes follow).
- */
-export type SpansState<TRow, TNode = unknown> = Pick<
-    DataGridState<TRow, TNode>,
-    "columns" | "source" | "rowCount" | "header" | "summaryRows"
->;
-
-/**
- * Whether the active position is in a body cell (E1.2): on its row, its column one the cell's
- * span (from `columnIndex`, `columnSpan` columns) holds. What the navigation's `cell-active` question and a cell's
- * part both ask.
- */
-export function activeInCell(
-    active: CellPosition | null,
-    rowIndex: number,
-    columnIndex: number,
-    columnSpan: number,
-): boolean {
-    return (
-        active !== null &&
-        active.rowIndex === rowIndex &&
-        active.columnIndex >= columnIndex &&
-        active.columnIndex < columnIndex + columnSpan
-    );
-}
-
-/**
  * The walk of a row's cells (E1.2): the cell covering `columnIndex`, its row's cells starting
  * again at `from` (its part's start, or the column right after a cell), written into `cell` (a
  * walk reuses one). A column with no `colSpan` is a cell of its own, so only the ones with one
  * between them are asked, each once, and a column a span covers never is.
  */
-export function cellCovering<TRow, TNode>(
+function cellCovering<TRow, TNode>(
     columns: readonly Column<TRow, TNode>[],
     args: ColSpanArgs<TRow>,
     from: number,
@@ -159,7 +126,7 @@ export function cellCovering<TRow, TNode>(
  * What a loaded row's cells are asked with, a summary row's (E2.1) or a group row's (Epic #87), or
  * `null` for a row not loaded (or no column spans).
  */
-export function rowSpanArgs<TRow, TNode>(
+function rowSpanArgs<TRow, TNode>(
     state: SpansState<TRow, TNode>,
     rowIndex: number,
 ): ColSpanArgs<TRow> | null {
@@ -178,7 +145,7 @@ export function rowSpanArgs<TRow, TNode>(
  * a column before it in its part (`cellCovering` from the part's start); a row not loaded spans
  * nothing.
  */
-export function spanAt<TRow, TNode>(
+function spanAt<TRow, TNode>(
     state: SpansState<TRow, TNode>,
     rowIndex: number,
     columnIndex: number,
@@ -195,19 +162,63 @@ export function spanAt<TRow, TNode>(
 }
 
 /**
- * The cell covering a position, at its own position (G4, E1.2): a header cell's top row and
- * first column (`header.cellAt`), a body or summary row cell's first column under a span
- * (`spanAt`) on its row; `undefined` for a header position no cell covers. What the model snaps
- * an active position to and the engine finds a cell's element by.
+ * The body cells of the rows a view renders where columns span (E1.2): for each loaded row with a
+ * span, the columns its cells start at (`columns`, ascending, less the ones a span covers, plus a
+ * span reaching into them from a column not rendered) and the spans over 1. `null` without one:
+ * every row renders `columns`. Asked of the rendered rows only, along one walk per row
+ * (`cellCovering`, from each cell to the next rendered column); a row without a span allocates
+ * nothing.
  */
-export function coveringCell<TRow, TNode>(
-    state: SpansState<TRow, TNode> & Pick<DataGridState<TRow, TNode>, "header">,
-    position: CellPosition,
-): CellPosition | undefined {
-    const { rowIndex, columnIndex } = position;
-    if (isHeaderRow(rowIndex, state.header)) {
-        return state.header.cellAt(rowIndex, columnIndex);
+function rowSpansOf<TRow, TNode>(
+    state: SpansState<TRow, TNode>,
+    rows: readonly number[],
+    columns: readonly number[],
+): ReadonlyMap<number, RowSpans> | null {
+    if (!hasColumnSpans(state.columns)) return null;
+    let found: Map<number, RowSpans> | null = null;
+    /** the cell the walk is at (one for every row) */
+    const cell = { columnIndex: 0, columnSpan: 1 };
+    for (const rowIndex of rows) {
+        const args = rowSpanArgs(state, rowIndex);
+        if (!args) continue;
+        /** from the first span on: the columns the cells start at, and the spans */
+        let starts: number[] | null = null;
+        let spans: Map<number, number> | null = null;
+        /** where the next cell starts at the earliest: the end of the last one */
+        let reach = 0;
+        for (let at = 0; at < columns.length; at++) {
+            const columnIndex = columns[at] ?? 0;
+            if (columnIndex < reach) continue;
+            // a new part starts its cells again: nothing between it and the last part is asked
+            // (the columns between the rendered ones and the end part)
+            const from = Math.max(
+                reach,
+                spanPartStart(state.columns, columnIndex),
+            );
+            cellCovering(state.columns, args, from, columnIndex, cell);
+            if (cell.columnSpan > 1) {
+                // every column before the first span is a cell of its own
+                starts ??= columns.slice(0, at);
+                spans ??= new Map();
+                spans.set(cell.columnIndex, cell.columnSpan);
+            }
+            starts?.push(cell.columnIndex);
+            reach = cell.columnIndex + cell.columnSpan;
+        }
+        if (starts && spans) {
+            found ??= new Map();
+            found.set(rowIndex, { columns: starts, spans });
+        }
     }
-    const start = spanAt(state, rowIndex, columnIndex).columnIndex;
-    return start === columnIndex ? position : { rowIndex, columnIndex: start };
+    return found;
 }
+
+/** The column spans as the core and the other features ask them (`spansOf`): one for every grid. */
+export const SPANS: CellSpans = {
+    hasSpans: hasColumnSpans,
+    spanAt,
+    rowArgs: rowSpanArgs,
+    covering: cellCovering,
+    partStart: spanPartStart,
+    rowSpans: rowSpansOf,
+};

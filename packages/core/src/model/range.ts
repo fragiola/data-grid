@@ -1,15 +1,13 @@
 import type { CellRangeState } from "../range/types";
 import { clamp, isIndex } from "../utils/utils";
 import type { Range } from "../viewport/window";
-import {
-    cellCovering,
-    hasColumnSpans,
-    rowSpanArgs,
-    type SpansState,
-    spanAt,
-    spanPartStart,
-} from "./spans";
-import type { CellPosition, CellRange, DataGridState } from "./types";
+import { spansOf } from "./bounds";
+import type {
+    CellPosition,
+    CellRange,
+    DataGridState,
+    SpansState,
+} from "./types";
 
 // A range of cells (Epic #88, E4.1–E4.2): the model keeps one, `{ anchor, focus }`, between body
 // cells (rows 0 to the last, the grid's columns: never the header nor the summary rows; a group
@@ -174,10 +172,9 @@ export function isCellSelected<TRow>(
 ): boolean {
     const range = state.selectedRange;
     if (!state.cellSelection || !range) return false;
-    if (!hasColumnSpans(state.columns)) {
-        return inRange(range, rowIndex, columnIndex);
-    }
-    const span = spanAt(state, rowIndex, columnIndex);
+    const spans = spansOf(state);
+    if (!spans) return inRange(range, rowIndex, columnIndex);
+    const span = spans.spanAt(state, rowIndex, columnIndex);
     return inRange(range, rowIndex, span.columnIndex, span.columnSpan);
 }
 
@@ -216,7 +213,8 @@ export function spannedArea<TRow>(
     area: CellRange,
 ): CellRange {
     const { columns } = state;
-    if (!hasColumnSpans(columns)) return area;
+    const spans = spansOf(state);
+    if (!spans) return area;
     let start = area.anchor.columnIndex;
     let end = area.focus.columnIndex;
     /** the cell the walk is at (one for every row) */
@@ -229,12 +227,12 @@ export function spannedArea<TRow>(
             rowIndex <= area.focus.rowIndex;
             rowIndex++
         ) {
-            const args = rowSpanArgs(state, rowIndex);
+            const args = spans.rowArgs(state, rowIndex);
             if (!args) continue;
-            cellCovering(
+            spans.covering(
                 columns,
                 args,
-                spanPartStart(columns, start),
+                spans.partStart(columns, start),
                 start,
                 cell,
             );
@@ -242,7 +240,13 @@ export function spannedArea<TRow>(
                 start = cell.columnIndex;
                 widened = true;
             }
-            cellCovering(columns, args, spanPartStart(columns, end), end, cell);
+            spans.covering(
+                columns,
+                args,
+                spans.partStart(columns, end),
+                end,
+                cell,
+            );
             if (cell.columnIndex + cell.columnSpan - 1 > end) {
                 end = cell.columnIndex + cell.columnSpan - 1;
                 widened = true;

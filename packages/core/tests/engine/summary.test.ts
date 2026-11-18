@@ -7,11 +7,10 @@ import {
     cellBox,
     cellSpan,
     rowColumns,
-    summaryCellPart,
     summaryHeight,
-    summaryRowPart,
 } from "../../src";
 import { buildView, viewChanged } from "../../src/engine/view";
+import { summaryCellPart, summaryRowPart } from "../../src/summary-rows";
 import {
     cellElement,
     fakeContentWidth,

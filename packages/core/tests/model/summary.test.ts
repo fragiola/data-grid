@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     type ColSpanArgs,
     type Column,
-    type DataGridModelOptions,
+    type ModelOptions,
     summaryRowAt,
     summaryRowIndex,
     summaryRowsOf,
@@ -15,7 +15,7 @@ import {
     nextPosition,
     rowLine,
 } from "../../src/navigation/navigation";
-import { gridModel } from "../features";
+import { type Features, gridModel } from "../features";
 
 // Summary rows (Epic #86, E2.1): the model keeps how many there are at the top and at the bottom,
 // and their row indexes extend the grid's on both sides, the header's (-depth … -1) and the
@@ -36,7 +36,7 @@ const column = (
 
 const COLUMNS = Array.from({ length: 5 }, (_, i) => column(`c${i}`));
 
-function modelOf(options: DataGridModelOptions<Row> = {}) {
+function modelOf(options: ModelOptions<Row, unknown, Features> = {}) {
     return gridModel<Row>({
         columns: COLUMNS,
         rows: Array.from({ length: 10 }, (_, id) => ({ id })),

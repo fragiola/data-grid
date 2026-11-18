@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sameRowKeys } from "../../src";
-import { holdsRow, holdsRowIn, withRow } from "../../src/model/expansion";
+import { holdsRow, holdsRowIn } from "../../src/model/expansion";
+import { withRow } from "../../src/row-expansion/expansion";
 
 // The model's small rules, tested on their own: the helpers the model, the engine and React share.
 

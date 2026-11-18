@@ -8,7 +8,6 @@ import {
     ariaEmptyRowIndex,
     ariaHeaderCellSpans,
     ariaRowCount,
-    ariaRowDetail,
     ariaRowIndex,
     cellRole,
     gridRole,
@@ -28,22 +27,12 @@ import {
     type CellState,
     cellBox,
     cellPart,
-    type GroupToggleState,
-    groupTogglePart,
     type HeaderCellPart,
     type HeaderCellState,
     headerCellPart,
-    type RowDetailState,
-    type RowDragHandleState,
     type RowState,
-    rowDetailPart,
-    rowDragHandlePart,
     rowPart,
     type SummaryCellPart,
-    type SummaryCellState,
-    type SummaryRowState,
-    summaryCellPart,
-    summaryRowPart,
 } from "../engine/parts";
 import type { DataGridEngine, EditDraft, GridView } from "../engine/types";
 import {
@@ -61,8 +50,6 @@ import type {
     GroupRow,
     HeaderCellLayout,
     RowMeta,
-    SummaryPosition,
-    SummaryRowView,
 } from "../model/types";
 
 /**
@@ -202,38 +189,6 @@ export interface GridCellInfo<TRow = unknown, TNode = unknown> {
     readonly meta: RowMeta | undefined;
 }
 
-/** A summary row's cell, as `DataGrid.SummaryCells` hands it to its children. */
-export interface GridSummaryCellInfo<TRow = unknown, TNode = unknown> {
-    readonly rowIndex: number;
-    readonly columnIndex: number;
-    readonly column: Column<TRow, TNode>;
-    readonly position: SummaryPosition;
-    readonly summaryIndex: number;
-}
-
-/** The rows a render shows, with their data, keys and kinds (Epic #87: a group row, a depth). */
-export function rowsOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-): GridRowInfo<TRow>[] {
-    const { source } = view;
-    return view.rows.map((rowIndex) => {
-        // read once: its kind (a grid without them asks for none), its data row, and its key by
-        // the core's one rule (the engine's measured keys share it)
-        const meta = rowMetaAt(source, rowIndex);
-        const row = dataRowAt(source, rowIndex, meta);
-        const group = meta?.group;
-        return {
-            rowIndex,
-            row,
-            loaded: row !== undefined || group !== undefined,
-            key: rowKeyOf(view, rowIndex, meta, row) ?? rowIndex,
-            group,
-            depth: depthOf(meta),
-            meta,
-        };
-    });
-}
-
 /**
  * A rendered row's key among its siblings: the app's key when it gives some (a row not loaded yet
  * has none: its index), else its index, so a row loading in place keeps its elements (and
@@ -252,7 +207,7 @@ export function rowElementKey<TRow, TNode>(
  * A row's cells (a body row's or a summary row's), each made from its column: one per rendered
  * column, but a cell spanning columns (Epic #85) stands for the ones it covers (`rowColumns`).
  */
-function cellsOf<TRow, TNode, Cell>(
+export function cellsOf<TRow, TNode, Cell>(
     view: GridView<TRow, TNode>,
     rowIndex: number,
     cell: (columnIndex: number, column: Column<TRow, TNode>) => Cell,
@@ -281,24 +236,6 @@ export function rowCellsOf<TRow, TNode>(
         value: rowCellValue(column, row.rowIndex, group, row.row),
         group,
         meta,
-    }));
-}
-
-/**
- * The cells a summary row renders, with their columns: one per rendered column, but a cell
- * spanning columns (a column's `colSpan` asked with `type: "summary"`) stands for the ones it
- * covers.
- */
-export function summaryCellsOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    row: SummaryRowView,
-): GridSummaryCellInfo<TRow, TNode>[] {
-    return cellsOf(view, row.rowIndex, (columnIndex, column) => ({
-        rowIndex: row.rowIndex,
-        columnIndex,
-        column,
-        position: row.position,
-        summaryIndex: row.summaryIndex,
     }));
 }
 
@@ -423,7 +360,11 @@ export function cellProps<TRow, TNode>(
  * its props (`cellProps`) on its box in its row, `height` tall (default: its row's own height),
  * or in a `measured` row as tall as its row's tallest cell.
  */
-function cellPartProps<TRow, TNode, P extends CellPart | SummaryCellPart>(
+export function cellPartProps<
+    TRow,
+    TNode,
+    P extends CellPart | SummaryCellPart,
+>(
     view: GridView<TRow, TNode>,
     part: P,
     cell: { readonly rowIndex: number; readonly columnIndex: number },
@@ -459,31 +400,6 @@ export function cellPartOf<TRow, TNode>(
         undefined,
         measuredRow(view, cell.loaded),
     );
-}
-
-/** A summary row cell's state and props (`useSummaryCell`), with its span (as a body cell's). */
-export function summaryCellPartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: GridSummaryCellInfo<TRow, TNode>,
-): PartResult<SummaryCellState> & { columnSpan: number; measured: boolean } {
-    return cellPartProps(
-        view,
-        summaryCellPart(view, cell),
-        cell,
-        view.summaryRowHeight,
-    );
-}
-
-/** A header cell's state and props (`useHeaderCell`): at its row's top, spanning down past it. */
-export function headerCellPartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    cell: HeaderCellLayout<TRow, TNode>,
-): PartResult<HeaderCellState> {
-    const part = headerCellPart(view, cell);
-    return {
-        state: part.state,
-        props: cellProps(view, part, headerCellBox(view, cell)),
-    };
 }
 
 /**
@@ -541,93 +457,6 @@ export function rowPartOf<TRow, TNode>(
 }
 
 /**
- * A row's detail (M3): its state, and the props for its element (rendered only while
- * `state.expanded`). One cell of its row spanning every column (M4), in the row's flow below its
- * cells, sticky at the view's start (the engine writes its `left`), as wide as the visible area.
- */
-export function rowDetailPartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    row: GridRowInfo<TRow>,
-): PartResult<RowDetailState> {
-    const { state, box } = rowDetailPart(view, row.rowIndex);
-    if (!box) return { state, props: { style: {} } };
-    const flex = rowDisplay(view) === "flex";
-    // a measured detail is as tall as its content (Epic #86)
-    const height = view.measuredDetails ? {} : { height: box.height };
-    return {
-        state,
-        props: {
-            role: cellRole(view),
-            ...ariaRowDetail(view),
-            ...dataAttributes({
-                "grid-part": "row-detail",
-                "row-index": row.rowIndex,
-            }),
-            // in a measured row, the area below its cells'
-            style: measuredRow(view, row.loaded)
-                ? {
-                      position: "sticky",
-                      display: "block",
-                      gridArea: DETAIL_AREA,
-                      width: box.width,
-                      ...height,
-                      boxSizing: "border-box",
-                  }
-                : {
-                      position: "sticky",
-                      display: "block",
-                      marginTop: box.top,
-                      // in a row of pinned cells (flex), from the row's start, never shrunk,
-                      // and measured, never stretched to the row's height
-                      ...(flex
-                          ? {
-                                [inlineSide(view.direction, "margin")]:
-                                    box.start,
-                                flexShrink: 0,
-                                ...(view.measuredDetails
-                                    ? { alignSelf: "flex-start" as const }
-                                    : {}),
-                            }
-                          : {}),
-                      width: box.width,
-                      ...height,
-                      boxSizing: "border-box",
-                  },
-        },
-    };
-}
-
-/**
- * A summary row's state and props (Epic #86): ARIA (`role="row"`, its `aria-rowindex` after the
- * header's or the body's rows), `data-summary`, and its structural style in its summary (from
- * `rowLeft`, a summary row tall; a flex container with pinned columns, as a body row).
- */
-export function summaryRowPartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    row: SummaryRowView,
-): PartResult<SummaryRowState> {
-    const { state } = summaryRowPart(view, row);
-    return {
-        state,
-        props: {
-            role: "row",
-            "aria-rowindex": ariaRowIndex(view, row.rowIndex),
-            ...dataAttributes({
-                "grid-part": "summary-row",
-                summary: row.position,
-                "row-index": row.rowIndex,
-                active: state.active,
-            }),
-            style: rowStyle(
-                view,
-                row.summaryIndex * view.summaryRowHeight,
-                view.summaryRowHeight,
-            ),
-        },
-    };
-}
-
-/**
  * A control the app renders in a part (a resizer, a row's drag handle, a fill handle, a group's
  * toggle): its state, and while it has its attributes (`undefined`: none to render), them and
  * its `data-*` (`dataOf` its state, a module function: nothing is allocated for a control with
@@ -644,47 +473,6 @@ export function controlPart<S>(
             ? { ...attributes, ...dataAttributes(dataOf(state)), style: {} }
             : { style: {} },
     };
-}
-
-const dragHandleData = (state: RowDragHandleState) => ({
-    "grid-part": "row-drag-handle",
-    reorderable: state.reorderable,
-    dragging: state.dragging,
-});
-
-const groupToggleData = (state: GroupToggleState) => ({
-    "grid-part": "group-toggle",
-    expanded: state.expanded,
-});
-
-/** A row's drag handle's state and props (`useRowDragHandle`). */
-export function rowDragHandlePartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    row: { readonly rowIndex: number; readonly loaded: boolean },
-): PartResult<RowDragHandleState> {
-    const { state, attributes } = rowDragHandlePart(
-        view,
-        row.rowIndex,
-        row.loaded,
-    );
-    return controlPart(state, attributes, dragHandleData);
-}
-
-/** A row group's toggle's state and props (`useGroupToggle`): none under a row that does not expand. */
-export function groupTogglePartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    row: {
-        readonly rowIndex: number;
-        /** the row's kind as read (a row's or a cell's info carries it): not read again */
-        readonly meta?: RowMeta | undefined;
-    },
-): PartResult<GroupToggleState> {
-    const { state, attributes } = groupTogglePart(
-        view,
-        row.rowIndex,
-        "meta" in row ? { meta: row.meta } : undefined,
-    );
-    return controlPart(state, attributes, groupToggleData);
 }
 
 /** The state of a group's label: the key of the header cell it labels. */
@@ -845,42 +633,6 @@ export function headerRowPartOf<TRow, TNode>(
     };
 }
 
-/** The state of a position's summary rows. */
-export interface SummaryState {
-    readonly position: SummaryPosition;
-}
-
-/**
- * A position's summary rows' state and props, sticky: the top ones under the header, the bottom
- * ones as far down as the view's bottom edge (a sticky inset's percentage is the scroll
- * container's height, so no measure places them).
- */
-export function summaryPartOf<TRow, TNode>(
-    view: GridView<TRow, TNode>,
-    position: SummaryPosition,
-): PartResult<SummaryState> {
-    const height = summaryHeight(view, position);
-    return {
-        state: { position },
-        props: {
-            role: "rowgroup",
-            ...dataAttributes({ "grid-part": "summary", summary: position }),
-            style: {
-                position: "sticky",
-                top:
-                    position === "top"
-                        ? view.headerHeight
-                        : `calc(100% - ${height}px)`,
-                // above the rows scrolling under them, below the header (E5.2)
-                zIndex: SUMMARY_LAYER,
-                display: "block",
-                height,
-                boxSizing: "border-box",
-            },
-        },
-    };
-}
-
 /**
  * The structural style of the empty state's row (and of its cell as a table's): a block the
  * area's full height.
@@ -1032,17 +784,37 @@ export function cellEditOf<TRow, TNode>(
     );
 }
 
-/** What a summary row's cell shows by default: its column's `renderSummaryCell`, else nothing. */
-export function summaryCellContent<TRow, TNode>(
-    cell: GridSummaryCellInfo<TRow, TNode>,
-): TNode | null {
-    const { column } = cell;
-    return (
-        column.renderSummaryCell?.({
-            position: cell.position,
-            summaryIndex: cell.summaryIndex,
-            column,
-            columnIndex: cell.columnIndex,
-        }) ?? null
-    );
+/** The rows a render shows, with their data, keys and kinds (Epic #87: a group row, a depth). */
+export function rowsOf<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+): GridRowInfo<TRow>[] {
+    const { source } = view;
+    return view.rows.map((rowIndex) => {
+        // read once: its kind (a grid without them asks for none), its data row, and its key by
+        // the core's one rule (the engine's measured keys share it)
+        const meta = rowMetaAt(source, rowIndex);
+        const row = dataRowAt(source, rowIndex, meta);
+        const group = meta?.group;
+        return {
+            rowIndex,
+            row,
+            loaded: row !== undefined || group !== undefined,
+            key: rowKeyOf(view, rowIndex, meta, row) ?? rowIndex,
+            group,
+            depth: depthOf(meta),
+            meta,
+        };
+    });
+}
+
+/** A header cell's state and props (`useHeaderCell`): at its row's top, spanning down past it. */
+export function headerCellPartOf<TRow, TNode>(
+    view: GridView<TRow, TNode>,
+    cell: HeaderCellLayout<TRow, TNode>,
+): PartResult<HeaderCellState> {
+    const part = headerCellPart(view, cell);
+    return {
+        state: part.state,
+        props: cellProps(view, part, headerCellBox(view, cell)),
+    };
 }

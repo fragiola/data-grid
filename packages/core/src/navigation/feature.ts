@@ -7,9 +7,14 @@ import {
     type FeatureState,
 } from "../feature/feature";
 import { isHeaderRow } from "../header/header";
-import { boundsOf, cellPosition, isCell } from "../model/bounds";
+import {
+    activeInCell,
+    boundsOf,
+    cellPosition,
+    isCell,
+    spansOf,
+} from "../model/bounds";
 import { done, fail, invalid, notOneOf } from "../model/result";
-import { activeInCell, spanAt } from "../model/spans";
 import type { CellPosition } from "../model/types";
 import { DIRECTIONS, nextPosition, sameCell } from "./navigation";
 import type { NavigationProps, NavigationTypes } from "./types";
@@ -110,12 +115,17 @@ const NAVIGATION = defineFeature<NavigationTypes>({
             if (isHeaderRow(position.rowIndex, state.header)) {
                 return sameCell(active, position, state.header.cellAt);
             }
-            const span = spanAt(state, position.rowIndex, position.columnIndex);
+            // the cell's columns under column spans (`cellSpans()`), else its own
+            const span = spansOf(state)?.spanAt(
+                state,
+                position.rowIndex,
+                position.columnIndex,
+            );
             return activeInCell(
                 active,
                 position.rowIndex,
-                span.columnIndex,
-                span.columnSpan,
+                span?.columnIndex ?? position.columnIndex,
+                span?.columnSpan ?? 1,
             );
         },
         "row-active": (state, { rowIndex }) =>

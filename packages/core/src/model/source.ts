@@ -237,27 +237,21 @@ export function groupKeyAt<TRow>(
         : undefined;
 }
 
-/** Whether a row group's key (`groupKeyAt`) is expanded: among the expanded group keys. */
+/**
+ * Whether a row group's key (`groupKeyAt`) is expanded: among the expanded group keys (row
+ * grouping's, Epic #151: none without it).
+ */
 export function groupExpanded(
-    state: Pick<DataGridState<unknown>, "expandedGroupKeys">,
+    state: { readonly expandedGroupKeys?: readonly RowKey[] | undefined },
     groupKey: RowKey | undefined,
 ): boolean {
+    const keys = state.expandedGroupKeys;
     return (
         groupKey !== undefined &&
-        state.expandedGroupKeys.length > 0 &&
-        keySet(state.expandedGroupKeys).has(groupKey)
+        keys !== undefined &&
+        keys.length > 0 &&
+        keySet(keys).has(groupKey)
     );
-}
-
-/**
- * Whether a row heads an expanded row group (Epic #87): it expands (`groupKeyAt`) and its key is
- * among the expanded group keys.
- */
-export function isGroupExpanded<TRow>(
-    state: RowsState<TRow> & Pick<DataGridState<TRow>, "expandedGroupKeys">,
-    rowIndex: number,
-): boolean {
-    return groupExpanded(state, groupKeyAt(state, rowIndex));
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { Size } from "../axis/axis";
+import type { RowSpans } from "../engine/types";
 import type {
     AnyFeatures,
     DataGridFeatures,
@@ -54,6 +55,67 @@ export type ColSpanArgs<TRow> =
           readonly rowIndex: number;
           readonly row: TRow;
       };
+
+/** A body (or summary row) cell's columns in its row: its first column, and how many it spans. */
+export interface CellSpan {
+    readonly columnIndex: number;
+    readonly columnSpan: number;
+}
+
+/**
+ * What a body cell's span is read from: the columns and the rows (the summary rows', E2.1, with
+ * the header's depth and the row count their indexes follow).
+ */
+export type SpansState<TRow, TNode = unknown> = Pick<
+    DataGridState<TRow, TNode>,
+    "columns" | "source" | "rowCount" | "header" | "summaryRows" | "cellSpans"
+>;
+
+/**
+ * The body cells' column spans (Epic #85, E1.2; `cellSpans()`'s since Epic #151), as the core,
+ * the navigation, the ranges and the clipboard ask them (`spansOf`): pure, asked only for the
+ * cells a render or a move needs.
+ */
+export interface CellSpans {
+    /** whether a column of these has a `colSpan`: without one, every cell is one column */
+    hasSpans<TRow, TNode>(columns: readonly Column<TRow, TNode>[]): boolean;
+    /** the body (or summary row) cell covering a position: its first column, and its span */
+    spanAt<TRow, TNode>(
+        state: SpansState<TRow, TNode>,
+        rowIndex: number,
+        columnIndex: number,
+    ): CellSpan;
+    /** what a row's cells are asked with (`colSpan`'s args), or `null` for a row not loaded */
+    rowArgs<TRow, TNode>(
+        state: SpansState<TRow, TNode>,
+        rowIndex: number,
+    ): ColSpanArgs<TRow> | null;
+    /**
+     * the walk of a row's cells: the cell covering `columnIndex`, its row's cells starting again
+     * at `from`, written into `cell` (a walk reuses one)
+     */
+    covering<TRow, TNode>(
+        columns: readonly Column<TRow, TNode>[],
+        args: ColSpanArgs<TRow>,
+        from: number,
+        columnIndex: number,
+        cell?: { columnIndex: number; columnSpan: number },
+    ): CellSpan;
+    /** the first column of the part (pinned or not) holding a column: where a row's cells start again */
+    partStart<TRow, TNode>(
+        columns: readonly Column<TRow, TNode>[],
+        columnIndex: number,
+    ): number;
+    /**
+     * the rendered rows' cells where columns span (`GridView.rowSpans`), or `null` when none
+     * does: asked of the rendered rows only
+     */
+    rowSpans<TRow, TNode>(
+        state: SpansState<TRow, TNode>,
+        rows: readonly number[],
+        columns: readonly number[],
+    ): ReadonlyMap<number, RowSpans> | null;
+}
 
 /** A column of the grid (D10). */
 export interface Column<TRow, TNode = unknown> {
@@ -543,26 +605,15 @@ export interface DataGridState<TRow, TNode = unknown> {
      * was said (`revision`, 0 before the first)
      */
     readonly rowsChanged: Range & { readonly revision: number };
-    /**
-     * the keys of the expanded rows, in the order they were expanded (M1). A key whose row is not
-     * loaded, or not in the data, stays: its row expands once it is there
-     */
-    readonly expandedRowKeys: readonly RowKey[];
-    /**
-     * the indexes of the rows shown expanded, ascending: each loaded, its key in
-     * `expandedRowKeys`. Derived from the data and the keys, as the data contract tells them
-     */
-    readonly expandedRows: readonly number[];
-    /** an expanded row's detail height */
+    /** an expanded row's detail height (row expansion's to give, Epic #151) */
     readonly detailHeight: DetailHeight<TRow>;
-    /**
-     * the keys of the expanded row groups (Epic #87, E3.1): group rows (`GroupRow.key`) and rows
-     * that expand (`RowMeta.expandable`, by their key), in the order expanded. The app's rows
-     * follow them: the grid shows the rows it is given, and tells ARIA and the keys which expand
-     */
-    readonly expandedGroupKeys: readonly RowKey[];
     /** a measured detail's height until it is measured (`detailHeight: "auto"`) */
     readonly estimatedDetailHeight: number;
+    /**
+     * the body cells' column spans in effect (Epic #151: `cellSpans()`'s, set at creation);
+     * without it, none: a column's `colSpan` is not asked and every body cell is one column
+     */
+    readonly cellSpans?: CellSpans | undefined;
     /**
      * the grid's direction: in `"rtl"`, its start is the right edge; `undefined`, the page's (an
      * engine reads its viewport's)
@@ -589,21 +640,6 @@ export interface DataGridModelOptions<TRow, TNode = unknown> {
     estimatedRowHeight?: number;
     /** a header row's height in pixels (default 35); 0 for no header */
     headerRowHeight?: number;
-    /** how many summary rows the grid has at the top and at the bottom (default none) */
-    summaryRows?: { readonly top?: number; readonly bottom?: number };
-    /** a summary row's height in pixels (default 35) */
-    summaryRowHeight?: number;
-    /** the keys of the rows expanded to start with (a key given twice counts once) */
-    expandedRowKeys?: readonly RowKey[];
-    /** the keys of the row groups expanded to start with (a key given twice counts once) */
-    expandedGroupKeys?: readonly RowKey[];
-    /**
-     * an expanded row's detail height in pixels, or a function of the row (default 300); `"auto"`:
-     * as tall as its content, measured by an engine once rendered
-     */
-    detailHeight?: DetailHeight<TRow>;
-    /** a measured detail's height until it is measured, in pixels (default 300) */
-    estimatedDetailHeight?: number;
     /** the grid's direction (default: the page's, as an engine reads it from its viewport) */
     direction?: GridDirection | undefined;
 }
@@ -649,68 +685,12 @@ export interface CommandMap<TRow, TNode = unknown> {
         result: Range;
     };
     /**
-     * replaces the expanded rows' keys (each once). A key whose row is not loaded is kept: the
-     * row expands once it is. Returns them
-     */
-    "expanded-rows.set": {
-        payload: { readonly rowKeys: readonly RowKey[] };
-        result: readonly RowKey[];
-    };
-    /**
-     * expands a row, or collapses it when it is expanded: by its index (a loaded row; its key is
-     * kept) or by its key. Returns the expanded rows' keys
-     */
-    "expanded-rows.toggle": {
-        payload:
-            | { readonly rowIndex: number; readonly rowKey?: undefined }
-            | { readonly rowKey: RowKey; readonly rowIndex?: undefined };
-        result: readonly RowKey[];
-    };
-    /**
-     * replaces the expanded row groups' keys (Epic #87, each once): group rows' keys and the keys
-     * of rows that expand. A key no row has is kept: its row may come. Returns them
-     */
-    "row-groups.set": {
-        payload: { readonly groupKeys: readonly RowKey[] };
-        result: readonly RowKey[];
-    };
-    /**
-     * expands a row group, or collapses it when it is expanded: by its row's index (a group row,
-     * or a loaded row that expands) or by its key. Returns the expanded row groups' keys
-     */
-    "row-groups.toggle": {
-        payload:
-            | { readonly rowIndex: number; readonly groupKey?: undefined }
-            | { readonly groupKey: RowKey; readonly rowIndex?: undefined };
-        result: readonly RowKey[];
-    };
-    /**
      * changes the grid's direction: in `"rtl"`, its start is the right edge; `null`, the page's
      * (an engine reads its viewport's). Returns it
      */
     "direction.set": {
         payload: { readonly direction: GridDirection | null };
         result: GridDirection | undefined;
-    };
-    /**
-     * replaces how many summary rows the grid has at the top and at the bottom (a count left out
-     * is 0): whole numbers, 0 or more. Returns them
-     */
-    "summary-rows.set": {
-        payload: {
-            readonly top?: number | undefined;
-            readonly bottom?: number | undefined;
-        };
-        result: SummaryRowCounts;
-    };
-    /**
-     * tells that the figures behind the summary rows changed (the app's data a column's
-     * `renderSummaryCell` or `colSpan` reads, its columns the same): their cells are drawn and
-     * spanned again. Nothing to tell without summary rows. Returns the summary revision
-     */
-    "summary-rows.changed": {
-        payload: NoPayload;
-        result: number;
     };
     /**
      * changes the row height (a number, a function of the index or `"auto"`), the header row's, a
@@ -956,29 +936,13 @@ export interface QueryMap<TRow, TNode = unknown> {
     };
     "row-height": { payload: undefined; result: RowHeight };
     "header-row-height": { payload: undefined; result: number };
-    /** how many summary rows the grid has, at the top and at the bottom */
-    "summary-rows": { payload: undefined; result: SummaryRowCounts };
-    "summary-row-height": { payload: undefined; result: number };
-    /** the summary row at a row index (its position and index), or `undefined` for another row */
-    "summary-row-by": {
-        payload: { readonly rowIndex: number };
-        result: SummaryRowView | undefined;
-    };
     /** the grid's direction, `undefined` for the page's (an engine's view tells the one in effect) */
     direction: { payload: undefined; result: GridDirection | undefined };
-    /** the expanded rows' keys, in the order they were expanded */
-    "expanded-row-keys": { payload: undefined; result: readonly RowKey[] };
-    /** the expanded row groups' keys (Epic #87), in the order they were expanded */
-    "expanded-group-keys": { payload: undefined; result: readonly RowKey[] };
     /** what kind of row a row index is (Epic #87): `getRowMeta`'s answer, `undefined` without */
     "row-meta-by": {
         payload: { readonly rowIndex: number };
         result: RowMeta | undefined;
     };
-    /** the indexes of the rows shown expanded (loaded, their key expanded), ascending */
-    "expanded-rows": { payload: undefined; result: readonly number[] };
-    /** an expanded row's detail height: a number, or a function of the row */
-    "detail-height": { payload: undefined; result: DetailHeight<TRow> };
 }
 
 export type QueryKey = keyof QueryMap<unknown>;
@@ -987,13 +951,6 @@ export type QueryKey = keyof QueryMap<unknown>;
 export interface QuestionMap {
     /** whether the row is loaded (its getter answered a row), or a group row (Epic #87) */
     "row-loaded": { readonly rowIndex: number };
-    /** whether the row shows its detail: loaded, and its key expanded */
-    "row-expanded": { readonly rowIndex: number };
-    /**
-     * whether the row heads an expanded row group (Epic #87): a group row, or a row that expands,
-     * its key among the expanded group keys
-     */
-    "row-group-expanded": { readonly rowIndex: number };
 }
 
 export type QuestionKey = keyof QuestionMap;

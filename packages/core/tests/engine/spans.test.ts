@@ -16,8 +16,8 @@ import { columnResizerPart } from "../../src/column-resize";
 import { activeColumn, elementPosition } from "../../src/engine/view";
 import { featuresOf } from "../../src/feature/registry";
 import { columnsError } from "../../src/header/header";
-import { spanAt } from "../../src/model/spans";
 import { sorting } from "../../src/sorting";
+import { SPANS } from "../../src/spans/spans";
 import { type Features, gridModel } from "../features";
 import {
     cellElement,
@@ -28,6 +28,8 @@ import {
     type Row,
 } from "./harness";
 import { stateOf, viewOf, windowOf } from "./views";
+
+const { spanAt } = SPANS;
 
 // Column spans (Epic #85, E1.2): a column's `colSpan` makes a cell cover the columns after it in
 // its part, its row's cells partitioning each part from its start. The view renders the spanning

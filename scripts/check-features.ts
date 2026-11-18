@@ -27,6 +27,11 @@ export const FEATURES = [
     { subpath: "column-reorder", factory: "columnReorder" },
     { subpath: "column-pinning", factory: "columnPinning" },
     { subpath: "column-group-collapse", factory: "columnGroupCollapse" },
+    { subpath: "row-expansion", factory: "rowExpansion" },
+    { subpath: "row-grouping", factory: "rowGrouping" },
+    { subpath: "row-reorder", factory: "rowReorder" },
+    { subpath: "spans", factory: "cellSpans" },
+    { subpath: "summary-rows", factory: "summaryRows" },
 ] as const;
 
 /** A feature as the guard reads it: its subpath and the markers its code holds. */

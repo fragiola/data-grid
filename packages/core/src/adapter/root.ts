@@ -4,11 +4,7 @@
 // adapter only renders and calls `sync` after each render.
 
 import { createDataGridEngine } from "../engine/engine";
-import type {
-    DataGridEngine,
-    DataGridEngineOptions,
-    RowMove,
-} from "../engine/types";
+import type { DataGridEngine, DataGridEngineOptions } from "../engine/types";
 import type { DataGridFeatures, FeatureKeys } from "../feature/feature";
 import {
     bindFeatureEvents,
@@ -19,7 +15,6 @@ import {
     featuresOf,
     type GridFeatures,
 } from "../feature/registry";
-import { DEFAULT_DETAIL_HEIGHT, sameRowKeys } from "../model/expansion";
 import {
     createDataGridModel,
     type DataGridModel,
@@ -29,14 +24,11 @@ import {
 import type {
     ColumnOrGroup,
     DataGridState,
-    DetailHeight,
     GridDirection,
     RowHeight,
-    RowKey,
     RowKeyGetter,
     RowMetaGetter,
 } from "../model/types";
-import { sameKeys } from "../utils/utils";
 import type { AxisWindow } from "../viewport/window";
 import {
     bindControlled,
@@ -95,58 +87,6 @@ export interface GridRootOptions<TRow, TNode> {
     estimatedRowHeight?: number | undefined;
     /** a header row's height in pixels (default 35); 0 for no header */
     headerRowHeight?: number | undefined;
-    /**
-     * how many summary rows the grid has: at the top, under the header, and at the bottom, at
-     * the view's bottom edge (default none). Each column's `renderSummaryCell` draws their
-     * cells from the app's own values; `DataGrid.Summary` renders them
-     */
-    summaryRows?:
-        | { readonly top?: number; readonly bottom?: number }
-        | undefined;
-    /** a summary row's height in pixels (default 35) */
-    summaryRowHeight?: number | undefined;
-    /**
-     * the expanded rows' keys (a row's `rowKey`, else its index), controlled; pair it with
-     * `onExpandedRowKeysChange`. An expanded row shows its `DataGrid.RowDetail`
-     */
-    expandedRowKeys?: readonly RowKey[] | undefined;
-    /** the expanded rows' keys to start with, uncontrolled */
-    defaultExpandedRowKeys?: readonly RowKey[] | undefined;
-    /** the expanded rows changed (or, controlled, ask to): a row was toggled, or a command ran */
-    onExpandedRowKeysChange?:
-        | ((expandedRowKeys: readonly RowKey[]) => void)
-        | undefined;
-    /**
-     * the expanded row groups' keys (Epic #87: a group row's `GroupRow.key`, a row that
-     * expands by its key), controlled; pair it with `onExpandedGroupKeysChange`. The app's
-     * rows follow them (`useLocalRows` does it for rows in memory)
-     */
-    expandedGroupKeys?: readonly RowKey[] | undefined;
-    /** the expanded row groups' keys to start with, uncontrolled */
-    defaultExpandedGroupKeys?: readonly RowKey[] | undefined;
-    /**
-     * the expanded row groups changed (or, controlled, ask to): a group was toggled (its
-     * toggle, Enter, Space, →, ←), or a command ran
-     */
-    onExpandedGroupKeysChange?:
-        | ((expandedGroupKeys: readonly RowKey[]) => void)
-        | undefined;
-    /**
-     * an expanded row's detail height in pixels, or a function of the row (default 300): it
-     * adds to the row's own height. `"auto"`: as tall as its content, measured once rendered
-     * (`estimatedDetailHeight` until then)
-     */
-    detailHeight?: DetailHeight<TRow> | undefined;
-    /** a measured detail's height until it is measured, in pixels (default 300) */
-    estimatedDetailHeight?: number | undefined;
-    /**
-     * a row was moved (Epic #86): dropped elsewhere by its drag handle (`useRowDragHandle`),
-     * or by Ctrl/⌘+Shift+↑/↓ on one of its cells. Given, the rows move: the app moves the row
-     * in its own rows, from `fromIndex` to `toIndex` (its index once moved: `moveRow` in
-     * `@fragiola/data-grid/local`), and the active cell follows it. Never while the grid is
-     * sorted, nor for rows not loaded
-     */
-    onRowMove?: ((move: RowMove) => void) | undefined;
     /** the rows in view or rendered changed: load what they need */
     onRowWindowChange?: ((window: AxisWindow) => void) | undefined;
     /** the columns in view or rendered changed */
@@ -204,17 +144,6 @@ export const GRID_ROOT_PROPS = [
     "rowHeight",
     "estimatedRowHeight",
     "headerRowHeight",
-    "summaryRows",
-    "summaryRowHeight",
-    "expandedRowKeys",
-    "defaultExpandedRowKeys",
-    "onExpandedRowKeysChange",
-    "expandedGroupKeys",
-    "defaultExpandedGroupKeys",
-    "onExpandedGroupKeysChange",
-    "detailHeight",
-    "estimatedDetailHeight",
-    "onRowMove",
     "onRowWindowChange",
     "onColumnWindowChange",
     "onRowsEndReached",
@@ -336,14 +265,6 @@ export function bindGridRoot<
         rowHeight: initial.rowHeight,
         estimatedRowHeight: initial.estimatedRowHeight,
         headerRowHeight: initial.headerRowHeight,
-        summaryRows: initial.summaryRows,
-        summaryRowHeight: initial.summaryRowHeight,
-        expandedRowKeys:
-            initial.expandedRowKeys ?? initial.defaultExpandedRowKeys,
-        expandedGroupKeys:
-            initial.expandedGroupKeys ?? initial.defaultExpandedGroupKeys,
-        detailHeight: initial.detailHeight,
-        estimatedDetailHeight: initial.estimatedDetailHeight,
         direction: initial.direction,
     });
     const flags: ControlledFlags = { syncing: false, applying: false };
@@ -356,27 +277,6 @@ export function bindGridRoot<
             V
         >,
     ) => bindControlled(model, flags, controlledProp(props, spec));
-    const expanded = bind<readonly RowKey[]>({
-        prefix: "expanded-rows.",
-        prop: (props) => props.expandedRowKeys,
-        onChange: (props) => props.onExpandedRowKeysChange,
-        read: (state) => state.expandedRowKeys,
-        same: sameRowKeys,
-        apply: (rowKeys) => {
-            model.run("expanded-rows.set", { rowKeys });
-        },
-    });
-    const groups = bind<readonly RowKey[]>({
-        prefix: "row-groups.",
-        prop: (props) => props.expandedGroupKeys,
-        onChange: (props) => props.onExpandedGroupKeysChange,
-        read: (state) => state.expandedGroupKeys,
-        // a set: the same keys in another order are no change
-        same: sameKeys,
-        apply: (groupKeys) => {
-            model.run("row-groups.set", { groupKeys });
-        },
-    });
     const installedFeatures = featuresOf(model);
     const engine = createDataGridEngine<TRow, TNode>(
         model,
@@ -390,7 +290,6 @@ export function bindGridRoot<
     engine.subscribe("rows-end-reached", (info) =>
         props().onRowsEndReached?.(info),
     );
-    engine.subscribe("row-move", (move) => props().onRowMove?.(move));
     // the features' events (Epic #144: a fill, a paste; Epic #146: an edit), told to their
     // props
     bindFeatureEvents(
@@ -431,8 +330,6 @@ export function bindGridRoot<
     // collapse moved settles in the same pass; the features' last (the selections, the sort)
     const controlled: readonly Controlled[] = [
         ...layout,
-        expanded,
-        groups,
         ...featurePieces.filter((piece) => !layout.includes(piece)),
     ];
     // the core's data props, then the features' (a selection's mode, Epic #144)
@@ -449,7 +346,6 @@ export function bindGridRoot<
             props.overscan?.columns,
             props.maxScrollSize,
             props.endReachedThreshold,
-            props.onRowMove !== undefined,
             props.ownTabStop,
             ...Object.values(featureEngineOptions(installedFeatures, props)),
         ],
@@ -533,8 +429,6 @@ function engineOptions<TRow, TNode>(
         },
         maxScrollSize: props.maxScrollSize,
         endReachedThreshold: props.endReachedThreshold,
-        // the rows move while the app takes their moves
-        reorderableRows: props.onRowMove !== undefined,
         ownTabStop: props.ownTabStop,
     };
 }
@@ -585,10 +479,7 @@ function dataGroups<TRow, TNode>(
             inputs: (props) => [
                 props.rowHeight,
                 props.headerRowHeight,
-                props.summaryRowHeight,
-                props.detailHeight,
                 props.estimatedRowHeight,
-                props.estimatedDetailHeight,
             ],
             run: (props) => {
                 const { state } = model;
@@ -596,51 +487,23 @@ function dataGroups<TRow, TNode>(
                 const rows = props.rowHeight ?? DEFAULT_ROW_HEIGHT;
                 const header =
                     props.headerRowHeight ?? DEFAULT_HEADER_ROW_HEIGHT;
-                const summary = props.summaryRowHeight ?? DEFAULT_ROW_HEIGHT;
-                const detail = props.detailHeight ?? DEFAULT_DETAIL_HEIGHT;
-                // the three sizes together when one changed, as always; the summary rows' height
-                // and the estimates (Epic #86) each on its own, only when it changed: one refused
-                // (an estimate that is no size above 0) never holds the others back
+                // the two sizes together when one changed, as always; the estimate (Epic #86) on
+                // its own, only when it changed: one refused (no size above 0) never holds the
+                // others back. A detail's height and estimate are row expansion's props, the
+                // summary rows' height the summary rows feature's (Epic #151)
                 if (
                     rows !== state.rowHeight ||
-                    header !== state.headerRowHeight ||
-                    detail !== state.detailHeight
+                    header !== state.headerRowHeight
                 ) {
                     model.run("sizes.set", {
                         rowHeight: rows,
                         headerRowHeight: header,
-                        detailHeight: detail,
                     });
-                }
-                if (summary !== model.state.summaryRowHeight) {
-                    model.run("sizes.set", { summaryRowHeight: summary });
                 }
                 const rowEstimate =
                     props.estimatedRowHeight ?? DEFAULT_ROW_HEIGHT;
-                const detailEstimate =
-                    props.estimatedDetailHeight ?? DEFAULT_DETAIL_HEIGHT;
                 if (rowEstimate !== model.state.estimatedRowHeight) {
                     model.run("sizes.set", { estimatedRowHeight: rowEstimate });
-                }
-                if (detailEstimate !== model.state.estimatedDetailHeight) {
-                    model.run("sizes.set", {
-                        estimatedDetailHeight: detailEstimate,
-                    });
-                }
-            },
-        },
-        {
-            inputs: (props) => [
-                props.summaryRows?.top ?? 0,
-                props.summaryRows?.bottom ?? 0,
-            ],
-            run: (props) => {
-                const top = props.summaryRows?.top ?? 0;
-                const bottom = props.summaryRows?.bottom ?? 0;
-                const held = model.state.summaryRows;
-                // a count left out (the prop removed) is 0
-                if (top !== held.top || bottom !== held.bottom) {
-                    model.run("summary-rows.set", { top, bottom });
                 }
             },
         },

@@ -12,6 +12,7 @@ import { columnPinning } from "../../src/column-pinning";
 import { columnReorder } from "../../src/column-reorder";
 import { columnResize } from "../../src/column-resize";
 import { navigation } from "../../src/navigation";
+import { rowExpansion } from "../../src/row-expansion";
 
 interface Person {
     name: string;
@@ -230,17 +231,26 @@ void pinnedMiddle;
 void pinnedGroup;
 
 // a row toggles by its index or by its key, never both; a detail's height is a function of the row
+// (row expansion's keys, Epic #151: they do not compile without it)
+// @ts-expect-error
 grid.run("expanded-rows.toggle", { rowIndex: 0 });
-grid.run("expanded-rows.toggle", { rowKey: "a" });
+const expanding = createDataGridModel({
+    columns,
+    rows: [] as Person[],
+    features: [rowExpansion()],
+    detailHeight: (row: Person) => row.name.length,
+});
+expanding.run("expanded-rows.toggle", { rowIndex: 0 });
+expanding.run("expanded-rows.toggle", { rowKey: "a" });
 // @ts-expect-error
-grid.run("expanded-rows.toggle", { rowIndex: 0, rowKey: "a" });
+expanding.run("expanded-rows.toggle", { rowIndex: 0, rowKey: "a" });
 // @ts-expect-error
-grid.run("expanded-rows.set", { rowKeys: [true] });
+expanding.run("expanded-rows.set", { rowKeys: [true] });
 grid.run("sizes.set", { detailHeight: (row: Person) => row.name.length });
 // @ts-expect-error
 grid.run("sizes.set", { detailHeight: (row: Order) => row.total });
 const expandedKeys: readonly (string | number)[] =
-    grid.get("expanded-row-keys");
+    expanding.get("expanded-row-keys");
 void expandedKeys;
 
 // a column or a group moves before or after a sibling; the order is keys; a reset takes none

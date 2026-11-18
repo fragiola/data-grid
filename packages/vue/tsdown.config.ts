@@ -6,7 +6,8 @@ export default defineConfig({
     // composables (`/sorting`, Epic #141; `/navigation`, `/row-selection` with `useSelectAll`,
     // `/range`, `/clipboard`, `/fill` with `useFillHandle`, Epic #144; `/editing` with `useCellEdit`,
     // Epic #146; `/column-resize` with `useColumnResizer`, `/column-reorder`, `/column-pinning`,
-    // `/column-group-collapse`, Epic #148)
+    // `/column-group-collapse`, Epic #148; `/row-expansion`, `/row-grouping`,
+    // `/row-reorder`, `/spans`, `/summary-rows`, Epic #151)
     entry: {
         index: "src/index.ts",
         local: "src/local/index.ts",
@@ -21,6 +22,11 @@ export default defineConfig({
         "column-reorder": "src/column-reorder/index.ts",
         "column-pinning": "src/column-pinning/index.ts",
         "column-group-collapse": "src/column-group-collapse/index.ts",
+        "row-expansion": "src/row-expansion/index.ts",
+        "row-grouping": "src/row-grouping/index.ts",
+        "row-reorder": "src/row-reorder/index.ts",
+        spans: "src/spans/index.ts",
+        "summary-rows": "src/summary-rows/index.ts",
     },
     format: "esm",
     platform: "browser",

@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GridView } from "../../src";
 import {
     type ModelOptions,
     ROW_DRAG_HANDLE_ATTRIBUTE,
     type RowMove,
     type RowReorder,
-    rowDragHandlePart,
     rowPart,
     veto,
 } from "../../src";
+import { type RowReorderView, rowDragHandlePart } from "../../src/row-reorder";
 import { sorting } from "../../src/sorting";
 import { FEATURES, type Features } from "../features";
 import {
@@ -180,12 +181,12 @@ describe("a drag on a row's handle", () => {
             side: "after",
         };
         expect(target()).toEqual(over);
-        expect(view().rowReorder).toEqual(over);
+        expect((view() as GridView & RowReorderView).rowReorder).toEqual(over);
         press(handle, "pointerup", middleOf(6) + 5);
         // after row 6: its index once moved is 6
         expect(moves).toEqual([{ fromIndex: 2, toIndex: 6, rowKey: "r2" }]);
         expect(target()).toBeNull();
-        expect(view().rowReorder).toBeNull();
+        expect((view() as GridView & RowReorderView).rowReorder).toBeNull();
         expect(reorders).toEqual([
             { rowIndex: 2, rowKey: "r2", targetIndex: null, side: null },
             over,
@@ -477,10 +478,14 @@ describe("a drag on a row's handle", () => {
         off.drag(handle, middleOf(2), middleOf(6));
         expect(off.target()).toBeNull();
         off.press(handle, "pointerup", middleOf(6));
-        expect(off.view().reorderableRows).toBe(false);
+        expect((off.view() as GridView & RowReorderView).reorderableRows).toBe(
+            false,
+        );
         // turned on: it drags; turned off mid-drag: it ends, moving nothing
         off.engine.adapter.setOptions({ reorderableRows: true });
-        expect(off.view().reorderableRows).toBe(true);
+        expect((off.view() as GridView & RowReorderView).reorderableRows).toBe(
+            true,
+        );
         off.drag(handle, middleOf(2), middleOf(6));
         expect(off.target()?.targetIndex).toBe(6);
         off.engine.adapter.setOptions({ reorderableRows: false });
@@ -795,12 +800,14 @@ describe("the parts", () => {
 
     it("tell the dragged row and the drop target, and when a handle drags", () => {
         const view = viewOf(stateOf(), {
-            reorderableRows: true,
-            rowReorder: {
-                rowIndex: 12,
-                rowKey: 12,
-                targetIndex: 15,
-                side: "before",
+            featureFields: {
+                reorderableRows: true,
+                rowReorder: {
+                    rowIndex: 12,
+                    rowKey: 12,
+                    targetIndex: 15,
+                    side: "before",
+                },
             },
         });
         expect(rowPart(view, 12, true).state).toMatchObject({
@@ -826,7 +833,7 @@ describe("the parts", () => {
                 features: [...FEATURES, sorting()],
                 sortColumns: [{ columnKey: "a", direction: "ascending" }],
             }),
-            { reorderableRows: true },
+            { featureFields: { reorderableRows: true } },
         );
         expect(rowDragHandlePart(sorted, 12, true).state.reorderable).toBe(
             false,

@@ -4,13 +4,13 @@ import {
     GROUP_TOGGLE_ATTRIBUTE,
     type GroupRow,
     gridRole,
-    groupTogglePart,
     type ModelOptions,
     type RowMeta,
-    rowDragHandlePart,
     rowPart,
     veto,
 } from "../../src";
+import { groupTogglePart } from "../../src/row-grouping";
+import { rowDragHandlePart } from "../../src/row-reorder";
 import type { Features } from "../features";
 import {
     cellElement,
@@ -155,10 +155,12 @@ describe("the parts", () => {
     });
 
     it("never drag a row while the rows have kinds", () => {
-        const plain = viewOf(stateOf(), { reorderableRows: true });
+        const plain = viewOf(stateOf(), {
+            featureFields: { reorderableRows: true },
+        });
         expect(rowDragHandlePart(plain, 12, true).state.reorderable).toBe(true);
         const grouped = viewOf(stateOf({ getRowMeta }), {
-            reorderableRows: true,
+            featureFields: { reorderableRows: true },
         });
         expect(rowDragHandlePart(grouped, 12, true).state.reorderable).toBe(
             false,
