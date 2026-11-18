@@ -1,15 +1,15 @@
+import type { SummaryPosition } from "@fragiola/data-grid";
 import {
-    type SummaryPosition,
     type SummaryState,
     summaryPartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/summary-rows";
 import type { ReactNode } from "react";
 import { SummaryContext } from "../context";
 import { useGridView } from "../hooks/use-grid-view";
 import { type DivPrimitiveProps, useRenderElement } from "../utils/use-render";
 import { SummaryRows } from "./summary-rows";
 
-export type { SummaryState } from "@fragiola/data-grid";
+export type { SummaryState } from "@fragiola/data-grid/summary-rows";
 
 export type SummaryProps = DivPrimitiveProps<SummaryState> & {
     /** under the header (`"top"`), or at the view's bottom edge (`"bottom"`) */

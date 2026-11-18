@@ -1,9 +1,9 @@
 import type { SummaryPosition } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import type { SummaryRowInfo } from "../context";
-import { useSummaryRows } from "../hooks/use-summary-rows";
 import { keyed } from "../utils/keyed";
 import { SummaryRow } from "./summary-row";
+import { useSummaryRows } from "./use-summary-rows";
 
 export interface SummaryRowsProps {
     /** renders a summary row; without it, `<DataGrid.SummaryRow row={row} />` */

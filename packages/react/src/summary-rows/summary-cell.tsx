@@ -1,8 +1,10 @@
-import { type SummaryCellState, summaryCellContent } from "@fragiola/data-grid";
+import type { SummaryCellState } from "@fragiola/data-grid";
+import { summaryCellContent } from "@fragiola/data-grid/summary-rows";
 import type { ReactNode } from "react";
-import type { SummaryCellInfo } from "../context";
-import { useCellElement, useSummaryCellPart } from "../hooks/internal";
+import { useCellElement } from "../hooks/internal";
 import type { DivPrimitiveProps } from "../utils/use-render";
+import type { SummaryCellInfo } from "./context";
+import { useSummaryCellPart } from "./use-summary-cell";
 
 export type SummaryCellProps<TRow> = DivPrimitiveProps<SummaryCellState> & {
     cell: SummaryCellInfo<TRow>;

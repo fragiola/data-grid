@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import type { SummaryCellInfo } from "../context";
-import { useSummaryCells } from "../hooks/use-summary-cells";
 import { keyed } from "../utils/keyed";
+import type { SummaryCellInfo } from "./context";
 import { SummaryCell } from "./summary-cell";
+import { useSummaryCells } from "./use-summary-cells";
 
 export interface SummaryCellsProps<TRow> {
     /** renders a cell; without it, `<DataGrid.SummaryCell cell={cell} />` */

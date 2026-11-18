@@ -14,17 +14,4 @@ export {
 export { HeaderRows, type HeaderRowsProps } from "./components/header-rows";
 export { Root, type RootProps, type RootState } from "./components/root";
 export { Row, type RowProps } from "./components/row";
-export { RowDetail, type RowDetailProps } from "./components/row-detail";
 export { Rows, type RowsProps } from "./components/rows";
-export {
-    Summary,
-    type SummaryProps,
-    type SummaryState,
-} from "./components/summary";
-export { SummaryCell, type SummaryCellProps } from "./components/summary-cell";
-export {
-    SummaryCells,
-    type SummaryCellsProps,
-} from "./components/summary-cells";
-export { SummaryRow, type SummaryRowProps } from "./components/summary-row";
-export { SummaryRows, type SummaryRowsProps } from "./components/summary-rows";

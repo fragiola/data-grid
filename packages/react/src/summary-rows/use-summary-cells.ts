@@ -1,12 +1,8 @@
-import { summaryCellsOf } from "@fragiola/data-grid";
+import { summaryCellsOf } from "@fragiola/data-grid/summary-rows";
 import { useContext } from "react";
-import {
-    type SummaryCellInfo,
-    SummaryRowContext,
-    type SummaryRowInfo,
-} from "../context";
-
-import { useGridView } from "./use-grid-view";
+import { SummaryRowContext, type SummaryRowInfo } from "../context";
+import { useGridView } from "../hooks/use-grid-view";
+import type { SummaryCellInfo } from "./context";
 
 /**
  * The cells a summary row renders, with their columns: one per rendered column, but a cell

@@ -8,6 +8,13 @@ import {
 } from "../src";
 import { groupKeyOf, useLocalRows } from "../src/local";
 import { sorting } from "../src/sorting";
+import {
+    Summary,
+    SummaryCell,
+    SummaryCells,
+    SummaryRow,
+    SummaryRows,
+} from "../src/summary-rows";
 import { FEATURES as GRID_FEATURES, tags } from "./helpers";
 
 // The grids the server-rendering tests share (Epic #89, E5.1): `server.test.tsx` renders each one
@@ -95,20 +102,17 @@ function Composition({
 }: GridOptions) {
     const tag = tags(table);
     const summaryRows = (
-        <DataGrid.SummaryRows>
+        <SummaryRows>
             {(row) => (
-                <DataGrid.SummaryRow row={row} render={tag.row}>
-                    <DataGrid.SummaryCells<Sale>>
+                <SummaryRow row={row} render={tag.row}>
+                    <SummaryCells<Sale>>
                         {(cell) => (
-                            <DataGrid.SummaryCell
-                                cell={cell}
-                                render={tag.cell}
-                            />
+                            <SummaryCell cell={cell} render={tag.cell} />
                         )}
-                    </DataGrid.SummaryCells>
-                </DataGrid.SummaryRow>
+                    </SummaryCells>
+                </SummaryRow>
             )}
-        </DataGrid.SummaryRows>
+        </SummaryRows>
     );
     return (
         <DataGrid.Root
@@ -140,12 +144,9 @@ function Composition({
                         )}
                     </DataGrid.HeaderRows>
                 </DataGrid.Header>
-                <DataGrid.Summary
-                    position="top"
-                    render={table ? <tbody /> : undefined}
-                >
+                <Summary position="top" render={table ? <tbody /> : undefined}>
                     {summaryRows}
-                </DataGrid.Summary>
+                </Summary>
                 <DataGrid.Body render={tag.body}>
                     <DataGrid.Rows<Sale>>
                         {(row) => (
@@ -162,12 +163,12 @@ function Composition({
                         )}
                     </DataGrid.Rows>
                 </DataGrid.Body>
-                <DataGrid.Summary
+                <Summary
                     position="bottom"
                     render={table ? <tfoot /> : undefined}
                 >
                     {summaryRows}
-                </DataGrid.Summary>
+                </Summary>
                 <DataGrid.Empty render={table ? <td /> : undefined}>
                     No sales
                 </DataGrid.Empty>

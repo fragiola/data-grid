@@ -10,6 +10,7 @@ import {
     type RowInfo,
     useRow,
 } from "../src";
+import { RowDetail } from "../src/row-expansion";
 import { cellAt, FEATURES, rowAt, stubViewportSize, tags } from "./helpers";
 
 // Measured heights (Epic #86, E2.2): with `rowHeight="auto"` a loaded row has no height of its
@@ -132,9 +133,9 @@ function Grid({
                                         />
                                     )}
                                 </DataGrid.Cells>
-                                <DataGrid.RowDetail render={tag.cell}>
+                                <RowDetail render={tag.cell}>
                                     <p>{row.row?.id}</p>
-                                </DataGrid.RowDetail>
+                                </RowDetail>
                             </DataGrid.Row>
                         )}
                     </DataGrid.Rows>
@@ -324,7 +325,9 @@ describe("measured details", () => {
 });
 
 describe("the sizes a root sends", () => {
-    it("are the three sizes together for a grid of given heights, as before; the rest on their own", () => {
+    // a detail's height is row expansion's and a summary row's the summary rows feature's (Epic
+    // #151): each its own command, after the core's sizes
+    it("are the two sizes together for a grid of given heights, as before; the rest on their own", () => {
         const gridRef = createDataGridRef<Row>();
         const Plain = ({
             rowHeight,
@@ -352,9 +355,7 @@ describe("the sizes a root sends", () => {
             return next();
         });
         rerender(<Plain rowHeight={30} />);
-        expect(sent).toEqual([
-            { rowHeight: 30, headerRowHeight: 35, detailHeight: 300 },
-        ]);
+        expect(sent).toEqual([{ rowHeight: 30, headerRowHeight: 35 }]);
         rerender(<Plain rowHeight={30} />);
         expect(sent).toHaveLength(1);
         rerender(
@@ -365,8 +366,8 @@ describe("the sizes a root sends", () => {
             />,
         );
         expect(sent.slice(1)).toEqual([
-            { summaryRowHeight: 40 },
             { estimatedRowHeight: 50 },
+            { summaryRowHeight: 40 },
         ]);
     });
 });

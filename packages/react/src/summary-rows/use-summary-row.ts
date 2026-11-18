@@ -1,7 +1,8 @@
-import { type SummaryRowState, summaryRowPartOf } from "@fragiola/data-grid";
+import type { SummaryRowState } from "@fragiola/data-grid";
+import { summaryRowPartOf } from "@fragiola/data-grid/summary-rows";
 import type { SummaryRowInfo } from "../context";
-import type { PartHookResult } from "./internal";
-import { useGridView } from "./use-grid-view";
+import type { PartHookResult } from "../hooks/internal";
+import { useGridView } from "../hooks/use-grid-view";
 
 /**
  * A summary row's state, and the props for its element (Epic #86): ARIA (`role="row"`, its

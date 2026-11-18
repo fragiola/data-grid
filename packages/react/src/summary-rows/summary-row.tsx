@@ -2,9 +2,9 @@ import { LAYER_KEYS, type SummaryRowState } from "@fragiola/data-grid";
 import type { ReactNode } from "react";
 import { SummaryRowContext, type SummaryRowInfo } from "../context";
 import { useLayer } from "../hooks/internal";
-import { useSummaryRow } from "../hooks/use-summary-row";
 import { type DivPrimitiveProps, useRenderElement } from "../utils/use-render";
 import { SummaryCells } from "./summary-cells";
+import { useSummaryRow } from "./use-summary-row";
 
 export type SummaryRowProps = DivPrimitiveProps<SummaryRowState> & {
     row: SummaryRowInfo;

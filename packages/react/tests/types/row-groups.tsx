@@ -7,9 +7,12 @@ import {
     type GroupRow,
     type RowMeta,
     type RowMetaGetter,
-    useGroupToggle,
 } from "../../src";
 import { groupKeyOf, useLocalRows } from "../../src/local";
+import { rowGrouping, useGroupToggle } from "../../src/row-grouping";
+
+// the expanded groups are row grouping's props (Epic #151)
+const grouping = [rowGrouping()] as const;
 
 interface Sale {
     country: string;
@@ -82,8 +85,21 @@ export function Served({
             rowCount={rowCount}
             getRow={getRow}
             getRowMeta={getRowMeta}
+            features={grouping}
             defaultExpandedGroupKeys={["g"]}
             onExpandedGroupKeysChange={(keys) => keys.length}
+        />
+    );
+}
+
+export function Ungrouped() {
+    return (
+        <DataGrid.Root
+            columns={columns}
+            rowCount={0}
+            getRow={() => undefined}
+            // @ts-expect-error: without row grouping, no expanded groups
+            defaultExpandedGroupKeys={["g"]}
         />
     );
 }

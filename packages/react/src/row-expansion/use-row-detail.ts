@@ -1,7 +1,10 @@
-import { type RowDetailState, rowDetailPartOf } from "@fragiola/data-grid";
+import {
+    type RowDetailState,
+    rowDetailPartOf,
+} from "@fragiola/data-grid/row-expansion";
 import type { RowInfo } from "../context";
-import type { PartHookResult } from "./internal";
-import { useGridView } from "./use-grid-view";
+import type { PartHookResult } from "../hooks/internal";
+import { useGridView } from "../hooks/use-grid-view";
 
 /**
  * A row's detail (M3): its state, and the props for its element (render it only while

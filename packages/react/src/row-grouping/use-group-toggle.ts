@@ -1,11 +1,11 @@
+import type { RowMeta } from "@fragiola/data-grid";
 import {
     type GroupToggleState,
     groupTogglePartOf,
-    type RowMeta,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/row-grouping";
 
-import type { PartHookResult } from "./internal";
-import { useGridView } from "./use-grid-view";
+import type { PartHookResult } from "../hooks/internal";
+import { useGridView } from "../hooks/use-grid-view";
 
 /**
  * A row group's toggle (Epic #87): the state and props of a control the app renders in a group

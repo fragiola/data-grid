@@ -2,7 +2,7 @@ import { type SummaryPosition, summaryRowsOf } from "@fragiola/data-grid";
 import { useContext, useMemo } from "react";
 import { SummaryContext, type SummaryRowInfo } from "../context";
 
-import { useGridView } from "./use-grid-view";
+import { useGridView } from "../hooks/use-grid-view";
 
 /**
  * A position's summary rows (Epic #86), the first one first: `position`'s, else the ones of the

@@ -1,10 +1,10 @@
 import {
     type RowDragHandleState,
     rowDragHandlePartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/row-reorder";
 
-import type { PartHookResult } from "./internal";
-import { useGridView } from "./use-grid-view";
+import type { PartHookResult } from "../hooks/internal";
+import { useGridView } from "../hooks/use-grid-view";
 
 /**
  * A row's drag handle (Epic #86): the state and props of an element the app renders in a row (a

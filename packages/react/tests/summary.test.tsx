@@ -8,6 +8,13 @@ import {
     useDataGrid,
 } from "../src";
 import {
+    Summary,
+    SummaryCell,
+    SummaryCells,
+    SummaryRow,
+    SummaryRows,
+} from "../src/summary-rows";
+import {
     cellAt,
     FEATURES,
     type Features,
@@ -91,45 +98,39 @@ function Grid({
             <Expose />
             <DataGrid.Grid render={tag.grid}>
                 <DataGrid.Header render={tag.header} />
-                <DataGrid.Summary position="top" render={summary?.top}>
-                    <DataGrid.SummaryRows>
+                <Summary position="top" render={summary?.top}>
+                    <SummaryRows>
                         {(row) => (
-                            <DataGrid.SummaryRow
-                                row={row}
-                                render={summary?.row}
-                            >
-                                <DataGrid.SummaryCells<Row>>
+                            <SummaryRow row={row} render={summary?.row}>
+                                <SummaryCells<Row>>
                                     {(cell) => (
-                                        <DataGrid.SummaryCell
+                                        <SummaryCell
                                             cell={cell}
                                             render={summary?.cell}
                                         />
                                     )}
-                                </DataGrid.SummaryCells>
-                            </DataGrid.SummaryRow>
+                                </SummaryCells>
+                            </SummaryRow>
                         )}
-                    </DataGrid.SummaryRows>
-                </DataGrid.Summary>
+                    </SummaryRows>
+                </Summary>
                 <DataGrid.Body render={tag.body} />
-                <DataGrid.Summary position="bottom" render={summary?.bottom}>
-                    <DataGrid.SummaryRows>
+                <Summary position="bottom" render={summary?.bottom}>
+                    <SummaryRows>
                         {(row) => (
-                            <DataGrid.SummaryRow
-                                row={row}
-                                render={summary?.row}
-                            >
-                                <DataGrid.SummaryCells<Row>>
+                            <SummaryRow row={row} render={summary?.row}>
+                                <SummaryCells<Row>>
                                     {(cell) => (
-                                        <DataGrid.SummaryCell
+                                        <SummaryCell
                                             cell={cell}
                                             render={summary?.cell}
                                         />
                                     )}
-                                </DataGrid.SummaryCells>
-                            </DataGrid.SummaryRow>
+                                </SummaryCells>
+                            </SummaryRow>
                         )}
-                    </DataGrid.SummaryRows>
-                </DataGrid.Summary>
+                    </SummaryRows>
+                </Summary>
             </DataGrid.Grid>
         </DataGrid.Root>
     );
@@ -293,7 +294,7 @@ describe("summary rows", () => {
                 summaryRows={{ top: 1 }}
             >
                 <DataGrid.Grid>
-                    <DataGrid.Summary
+                    <Summary
                         position="top"
                         ref={ref}
                         data-testid="summary"
@@ -301,18 +302,18 @@ describe("summary rows", () => {
                         // structural keys win
                         style={{ top: 3, color: "red" }}
                     >
-                        <DataGrid.SummaryRows>
+                        <SummaryRows>
                             {(row) => (
-                                <DataGrid.SummaryRow
+                                <SummaryRow
                                     row={row}
                                     className={(state) =>
                                         `row-${state.summaryIndex}`
                                     }
                                     style={{ transform: "none" }}
                                 >
-                                    <DataGrid.SummaryCells<Row>>
+                                    <SummaryCells<Row>>
                                         {(cell) => (
-                                            <DataGrid.SummaryCell
+                                            <SummaryCell
                                                 cell={cell}
                                                 render={(props, state) => (
                                                     <span
@@ -324,13 +325,13 @@ describe("summary rows", () => {
                                                 )}
                                             >
                                                 {cell.columnIndex}
-                                            </DataGrid.SummaryCell>
+                                            </SummaryCell>
                                         )}
-                                    </DataGrid.SummaryCells>
-                                </DataGrid.SummaryRow>
+                                    </SummaryCells>
+                                </SummaryRow>
                             )}
-                        </DataGrid.SummaryRows>
-                    </DataGrid.Summary>
+                        </SummaryRows>
+                    </Summary>
                 </DataGrid.Grid>
             </DataGrid.Root>,
         );
@@ -364,7 +365,7 @@ describe("summary rows", () => {
                 summaryRows={{ bottom: 1 }}
             >
                 <DataGrid.Grid>
-                    <DataGrid.Summary position="bottom" />
+                    <Summary position="bottom" />
                 </DataGrid.Grid>
             </DataGrid.Root>,
         );
@@ -373,7 +374,7 @@ describe("summary rows", () => {
         expect(() =>
             render(
                 <DataGrid.Root features={FEATURES} columns={plain} rows={rows}>
-                    <DataGrid.SummaryCells />
+                    <SummaryCells />
                 </DataGrid.Root>,
             ),
         ).toThrow(/SummaryRow/);
@@ -396,7 +397,7 @@ describe("summary rows", () => {
                     <Expose />
                     <DataGrid.Grid>
                         <DataGrid.Body />
-                        <DataGrid.Summary position="bottom" />
+                        <Summary position="bottom" />
                     </DataGrid.Grid>
                 </DataGrid.Root>
             );
@@ -434,26 +435,24 @@ describe("summary rows", () => {
                 >
                     <Expose />
                     <DataGrid.Grid>
-                        <DataGrid.Summary position="top">
-                            <DataGrid.SummaryRows>
+                        <Summary position="top">
+                            <SummaryRows>
                                 {(row) => (
-                                    <DataGrid.SummaryRow row={row}>
-                                        <DataGrid.SummaryCells<Row>>
+                                    <SummaryRow row={row}>
+                                        <SummaryCells<Row>>
                                             {(cell) => (
-                                                <DataGrid.SummaryCell
-                                                    cell={cell}
-                                                >
+                                                <SummaryCell cell={cell}>
                                                     {note}{" "}
                                                     {cell.column.renderSummaryCell?.(
                                                         cell,
                                                     )}
-                                                </DataGrid.SummaryCell>
+                                                </SummaryCell>
                                             )}
-                                        </DataGrid.SummaryCells>
-                                    </DataGrid.SummaryRow>
+                                        </SummaryCells>
+                                    </SummaryRow>
                                 )}
-                            </DataGrid.SummaryRows>
-                        </DataGrid.Summary>
+                            </SummaryRows>
+                        </Summary>
                     </DataGrid.Grid>
                 </DataGrid.Root>
             );
@@ -488,23 +487,23 @@ describe("a summary cell's controls", () => {
                 <DataGrid.Grid>
                     <DataGrid.Header />
                     <DataGrid.Body />
-                    <DataGrid.Summary position="bottom">
-                        <DataGrid.SummaryRows>
+                    <Summary position="bottom">
+                        <SummaryRows>
                             {(row) => (
-                                <DataGrid.SummaryRow row={row}>
-                                    <DataGrid.SummaryCells<Row>>
+                                <SummaryRow row={row}>
+                                    <SummaryCells<Row>>
                                         {(cell) => (
-                                            <DataGrid.SummaryCell cell={cell}>
+                                            <SummaryCell cell={cell}>
                                                 {cell.columnIndex === 2 ? (
                                                     <input aria-label="Note" />
                                                 ) : null}
-                                            </DataGrid.SummaryCell>
+                                            </SummaryCell>
                                         )}
-                                    </DataGrid.SummaryCells>
-                                </DataGrid.SummaryRow>
+                                    </SummaryCells>
+                                </SummaryRow>
                             )}
-                        </DataGrid.SummaryRows>
-                    </DataGrid.Summary>
+                        </SummaryRows>
+                    </Summary>
                 </DataGrid.Grid>
             </DataGrid.Root>
         );

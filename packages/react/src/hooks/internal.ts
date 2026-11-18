@@ -11,8 +11,6 @@ import {
     PINNED_KEYS,
     type RowState,
     rowPartOf,
-    type SummaryCellState,
-    summaryCellPartOf,
 } from "@fragiola/data-grid";
 import type * as React from "react";
 import {
@@ -26,7 +24,6 @@ import {
     HeaderRowContext,
     type HeaderRowInfo,
     type RowInfo,
-    type SummaryCellInfo,
     useGrid,
     useRootGrid,
 } from "../context";
@@ -110,16 +107,6 @@ export function useHeaderRowOf<TRow>(
         HeaderRowContext,
     ) as HeaderRowInfo<TRow> | null;
     return row ?? rendering ?? view.headerRows[view.headerRows.length - 1];
-}
-
-/** `useSummaryCell`, and how many columns the cell spans (a table cell's `colSpan`). */
-export function useSummaryCellPart<TRow>(
-    cell: SummaryCellInfo<TRow>,
-): PartHookResult<SummaryCellState> & {
-    columnSpan: number;
-    measured: boolean;
-} {
-    return summaryCellPartOf(useGridView<TRow>(), cell);
 }
 
 /** A ref that registers an element as one of the layers the engine of the `Root` around writes. */

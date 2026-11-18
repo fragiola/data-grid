@@ -6,7 +6,6 @@ import type {
     DataGridModel,
     GridCellInfo,
     GridRowInfo,
-    GridSummaryCellInfo,
     GridView,
     HeaderCellLayout,
     HeaderRowView,
@@ -53,16 +52,10 @@ export type HeaderCellInfo<TRow = unknown> = HeaderCellLayout<TRow, ReactNode>;
 export type HeaderRowInfo<TRow = unknown> = HeaderRowView<TRow, ReactNode>;
 
 /**
- * A summary row (Epic #86), as `DataGrid.SummaryRows` hands it to its children: its row index, its
- * position and its index among its position's rows.
+ * A summary row (Epic #86), as `SummaryRows` (from `/summary-rows`) hands it to its children: its
+ * row index, its position and its index among its position's rows.
  */
 export type SummaryRowInfo = SummaryRowView;
-
-/** A summary row's cell, as `DataGrid.SummaryCells` hands it to its children. */
-export type SummaryCellInfo<TRow = unknown> = GridSummaryCellInfo<
-    TRow,
-    ReactNode
->;
 
 export const DataGridContext = createContext<DataGridContextValue | null>(null);
 
@@ -71,17 +64,17 @@ export const RowContext = createContext<RowInfo | null>(null);
 /** The header row a part renders in (`DataGrid.HeaderRow`, `DataGrid.HeaderCells`). */
 export const HeaderRowContext = createContext<HeaderRowInfo | null>(null);
 
-/** The summary rows' position a part renders in (`DataGrid.Summary`, `DataGrid.SummaryRows`). */
-export const SummaryContext = createContext<SummaryPosition | null>(null);
-
-/** The summary row a part renders in (`DataGrid.SummaryRow`, `DataGrid.SummaryCells`). */
-export const SummaryRowContext = createContext<SummaryRowInfo | null>(null);
-
 /**
  * Whether the grid is a table (`DataGrid.Grid` rendered as a `<table>` element): the parts it
  * holds take a table's structure (`DataGrid.Empty`'s row and area).
  */
 export const TableContext = createContext(false);
+
+/** The summary rows' position a part renders in (`Summary`, `SummaryRows`; a nested grid's root resets it). */
+export const SummaryContext = createContext<SummaryPosition | null>(null);
+
+/** The summary row a part renders in (`SummaryRow`, `SummaryCells`; a nested grid's root resets it). */
+export const SummaryRowContext = createContext<SummaryRowInfo | null>(null);
 
 /**
  * The view the engine reports, read once by the root and handed down: a part re-renders when it

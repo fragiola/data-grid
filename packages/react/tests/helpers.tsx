@@ -15,17 +15,22 @@ import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
 import { navigation } from "../src/navigation";
 import { cellRange } from "../src/range";
+import { rowExpansion } from "../src/row-expansion";
+import { rowGrouping } from "../src/row-grouping";
+import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { cellSpans } from "../src/spans";
+import { summaryRows } from "../src/summary-rows";
 
 // What the React tests share: the features of Epics #144, #146 and #148, a grid root's size (jsdom
 // lays nothing out), the parts by their `data-grid-part` and indexes, and the elements that render a grid as a
 // table.
 
 /**
- * Every feature of Epics #144, #146 and #148, in their requirements' order: navigation, row
- * selection, cell ranges, the clipboard, the fill handle, cell editing and the column features
- * (resizing, reordering, pinning, collapsible groups), as the grid had them before they were
- * features. A test of these behaviours installs them (`features={FEATURES}`); a test of a grid
+ * Every feature of Epics #144, #146, #148 and #151, in their requirements' order: navigation, row
+ * selection, cell ranges, the clipboard, the fill handle, cell editing, the column features
+ * (resizing, reordering, pinning, collapsible groups) and the row features (spans, grouping,
+ * expansion, summary rows, reorder), as the grid had them before they were features. A test of these behaviours installs them (`features={FEATURES}`); a test of a grid
  * without them installs none.
  */
 export const FEATURES = [
@@ -39,6 +44,11 @@ export const FEATURES = [
     columnReorder(),
     columnPinning(),
     columnGroupCollapse(),
+    cellSpans(),
+    rowGrouping(),
+    rowExpansion(),
+    summaryRows(),
+    rowReorder(),
 ] as const;
 
 /** Their types (`useDataGridRef<Row, Features>()`, `RootProps<Row, Features>`). */

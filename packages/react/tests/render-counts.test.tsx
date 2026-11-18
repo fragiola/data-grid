@@ -13,6 +13,8 @@ import {
 } from "../src";
 import { useFillHandle } from "../src/fill";
 import { groupKeyOf, useLocalRows } from "../src/local";
+import { RowDetail } from "../src/row-expansion";
+import { Summary } from "../src/summary-rows";
 import {
     FEATURES,
     type Features,
@@ -103,7 +105,7 @@ function Grid({ fillHandle = false, rows = items, ...props }: GridProps) {
                         )}
                     </DataGrid.HeaderRows>
                 </DataGrid.Header>
-                <DataGrid.Summary position="top" />
+                <Summary position="top" />
                 <DataGrid.Body>
                     <DataGrid.Rows<Item>>
                         {(row) => (
@@ -120,14 +122,14 @@ function Grid({ fillHandle = false, rows = items, ...props }: GridProps) {
                                         </DataGrid.Cell>
                                     )}
                                 </DataGrid.Cells>
-                                <DataGrid.RowDetail>
+                                <RowDetail>
                                     <p>{row.row?.id}</p>
-                                </DataGrid.RowDetail>
+                                </RowDetail>
                             </DataGrid.Row>
                         )}
                     </DataGrid.Rows>
                 </DataGrid.Body>
-                <DataGrid.Summary position="bottom" />
+                <Summary position="bottom" />
             </DataGrid.Grid>
         </DataGrid.Root>
     );
