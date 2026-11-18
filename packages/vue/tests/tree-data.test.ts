@@ -112,7 +112,11 @@ const Files = defineComponent({
     // `tick` only renders it again
     props: { tick: { type: Number, default: 0 } },
     setup(props) {
-        const local = useLocalRows(files, columns, { getSubRows, rowKey });
+        const local = useLocalRows(files, columns, {
+            features: FEATURES,
+            getSubRows,
+            rowKey,
+        });
         latest = local;
         return () => {
             props.tick;

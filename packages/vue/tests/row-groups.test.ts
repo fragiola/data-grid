@@ -115,6 +115,7 @@ const Sales = defineComponent({
     },
     setup(props) {
         const local = useLocalRows(sales, columns, () => ({
+            features: FEATURES,
             groupBy: props.groupBy,
             aggregates,
             rowKey,

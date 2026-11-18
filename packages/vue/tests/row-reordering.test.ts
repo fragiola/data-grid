@@ -503,6 +503,7 @@ describe("useLocalRows' moveRow", () => {
             setup() {
                 const rows = shallowRef<readonly Task[]>(tasks);
                 const local = useLocalRows(() => rows.value, columns, {
+                    features: FEATURES,
                     defaultFilters: { id: [1, 3, 5, 7] },
                 });
                 move = (next) => {
@@ -533,6 +534,7 @@ describe("useLocalRows' moveRow", () => {
         const Paged = defineComponent({
             setup() {
                 const local = useLocalRows(letters, letter, {
+                    features: FEATURES,
                     pageSize: 2,
                     defaultPageIndex: 1,
                 });
@@ -560,7 +562,9 @@ describe("useLocalRows' moveRow", () => {
         const Local = defineComponent({
             setup() {
                 const rows = shallowRef<readonly Task[]>(tasks);
-                const local = useLocalRows(() => rows.value, columns);
+                const local = useLocalRows(() => rows.value, columns, {
+                    features: FEATURES,
+                });
                 apply = (moves) => {
                     for (const next of moves) rows.value = local.moveRow(next);
                 };
