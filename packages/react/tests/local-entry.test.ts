@@ -59,6 +59,9 @@ const EXTRAS = [
     "row-reorder",
     "spans",
     "summary-rows",
+    "filtering",
+    "search",
+    "pagination",
 ];
 
 describe("the primitives' entry", () => {
@@ -105,5 +108,17 @@ describe("the opt-in entries", () => {
                 `@fragiola/data-grid/${extra}`,
             );
         }
+    });
+});
+
+describe("the local entry", () => {
+    it("never reaches a feature's entry: it hands their state to the root (Epic #153)", () => {
+        const { packages } = reachable(join(src, "local", "index.ts"));
+        const features = EXTRAS.filter((name) => name !== "local");
+        expect(
+            [...packages].filter((name) =>
+                features.some((feature) => name.endsWith(`/${feature}`)),
+            ),
+        ).toEqual([]);
     });
 });

@@ -88,7 +88,7 @@ const columns: Column<Profile>[] = [
 export default function AutoRowHeights() {
     // a sort moves the rows: the ones on screen keep their heights, the others are measured
     // again when they render (counted at the estimate until then)
-    const local = useLocalRows(rows, columns);
+    const local = useLocalRows(rows, columns, { features: FEATURES });
     return (
         <div className={styles.frame}>
             <DataGrid.Root

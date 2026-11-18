@@ -154,6 +154,7 @@ class Sales {
     readonly rowSelection = input<"multiple" | undefined>(undefined);
     readonly columns = columns;
     readonly local = injectLocalRows(sales, columns, () => ({
+        features: TEST_FEATURES,
         groupBy: this.groupBy(),
         aggregates,
         rowKey,

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { filtering } from "@fragiola/data-grid-vue/filtering";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { pagination } from "@fragiola/data-grid-vue/pagination";
+import { search } from "@fragiola/data-grid-vue/search";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import {
     ChevronLeft,
@@ -25,7 +28,15 @@ const searchInset = {
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop)
-const features = [sorting(), navigation()] as const;
+// and filtering (the column filters), search (the search text), pagination (the page): `useLocalRows` applies them to the rows, the grid's
+// model holds them
+const features = [
+    sorting(),
+    filtering(),
+    search(),
+    pagination(),
+    navigation(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.
@@ -72,6 +83,7 @@ const columns: Column<Person, VNodeChild>[] = [
 // every row is in memory: one composable filters, searches, sorts and pages them, and keeps
 // that state itself. Its props go to the grid, its controls to the toolbar and the pager
 const local = useLocalRows(all, columns, {
+    features: features,
     pageSize: 25,
     defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
 });

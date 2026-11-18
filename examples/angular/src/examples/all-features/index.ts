@@ -288,7 +288,9 @@ export default class AllFeatures {
         columnResize(),
         columnPinning(),
     ];
-    readonly local = injectLocalRows(this.tasks, this.columns);
+    readonly local = injectLocalRows(this.tasks, this.columns, {
+        features: this.features,
+    });
     // the grid's model from outside its root: a fill repeats the values it reads
     readonly gridRef = createDataGridRef<BudgetedTask>();
 

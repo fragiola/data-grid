@@ -125,6 +125,24 @@
             "import": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs",
             "default": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs"
         },
+        "./filtering": {
+            "@fragiola/source": "./src/filtering/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-filtering.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-filtering.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-filtering.mjs"
+        },
+        "./search": {
+            "@fragiola/source": "./src/search/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-search.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-search.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-search.mjs"
+        },
+        "./pagination": {
+            "@fragiola/source": "./src/pagination/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-pagination.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-pagination.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-pagination.mjs"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -223,6 +241,21 @@
                 "types": "./dist/types/fragiola-data-grid-angular-summary-rows.d.ts",
                 "import": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs",
                 "default": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs"
+            },
+            "./filtering": {
+                "types": "./dist/types/fragiola-data-grid-angular-filtering.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-filtering.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-filtering.mjs"
+            },
+            "./search": {
+                "types": "./dist/types/fragiola-data-grid-angular-search.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-search.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-search.mjs"
+            },
+            "./pagination": {
+                "types": "./dist/types/fragiola-data-grid-angular-pagination.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-pagination.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-pagination.mjs"
             },
             "./package.json": "./package.json"
         }

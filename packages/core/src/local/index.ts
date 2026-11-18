@@ -1,6 +1,7 @@
 // @fragiola/data-grid/local: rows in memory, filtered, searched, sorted, grouped (Epic #87) and
-// paged (Epic #47). An opt-in entry point: the grid itself never orders, filters or groups rows,
-// and an app that never imports this never ships it.
+// paged (Epic #47), from the state of the features the grid installs (Epic #153: sorting,
+// filtering, search, pagination; it never imports them). An opt-in entry point: the grid itself
+// never orders, filters or groups rows, and an app that never imports this never ships it.
 
 export { indexAfterMove } from "../utils/utils";
 export type { LocalFilters } from "./filter";
@@ -12,6 +13,8 @@ export {
 export { moveRow, moveShownRow, moveShownRowAt, shownRowMove } from "./move";
 export { pageCount } from "./page";
 export {
+    type LocalFeatureProps,
+    type LocalGroupProps,
     type LocalRowsInputs,
     type LocalRowsProps,
     type LocalRowsResult,
@@ -27,6 +30,8 @@ export {
     type LocalRowsOptions,
     type LocalRowsState,
     type LocalRowsView,
+    type LocalStages,
+    localStagesOf,
     pageRows,
     searchRows,
     sortRows,

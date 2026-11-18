@@ -9,11 +9,15 @@ import {
 import {
     type CellInfo,
     type Column,
+    createDataGridRef,
     type HeaderCellInfo,
     type RowInfo,
     typedDataGrid,
 } from "../src";
+import { filtering } from "../src/filtering";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { pagination } from "../src/pagination";
+import { search } from "../src/search";
 import { type SortColumn, sorting } from "../src/sorting";
 import {
     click,
@@ -34,7 +38,7 @@ interface Person {
     team: string;
 }
 
-const FEATURES = [sorting()] as const;
+const FEATURES = [sorting(), filtering(), search(), pagination()] as const;
 
 const G = typedDataGrid<Person, typeof FEATURES>();
 
@@ -66,7 +70,7 @@ const People = defineComponent({
         const local = useLocalRows(
             () => props.rows,
             columns,
-            () => ({ pageSize: props.pageSize }),
+            () => ({ features: FEATURES, pageSize: props.pageSize }),
         );
         latest = local;
         return () => {
@@ -241,6 +245,7 @@ describe("useLocalRows across renders", () => {
             setup() {
                 const rows = shallowRef(people);
                 const local = useLocalRows(() => rows.value, columns, {
+                    features: FEATURES,
                     pageSize: 2,
                     defaultSortColumns: [
                         { columnKey: "name", direction: "ascending" },
@@ -318,7 +323,9 @@ describe("useLocalRows across renders", () => {
         const seen = new Set<(sortColumns: readonly SortColumn[]) => void>();
         const Watch = defineComponent({
             setup() {
-                const local = useLocalRows(people, columns);
+                const local = useLocalRows(people, columns, {
+                    features: FEATURES,
+                });
                 return () => {
                     seen.add(local.props.onSortColumnsChange);
                     return h(
@@ -342,5 +349,57 @@ describe("useLocalRows across renders", () => {
         click(headerAt(container, 1));
         await settled();
         expect(seen.size).toBe(1);
+    });
+});
+
+describe("useLocalRows over the features (Epic #153)", () => {
+    it("hands the root's model the state and takes a command run on it back; skips a stage not installed", async () => {
+        const gridRef = createDataGridRef<Person, typeof FEATURES>();
+        let sortedOnly: LocalRowsResult<Person> | undefined;
+        const Grids = defineComponent({
+            setup() {
+                const local = useLocalRows(people, columns, {
+                    features: FEATURES,
+                    pageSize: 2,
+                    defaultFilters: { team: "Core" },
+                });
+                latest = local;
+                // without filtering nor pagination: every row
+                sortedOnly = useLocalRows(people, columns, {
+                    features: [sorting()],
+                    pageSize: 2,
+                    defaultFilters: { team: "Core" },
+                }) as LocalRowsResult<Person>;
+                return () =>
+                    h(G.Root, {
+                        columns,
+                        features: FEATURES,
+                        gridRef,
+                        ...local.props,
+                    });
+            },
+        });
+        renderGrid(Grids);
+        await settled();
+        expect(sortedOnly?.rows).toHaveLength(5);
+        expect(Object.keys(sortedOnly?.props ?? {}).sort()).toEqual([
+            "onSortColumnsChange",
+            "rows",
+            "sortColumns",
+        ]);
+        const model = gridRef.current?.model;
+        expect(model?.get("column-filters")).toEqual({ team: "Core" });
+        expect(model?.get("page-info").pageCount).toBe(1);
+        model?.run("column-filters.clear", undefined);
+        await settled();
+        expect(latest?.rows.map((row) => row.name)).toEqual(["Carla", "Ana"]);
+        expect(model?.get("page-count")).toBe(3);
+        model?.run("page.set", { pageIndex: 2 });
+        await settled();
+        expect(latest?.page.index).toBe(2);
+        model?.run("search.set", { text: "an" });
+        await settled();
+        expect(latest?.rows.map((row) => row.name)).toEqual(["Ana"]);
+        expect(model?.get("page-info").pageIndex).toBe(0);
     });
 });

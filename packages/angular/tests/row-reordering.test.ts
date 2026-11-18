@@ -510,6 +510,7 @@ describe("injectLocalRows' moveRow", () => {
         class Local {
             readonly rows = signal<readonly Task[]>(tasks);
             readonly local = injectLocalRows(this.rows, columns, {
+                features: TEST_FEATURES,
                 defaultFilters: { id: [1, 3, 5, 7] },
             });
             move(next: RowMove) {
@@ -541,6 +542,7 @@ describe("injectLocalRows' moveRow", () => {
         })
         class Paged {
             readonly local = injectLocalRows(letters, letter, {
+                features: TEST_FEATURES,
                 pageSize: 2,
                 defaultPageIndex: 1,
             });
@@ -568,7 +570,9 @@ describe("injectLocalRows' moveRow", () => {
         })
         class Local {
             readonly rows = signal<readonly Task[]>(tasks);
-            readonly local = injectLocalRows(this.rows, columns);
+            readonly local = injectLocalRows(this.rows, columns, {
+                features: TEST_FEATURES,
+            });
             apply(moves: readonly RowMove[]) {
                 for (const next of moves) {
                     this.rows.set(this.local.moveRow(next));

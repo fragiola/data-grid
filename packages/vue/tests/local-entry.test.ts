@@ -63,11 +63,27 @@ describe("the primitives' entry", () => {
             "row-reorder",
             "spans",
             "summary-rows",
+            "filtering",
+            "search",
+            "pagination",
         ]) {
             expect(names.filter((file) => file.startsWith(extra))).toEqual([]);
             expect(
                 [...packages].filter((name) => name.endsWith(`/${extra}`)),
             ).toEqual([]);
         }
+    });
+});
+
+describe("the local entry", () => {
+    it("never reaches a feature's entry: it hands their state to the root (Epic #153)", () => {
+        const { packages } = reachable(join(src, "local", "index.ts"));
+        expect(
+            [...packages].filter((name) =>
+                /\/(sorting|filtering|search|pagination|row-grouping)$/.test(
+                    name,
+                ),
+            ),
+        ).toEqual([]);
     });
 });

@@ -10,6 +10,7 @@ import {
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
+import { search } from "@fragiola/data-grid-angular/search";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { cellSpans } from "@fragiola/data-grid-angular/spans";
 import {
@@ -146,14 +147,18 @@ export default class SummaryRows {
     // leaves the features the grid installs: sorting (the local rows' sort needs it, or no column
     // sorts), cell navigation (the keys, the active cell, the tab stop), pinned columns (without
     // it, every column scrolls), the summary rows, column spans (the bottom row's count spans)
+    // and search (the search text): `injectLocalRows` applies them to the rows, the
+    // grid's model holds them
     readonly features = [
         sorting(),
+        search(),
         navigation(),
         columnPinning(),
         summaryRows(),
         cellSpans(),
     ];
     readonly local = injectLocalRows(all, this.columns, {
+        features: this.features,
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });
 

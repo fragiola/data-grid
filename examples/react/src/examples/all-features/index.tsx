@@ -156,7 +156,7 @@ export default function AllFeatures() {
     );
     const [announcement, setAnnouncement] = useState("");
     // sorted in memory: the grid's indexes are the rows shown
-    const local = useLocalRows(tasks, columns);
+    const local = useLocalRows(tasks, columns, { features: FEATURES });
     // the grid's model from outside its root: a fill repeats the values it reads
     const gridRef = useDataGridRef<BudgetedTask>();
 

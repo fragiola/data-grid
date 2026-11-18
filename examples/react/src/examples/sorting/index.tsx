@@ -48,6 +48,7 @@ export default function Sorting() {
     // the rows in memory, sorted by one hook: its props give the grid the sorted rows and its
     // sort (a click, Enter or Space on a header cell; Ctrl or ⌘ adds a column)
     const local = useLocalRows(all, columns, {
+        features: FEATURES,
         defaultSortColumns: [{ columnKey: "team", direction: "ascending" }],
     });
 

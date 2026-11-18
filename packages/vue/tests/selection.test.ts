@@ -539,7 +539,10 @@ describe("useLocalRows", () => {
         let result: ReturnType<typeof useLocalRows<Person>> | undefined;
         const Local = defineComponent({
             setup() {
-                result = useLocalRows(people, columns, { pageSize: 5 });
+                result = useLocalRows(people, columns, {
+                    features: FEATURES,
+                    pageSize: 5,
+                });
                 return () => null;
             },
         });

@@ -7,7 +7,8 @@ export default defineConfig({
     // `/range`, `/clipboard`, `/fill` with `useFillHandle`, Epic #144; `/editing` with `useCellEdit`,
     // Epic #146; `/column-resize` with `useColumnResizer`, `/column-reorder`, `/column-pinning`,
     // `/column-group-collapse`, Epic #148; `/row-expansion`, `/row-grouping`,
-    // `/row-reorder`, `/spans`, `/summary-rows`, Epic #151)
+    // `/row-reorder`, `/spans`, `/summary-rows`, Epic #151; `/filtering`, `/search`,
+    // `/pagination`, Epic #153)
     entry: {
         index: "src/index.ts",
         local: "src/local/index.ts",
@@ -27,6 +28,9 @@ export default defineConfig({
         "row-reorder": "src/row-reorder/index.ts",
         spans: "src/spans/index.ts",
         "summary-rows": "src/summary-rows/index.ts",
+        filtering: "src/filtering/index.ts",
+        search: "src/search/index.ts",
+        pagination: "src/pagination/index.ts",
     },
     format: "esm",
     platform: "browser",

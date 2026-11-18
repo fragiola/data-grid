@@ -127,7 +127,7 @@ const highPriority = (cell: CellInfo<Task>) =>
 
 export default function CustomRenderers() {
     const [rows, setRows] = useState<readonly Task[]>(ROWS);
-    const local = useLocalRows(rows, columns);
+    const local = useLocalRows(rows, columns, { features: FEATURES });
     return (
         <div className={styles.frame}>
             <DataGrid.Root

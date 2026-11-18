@@ -3,27 +3,36 @@ title: Rows in memory
 description: Sort, filter, search and page the rows you hold in the browser with one hook, or send the same state to your server.
 ---
 
-The grid shows the rows it is given, in that order. When every row is in memory, one hook does
-the rest: it keeps the sort, the filters, the search and the page, and hands the grid the rows to
-show. A grid fed by a server never loads it.
+The grid shows the rows it is given, in that order. The sort, the column filters, the search text
+and the page are the grid's state, each kept by a [feature](/docs/concepts/features):
+`sorting()`, `filtering()`, `search()` and `pagination()`. When every row is in memory, one hook
+does the rest: it applies the state of the features you install to your rows and hands the grid
+the rows to show. A grid fed by a server never loads it: it sends the same state.
 
 <Example id="local-rows" />
 
 ## One hook
 
 `useLocalRows(rows, columns, options)` comes from its own entry point,
-`@fragiola/data-grid-react/local`. Spread its `props` onto `DataGrid.Root`: the current page's
-rows, and the sort, so a click on a sortable header sorts them. The sort is a
-[feature](/docs/concepts/features): install `sorting()` on the root too, or no column sorts. Give
-its `filter` and `page` to your own controls.
+`@fragiola/data-grid-react/local`. Give it the root's features (`features`): each of
+`sorting()`, `filtering()`, `search()` and `pagination()` installed runs its stage, one left out
+is skipped (its controls change nothing). Spread its `props` onto `DataGrid.Root`: the current
+page's rows, and the state of those features, so a click on a sortable header sorts them. The
+root's model holds that state, controlled by the hook: `model.get("column-filters")` reads it, and
+a command run on the model (`model.run("page.set", { pageIndex: 2 })`) comes back to the hook.
+Give its `filter` and `page` to your own controls.
 
 ```tsx title="people.tsx"
+import { filtering } from "@fragiola/data-grid-react/filtering";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
+import { pagination } from "@fragiola/data-grid-react/pagination";
+import { search } from "@fragiola/data-grid-react/search";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 
-const features = [sorting()];
+const features = [sorting(), filtering(), search(), pagination()];
 
 const local = useLocalRows(people, columns, {
+    features,
     pageSize: 50,
     defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
 });
@@ -44,7 +53,7 @@ It returns:
 
 | field | holds |
 | --- | --- |
-| `props` | `rows`, `sortColumns` and `onSortColumnsChange`, for `DataGrid.Root` (the sort taken only with `sorting()` installed) |
+| `props` | `rows`, and the state of each feature given, for `DataGrid.Root`: `sortColumns` (`sorting()`), `columnFilters` (`filtering()`), `searchText` (`search()`), `pageIndex`, `pageSize` and `totalRowCount` (`pagination()`), each with its handler |
 | `rows` | the current page's rows |
 | `total`, `filteredCount` | every row given, and those passing the filters and the search |
 | `sort` | `columns`, `set`, `clear` |
@@ -53,7 +62,9 @@ It returns:
 
 The options are where it starts: `pageSize` (none: a single page of every row),
 `defaultSortColumns`, `defaultFilters`, `defaultSearch`, `defaultPageIndex`. A filter, the
-search or the sort changing goes back to the first page.
+search or the sort changing goes back to the first page. `features` is read once, as the root
+reads its own. The hook controls the state it hands the root: with `pagination()` installed,
+the page size is its `pageSize` option (`page.setSize`), never the root's `defaultPageSize`.
 
 Keep `rows` and `columns` the same arrays between renders (outside the component, or memoised),
 as `DataGrid.Root` wants its columns: the hook works again when they change.
@@ -63,7 +74,8 @@ as `DataGrid.Root` wants its columns: the hook works again when they change.
 The rows are filtered, then searched, then sorted, then grouped (with `groupBy`,
 [Row grouping](/docs/concepts/row-grouping)) or shown as a tree (with `getSubRows`,
 [Tree data](/docs/concepts/tree-data)), then paged. Grouped, `props` carry the expanded groups
-too (`expandedGroupKeys`, `onExpandedGroupKeysChange`): install `rowGrouping()` with them. Each stage is worked out again only
+too (`expandedGroupKeys`, `onExpandedGroupKeysChange`) when `features` has `rowGrouping()`. A stage
+whose feature is not in `features` is skipped. Each stage is worked out again only
 when its own inputs change: turning a page sorts nothing again, a new sort filters nothing
 again, and expanding a group groups nothing again.
 
@@ -125,7 +137,7 @@ the rows are grouped.
 
 ```tsx title="backlog.tsx"
 const [tasks, setTasks] = useState(initialTasks);
-const local = useLocalRows(tasks, columns);
+const local = useLocalRows(tasks, columns, { features });
 
 <DataGrid.Root
     features={features}
@@ -138,7 +150,8 @@ const local = useLocalRows(tasks, columns);
 ## Without React
 
 The same pipeline is framework-free in `@fragiola/data-grid/local`: `createLocalRows(options)`
-keeps the state and `derive(rows, columns, grouping?)` returns the page and the counts (grouped,
+keeps the state (`stages`, from `localStagesOf(features)`, says which stages run: every one
+without it) and `derive(rows, columns, grouping?)` returns the page and the counts (grouped,
 its `groups`: the rows shown, their kinds and their keys), and `sortRows`,
 `filterRows`, `searchRows` and `pageRows` work on any array, as `moveRow(rows, fromIndex,
 toIndex)` and `moveShownRow(rows, rowIndexes, fromIndex, toIndex)` do for a move (the rows
@@ -146,9 +159,31 @@ shown by their places among your rows, a view's `rowIndexes`, so equal rows are 
 
 ## On a server
 
-With more rows than the browser should hold, keep the same state in your app and send it: the
-sort is grid state (`sortColumns` and `onSortColumnsChange`, with `sorting()` installed; the
-header toggles it), the filters,
-the search and the page are yours. The grid shows the page that comes back.
+With more rows than the browser should hold, install the same features and send their state: the
+sort (`sortColumns`, the header toggles it), the column filters (`columnFilters`), the search text
+(`searchText`) and the page (`pageIndex`, `pageSize`), controlled by your app or read from the
+model (`model.get("page-info")`). Give the root the server's count (`totalRowCount`), so
+`get("page-count")` counts its pages. No `/local`: the grid shows the page that comes back.
+
+```tsx title="server.tsx"
+const features = [sorting(), filtering(), search(), pagination()];
+
+<DataGrid.Root
+    features={features}
+    columns={columns}
+    rows={page.rows}
+    sortColumns={sortColumns}
+    onSortColumnsChange={setSortColumns}
+    columnFilters={columnFilters}
+    onColumnFiltersChange={setColumnFilters}
+    pageIndex={pageIndex}
+    onPageIndexChange={setPageIndex}
+    pageSize={50}
+    totalRowCount={page.total}
+/>
+```
+
+The model never moves one piece for another: going back to the first page when a filter changes
+is your app's (`/local` does it in memory).
 
 <Example id="server-side" />

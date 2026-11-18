@@ -141,6 +141,7 @@ const TEAM_KEYS: readonly RowKey[] = TEAMS.map((team) =>
 );
 function Grouped(props: GridProps) {
     const local = useLocalRows(items, COLUMNS, {
+        features: FEATURES,
         groupBy: ["team"],
         rowKey,
         expandedGroupKeys: TEAM_KEYS,
@@ -157,6 +158,7 @@ const PARENT_KEYS: readonly RowKey[] = parents.map(rowKey);
 const getSubRows = (row: Item) => row.children;
 function Tree(props: GridProps) {
     const local = useLocalRows(parents, COLUMNS, {
+        features: FEATURES,
         getSubRows,
         rowKey,
         expandedGroupKeys: PARENT_KEYS,

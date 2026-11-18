@@ -463,6 +463,7 @@ export default class Companies {
         columnReorder(),
     ];
     readonly local = injectLocalRows(this.all, this.columns, {
+        features: this.features,
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });
     /** The ids of the companies the grid holds: what the header's checkbox selects. */

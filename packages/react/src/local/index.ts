@@ -1,11 +1,12 @@
 // @fragiola/data-grid-react/local: rows in memory in one hook (Epic #47). An opt-in entry point:
 // the primitives never import it, and an app that never imports it never ships it.
 
-import type { RowKey } from "@fragiola/data-grid";
+import type { DataGridFeatures, RowKey } from "@fragiola/data-grid";
 import {
     createLocalRows,
     type LocalRowsResult,
     localRowsResult,
+    localStagesOf,
     moveShownRowAt,
     plainRowKey,
     type UseLocalRowsOptions,
@@ -24,7 +25,9 @@ import type { ColumnOrGroup } from "../context";
 
 export {
     groupKeyOf,
+    type LocalFeatureProps,
     type LocalFilters,
+    type LocalGroupProps,
     type LocalRowsOptions,
     type LocalRowsProps,
     type LocalRowsResult,
@@ -36,13 +39,20 @@ const NO_GROUPS: readonly string[] = [];
 
 const NO_KEYS: readonly RowKey[] = [];
 
+/** No features: no stage, no feature's props. */
+const NO_FEATURES: DataGridFeatures = [];
+
 /**
- * Rows in memory, sorted, filtered, searched, grouped and paged, in one hook: it keeps that state
- * itself. Spread `props` onto `DataGrid.Root` (its rows and its sort; grouped, the rows shown, their
- * kinds and the expanded groups), and give `filter`, `group` and `page` to the app's own controls.
- * `options` is where it starts (`pageSize`, `defaultSortColumns`, `defaultFilters`,
- * `defaultSearch`, `defaultPageIndex`, `defaultExpandedGroupKeys`; a new `pageSize` and a new
- * `groupBy` are followed); a filter, the search or the sort changing goes back to the first page.
+ * Rows in memory, sorted, filtered, searched, grouped and paged, in one hook, by the features the
+ * grid installs (Epic #153: `options.features`, the same list as `Root`'s): each of `sorting()`,
+ * `filtering()`, `search()` and `pagination()` runs its stage, one not installed is skipped.
+ * Spread `props` onto `DataGrid.Root` (its rows and the state of those features, which the root's
+ * model holds, controlled by this hook: a command run on the model comes back here; grouped, the
+ * rows shown, their kinds and, with `rowGrouping()`, the expanded groups), and give `filter`,
+ * `group` and `page` to the app's own controls. `options` is where it starts (`pageSize`,
+ * `defaultSortColumns`, `defaultFilters`, `defaultSearch`, `defaultPageIndex`,
+ * `defaultExpandedGroupKeys`; a new `pageSize` and a new `groupBy` are followed); a filter, the
+ * search or the sort changing goes back to the first page.
  * Grouped (`groupBy`, Epic #87), the sort and the filters apply inside the groups, the groups are
  * ordered by the sort when it sorts their column (else ascending), and a page is of the rows shown,
  * group rows included.
@@ -50,13 +60,23 @@ const NO_KEYS: readonly RowKey[] = [];
  * Keep `rows` and `columns` the same arrays between renders (outside the component, or memoised),
  * as `DataGrid.Root` wants its `columns`: each stage is computed again when they change.
  */
-export function useLocalRows<TRow>(
+export function useLocalRows<
+    TRow,
+    const TFeatures extends DataGridFeatures = [],
+>(
     rows: readonly TRow[],
     columns: readonly ColumnOrGroup<TRow>[],
-    options?: UseLocalRowsOptions<TRow>,
-): LocalRowsResult<TRow> {
+    options?: UseLocalRowsOptions<TRow, TFeatures>,
+): LocalRowsResult<TRow, TFeatures> {
+    // the features are the grid's from its creation: read once, as the root reads its own
+    const [features] = useState(
+        (): DataGridFeatures => options?.features ?? NO_FEATURES,
+    );
     const [local] = useState(() =>
-        createLocalRows<TRow, ReactNode>(options ?? {}),
+        createLocalRows<TRow, ReactNode>({
+            ...options,
+            stages: localStagesOf(features),
+        }),
     );
     // `pageSize` is followed: a new one sets the page size (the first page)
     const pageSize = options?.pageSize;
@@ -151,8 +171,9 @@ export function useLocalRows<TRow>(
         (rowIndex: number) => groups?.subRowKeysOf(rowIndex) ?? NO_KEYS,
         [groups],
     );
-    return localRowsResult({
+    return localRowsResult<TRow, TFeatures>({
         local,
+        features,
         state,
         view,
         expandedGroupKeys,

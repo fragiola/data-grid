@@ -1,6 +1,8 @@
 // What every adapter's `useLocalRows` takes and gives (Epic #123): its options, the props it
 // hands a root and the controls it gives the app's UI, built once here from the pipeline.
 
+import type { DataGridFeatures, FeatureKeys } from "../feature/feature";
+import type { ColumnFilters } from "../filtering/types";
 import type { RowKey, RowKeyGetter, RowMetaGetter } from "../model/types";
 import type { SortColumn } from "../sorting/types";
 import type { LocalFilters } from "./filter";
@@ -11,8 +13,20 @@ import type {
     LocalRowsView,
 } from "./rows";
 
-/** Where `useLocalRows` starts, and how it groups (Epic #87). */
-export interface UseLocalRowsOptions<TRow> extends LocalRowsOptions {
+/** Where `useLocalRows` starts, which features its stages are, and how it groups (Epic #87). */
+export interface UseLocalRowsOptions<
+    TRow,
+    TFeatures extends DataGridFeatures = [],
+> extends Omit<LocalRowsOptions, "stages"> {
+    /**
+     * the features the grid installs (Epic #153: the same list as `Root`'s `features`): each of
+     * sorting, filtering, search and pagination installed runs its stage, and `props` carry its
+     * state for the root (the root's model holds it: `model.get("column-filters")`, a command
+     * run on it comes back here); one not installed is skipped. Grouped, `rowGrouping()`
+     * installed, `props` carry the expanded groups. Without it, none: no stage, no feature's
+     * props. Read once
+     */
+    readonly features?: TFeatures | undefined;
     /**
      * the columns to group the rows by, the outer one first (Epic #87): the grid shows a group
      * row per value, its rows under it while it is expanded. Followed: a new list groups again
@@ -55,39 +69,77 @@ export interface UseLocalRowsOptions<TRow> extends LocalRowsOptions {
 }
 
 /**
- * What `useLocalRows` hands `DataGrid.Root`: spread it (`{...local.props}`). The current page's
- * rows, filtered, searched and sorted, and the sort; grouped (Epic #87), the rows shown as a count
- * and getters (group rows and the rows of the expanded ones), their keys and the expanded groups.
+ * The props `useLocalRows` hands a root for each feature it runs (Epic #153), by name: the root
+ * takes only those of the features it installs.
  */
-export type LocalRowsProps<TRow> = {
+export interface LocalFeatureProps {
+    /** sorting's */
     readonly sortColumns: readonly SortColumn[];
     readonly onSortColumnsChange: (sortColumns: readonly SortColumn[]) => void;
-} & (
-    | {
-          readonly rows: readonly TRow[];
-          readonly rowCount?: undefined;
-          readonly getRow?: undefined;
-          readonly getRowMeta?: undefined;
-          /** the `rowKey` option, when given, called with a row's index among the rows given */
-          readonly rowKey?: RowKeyGetter<TRow>;
-      }
-    | {
-          readonly rows?: undefined;
-          readonly rowCount: number;
-          readonly getRow: (index: number) => TRow | undefined;
-          readonly getRowMeta: RowMetaGetter;
-          readonly rowKey: RowKeyGetter<TRow>;
-          readonly expandedGroupKeys: readonly RowKey[];
-          readonly onExpandedGroupKeysChange: (
-              expandedGroupKeys: readonly RowKey[],
-          ) => void;
-      }
-);
+    /** filtering's */
+    readonly columnFilters: ColumnFilters;
+    readonly onColumnFiltersChange: (columnFilters: ColumnFilters) => void;
+    /** search's */
+    readonly searchText: string;
+    readonly onSearchTextChange: (searchText: string) => void;
+    /** pagination's: the page shown, its size (`null`: none) and the rows paged */
+    readonly pageIndex: number;
+    readonly onPageIndexChange: (pageIndex: number) => void;
+    readonly pageSize: number | null;
+    readonly onPageSizeChange: (pageSize: number | undefined) => void;
+    readonly totalRowCount: number;
+}
+
+/** The expanded groups `useLocalRows` hands a root, grouped (row grouping's, Epic #151). */
+export interface LocalGroupProps {
+    readonly expandedGroupKeys: readonly RowKey[];
+    readonly onExpandedGroupKeysChange: (
+        expandedGroupKeys: readonly RowKey[],
+    ) => void;
+}
+
+/** The props of `T` the installed features have: those a root with them takes. */
+type InstalledOf<T, TFeatures extends DataGridFeatures> = Pick<
+    T,
+    Extract<keyof T, keyof FeatureKeys<TFeatures>["props"]>
+>;
+
+/**
+ * What `useLocalRows` hands `DataGrid.Root`: spread it (`{...local.props}`). The current page's
+ * rows, filtered, searched and sorted, and the state of the features it runs (the sort, the
+ * filters, the search, the page: `LocalFeatureProps`, each with its feature installed); grouped
+ * (Epic #87), the rows shown as a count and getters (group rows and the rows of the expanded
+ * ones), their keys and, with `rowGrouping()`, the expanded groups.
+ */
+export type LocalRowsProps<
+    TRow,
+    TFeatures extends DataGridFeatures = [],
+> = InstalledOf<LocalFeatureProps, TFeatures> &
+    (
+        | {
+              readonly rows: readonly TRow[];
+              readonly rowCount?: undefined;
+              readonly getRow?: undefined;
+              readonly getRowMeta?: undefined;
+              /** the `rowKey` option, when given, called with a row's index among the rows given */
+              readonly rowKey?: RowKeyGetter<TRow>;
+          }
+        | ({
+              readonly rows?: undefined;
+              readonly rowCount: number;
+              readonly getRow: (index: number) => TRow | undefined;
+              readonly getRowMeta: RowMetaGetter;
+              readonly rowKey: RowKeyGetter<TRow>;
+          } & InstalledOf<LocalGroupProps, TFeatures>)
+    );
 
 /** Everything `useLocalRows` gives: the props for the grid, and the controls for the app's UI. */
-export interface LocalRowsResult<TRow> {
+export interface LocalRowsResult<
+    TRow,
+    TFeatures extends DataGridFeatures = [],
+> {
     /** spread onto `DataGrid.Root` */
-    readonly props: LocalRowsProps<TRow>;
+    readonly props: LocalRowsProps<TRow, TFeatures>;
     /** the current page's rows (the same as `props.rows`) */
     readonly rows: readonly TRow[];
     /** every row given */
@@ -181,6 +233,11 @@ export interface LocalRowsInputs<TRow> {
     /** the keys of the rows under the row shown at an index (`groups.subRowKeysOf`) */
     readonly subRowKeysOf: (rowIndex: number) => readonly RowKey[];
     readonly moveRow: LocalRowsResult<TRow>["moveRow"];
+    /**
+     * the grid's features (`UseLocalRowsOptions.features`, Epic #153): the props carry the state
+     * of those the pipeline runs, and the expanded groups with row grouping
+     */
+    readonly features: readonly { readonly name: string }[];
 }
 
 /**
@@ -199,32 +256,56 @@ export function plainRowKey<TRow>(
 }
 
 /** What `useLocalRows` gives, from what it keeps (`LocalRowsInputs`). */
-export function localRowsResult<TRow>(
+export function localRowsResult<TRow, TFeatures extends DataGridFeatures = []>(
     inputs: LocalRowsInputs<TRow>,
-): LocalRowsResult<TRow> {
+): LocalRowsResult<TRow, TFeatures> {
     const { local, state, view, expandedGroupKeys, setExpanded } = inputs;
     const last = view.pageCount - 1;
     const { groups } = view;
-    const sort = {
-        sortColumns: state.sortColumns,
-        onSortColumnsChange: local.setSortColumns,
+    const has = (name: string) => inputs.features.some((f) => f.name === name);
+    // the state of each feature the pipeline runs, for the root's model to hold (Epic #153): a
+    // command run on the model comes back to the pipeline through the handler
+    const features: Partial<LocalFeatureProps> = {
+        ...(has("sorting") && {
+            sortColumns: state.sortColumns,
+            onSortColumnsChange: local.setSortColumns,
+        }),
+        ...(has("filtering") && {
+            columnFilters: state.filters,
+            onColumnFiltersChange: local.setFilters,
+        }),
+        ...(has("search") && {
+            searchText: state.search,
+            onSearchTextChange: local.setSearch,
+        }),
+        ...(has("pagination") && {
+            pageIndex: view.pageIndex,
+            onPageIndexChange: local.setPageIndex,
+            pageSize: view.pageSize ?? null,
+            onPageSizeChange: local.setPageSize,
+            totalRowCount: view.pagedCount,
+        }),
     };
-    return {
-        props: groups
-            ? {
-                  rowCount: groups.rowCount,
-                  getRow: groups.getRow,
-                  getRowMeta: groups.getRowMeta,
-                  rowKey: groups.rowKey,
+    const props = groups
+        ? {
+              rowCount: groups.rowCount,
+              getRow: groups.getRow,
+              getRowMeta: groups.getRowMeta,
+              rowKey: groups.rowKey,
+              ...(has("rowGrouping") && {
                   expandedGroupKeys,
                   onExpandedGroupKeysChange: setExpanded,
-                  ...sort,
-              }
-            : {
-                  rows: view.rows,
-                  ...(inputs.rowKey ? { rowKey: inputs.rowKey } : {}),
-                  ...sort,
-              },
+              }),
+              ...features,
+          }
+        : {
+              rows: view.rows,
+              ...(inputs.rowKey ? { rowKey: inputs.rowKey } : {}),
+              ...features,
+          };
+    return {
+        // the props of the features given, typed by them
+        props: props as unknown as LocalRowsProps<TRow, TFeatures>,
         rows: view.rows,
         total: view.total,
         filteredCount: view.filteredCount,

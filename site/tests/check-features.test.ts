@@ -1,7 +1,12 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+    FEATURES,
     type FeatureMarkers,
     featureLeaks,
+    localEntryOf,
     markersOf,
 } from "../../scripts/check-features.ts";
 
@@ -80,6 +85,38 @@ describe("the features' bundle guard", () => {
             "sort-columns.toggle",
             "sort-columns",
             "column-sortable",
+        ]);
+    });
+
+    it("lists every feature, filtering, search and pagination included (Epic #153)", () => {
+        expect(FEATURES.map((feature) => feature.subpath)).toEqual(
+            expect.arrayContaining(["filtering", "search", "pagination"]),
+        );
+    });
+
+    it("finds each package's /local entry, tsdown's or ng-packagr's, and fails on a feature in it", () => {
+        const tsdown = mkdtempSync(join(tmpdir(), "guard-"));
+        writeFileSync(join(tsdown, "local.js"), "");
+        expect(localEntryOf(tsdown, "@fragiola/data-grid")).toBe("local.js");
+        const ng = mkdtempSync(join(tmpdir(), "guard-"));
+        mkdirSync(join(ng, "fesm2022"));
+        writeFileSync(
+            join(ng, "fesm2022", "fragiola-data-grid-angular-local.mjs"),
+            "",
+        );
+        expect(localEntryOf(ng, "@fragiola/data-grid-angular")).toBe(
+            "fesm2022/fragiola-data-grid-angular-local.mjs",
+        );
+        expect(localEntryOf(tsdown, "@fragiola/x-angular")).toBe("local.js");
+        const FILTERING: FeatureMarkers = {
+            subpath: "filtering",
+            markers: ["column-filters.set"],
+        };
+        const local = built({
+            "local.js": 'model.run("column-filters.set", { columnFilters });',
+        });
+        expect(featureLeaks("local.js", local, [FILTERING])).toEqual([
+            'local.js: filtering\'s "column-filters.set"',
         ]);
     });
 });

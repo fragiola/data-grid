@@ -9,7 +9,7 @@ import {
     type RowSelection,
     useDataGridRef,
 } from "../src";
-import { useLocalRows } from "../src/local";
+import { type LocalRowsResult, useLocalRows } from "../src/local";
 import { useSelectAll } from "../src/row-selection";
 import {
     cellAt,
@@ -387,9 +387,12 @@ describe("a row's state", () => {
 
 describe("useLocalRows", () => {
     it("returns every page's filtered rows", () => {
-        let result: ReturnType<typeof useLocalRows<Person>> | undefined;
+        let result: LocalRowsResult<Person, Features> | undefined;
         function Local() {
-            result = useLocalRows(people, columns, { pageSize: 5 });
+            result = useLocalRows(people, columns, {
+                features: FEATURES,
+                pageSize: 5,
+            });
             return null;
         }
         render(<Local />);

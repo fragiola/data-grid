@@ -89,7 +89,11 @@ class Files {
     /** only renders it again */
     readonly tick = input(0);
     readonly columns = columns;
-    readonly local = injectLocalRows(files, columns, { getSubRows, rowKey });
+    readonly local = injectLocalRows(files, columns, {
+        features: TEST_FEATURES,
+        getSubRows,
+        rowKey,
+    });
 
     constructor() {
         latest = this.local;

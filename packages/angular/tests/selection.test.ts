@@ -22,6 +22,7 @@ import {
 import { injectSelectAll } from "../src/row-selection";
 import {
     renderTestGrid,
+    TEST_FEATURES,
     type TestFeatures,
     type TestProps,
     TestRootProps,
@@ -447,7 +448,10 @@ describe("injectLocalRows", () => {
         @Component({ template: "" })
         class Local {
             constructor() {
-                result = injectLocalRows(people, columns, { pageSize: 5 });
+                result = injectLocalRows(people, columns, {
+                    features: TEST_FEATURES,
+                    pageSize: 5,
+                });
             }
         }
         await render(Local);

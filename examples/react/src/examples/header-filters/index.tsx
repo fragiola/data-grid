@@ -6,6 +6,7 @@ import {
     type HeaderCellInfo,
     headerCellContent,
 } from "@fragiola/data-grid-react";
+import { filtering } from "@fragiola/data-grid-react/filtering";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
 import { sorting } from "@fragiola/data-grid-react/sorting";
@@ -27,7 +28,9 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop)
-const FEATURES = [sorting(), navigation()];
+// and filtering (the column filters): `useLocalRows` applies them to the rows, the grid's
+// model holds them
+const FEATURES = [sorting(), filtering(), navigation()];
 
 const ROWS = tasks(1_000);
 
@@ -95,7 +98,7 @@ const columns: Column<Task>[] = [
 // are filtered and sorted in memory by `useLocalRows`, the filters' values kept by it.
 
 export default function HeaderFilters() {
-    const local = useLocalRows(ROWS, columns);
+    const local = useLocalRows(ROWS, columns, { features: FEATURES });
     const [shown, setShown] = useState(true);
     const shownLabel = useId();
     return (

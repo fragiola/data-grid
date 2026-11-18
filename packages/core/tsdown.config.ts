@@ -4,7 +4,8 @@ export default defineConfig({
     // the grid, and its opt-in extras, each its own file: the local pipeline
     // (`@fragiola/data-grid/local`) and the features (Epic #141, #144: `/sorting`,
     // `/navigation`, `/row-selection`, `/range`, `/clipboard`, `/fill`; Epic #146: `/editing`;
-    // Epic #148: `/column-resize`, `/column-reorder`, `/column-pinning`, `/column-group-collapse`)
+    // Epic #148: `/column-resize`, `/column-reorder`, `/column-pinning`, `/column-group-collapse`;
+    // Epic #151: the row features; Epic #153: `/filtering`, `/search`, `/pagination`)
     entry: {
         index: "src/index.ts",
         local: "src/local/index.ts",
@@ -24,6 +25,9 @@ export default defineConfig({
         "row-reorder": "src/row-reorder/index.ts",
         spans: "src/spans/index.ts",
         "summary-rows": "src/summary-rows/index.ts",
+        filtering: "src/filtering/index.ts",
+        search: "src/search/index.ts",
+        pagination: "src/pagination/index.ts",
     },
     format: "esm",
     platform: "browser",

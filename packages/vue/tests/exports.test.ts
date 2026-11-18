@@ -132,6 +132,9 @@ describe("@fragiola/data-grid-vue", () => {
                         "@fragiola/data-grid/row-reorder",
                         "@fragiola/data-grid/spans",
                         "@fragiola/data-grid/summary-rows",
+                        "@fragiola/data-grid/filtering",
+                        "@fragiola/data-grid/search",
+                        "@fragiola/data-grid/pagination",
                     ],
                     file,
                 ).toContain(specifier);
@@ -167,6 +170,10 @@ const FEATURE_ENTRIES = {
         "useSummaryRow",
         "useSummaryRows",
     ],
+    // Epic #153: the core's only
+    filtering: [],
+    search: [],
+    pagination: [],
 } as const;
 
 describe("the features' entries", () => {

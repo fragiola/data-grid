@@ -2,17 +2,28 @@ import {
     ChangeDetectionStrategy,
     Component,
     computed,
+    DestroyRef,
     effect,
+    inject,
     signal,
-    untracked,
 } from "@angular/core";
-import { pageCount } from "@fragiola/data-grid/local";
 import {
     type Column,
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import {
+    type ColumnFilters,
+    DataGridFiltering,
+    filtering,
+} from "@fragiola/data-grid-angular/filtering";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridPagination,
+    pageCount,
+    pagination,
+} from "@fragiola/data-grid-angular/pagination";
+import { DataGridSearch, search } from "@fragiola/data-grid-angular/search";
 import {
     DataGridSorting,
     type SortColumn,
@@ -27,8 +38,9 @@ import { ClickableButton } from "#/components/atoms/clickable";
 import { FIELDS } from "#/components/atoms/fields";
 import { SELECT_PARTS } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person } from "../_kit/data";
+import { fetchPeople } from "../_kit/people-server";
+import { createServerQuery } from "../_kit/server-query";
 import { RequestLog } from "./request-log";
-import { fetchPeople } from "./server";
 import * as styles from "./styles";
 
 const PAGE_SIZE = 50;
@@ -67,6 +79,9 @@ const columns: Column<Person, DataGridNode>[] = [
     imports: [
         DATA_GRID,
         DataGridSorting,
+        DataGridFiltering,
+        DataGridSearch,
+        DataGridPagination,
         ClickableButton,
         FIELDS,
         SELECT_PARTS,
@@ -120,6 +135,17 @@ const columns: Column<Person, DataGridNode>[] = [
                     dataGridSorting
                     [sortColumns]="sortColumns()"
                     (sortColumnsChange)="sortBy($event)"
+                    dataGridFiltering
+                    [columnFilters]="columnFilters()"
+                    (columnFiltersChange)="filterBy($event)"
+                    dataGridSearch
+                    [searchText]="searchText()"
+                    (searchTextChange)="searchFor($event)"
+                    dataGridPagination
+                    [pageIndex]="pageIndex()"
+                    (pageIndexChange)="goTo($event)"
+                    [pageSize]="PAGE_SIZE"
+                    [totalRowCount]="page().total"
                     [attr.aria-busy]="loading() || null"
                     [class]="styles.root"
                 >
@@ -183,24 +209,42 @@ export default class ServerSide {
     protected readonly formatNumber = formatNumber;
 
     readonly columns = columns;
-    // the features the grid installs: sorting (the header toggles the sort the app keeps), cell
-    // navigation (the keys, the active cell, the tab stop)
-    readonly features = [sorting(), navigation()];
+    protected readonly PAGE_SIZE = PAGE_SIZE;
+    // the features the grid installs: sorting (the header toggles the sort), filtering, search and
+    // pagination (the column filters, the search text and the page, held by the grid's model: the
+    // app reads them to ask the server, no rows in memory), cell navigation (the keys, the active
+    // cell, the tab stop)
+    readonly features = [
+        sorting(),
+        filtering(),
+        search(),
+        pagination(),
+        navigation(),
+    ];
 
-    // the external mode: the app keeps the sort (grid state, the header toggles it), the filter,
-    // the search and the page, and asks the server; the grid shows the page it gets back
+    // the external mode: the grid's features hold the sort (the header toggles it), the column
+    // filters, the search text and the page, controlled here; the app asks the server for the
+    // page they make (the fetch policy in `_kit/server-query.ts`) and the grid shows it
     readonly sortColumns = signal<readonly SortColumn[]>([
         { columnKey: "name", direction: "ascending" },
     ]);
-    readonly team = signal("");
+    readonly columnFilters = signal<ColumnFilters>({});
     readonly typed = signal("");
-    readonly search = signal("");
+    readonly searchText = signal("");
     readonly pageIndex = signal(0);
-    readonly page = signal<{ rows: readonly Person[]; total: number }>({
-        rows: [],
-        total: 0,
+    private readonly query = createServerQuery(fetchPeople);
+    private readonly answer = signal(this.query.state);
+    readonly page = computed(
+        () => this.answer().answer ?? { rows: [], total: 0 },
+    );
+    readonly loading = computed(() => this.answer().loading);
+    /** the team a filter holds: a list of one, the team chosen from the select */
+    readonly team = computed(() => {
+        const { team } = this.columnFilters() as { readonly team?: unknown };
+        return Array.isArray(team) && typeof team[0] === "string"
+            ? team[0]
+            : "";
     });
-    readonly loading = signal(true);
 
     protected readonly pages = computed(() =>
         pageCount(this.page().total, PAGE_SIZE),
@@ -209,44 +253,55 @@ export default class ServerSide {
     readonly rowKey = (row: Person) => row.id;
 
     constructor() {
+        inject(DestroyRef).onDestroy(
+            this.query.subscribe(() => this.answer.set(this.query.state)),
+        );
         // the search goes to the server once the typing pauses (and only when it changed: a page
         // chosen meanwhile stays)
         effect((onCleanup) => {
             const text = this.typed();
-            if (text === this.search()) return;
+            if (text === this.searchText()) return;
             const timer = setTimeout(() => {
-                this.search.set(text);
+                this.searchText.set(text);
                 this.pageIndex.set(0);
             }, 250);
             onCleanup(() => clearTimeout(timer));
         });
 
-        effect((onCleanup) => {
-            const query = {
+        effect(() => {
+            this.query.ask({
                 sortColumns: this.sortColumns(),
-                team: this.team(),
-                search: this.search(),
+                columnFilters: this.columnFilters(),
+                searchText: this.searchText(),
                 pageIndex: this.pageIndex(),
                 pageSize: PAGE_SIZE,
-            };
-            // an answer to a query the app has moved on from is dropped
-            let current = true;
-            untracked(() => this.loading.set(true));
-            fetchPeople(query).then((answer) => {
-                if (!current) return;
-                this.page.set(answer);
-                this.loading.set(false);
-            });
-            onCleanup(() => {
-                current = false;
             });
         });
     }
 
     protected chooseTeam(choice: unknown) {
-        this.team.set(
-            typeof choice === "string" && choice !== "any" ? choice : "",
+        // a team chosen from a list: an exact value (a list filter), not a text
+        this.columnFilters.set(
+            typeof choice === "string" && choice !== "any"
+                ? { team: [choice] }
+                : {},
         );
+        this.pageIndex.set(0);
+    }
+
+    protected filterBy(next: ColumnFilters) {
+        this.columnFilters.set(next);
+        this.pageIndex.set(0);
+    }
+
+    protected goTo(next: number) {
+        // the model keeps any page: the pages the server's total makes hold it
+        this.pageIndex.set(Math.min(next, this.pages() - 1));
+    }
+
+    protected searchFor(next: string) {
+        this.typed.set(next);
+        this.searchText.set(next);
         this.pageIndex.set(0);
     }
 

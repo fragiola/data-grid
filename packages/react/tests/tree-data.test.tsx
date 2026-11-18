@@ -50,7 +50,11 @@ function Toggle({ cell }: { cell: CellInfo<File> }) {
 }
 
 function Files() {
-    const local = useLocalRows(files, columns, { getSubRows, rowKey });
+    const local = useLocalRows(files, columns, {
+        features: FEATURES,
+        getSubRows,
+        rowKey,
+    });
     latest = local;
     return (
         <DataGrid.Root

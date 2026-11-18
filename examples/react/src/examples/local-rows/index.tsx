@@ -1,8 +1,11 @@
 "use client";
 
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import { filtering } from "@fragiola/data-grid-react/filtering";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import { pagination } from "@fragiola/data-grid-react/pagination";
+import { search } from "@fragiola/data-grid-react/search";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import {
     ChevronLeft,
@@ -20,7 +23,9 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop)
-const FEATURES = [sorting(), navigation()];
+// and filtering (the column filters), search (the search text), pagination (the page): `useLocalRows` applies them to the rows, the grid's
+// model holds them
+const FEATURES = [sorting(), filtering(), search(), pagination(), navigation()];
 
 const all = people(1_000);
 
@@ -64,6 +69,7 @@ export default function LocalRows() {
     // every row is in memory: one hook filters, searches, sorts and pages them, and keeps that
     // state itself. Its props go to the grid, its controls to the toolbar and the pager
     const local = useLocalRows(all, columns, {
+        features: FEATURES,
         pageSize: 25,
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

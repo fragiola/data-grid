@@ -14,7 +14,9 @@ import { columnReorder } from "../src/column-reorder";
 import { columnResize } from "../src/column-resize";
 import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
+import { filtering } from "../src/filtering";
 import { navigation } from "../src/navigation";
+import { pagination } from "../src/pagination";
 import {
     type ColumnOrGroup,
     DATA_GRID,
@@ -28,6 +30,7 @@ import { rowExpansion } from "../src/row-expansion";
 import { rowGrouping } from "../src/row-grouping";
 import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { search } from "../src/search";
 import { cellSpans } from "../src/spans";
 import { SUMMARY_ROWS, summaryRows } from "../src/summary-rows";
 import { type Rendered, render, settled } from "./helpers";
@@ -39,8 +42,8 @@ import { type Rendered, render, settled } from "./helpers";
 /**
  * The features the tests' grids install unless a test gives its own (Epics #144, #146, #148,
  * #151): every behaviour the core had before it became a feature (navigation, row selection, cell
- * ranges, the clipboard, the fill handle, cell editing, the column features and the row
- * features), so the tests of those behaviours pass unchanged.
+ * ranges, the clipboard, the fill handle, cell editing, the column features, the row features
+ * and, Epic #153, filtering, search and pagination), so the tests of those behaviours pass unchanged.
  */
 export const TEST_FEATURES = [
     navigation(),
@@ -58,6 +61,9 @@ export const TEST_FEATURES = [
     rowExpansion(),
     summaryRows(),
     rowReorder(),
+    filtering(),
+    search(),
+    pagination(),
 ] as const;
 
 /** The features a root whose columns span installs on its own (no other feature). */

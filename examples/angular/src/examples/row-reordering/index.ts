@@ -21,6 +21,7 @@ import {
     DataGridRowReorder,
     rowReorder,
 } from "@fragiola/data-grid-angular/row-reorder";
+import { search } from "@fragiola/data-grid-angular/search";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideArrowDown,
@@ -194,13 +195,18 @@ export default class RowReordering {
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), pinned columns (without it, every
     // column scrolls), row reorder (the drag handles and the keys move rows)
+    // and search (the search text): `injectLocalRows` applies them to the rows, the
+    // grid's model holds them
     readonly features = [
         sorting(),
+        search(),
         navigation(),
         columnPinning(),
         rowReorder(),
     ];
-    readonly local = injectLocalRows(this.rows, columns);
+    readonly local = injectLocalRows(this.rows, columns, {
+        features: this.features,
+    });
     protected readonly sorted = computed(
         () => this.local.sort.columns.length > 0,
     );

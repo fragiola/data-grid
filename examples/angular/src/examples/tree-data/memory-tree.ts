@@ -9,6 +9,7 @@ import {
     type LocalRowsResult,
 } from "@fragiola/data-grid-angular/local";
 import { columns, getSubRows, rowKey } from "./columns";
+import { MEMORY_FEATURES } from "./features";
 import { type Entry, FILES } from "./files";
 
 // The files in memory: one injection function makes the tree, searches it (a match's folders stay)
@@ -30,6 +31,7 @@ export class MemoryTree {
     }
 
     readonly local = injectLocalRows(FILES, columns, {
+        features: MEMORY_FEATURES,
         getSubRows,
         rowKey,
         defaultExpandedGroupKeys: ["src"],

@@ -180,6 +180,7 @@ function Composition({
 /** Row groups in memory (Epic #87): `useLocalRows` groups by country, Brazil expanded. */
 function RowGroups({ table }: { table: boolean }) {
     const local = useLocalRows(sales, columns, {
+        features: FEATURES,
         groupBy: ["country"],
         rowKey,
         defaultExpandedGroupKeys: [groupKeyOf([["country", "Brazil"]])],

@@ -8,12 +8,15 @@ import { columnReorder } from "../src/column-reorder";
 import { columnResize } from "../src/column-resize";
 import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
+import { filtering } from "../src/filtering";
 import { navigation } from "../src/navigation";
+import { pagination } from "../src/pagination";
 import { cellRange } from "../src/range";
 import { rowExpansion } from "../src/row-expansion";
 import { rowGrouping } from "../src/row-grouping";
 import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { search } from "../src/search";
 import { cellSpans } from "../src/spans";
 import { summaryRows } from "../src/summary-rows";
 
@@ -45,6 +48,9 @@ export const FEATURES = [
     rowExpansion(),
     summaryRows(),
     rowReorder(),
+    filtering(),
+    search(),
+    pagination(),
 ] as const;
 
 /** The type of `FEATURES`, for `typedDataGrid`, `RootProps` and the refs. */

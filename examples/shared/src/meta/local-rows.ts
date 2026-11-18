@@ -8,6 +8,9 @@ export default {
     order: 2,
     features: [
         "useLocalRows",
+        "filtering()",
+        "search()",
+        "pagination()",
         "filter",
         "search",
         "pageSize",

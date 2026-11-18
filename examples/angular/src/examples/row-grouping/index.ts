@@ -17,6 +17,7 @@ import {
     DataGridRowSelection,
     rowSelection,
 } from "@fragiola/data-grid-angular/row-selection";
+import { search } from "@fragiola/data-grid-angular/search";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import { LucideSearch } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
@@ -206,14 +207,18 @@ export default class RowGrouping {
     // cell navigation (the keys, the active cell, the tab stop), row selection, pinned columns
     // (without it, every column scrolls), row grouping (the groups expand: the local rows' props
     // carry the expanded groups)
+    // and search (the search text): `injectLocalRows` applies them to the rows, the
+    // grid's model holds them
     readonly features = [
         sorting(),
+        search(),
         navigation(),
         rowSelection(),
         columnPinning(),
         rowGrouping(),
     ];
     readonly local = injectLocalRows(ROWS, this.columns, () => ({
+        features: this.features,
         groupBy: GROUP_BY[this.grouping()],
         aggregates: AGGREGATES,
         rowKey,

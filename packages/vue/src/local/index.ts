@@ -1,11 +1,16 @@
 // @fragiola/data-grid-vue/local: rows in memory in one composable (Epic #47). An opt-in entry
 // point: the primitives never import it, and an app that never imports it never ships it.
 
-import type { ColumnOrGroup, RowKey } from "@fragiola/data-grid";
+import type {
+    ColumnOrGroup,
+    DataGridFeatures,
+    RowKey,
+} from "@fragiola/data-grid";
 import {
     createLocalRows,
     type LocalRowsResult,
     localRowsResult,
+    localStagesOf,
     moveShownRowAt,
     plainRowKey,
     type UseLocalRowsOptions,
@@ -22,7 +27,9 @@ import {
 
 export {
     groupKeyOf,
+    type LocalFeatureProps,
     type LocalFilters,
+    type LocalGroupProps,
     type LocalRowsOptions,
     type LocalRowsProps,
     type LocalRowsResult,
@@ -34,11 +41,18 @@ const NO_GROUPS: readonly string[] = [];
 
 const NO_KEYS: readonly RowKey[] = [];
 
+/** No features: no stage, no feature's props. */
+const NO_FEATURES: DataGridFeatures = [];
+
 /**
- * Rows in memory, sorted, filtered, searched, grouped and paged, in one composable: it keeps that
- * state itself. Bind `props` onto `DataGrid.Root` (`v-bind="local.props"`: its rows and its sort;
- * grouped, the rows shown, their kinds and the expanded groups), and give `filter`, `group` and
- * `page` to the app's own controls. Every field is read when used, so a template follows it.
+ * Rows in memory, sorted, filtered, searched, grouped and paged, in one composable, by the
+ * features the grid installs (Epic #153: `options.features`, the same list as `Root`'s, read
+ * once): each of `sorting()`, `filtering()`, `search()` and `pagination()` runs its stage, one not
+ * installed is skipped. Bind `props` onto `DataGrid.Root` (`v-bind="local.props"`: its rows and
+ * the state of those features, which the root's model holds, controlled by this composable: a
+ * command run on the model comes back here; grouped, the rows shown, their kinds and, with
+ * `rowGrouping()`, the expanded groups), and give `filter`, `group` and `page` to the app's own
+ * controls. Every field is read when used, so a template follows it.
  * `options` is where it starts (`pageSize`, `defaultSortColumns`, `defaultFilters`,
  * `defaultSearch`, `defaultPageIndex`, `defaultExpandedGroupKeys`; a new `pageSize` and a new
  * `groupBy` are followed); a filter, the search or the sort changing goes back to the first page.
@@ -46,12 +60,23 @@ const NO_KEYS: readonly RowKey[] = [];
  * Keep `rows` and `columns` the same arrays while they do not change (each stage is computed
  * again when they do). Call it in `setup`.
  */
-export function useLocalRows<TRow>(
+export function useLocalRows<
+    TRow,
+    const TFeatures extends DataGridFeatures = [],
+>(
     rows: MaybeRefOrGetter<readonly TRow[]>,
     columns: MaybeRefOrGetter<readonly ColumnOrGroup<TRow, VNodeChild>[]>,
-    options?: MaybeRefOrGetter<UseLocalRowsOptions<TRow> | undefined>,
-): LocalRowsResult<TRow> {
-    const local = createLocalRows<TRow, VNodeChild>(toValue(options) ?? {});
+    options?: MaybeRefOrGetter<
+        UseLocalRowsOptions<TRow, TFeatures> | undefined
+    >,
+): LocalRowsResult<TRow, TFeatures> {
+    const initial = toValue(options);
+    // the features are the grid's from its creation: read once, as the root reads its own
+    const features: DataGridFeatures = initial?.features ?? NO_FEATURES;
+    const local = createLocalRows<TRow, VNodeChild>({
+        ...initial,
+        stages: localStagesOf(features),
+    });
     const state = shallowRef(local.state);
     onScopeDispose(
         local.subscribe(() => {
@@ -139,8 +164,9 @@ export function useLocalRows<TRow>(
     const subRowKeysOf = (rowIndex: number) =>
         view.value.groups?.subRowKeysOf(rowIndex) ?? NO_KEYS;
     const result = computed(() =>
-        localRowsResult({
+        localRowsResult<TRow, TFeatures>({
             local,
+            features,
             state: state.value,
             view: view.value,
             expandedGroupKeys: expandedGroupKeys.value,

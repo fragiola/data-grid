@@ -244,6 +244,7 @@ const grouped = (props: GridProps = {}) =>
         name: "GroupedGrid",
         setup() {
             const local = useLocalRows(items, COLUMNS, {
+                features: FEATURES,
                 groupBy: ["team"],
                 rowKey,
                 expandedGroupKeys: TEAM_KEYS,
@@ -264,6 +265,7 @@ const tree = (props: GridProps = {}) =>
         name: "TreeGrid",
         setup() {
             const local = useLocalRows(parents, COLUMNS, {
+                features: FEATURES,
                 getSubRows,
                 rowKey,
                 expandedGroupKeys: PARENT_KEYS,

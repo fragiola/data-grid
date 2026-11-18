@@ -207,7 +207,7 @@ export default function ColumnReorderingExample() {
     const moving = useRef(false);
     useMoveAnnouncements(gridRef, moving, setAnnouncement);
     // a click on a sortable header still sorts: the rows in memory, ordered by the app
-    const local = useLocalRows(all, columns);
+    const local = useLocalRows(all, columns, { features: FEATURES });
 
     return (
         <div className={styles.frame}>

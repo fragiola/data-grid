@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { type RowKey, typedDataGrid } from "@fragiola/data-grid-vue";
-import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
-import { navigation } from "@fragiola/data-grid-vue/navigation";
-import { rowGrouping } from "@fragiola/data-grid-vue/row-grouping";
-import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
-import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Search } from "@lucide/vue";
 import { h, ref, useId } from "vue";
 import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
 import { Switch } from "#/components/ui/switch";
 import { columns } from "./columns";
+import { features as FEATURES } from "./features";
 import FileGrid from "./file-grid.vue";
 import type { Entry } from "./files";
 import MemoryTree from "./memory-tree.vue";
@@ -22,19 +18,11 @@ const searchInset = {
     start: h(Search, { "aria-hidden": "true", class: styles.searchIcon }),
 };
 
-// the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
-// every column scrolls), row grouping (a group's toggle and keys; without it, nothing expands)
-const features = [
-    sorting(),
-    navigation(),
-    rowSelection(),
-    columnPinning(),
-    rowGrouping(),
-] as const;
-
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.
+// the features the grid installs (`./features.ts`, shared with the tree in memory)
+const features = FEATURES;
+
 const DataGrid = typedDataGrid<Entry, typeof features>();
 
 /** Loaded lazily, no keys under a row: a folder's entries are not all here. */

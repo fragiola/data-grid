@@ -96,6 +96,10 @@ const ENTRIES: Readonly<Record<string, readonly string[]>> = {
     "row-reorder": ["DataGridRowReorder", "DataGridRowDragHandle"],
     spans: [],
     "summary-rows": ["DataGridSummaryRowsRoot", "SUMMARY_ROWS"],
+    // filtering, search and pagination (Epic #153): the root's inputs
+    filtering: ["DataGridFiltering"],
+    search: ["DataGridSearch"],
+    pagination: ["DataGridPagination"],
 };
 
 /** The features' entries: each re-exports the core's of the same name. */

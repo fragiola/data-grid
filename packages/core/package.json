@@ -125,6 +125,24 @@
             "import": "./dist/summary-rows.js",
             "default": "./dist/summary-rows.js"
         },
+        "./filtering": {
+            "@fragiola/source": "./src/filtering/index.ts",
+            "types": "./dist/filtering.d.ts",
+            "import": "./dist/filtering.js",
+            "default": "./dist/filtering.js"
+        },
+        "./search": {
+            "@fragiola/source": "./src/search/index.ts",
+            "types": "./dist/search.d.ts",
+            "import": "./dist/search.js",
+            "default": "./dist/search.js"
+        },
+        "./pagination": {
+            "@fragiola/source": "./src/pagination/index.ts",
+            "types": "./dist/pagination.d.ts",
+            "import": "./dist/pagination.js",
+            "default": "./dist/pagination.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -222,6 +240,21 @@
                 "types": "./dist/summary-rows.d.ts",
                 "import": "./dist/summary-rows.js",
                 "default": "./dist/summary-rows.js"
+            },
+            "./filtering": {
+                "types": "./dist/filtering.d.ts",
+                "import": "./dist/filtering.js",
+                "default": "./dist/filtering.js"
+            },
+            "./search": {
+                "types": "./dist/search.d.ts",
+                "import": "./dist/search.js",
+                "default": "./dist/search.js"
+            },
+            "./pagination": {
+                "types": "./dist/pagination.d.ts",
+                "import": "./dist/pagination.js",
+                "default": "./dist/pagination.js"
             },
             "./package.json": "./package.json"
         }

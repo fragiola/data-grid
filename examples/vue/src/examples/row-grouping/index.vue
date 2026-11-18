@@ -9,6 +9,7 @@ import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowGrouping } from "@fragiola/data-grid-vue/row-grouping";
 import { rowSelection } from "@fragiola/data-grid-vue/row-selection";
+import { search } from "@fragiola/data-grid-vue/search";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { Search } from "@lucide/vue";
 import { h, ref, type VNodeChild } from "vue";
@@ -30,8 +31,11 @@ const searchInset = {
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
 // every column scrolls), row grouping (a group's toggle and keys; without it, nothing expands)
+// and search (the search text): `useLocalRows` applies them to the rows, the grid's
+// model holds them
 const features = [
     sorting(),
+    search(),
     navigation(),
     rowSelection(),
     columnPinning(),
@@ -76,6 +80,7 @@ const grouping = ref<Grouping>("team");
 const selected = ref<readonly RowKey[]>([]);
 // the rows in memory searched, sorted and grouped by one composable; it keeps the expanded groups
 const local = useLocalRows(ROWS, columns, () => ({
+    features,
     groupBy: GROUP_BY[grouping.value],
     aggregates: AGGREGATES,
     rowKey,

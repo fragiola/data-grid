@@ -14,11 +14,16 @@ import {
     signal,
     untracked,
 } from "@angular/core";
-import type { ColumnOrGroup, RowKey } from "@fragiola/data-grid";
+import type {
+    ColumnOrGroup,
+    DataGridFeatures,
+    RowKey,
+} from "@fragiola/data-grid";
 import {
     createLocalRows,
     type LocalRowsResult,
     localRowsResult,
+    localStagesOf,
     moveShownRowAt,
     plainRowKey,
     type UseLocalRowsOptions,
@@ -27,7 +32,9 @@ import { type DataGridNode, DataGridRoot } from "@fragiola/data-grid-angular";
 
 export {
     groupKeyOf,
+    type LocalFeatureProps,
     type LocalFilters,
+    type LocalGroupProps,
     type LocalRowsOptions,
     type LocalRowsProps,
     type LocalRowsResult,
@@ -47,12 +54,18 @@ const NO_GROUPS: readonly string[] = [];
 
 const NO_KEYS: readonly RowKey[] = [];
 
+/** No features: no stage, no feature's props. */
+const NO_FEATURES: DataGridFeatures = [];
+
 /**
- * Rows in memory, sorted, filtered, searched, grouped and paged, in one injection function: it
- * keeps that state itself (React's `useLocalRows`). Give it to the root
- * (`<div dataGridRoot [dataGridLocalRows]="local" [columns]="columns">`: its rows and its sort;
- * grouped, the rows shown, their kinds and the expanded groups), and `filter`, `group` and `page`
- * to the app's own controls. Every field is read when used, so a template (or a computed) follows
+ * Rows in memory, sorted, filtered, searched, grouped and paged, in one injection function, by
+ * the features the grid installs (React's `useLocalRows`; Epic #153: `options.features`, the same
+ * list as the root's, read once): each of `sorting()`, `filtering()`, `search()` and
+ * `pagination()` runs its stage, one not installed is skipped. Give it to the root (`<div
+ * dataGridRoot [features]="features" [dataGridLocalRows]="local" [columns]="columns">`: its rows
+ * and the state of those features, which the root's model holds, controlled by it: a command run
+ * on the model comes back here; grouped, the rows shown, their kinds and, with `rowGrouping()`,
+ * the expanded groups), and `filter`, `group` and `page` to the app's own controls. Every field is read when used, so a template (or a computed) follows
  * it. `options` is where it starts (`pageSize`, `defaultSortColumns`, `defaultFilters`,
  * `defaultSearch`, `defaultPageIndex`, `defaultExpandedGroupKeys`; a new `pageSize` and a new
  * `groupBy` are followed); a filter, the search or the sort changing goes back to the first page.
@@ -60,16 +73,23 @@ const NO_KEYS: readonly RowKey[] = [];
  * Keep `rows` and `columns` the same arrays while they do not change (each stage is computed
  * again when they do). Call it in an injection context (a constructor, a field).
  */
-export function injectLocalRows<TRow>(
+export function injectLocalRows<
+    TRow,
+    const TFeatures extends DataGridFeatures = [],
+>(
     rows: ValueOrSignal<readonly TRow[]>,
     columns: ValueOrSignal<readonly ColumnOrGroup<TRow, DataGridNode>[]>,
-    options?: ValueOrSignal<UseLocalRowsOptions<TRow> | undefined>,
-): LocalRowsResult<TRow> {
+    options?: ValueOrSignal<UseLocalRowsOptions<TRow, TFeatures> | undefined>,
+): LocalRowsResult<TRow, TFeatures> {
     const optionsNow = () =>
         options === undefined ? undefined : valueNow(options);
-    const local = createLocalRows<TRow, DataGridNode>(
-        untracked(optionsNow) ?? {},
-    );
+    const initial = untracked(optionsNow);
+    // the features are the grid's from its creation: read once, as the root reads its own
+    const features: DataGridFeatures = initial?.features ?? NO_FEATURES;
+    const local = createLocalRows<TRow, DataGridNode>({
+        ...initial,
+        stages: localStagesOf(features),
+    });
     const state = signal(local.state);
     inject(DestroyRef).onDestroy(
         local.subscribe(() => {
@@ -156,8 +176,9 @@ export function injectLocalRows<TRow>(
     const subRowKeysOf = (rowIndex: number) =>
         untracked(view).groups?.subRowKeysOf(rowIndex) ?? NO_KEYS;
     const result = computed(() =>
-        localRowsResult({
+        localRowsResult<TRow, TFeatures>({
             local,
+            features,
             state: state(),
             view: view(),
             expandedGroupKeys: expandedGroupKeys(),
@@ -203,14 +224,15 @@ export function injectLocalRows<TRow>(
 
 /**
  * Gives a root the props of `injectLocalRows` (React's `{...local.props}` on `Root`): its rows and
- * its sort, grouped the rows shown, their kinds and the expanded groups, over the root's own
- * inputs. On the root's element: `<div dataGridRoot [dataGridLocalRows]="local"
+ * the state of the features it runs (the sort, the filters, the search, the page), grouped the
+ * rows shown, their kinds and the expanded groups, over the root's own inputs. On the root's element: `<div dataGridRoot [dataGridLocalRows]="local"
  * [columns]="columns">`.
  */
 @Directive({ selector: "[dataGridRoot][dataGridLocalRows]" })
 export class DataGridLocalRows<TRow = unknown> {
     /** what `injectLocalRows` returned */
-    readonly dataGridLocalRows = input.required<LocalRowsResult<TRow>>();
+    readonly dataGridLocalRows =
+        input.required<LocalRowsResult<TRow, DataGridFeatures>>();
 
     constructor() {
         const root = inject<DataGridRoot<TRow>>(DataGridRoot);

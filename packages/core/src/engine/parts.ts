@@ -146,6 +146,8 @@ export interface HeaderCellState {
     readonly sortDirection?: "ascending" | "descending" | undefined;
     /** its column's place among the sorted columns, 1-based, when it is sorted (sorting's) */
     readonly sortPriority?: number | undefined;
+    /** its column has a filter (filtering's, Epic #153: `@fragiola/data-grid/filtering`) */
+    readonly filtered?: boolean | undefined;
     /** its columns are pinned, at the start or at the end: sticky, it stays in view sideways */
     readonly pinned: boolean;
     /**

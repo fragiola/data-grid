@@ -58,7 +58,8 @@ The same primitives as `@fragiola/data-grid-react`, mapped onto Vue:
 - Composables (`useRow`, `useCell`, `useColumnResizer`, …) take a value or a getter and return
   `{ state, props }` as computed refs. `typedDataGrid<TRow>()` types the parts by your row type,
   which a template cannot pass as a type argument.
-- `/local` (`useLocalRows`) is an opt-in entry point, and so is every feature, the core's
+- `/local` (`useLocalRows`, `features` its stages: the installed `sorting()`, `filtering()`,
+  `search()`, `pagination()`) is an opt-in entry point, and so is every feature, the core's
   re-exported with its composables: `/sorting`, `/navigation` (the keys and the tab stop: without
   it the grid is a plain `table` of `cell`s), `/row-selection` (`useSelectAll`), `/range`,
   `/clipboard` and `/fill` (`useFillHandle`). Install them on `Root` (`:features="features"`, a

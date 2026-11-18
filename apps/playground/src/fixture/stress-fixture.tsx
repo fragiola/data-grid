@@ -15,8 +15,10 @@ import { columnReorder } from "@fragiola/data-grid-react/column-reorder";
 import { columnResize } from "@fragiola/data-grid-react/column-resize";
 import { editing } from "@fragiola/data-grid-react/editing";
 import { fillHandle, repeatedFill } from "@fragiola/data-grid-react/fill";
+import { filtering } from "@fragiola/data-grid-react/filtering";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import { pagination } from "@fragiola/data-grid-react/pagination";
 import { cellRange } from "@fragiola/data-grid-react/range";
 import {
     RowDetail,
@@ -25,6 +27,7 @@ import {
 import { rowGrouping } from "@fragiola/data-grid-react/row-grouping";
 import { rowReorder } from "@fragiola/data-grid-react/row-reorder";
 import { rowSelection } from "@fragiola/data-grid-react/row-selection";
+import { search } from "@fragiola/data-grid-react/search";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { cellSpans } from "@fragiola/data-grid-react/spans";
 import { summaryRows } from "@fragiola/data-grid-react/summary-rows";
@@ -54,7 +57,8 @@ import {
  * the features the fixture installs: every migrated one, sorting (Epic #141), cell navigation,
  * row selection, cell ranges, the clipboard and the fill handle (Epic #144), cell editing (Epic
  * #146), column resizing, reordering, pinning and collapsible groups (Epic #148), column spans,
- * row grouping, row expansion, summary rows and row reordering (Epic #151)
+ * row grouping, row expansion, summary rows and row reordering (Epic #151), filtering, search
+ * and pagination (Epic #153)
  */
 const FEATURES: FixtureFeatures = [
     sorting(),
@@ -73,6 +77,9 @@ const FEATURES: FixtureFeatures = [
     rowExpansion(),
     summaryRows(),
     rowReorder(),
+    filtering(),
+    search(),
+    pagination(),
 ];
 
 // The combined stress fixture (Epic #89, E5.3): every feature on at once, over 1,000,000 rows and
@@ -288,6 +295,7 @@ function StressFixture({
         [grouped],
     );
     const local = useLocalRows(memoryRows, columns, {
+        features: FEATURES,
         groupBy: grouped ? ["c5"] : [],
         rowKey: rowId,
     });

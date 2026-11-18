@@ -1,8 +1,13 @@
 "use client";
 
-import { pageCount } from "@fragiola/data-grid/local";
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import {
+    type ColumnFilters,
+    filtering,
+} from "@fragiola/data-grid-react/filtering";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import { pageCount, pagination } from "@fragiola/data-grid-react/pagination";
+import { search } from "@fragiola/data-grid-react/search";
 import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -10,12 +15,15 @@ import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
 import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person } from "../_kit/data";
-import { api, fetchPeople } from "./server";
+import { fetchPeople, peopleApi } from "../_kit/people-server";
+import { createServerQuery } from "../_kit/server-query";
 import * as styles from "./styles";
 
-// the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop)
-const FEATURES = [sorting(), navigation()];
+// the features the grid installs: sorting (without it, a sortable column never sorts), filtering,
+// search and pagination (the column filters, the search text and the page, held by the grid's
+// model: the app reads them to ask the server, no rows in memory), cell navigation (the keys, the
+// active cell, the tab stop)
+const FEATURES = [sorting(), filtering(), search(), pagination(), navigation()];
 
 const PAGE_SIZE = 50;
 
@@ -43,54 +51,54 @@ const columns: Column<Person>[] = [
     },
 ];
 
+/** The team a filter holds: a list of one, the team chosen from the select. */
+function teamOf(columnFilters: ColumnFilters): string {
+    const team = columnFilters.team;
+    return Array.isArray(team) && typeof team[0] === "string" ? team[0] : "";
+}
+
 export default function ServerSide() {
-    // the external mode: the app keeps the sort (grid state, the header toggles it), the filter,
-    // the search and the page, and asks the server; the grid shows the page it gets back
+    // the external mode: the grid's features hold the sort (the header toggles it), the column
+    // filters, the search text and the page, controlled here; the app asks the server for the
+    // page they make (the fetch policy in `_kit/server-query.ts`) and the grid shows it
     const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([
         { columnKey: "name", direction: "ascending" },
     ]);
-    const [team, setTeam] = useState("");
+    const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
     const [typed, setTyped] = useState("");
-    const [search, setSearch] = useState("");
+    const [searchText, setSearchText] = useState("");
     const [pageIndex, setPageIndex] = useState(0);
-    const [page, setPage] = useState<{
-        rows: readonly Person[];
-        total: number;
-    }>({ rows: [], total: 0 });
-    const [loading, setLoading] = useState(true);
+    const [query] = useState(() => createServerQuery(fetchPeople));
+    const { answer, loading } = useSyncExternalStore(
+        query.subscribe,
+        () => query.state,
+        () => query.state,
+    );
+    const page = answer ?? { rows: [], total: 0 };
 
     // the search goes to the server once the typing pauses (and only when it changed: a page
     // chosen meanwhile stays)
     useEffect(() => {
-        if (typed === search) return;
+        if (typed === searchText) return;
         const timer = setTimeout(() => {
-            setSearch(typed);
+            setSearchText(typed);
             setPageIndex(0);
         }, 250);
         return () => clearTimeout(timer);
-    }, [typed, search]);
+    }, [typed, searchText]);
 
     useEffect(() => {
-        // an answer to a query the app has moved on from is dropped
-        let current = true;
-        setLoading(true);
-        fetchPeople({
+        query.ask({
             sortColumns,
-            team,
-            search,
+            columnFilters,
+            searchText,
             pageIndex,
             pageSize: PAGE_SIZE,
-        }).then((answer) => {
-            if (!current) return;
-            setPage(answer);
-            setLoading(false);
         });
-        return () => {
-            current = false;
-        };
-    }, [sortColumns, team, search, pageIndex]);
+    }, [query, sortColumns, columnFilters, searchText, pageIndex]);
 
     const pages = pageCount(page.total, PAGE_SIZE);
+    const team = teamOf(columnFilters);
 
     return (
         <div className={styles.frame}>
@@ -109,10 +117,11 @@ export default function ServerSide() {
                     items={TEAMS}
                     value={team || "any"}
                     onValueChange={(choice) => {
-                        setTeam(
+                        // a team chosen from a list: an exact value (a list filter), not a text
+                        setColumnFilters(
                             typeof choice === "string" && choice !== "any"
-                                ? choice
-                                : "",
+                                ? { team: [choice] }
+                                : {},
                         );
                         setPageIndex(0);
                     }}
@@ -150,6 +159,24 @@ export default function ServerSide() {
                         setSortColumns(next);
                         setPageIndex(0);
                     }}
+                    columnFilters={columnFilters}
+                    onColumnFiltersChange={(next) => {
+                        setColumnFilters(next);
+                        setPageIndex(0);
+                    }}
+                    searchText={searchText}
+                    onSearchTextChange={(next) => {
+                        setTyped(next);
+                        setSearchText(next);
+                        setPageIndex(0);
+                    }}
+                    pageIndex={pageIndex}
+                    onPageIndexChange={(next) =>
+                        // the model keeps any page: the pages the server's total makes hold it
+                        setPageIndex(Math.min(next, pages - 1))
+                    }
+                    pageSize={PAGE_SIZE}
+                    totalRowCount={page.total}
                     className={styles.root}
                     aria-busy={loading || undefined}
                 >
@@ -223,9 +250,9 @@ export default function ServerSide() {
 /** What the app asked the server, newest first. */
 function RequestLog() {
     const log = useSyncExternalStore(
-        api.subscribe,
-        () => api.log,
-        () => api.log,
+        peopleApi.subscribe,
+        () => peopleApi.log,
+        () => peopleApi.log,
     );
     return (
         <aside className={styles.log} aria-label="Requests">

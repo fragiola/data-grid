@@ -82,6 +82,7 @@ function Sales({
     rowSelection?: "multiple";
 }) {
     const local = useLocalRows(sales, columns, {
+        features: FEATURES,
         groupBy,
         aggregates,
         rowKey,

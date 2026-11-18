@@ -90,7 +90,7 @@ const columns: Column<Profile, VNodeChild>[] = [
 
 // a sort moves the rows: the ones on screen keep their heights, the others are measured
 // again when they render (counted at the estimate until then)
-const local = useLocalRows(rows, columns);
+const local = useLocalRows(rows, columns, { features: features });
 
 const rowKey = (row: Profile) => row.id;
 </script>
