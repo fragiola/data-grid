@@ -14,8 +14,8 @@ import {
 } from "../_kit/market";
 import * as styles from "./styles";
 
-// The cells' content: each one reads its instrument, a new object whenever it moves, so a cell
-// renders again only when its row changed.
+// The cells' content: each one reads its instrument, a new object whenever it moves (the timeline
+// works its bars out again only for a new history).
 
 /** how long a moved price stays lit, in milliseconds (the flash's fade, `styles.flash`) */
 const FLASH = 700;
