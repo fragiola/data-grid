@@ -11,6 +11,17 @@ data's, done in memory by `useLocalRows`, or by a server.
 
 <Example id="row-grouping" />
 
+## Install row grouping
+
+Expanding groups is a [feature](/docs/concepts/features): `rowGrouping()` from the
+`/row-grouping` entry, which holds the toggle's hook too (`useGroupToggle`; Angular:
+`DataGridGroupToggle`, `injectGroupToggle` and the root's `DataGridRowGrouping` for
+`[(expandedGroupKeys)]`). The row kinds are the core's data contract (`getRowMeta`): without
+`rowGrouping()` a group row still renders as a row at its depth, but nothing expands it (its
+toggle and the keys do nothing), the grid is a `grid`, not a `treegrid`, its rows carry no tree's
+ARIA, and `expandedGroupKeys` and `row-groups.*` do not compile. Grouped rows in memory hand the
+root their expanded groups: install `rowGrouping()` with them.
+
 ## Rows in memory
 
 `useLocalRows` groups by the columns in `groupBy`, the outer one first, and keeps which groups
@@ -18,12 +29,13 @@ are expanded. Spread its `props` on the root: grouped, they are the rows shown (
 `getRow`), their kinds (`getRowMeta`), their keys (`rowKey`) and the expanded groups.
 
 ```tsx title="people.tsx"
-import { type Column, DataGrid, useGroupToggle } from "@fragiola/data-grid-react";
+import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import { groupKeyOf, useLocalRows } from "@fragiola/data-grid-react/local";
+import { rowGrouping, useGroupToggle } from "@fragiola/data-grid-react/row-grouping";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 
-// the sortable columns sort only with sorting installed
-const features = [sorting()];
+// the sortable columns sort only with sorting installed, the groups expand with row grouping
+const features = [sorting(), rowGrouping()];
 
 const columns: Column<Person>[] = [
     { key: "name", name: "Name", width: 220 },
@@ -146,7 +158,7 @@ The grid shows the rows it is given: toggling a group changes the keys, and your
 (`useLocalRows` does). The active cell stays at its index when your rows change under it: a group
 toggled from its own row keeps it there, one expanded above it from elsewhere (a toolbar's "expand
 all") moves what it holds. Group rows have no detail and never move by drag: while rows have
-kinds, `onRowMove` moves nothing. A fit to content measures group rows' cells as it measures
+kinds, [`onRowMove`](/docs/concepts/row-reordering) moves nothing. A fit to content measures group rows' cells as it measures
 data rows'.
 
 ## Keys
@@ -227,6 +239,7 @@ const getRowMeta = (index: number): RowMeta | undefined => {
 };
 
 <DataGrid.Root
+    features={features}
     columns={columns}
     rowCount={page.rowCount}
     getRow={(index) => page.items[index]?.person}

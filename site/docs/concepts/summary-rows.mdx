@@ -10,15 +10,35 @@ pinned columns and spans apply.
 
 <Example id="summary-rows" />
 
+## Install summary rows
+
+Summary rows are a [feature](/docs/concepts/features): `summaryRows()` from the `/summary-rows`
+entry, which holds their parts too (`Summary`, `SummaryRows`, `SummaryRow`, `SummaryCells`,
+`SummaryCell` and their hooks). Without it, a grid has no summary rows: `summaryRows`,
+`summaryRowHeight` and `summary-rows.*` do not compile, and the parts are not in the main entry.
+Where the rows stay (their indexes, their sticky layers, the body between them) is the core's.
+
 ## Giving the grid summary rows
 
 `summaryRows` on the root says how many there are at each end. The figures are yours: the grid
 keeps no second row type and computes nothing. Compute them in your component, over the rows you
-show, and render them in the summary cells: the `DataGrid.SummaryCells` children function reads
-them as it renders, so they follow your state while the columns stay the same.
+show, and render them in the summary cells: the `SummaryCells` children function reads them as
+it renders, so they follow your state while the columns stay the same.
+
+<Framework name="react">
 
 ```tsx title="people.tsx"
 import { type Column, DataGrid } from "@fragiola/data-grid-react";
+import {
+    Summary,
+    SummaryCell,
+    SummaryCells,
+    SummaryRow,
+    SummaryRows,
+    summaryRows,
+} from "@fragiola/data-grid-react/summary-rows";
+
+const features = [summaryRows()];
 
 const columns: Column<Person>[] = [
     { key: "name", name: "Name", width: 180 },
@@ -35,24 +55,29 @@ function People({ people }: { people: Person[] }) {
         },
     };
     const summary = (position: "top" | "bottom") => (
-        <DataGrid.Summary position={position}>
-            <DataGrid.SummaryRows>
+        <Summary position={position}>
+            <SummaryRows>
                 {(row) => (
-                    <DataGrid.SummaryRow row={row}>
-                        <DataGrid.SummaryCells<Person>>
+                    <SummaryRow row={row}>
+                        <SummaryCells<Person>>
                             {(cell) => (
-                                <DataGrid.SummaryCell cell={cell}>
+                                <SummaryCell cell={cell}>
                                     {figures[cell.column.key]?.[cell.position]}
-                                </DataGrid.SummaryCell>
+                                </SummaryCell>
                             )}
-                        </DataGrid.SummaryCells>
-                    </DataGrid.SummaryRow>
+                        </SummaryCells>
+                    </SummaryRow>
                 )}
-            </DataGrid.SummaryRows>
-        </DataGrid.Summary>
+            </SummaryRows>
+        </Summary>
     );
     return (
-        <DataGrid.Root columns={columns} rows={people} summaryRows={{ top: 1, bottom: 1 }}>
+        <DataGrid.Root
+            features={features}
+            columns={columns}
+            rows={people}
+            summaryRows={{ top: 1, bottom: 1 }}
+        >
             <DataGrid.Grid aria-label="People">
                 <DataGrid.Header />
                 {summary("top")}
@@ -64,6 +89,70 @@ function People({ people }: { people: Person[] }) {
 }
 ```
 
+</Framework>
+
+<Framework name="vue">
+
+`typedSummaryRows<Person>()` types the parts by your row type, as `typedDataGrid` types the
+grid's (a template cannot pass type arguments).
+
+```vue title="summary.vue"
+<script setup lang="ts">
+import type { SummaryPosition } from "@fragiola/data-grid-vue";
+import { typedSummaryRows } from "@fragiola/data-grid-vue/summary-rows";
+
+const S = typedSummaryRows<Person>();
+defineProps<{ position: SummaryPosition; figures: Figures }>();
+</script>
+
+<template>
+    <S.Summary :position="position">
+        <S.SummaryRows v-slot="{ row }">
+            <S.SummaryRow :row="row">
+                <S.SummaryCells v-slot="{ cell }">
+                    <S.SummaryCell :cell="cell">
+                        {{ figures[cell.column.key]?.[cell.position] }}
+                    </S.SummaryCell>
+                </S.SummaryCells>
+            </S.SummaryRow>
+        </S.SummaryRows>
+    </S.Summary>
+</template>
+```
+
+The root installs `summaryRows()` (`features`) and takes `:summary-rows="{ top: 1, bottom: 1 }"`.
+
+</Framework>
+
+<Framework name="angular">
+
+The root carries `DataGridSummaryRowsRoot` (`dataGridSummaryRows`) for `[summaryRows]` and
+`[summaryRowHeight]`; the parts are `*dataGridSummary`, `[dataGridSummaryRows]`,
+`[dataGridSummaryRow]`, `[dataGridSummaryCells]` and `[dataGridSummaryCell]` (all in
+`SUMMARY_ROWS`), from `@fragiola/data-grid-angular/summary-rows`.
+
+```ts title="people.ts"
+import { DATA_GRID } from "@fragiola/data-grid-angular";
+import {
+    DataGridSummaryRowsRoot,
+    SUMMARY_ROWS,
+    summaryRows,
+} from "@fragiola/data-grid-angular/summary-rows";
+
+@Component({
+    imports: [DATA_GRID, DataGridSummaryRowsRoot, SUMMARY_ROWS],
+    template: `
+        <div dataGridRoot dataGridSummaryRows [features]="features" [columns]="columns"
+            [rows]="people" [summaryRows]="{ top: 1, bottom: 1 }">…</div>
+    `,
+})
+export class People {
+    readonly features = [summaryRows()];
+}
+```
+
+</Framework>
+
 A summary cell's state and its info tell which cell it is: its row's `position` (`"top"` or
 `"bottom"`) and `summaryIndex` (0 for the first row at that end, top to bottom), its `column` and
 `columnIndex`. A summary row is `summaryRowHeight` tall (35 by default). From code,
@@ -73,7 +162,7 @@ A summary cell's state and its info tell which cell it is: its row's `position` 
 ### A column's own summary cells
 
 A column can draw its summary cells itself: `renderSummaryCell({ position, summaryIndex, column,
-columnIndex })` is what a `DataGrid.SummaryCell` given no children shows (nothing without it). It
+columnIndex })` is what a `SummaryCell` given no children shows (nothing without it). It
 suits figures that live with the column. When the data it reads changes behind the same columns
 (a cache, a store), tell the grid with `model.run("summary-rows.changed")`, as `rows.changed`
 tells it of rows: the summary cells are drawn, and spanned, again. Figures held in your
@@ -81,10 +170,10 @@ component's state need none of it: render them in the children function, as abov
 
 ## The parts
 
-`DataGrid.Summary` holds one end's rows, sticky; it renders nothing while the grid has none
-there. Inside it, `DataGrid.SummaryRows` hands its children each row (by default a
-`DataGrid.SummaryRow`), a row's `DataGrid.SummaryCells` hands its children each cell (by default a
-`DataGrid.SummaryCell`), as the header's and the body's parts do. They follow the
+`Summary` holds one end's rows, sticky; it renders nothing while the grid has none there. Inside
+it, `SummaryRows` hands its children each row (by default a `SummaryRow`), a row's `SummaryCells`
+hands its children each cell (by default a `SummaryCell`), as the header's and the body's parts
+do. They follow the
 [primitive contract](/docs/concepts/primitive-contract): `render`, `className` and `style`
 functions of their state, forwarded props. The hooks are `useSummaryRows`, `useSummaryRow`,
 `useSummaryCells` and `useSummaryCell`.
@@ -151,7 +240,7 @@ top summary rows, the body rows, the bottom summary rows. Summary rows and cells
 Summary cells follow the columns as body cells do:
 
 - **Pinned columns.** A pinned column's summary cells are pinned too, with `data-pinned`.
-- **Spans.** A column's `colSpan` is asked for its summary cells with
+- **Spans.** With [`cellSpans()`](/docs/concepts/column-spanning), a column's `colSpan` is asked for its summary cells with
   `{ type: "summary", position, summaryIndex, rowIndex }`, and spans them as it spans a row's
   ([Column spanning](/docs/concepts/column-spanning)).
 - **Groups, order, widths, direction.** A collapsed group's hidden columns have no summary cells,

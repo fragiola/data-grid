@@ -73,9 +73,9 @@ Parts render their children, or the column's renderer (an
 name the grid yourself (`<DataGrid.Grid aria-label="People">`). A
 [column's resize handle](/docs/concepts/column-resizing) is an element of yours too:
 `useColumnResizer` (from `/column-resize`, with `columnResize()`) gives it its props (ARIA, `data-*`, the marker the grid finds it by), never a
-name, a place or a look, and so does `useRowDragHandle` for a
+name, a place or a look, and so does `useRowDragHandle` (from `/row-reorder`) for a
 [row's drag handle](/docs/concepts/row-reordering) (hidden from screen readers: the keys move a
-row from its cells), and `useGroupToggle` for a [group row's toggle](/docs/concepts/row-grouping)
+row from its cells), and `useGroupToggle` (from `/row-grouping`) for a [group row's toggle](/docs/concepts/row-grouping)
 (its `aria-expanded`, never a name), and `useFillHandle` (from `/fill`) for a
 [fill handle](/docs/concepts/fill) (its mark, at a range's corner only).
 
@@ -129,7 +129,8 @@ the same attributes and structural style on your elements ([Angular directives](
 - **Your element, never `asChild`.** A part is an attribute directive on the element you write
   (`<table dataGridGrid>`, `<td [dataGridCell]="cell">`), the Angular form of `render`. A part
   that renders only sometimes is a structural directive on its element (`*dataGridHeader`,
-  `*dataGridEmpty`, `*dataGridRowDetail`, `*dataGridSummary="'top'"`).
+  `*dataGridEmpty`, `*dataGridRowDetail` from `/row-expansion`, `*dataGridSummary="'top'"` from
+  `/summary-rows`).
 
 ```html title="people-grid.ts"
 <table dataGridGrid aria-label="People">

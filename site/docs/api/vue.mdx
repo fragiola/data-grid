@@ -117,13 +117,16 @@ Every part is `DataGrid.<Part>`, with the props of its React counterpart except 
 | `DataGrid.Row` | `row` | default `{ state }` |
 | `DataGrid.Cells` | none | default `{ cell }` |
 | `DataGrid.Cell` | `cell` | default `{ cell, state }` |
-| `DataGrid.RowDetail` | none | default `{ state }` |
 | `DataGrid.Empty` | none | default |
-| `DataGrid.Summary` | `position` | default |
-| `DataGrid.SummaryRows` | `position` | default `{ row }` |
-| `DataGrid.SummaryRow` | `row` | default `{ state }` |
-| `DataGrid.SummaryCells` | none | default `{ cell }` |
-| `DataGrid.SummaryCell` | `cell` | default `{ state }` |
+| `RowDetail` (`/row-expansion`) | none | default `{ state }` |
+| `Summary` (`/summary-rows`) | `position` | default |
+| `SummaryRows` (`/summary-rows`) | `position` | default `{ row }` |
+| `SummaryRow` (`/summary-rows`) | `row` | default `{ state }` |
+| `SummaryCells` (`/summary-rows`) | none | default `{ cell }` |
+| `SummaryCell` (`/summary-rows`) | `cell` | default `{ state }` |
+
+A feature's parts are not in `typedDataGrid()`: `RowDetail` comes from `/row-expansion`, the
+summary's from `/summary-rows` (`typedSummaryRows<TRow>()` types them by your row type).
 
 ```vue title="people-grid.vue"
 <DataGrid.Grid as="table" aria-label="People">
@@ -163,9 +166,9 @@ row or cell (a value, a ref or a getter) and returns `{ state, props }` as compu
 | `useGridView()` | the grid's view, as a shallow ref |
 | `useRows()`, `useCells(row)` | the rendered rows, a row's rendered cells, as computed refs |
 | `useHeaderRows()`, `useHeaderCells(row?)` | the header rows, a header row's cells |
-| `useSummaryRows(position?)`, `useSummaryCells(row?)` | the summary rows, a summary row's cells |
-| `useRow(row)`, `useCell(cell)`, `useHeaderCell(cell)`, `useSummaryRow(row)`, `useSummaryCell(cell)`, `useRowDetail(row)` | a part's `{ state, props }` |
-| `useRowDragHandle(row)`, `useGroupToggle(row)`, `useGroupLabel(cell)`, `/column-resize`'s `useColumnResizer(cell)` | the `{ state, props }` of an element of yours: a drag handle, a group's toggle, a sticky group label, a resize handle |
+| `/summary-rows`'s `useSummaryRows(position?)`, `useSummaryCells(row?)` | the summary rows, a summary row's cells |
+| `useRow(row)`, `useCell(cell)`, `useHeaderCell(cell)`; `/summary-rows`'s `useSummaryRow(row)`, `useSummaryCell(cell)`; `/row-expansion`'s `useRowDetail(row)` | a part's `{ state, props }` |
+| `/row-reorder`'s `useRowDragHandle(row)`, `/row-grouping`'s `useGroupToggle(row)`, `useGroupLabel(cell)`, `/column-resize`'s `useColumnResizer(cell)` | the `{ state, props }` of an element of yours: a drag handle, a group's toggle, a sticky group label, a resize handle |
 | `/editing`'s `useCellEdit(cell)` | the editor props of the cell being edited (`EditCellRenderProps`), a computed ref, `null` otherwise |
 
 The opt-in entry points have the same exports as React's:
@@ -180,6 +183,11 @@ The opt-in entry points have the same exports as React's:
 | `@fragiola/data-grid-vue/clipboard` | `clipboard()` (with `cellRange()`), `parseTsv`, `toTsv`, `pastedRange`, `rangeText` |
 | `@fragiola/data-grid-vue/fill` | `fillHandle()`, the [fill handle](/docs/concepts/fill) (with `cellRange()`), `repeatedFill`, and `useFillHandle(cell)`: the `{ state, props }` of your handle |
 | `@fragiola/data-grid-vue/editing` | `editing()`, [cells edited in place](/docs/concepts/editing) (with `navigation()`), `CellEditEvent`, `editActions`, `editCellPropsOf`, `EDITOR_ATTRIBUTE`, and `useCellEdit(cell)`: the editor props of the cell being edited |
+| `@fragiola/data-grid-vue/row-expansion` | `rowExpansion()`, [rows that expand](/docs/guides/master-detail), `RowDetail` and `useRowDetail(row)` |
+| `@fragiola/data-grid-vue/row-grouping` | `rowGrouping()`, [row groups and trees](/docs/concepts/row-grouping) that expand, `useGroupToggle(row)` |
+| `@fragiola/data-grid-vue/row-reorder` | `rowReorder()`, [rows moved](/docs/concepts/row-reordering) by a handle or the keys, `useRowDragHandle(row)` |
+| `@fragiola/data-grid-vue/spans` | `cellSpans()`, a column's [`colSpan`](/docs/concepts/column-spanning) in the body |
+| `@fragiola/data-grid-vue/summary-rows` | `summaryRows()`, the [summary rows](/docs/concepts/summary-rows), `Summary`, `SummaryRows`, `SummaryRow`, `SummaryCells`, `SummaryCell`, their composables, `typedSummaryRows<TRow>()`; the feature's root props are `SummaryRowsFeatureProps` |
 
 ## Types
 
@@ -187,10 +195,11 @@ Each part exports its props and its slots, named as in React: `RootProps`, `Root
 `RootState`, `GridProps`, `GridSlots`, `HeaderProps`, `HeaderSlots`, `HeaderRowsProps`,
 `HeaderRowsSlots`, `HeaderRowProps`, `HeaderRowSlots`, `HeaderCellsProps`, `HeaderCellsSlots`,
 `HeaderCellProps`, `HeaderCellSlots`, `BodyProps`, `BodySlots`, `RowsProps`, `RowsSlots`,
-`RowProps`, `RowSlots`, `CellsProps`, `CellsSlots`, `CellProps`, `CellSlots`, `RowDetailProps`,
-`RowDetailSlots`, `EmptyProps`, `EmptySlots`, `SummaryProps`, `SummarySlots`,
-`SummaryRowsProps`, `SummaryRowsSlots`, `SummaryRowProps`, `SummaryRowSlots`,
-`SummaryCellsProps`, `SummaryCellsSlots`, `SummaryCellProps`, `SummaryCellSlots`.
+`RowProps`, `RowSlots`, `CellsProps`, `CellsSlots`, `CellProps`, `CellSlots`, `EmptyProps`,
+`EmptySlots`; `/row-expansion`'s `RowDetailProps`, `RowDetailSlots`; `/summary-rows`'s
+`SummaryProps`, `SummarySlots`, `SummaryRowsProps`, `SummaryRowsSlots`, `SummaryRowProps`,
+`SummaryRowSlots`, `SummaryCellsProps`, `SummaryCellsSlots`, `SummaryCellProps`,
+`SummaryCellSlots`.
 
 | type | description |
 | --- | --- |

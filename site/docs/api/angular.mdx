@@ -79,10 +79,10 @@ export class PeopleGrid {
 
 A part that renders only sometimes is a **structural directive** on its element:
 `*dataGridHeader` (none without a header row), `*dataGridEmpty` (only while there are no rows),
-`*dataGridRowDetail` (only while its row is expanded), `*dataGridSummary="'top'"` (only while
-there are summary rows there), and the elements of yours React gives through a hook:
-`*dataGridGroupToggle`, `*dataGridColumnResizer` (from `/column-resize`), `*dataGridFillHandle`
-(from `/fill`),
+`*dataGridRowDetail` (from `/row-expansion`, only while its row is expanded),
+`*dataGridSummary="'top'"` (from `/summary-rows`, only while there are summary rows there), and
+the elements of yours React gives through a hook: `*dataGridGroupToggle` (from `/row-grouping`),
+`*dataGridColumnResizer` (from `/column-resize`), `*dataGridFillHandle` (from `/fill`),
 `*dataGridCellEdit` (from `/editing`).
 
 ## Typing by your row
@@ -141,15 +141,15 @@ The template renders with the props the renderer was given, as its `$implicit` t
 | `onKeyDown`, `onClick`, `onPointerDown`, `onCopy`, `onPaste`, … | your listeners (`(keydown)`, `(click)`, …): yours first, then the grid's keys, clicks, presses and clipboard on the root, so `preventDefault` in yours cancels the grid's |
 | `features={features}` | the input `[features]="features"` on the root, fixed when the grid is created |
 | a feature's props (`sortColumns`, `activePosition`, `selectedRowKeys`, `selectedRange`, `onRangePaste`, `onFill`, …) | its own directive's inputs and outputs, on the root's element (the table below): `dataGridSorting` with `[(sortColumns)]`, `dataGridNavigation` with `[(activePosition)]`, … |
-| `Root`'s `onXChange` and the other callbacks | outputs without `on`: `(expandedRowKeysChange)`, `(rowWindowChange)`, `(rowsEndReached)`, …; `[(expandedRowKeys)]` binds both ways |
+| `Root`'s `onXChange` and the other callbacks | outputs without `on`: `(rowWindowChange)`, `(rowsEndReached)`, `(expandedRowKeysChange)` (on `dataGridRowExpansion`), …; `[(expandedRowKeys)]` binds both ways |
 | `editingCell`, `onEditingCellChange`, `onCellEdit` | `dataGridEditing`'s `[(editingCell)]`, `[defaultEditingCell]` and `(cellEdit)` (`[dataGridEditing]="columns"` types its row); from `/editing` |
-| `onRowMove` (given, rows move) | the input `reorderableRows` turns it on; the output `(rowMove)` tells |
+| `onRowMove` (given, rows move) | `dataGridRowReorder` on the root turns it on (`[dataGridRowReorder]="false"` off); its output `(rowMove)` tells |
 | `onFill` (given, cells fill) | `dataGridFill` on the root (`[dataGridFill]="false"` off), its output `(fill)`; from `/fill` |
 | `onBeforeRangePaste`, `onRangePaste` | `dataGridClipboard`'s input `[beforeRangePaste]` (a function: `false` refuses) and output `(rangePaste)`; from `/clipboard` |
 | `ref` | your element's own template reference; a handle on the grid is a `gridRef` (`createDataGridRef()`) |
 | `useX(…)` hooks | `injectX(…)` injection functions (below) |
 | `<DataGrid.Rows<Person>>` and the other type arguments | `[dataGridRows]="columns"` (or the root) |
-| `useColumnResizer`, `useRowDragHandle`, `useGroupToggle`, `useGroupLabel`, `useFillHandle`, `useCellEdit` on your element | the directives `*dataGridColumnResizer="cell"`, `[dataGridRowDragHandle]="row"`, `*dataGridGroupToggle="row"`, `[dataGridGroupLabel]="cell"`, `*dataGridFillHandle="cell"`, `*dataGridCellEdit="let edit"` |
+| `useColumnResizer`, `useRowDragHandle`, `useGroupToggle`, `useGroupLabel`, `useFillHandle`, `useCellEdit` on your element | the directives `*dataGridColumnResizer="cell"`, `[dataGridRowDragHandle]="row"` (`/row-reorder`), `*dataGridGroupToggle="row"` (`/row-grouping`), `[dataGridGroupLabel]="cell"`, `*dataGridFillHandle="cell"`, `*dataGridCellEdit="let edit"` |
 
 A part's `state()` is `undefined` on the first pass of a binding on its own element (Angular
 evaluates class bindings before the element's inputs), so read it with `?.`.
@@ -158,7 +158,7 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 
 | directive | inputs | template context |
 | --- | --- | --- |
-| `[dataGridRoot]` | the core's root props (`GridRootProps`: `columns`, `rows` or `rowCount` + `getRow`, `rowKey`, the sizes, every piece of the core's state controlled or not, the engine's options), `reorderableRows`, `gridRef`, `features`; the callbacks are outputs | |
+| `[dataGridRoot]` | the core's root props (`GridRootProps`: `columns`, `rows` or `rowCount` + `getRow`, `rowKey`, the sizes, every piece of the core's state controlled or not, the engine's options), `gridRef`, `features`; the callbacks are outputs | |
 | `[dataGridRoot][dataGridSorting]` | `sortColumns` (`[(sortColumns)]` with the output `sortColumnsChange`), `defaultSortColumns`; from `@fragiola/data-grid-angular/sorting`, with `sorting()` in the root's features | |
 | `[dataGridRoot][dataGridNavigation]` | `activePosition` (`[(activePosition)]`, the output `activePositionChange`), `defaultActivePosition`; from `/navigation`, with `navigation()` | |
 | `[dataGridRoot][dataGridRowSelection]` | `rowSelection`, `isRowSelectable`, `selectedRowKeys` (`[(selectedRowKeys)]`), `defaultSelectedRowKeys`; from `/row-selection`, with `rowSelection()` | |
@@ -169,6 +169,10 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 | `[dataGridRoot][dataGridColumnResize]` | `columnWidths` (`[(columnWidths)]`, the output `columnWidthsChange`), `defaultColumnWidths`; from `/column-resize`, with `columnResize()` | |
 | `[dataGridRoot][dataGridColumnReorder]` | `columnOrder` (`[(columnOrder)]`, the output `columnOrderChange`), `defaultColumnOrder`; from `/column-reorder`, with `columnReorder()` | |
 | `[dataGridRoot][dataGridColumnGroupCollapse]` | `collapsedGroupKeys` (`[(collapsedGroupKeys)]`, the output `collapsedGroupKeysChange`), `defaultCollapsedGroupKeys`; from `/column-group-collapse`, with `columnGroupCollapse()` (`columnPinning()`, from `/column-pinning`, has no input) | |
+| `[dataGridRoot][dataGridRowExpansion]` | `expandedRowKeys` (`[(expandedRowKeys)]`, the output `expandedRowKeysChange`), `defaultExpandedRowKeys`, `detailHeight`, `estimatedDetailHeight`; from `/row-expansion`, with `rowExpansion()` | |
+| `[dataGridRoot][dataGridRowGrouping]` | `expandedGroupKeys` (`[(expandedGroupKeys)]`, the output `expandedGroupKeysChange`), `defaultExpandedGroupKeys`; from `/row-grouping`, with `rowGrouping()` | |
+| `[dataGridRoot][dataGridRowReorder]` | the rows move while it is present (`[dataGridRowReorder]="false"` stops them), the output `rowMove`; from `/row-reorder`, with `rowReorder()` | |
+| `[dataGridRoot][dataGridSummaryRows]` | `summaryRows`, `summaryRowHeight` (`DataGridSummaryRowsRoot`); from `/summary-rows`, with `summaryRows()` (`cellSpans()`, from `/spans`, has no input) | |
 | `[dataGridGrid]` | none | |
 | `*dataGridHeader` | none | |
 | `ng-template[dataGridHeaderRows]` | what types it (optional) | `{ $implicit: row, row }` |
@@ -181,15 +185,15 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 | `ng-template[dataGridCells]` | what types it (optional) | `{ $implicit: cell, cell }` |
 | `[dataGridCell]` | its cell | |
 | `*dataGridCellContent` | none: the cell it is in | |
-| `*dataGridRowDetail` | none: the row it is in | `{ $implicit: state, state }` |
+| `*dataGridRowDetail` (`/row-expansion`) | none: the row it is in | `{ $implicit: state, state }` |
 | `*dataGridEmpty` | none | |
-| `*dataGridSummary` | its position | `{ $implicit: state, state }` |
+| `*dataGridSummary` (`/summary-rows`, as the four below: `SUMMARY_ROWS`) | its position | `{ $implicit: state, state }` |
 | `ng-template[dataGridSummaryRows]` | its position (optional: the summary's) | `{ $implicit: row, row }` |
 | `[dataGridSummaryRow]` | its row | |
 | `ng-template[dataGridSummaryCells]` | what types it (optional) | `{ $implicit: cell, cell }` |
 | `[dataGridSummaryCell]` | its cell | |
-| `*dataGridColumnResizer` (`/column-resize`), `*dataGridGroupToggle`, `*dataGridFillHandle` (`/fill`) | a header cell, a row (or cell), a cell | `{ $implicit: state, state }` |
-| `[dataGridRowDragHandle]`, `[dataGridGroupLabel]` | a row (or cell), a group's header cell | |
+| `*dataGridColumnResizer` (`/column-resize`), `*dataGridGroupToggle` (`/row-grouping`), `*dataGridFillHandle` (`/fill`) | a header cell, a row (or cell), a cell | `{ $implicit: state, state }` |
+| `[dataGridRowDragHandle]` (`/row-reorder`), `[dataGridGroupLabel]` | a row (or cell), a group's header cell | |
 | `*dataGridCellEdit` | its cell (optional: the cell it is in) | `{ $implicit: edit, edit }` |
 | `[dataGridTemplate]` | a context type (`contextOf<…>()`) | that context |
 | `[dataGridBind]` | an injection function's `props()` | |
@@ -213,9 +217,9 @@ returns `{ state, props }` as signals (`PartInjectResult`); put `props()` on you
 | `injectGridView()` | the grid's view, as a signal |
 | `injectRows()`, `injectCells(row)` | the rendered rows, a row's rendered cells |
 | `injectHeaderRows()`, `injectHeaderCells(row?)` | the header rows, a header row's cells |
-| `injectSummaryRows(position?)`, `injectSummaryCells(row?)` | the summary rows, a summary row's cells |
-| `injectRow(row)`, `injectCell(cell)`, `injectHeaderCell(cell)`, `injectSummaryRow(row)`, `injectSummaryCell(cell)`, `injectRowDetail(row)` | a part's `{ state, props }` |
-| `injectRowDragHandle(row)`, `injectGroupToggle(row)`, `injectGroupLabel(cell)`, `/column-resize`'s `injectColumnResizer(cell)`, `/fill`'s `injectFillHandle(cell)` | the `{ state, props }` of an element of yours (the directives above are the shorter form; a measured row and a group label need theirs: the engine reads their element) |
+| `/summary-rows`'s `injectSummaryRows(position?)`, `injectSummaryCells(row?)` | the summary rows, a summary row's cells |
+| `injectRow(row)`, `injectCell(cell)`, `injectHeaderCell(cell)`; `/summary-rows`'s `injectSummaryRow(row)`, `injectSummaryCell(cell)`; `/row-expansion`'s `injectRowDetail(row)` | a part's `{ state, props }` |
+| `/row-reorder`'s `injectRowDragHandle(row)`, `/row-grouping`'s `injectGroupToggle(row)`, `injectGroupLabel(cell)`, `/column-resize`'s `injectColumnResizer(cell)`, `/fill`'s `injectFillHandle(cell)` | the `{ state, props }` of an element of yours (the directives above are the shorter form; a measured row and a group label need theirs: the engine reads their element) |
 | `/editing`'s `injectCellEdit(cell)` | the editor props of the cell being edited (`EditCellRenderProps`), `null` otherwise |
 
 The opt-in entry points:
@@ -229,6 +233,11 @@ The opt-in entry points:
 | `@fragiola/data-grid-angular/range` | `cellRange()`, [ranges of cells](/docs/concepts/cell-selection) (with `navigation()`); `DataGridCellRange`; `keptRange`, `sameCellRange` |
 | `@fragiola/data-grid-angular/clipboard` | `clipboard()` (with `cellRange()`); `DataGridClipboard`; `parseTsv`, `toTsv`, `pastedRange`, `rangeText` |
 | `@fragiola/data-grid-angular/fill` | `fillHandle()`, the [fill handle](/docs/concepts/fill) (with `cellRange()`); `DataGridFill`; `*dataGridFillHandle` (`DataGridFillHandle`, `FillHandleContext`), `injectFillHandle(cell)`; `repeatedFill` |
+| `@fragiola/data-grid-angular/row-expansion` | `rowExpansion()`, [rows that expand](/docs/guides/master-detail); `DataGridRowExpansion`; `*dataGridRowDetail` (`DataGridRowDetail`, `RowDetailContext`), `injectRowDetail(row)` |
+| `@fragiola/data-grid-angular/row-grouping` | `rowGrouping()`, [row groups and trees](/docs/concepts/row-grouping) that expand; `DataGridRowGrouping`; `*dataGridGroupToggle` (`DataGridGroupToggle`, `GroupToggleContext`), `injectGroupToggle(row)` |
+| `@fragiola/data-grid-angular/row-reorder` | `rowReorder()`, [rows moved](/docs/concepts/row-reordering); `DataGridRowReorder`; `[dataGridRowDragHandle]` (`DataGridRowDragHandle`), `injectRowDragHandle(row)` |
+| `@fragiola/data-grid-angular/spans` | `cellSpans()`, a column's [`colSpan`](/docs/concepts/column-spanning) in the body |
+| `@fragiola/data-grid-angular/summary-rows` | `summaryRows()`, the [summary rows](/docs/concepts/summary-rows); `DataGridSummaryRowsRoot` (`dataGridSummaryRows`); the summary's directives (`SUMMARY_ROWS`: `*dataGridSummary`, `[dataGridSummaryRows]`, `[dataGridSummaryRow]`, `[dataGridSummaryCells]`, `[dataGridSummaryCell]`) and inject functions; `SummaryRowInfo`, `SummaryCellInfo`, `SummaryRowsFeatureProps` |
 | `@fragiola/data-grid-angular/editing` | `editing()`, [cells edited in place](/docs/concepts/editing) (with `navigation()`); `DataGridEditing`; `*dataGridCellEdit` (`DataGridCellEdit`, `CellEditContext`), `injectCellEdit(cell)`; `CellEditEvent`, `editActions`, `editCellPropsOf`, `EDITOR_ATTRIBUTE` |
 
 ## Features
@@ -277,9 +286,9 @@ feature's directive does.
 | `TemplateContent<C>`, `TemplateContext<C>` | a template with its context; the context a template renders with (`C` and its `$implicit`) |
 | `ContextOf<C>` | a context type for `[dataGridTemplate]` (`contextOf<C>()`) |
 | `CellTemplateProps<TRow>` | a body cell's render props (`renderCell`'s) |
-| `RowsContext`, `CellsContext`, `HeaderRowsContext`, `HeaderCellsContext`, `SummaryRowsContext`, `SummaryCellsContext` | the collection templates' contexts |
-| `RowDetailContext`, `SummaryTemplateContext`, `ColumnResizerContext`, `GroupToggleContext`, `FillHandleContext` (`/fill`'s), `CellEditContext` (`/editing`'s) | the structural parts' contexts |
-| `RowInfo`, `CellInfo`, `HeaderRowInfo`, `HeaderCellInfo`, `SummaryRowInfo`, `SummaryCellInfo` | what the templates hand you, as in React |
+| `RowsContext`, `CellsContext`, `HeaderRowsContext`, `HeaderCellsContext`; `/summary-rows`'s `SummaryRowsContext`, `SummaryCellsContext` | the collection templates' contexts |
+| `RowDetailContext` (`/row-expansion`'s), `SummaryTemplateContext` (`/summary-rows`'s), `ColumnResizerContext`, `GroupToggleContext` (`/row-grouping`'s), `FillHandleContext` (`/fill`'s), `CellEditContext` (`/editing`'s) | the structural parts' contexts |
+| `RowInfo`, `CellInfo`, `HeaderRowInfo`, `HeaderCellInfo`; `/summary-rows`'s `SummaryRowInfo`, `SummaryCellInfo` | what the templates hand you, as in React |
 | `DataGridContextValue`, `DataGridRef` | the model and the engine; the handle on a grid |
 | `PartInjectResult<State>`, `ValueOrSignal<T>` | what a part's injection function returns; what it takes |
 | `RootPropsSource<TRow, TFeatures>`, `RootPropsSourceOptions` | what `addPropsSource` takes: the props a directive gives the root, and how they rank (`inputs`) |

@@ -12,6 +12,12 @@ in memory with `useLocalRows`, or listed by a server.
 
 <Example id="tree-data" />
 
+## Install row grouping
+
+A tree's parents expand with [`rowGrouping()`](/docs/concepts/row-grouping#install-row-grouping),
+from the `/row-grouping` entry with `useGroupToggle`: without it the rows render at their depth,
+but nothing expands them and the grid is no `treegrid`.
+
 ## Rows in memory
 
 Give `useLocalRows` the tree's top rows and `getSubRows`, which answers a row's rows. Spread its
@@ -19,13 +25,14 @@ Give `useLocalRows` the tree's top rows and `getSubRows`, which answers a row's 
 keys (`rowKey`) and the expanded parents.
 
 ```tsx title="files.tsx"
-import { type Column, DataGrid, useGroupToggle } from "@fragiola/data-grid-react";
+import { type Column, DataGrid } from "@fragiola/data-grid-react";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import { rowGrouping, useGroupToggle } from "@fragiola/data-grid-react/row-grouping";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 
-// the keys (the treegrid's), and the sort `useLocalRows` hands the root
-const features = [navigation(), sorting()];
+// the keys (the treegrid's), the sort `useLocalRows` hands the root, the parents that expand
+const features = [navigation(), sorting(), rowGrouping()];
 
 // keep both the same functions between renders (outside the component, or memoised)
 const getSubRows = (file: File) => file.children;

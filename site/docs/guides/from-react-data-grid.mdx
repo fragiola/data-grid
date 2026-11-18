@@ -74,8 +74,8 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 | `rowKeyGetter(row)` | `rowKey(row, index)` | without one, a row's key is its index |
 | `rowHeight` (a number, or a function of the row) | `rowHeight` | a number, a function of the row's **index**, or `"auto"`: as tall as its content, measured ([Measured heights](/docs/concepts/measured-heights)) |
 | `headerRowHeight` | `headerRowHeight` | default 35 (not the row height); 0 for no header |
-| `summaryRowHeight` | `summaryRowHeight` | default 35 |
-| `topSummaryRows`, `bottomSummaryRows` (arrays of summary rows) | `summaryRows={{ top, bottom }}` (counts) | the figures are yours, read where the summary cells render. See [Summary rows](/docs/concepts/summary-rows) |
+| `summaryRowHeight` | `summaryRowHeight` | default 35, with `summaryRows()` installed (`/summary-rows`) |
+| `topSummaryRows`, `bottomSummaryRows` (arrays of summary rows) | `summaryRows={{ top, bottom }}` (counts), with `summaryRows()` | the figures are yours, read where the summary cells render. See [Summary rows](/docs/concepts/summary-rows) |
 | `enableVirtualization` | — | always virtualized on both axes. To print or export, use the rows your app holds (`rows`, or `useLocalRows`'s `filteredRows`); `toTsv` from `@fragiola/data-grid-react/clipboard` makes tab-separated text of rows of strings, so map each row to its columns' texts first |
 | `direction` | `direction` | `"ltr"` or `"rtl"`; without it, the page's direction, as the browser computes it. See [Right to left](/docs/concepts/right-to-left) |
 
@@ -93,7 +93,7 @@ container needs one. See [Sizing the grid](/docs/getting-started/sizing).
 
 | React Data Grid | here | notes |
 | --- | --- | --- |
-| `onRowsChange(rows, data)` | `onCellEdit`, `onRangePaste`, `onFill`, `onRowMove` | each tells what happened; your app writes the rows. Rows behind `getRow` are told with `rows.changed` |
+| `onRowsChange(rows, data)` | `onCellEdit`, `onRangePaste`, `onFill`, `onRowMove` (`rowReorder()`'s) | each tells what happened; your app writes the rows. Rows behind `getRow` are told with `rows.changed` |
 | a column's edit committed | `onCellEdit({ row, rowIndex, columnIndex, columnKey, value })`, with `editing()` installed (and `navigation()`) | from `@fragiola/data-grid-react/editing`; told only when the value changed. See [Editing cells](/docs/concepts/editing) |
 | `onCellCopy` | `clipboard()` installed (from `/clipboard`, with `cellRange()`), `cellSelection="range"` and a column's `getCopyText` | Ctrl+C copies the range (or the active cell) as tab-separated text; your `onCopy` on `Root` runs first, and `preventDefault` makes the copy yours |
 | `onCellPaste` (returns the row) | `onRangePaste({ range, values })`, `onBeforeRangePaste`, with `clipboard()` | the values parsed from the clipboard and the range they land in; `onBeforeRangePaste` returning `false` refuses one |
@@ -166,12 +166,12 @@ Inside the root, `useDataGrid()` returns the same `{ model, engine }`. See
 | `renderEditCell({ row, onRowChange, onClose })` | `renderEditCell({ row, value, initialValue, startKey, onChange, onCommit, onCancel, editorProps })` | the draft is a value, not a row; `editorProps` marks a portalled popover as part of the edit |
 | `editable` (a boolean, or a function of the row) | `editable` (a boolean, or a function of the row and its index) | with `editing()` installed; there is no built-in text editor: give `renderEditCell` |
 | `editorOptions` | — | a press outside the cell commits; the edit ends when its row or column leaves its place (by key); `useCellEdit(cell)` (`/editing`) puts an editor inside a cell's own children, beside its content |
-| `colSpan({ type })` | `colSpan({ type, rowIndex, … })` | `type` is lowercase: `"header"`, `"row"` (with `row`), `"summary"`, `"group"`. See [Column spanning](/docs/concepts/column-spanning) |
-| `renderSummaryCell({ row })` | `renderSummaryCell({ position, summaryIndex, column, columnIndex })`, or `DataGrid.SummaryCell` children | there is no summary row object: your figures come from your component |
-| `renderGroupCell({ groupKey, childRows, isExpanded, toggleGroup })` | `renderGroupCell({ group, rowIndex, column, columnIndex, value })` | the toggle is your control with `useGroupToggle(row)` |
+| `colSpan({ type })` | `colSpan({ type, rowIndex, … })` | `type` is lowercase: `"header"`, `"row"` (with `row`), `"summary"`, `"group"`; a body cell's span with `cellSpans()` installed (`/spans`). See [Column spanning](/docs/concepts/column-spanning) |
+| `renderSummaryCell({ row })` | `renderSummaryCell({ position, summaryIndex, column, columnIndex })`, or `SummaryCell` children (`/summary-rows`) | there is no summary row object: your figures come from your component |
+| `renderGroupCell({ groupKey, childRows, isExpanded, toggleGroup })` | `renderGroupCell({ group, rowIndex, column, columnIndex, value })` | the toggle is your control with `useGroupToggle(row)` (`/row-grouping`, with `rowGrouping()`) |
 | `cellClass(row)` | `className` on `DataGrid.Cell`, a value or `(state) => …` | the row is `cell.row` in the `Cells` children function |
 | `headerCellClass` | `className` on `DataGrid.HeaderCell` | the same for a group's header cell |
-| `summaryCellClass` | `className` on `DataGrid.SummaryCell` | |
+| `summaryCellClass` | `className` on `SummaryCell` | |
 | — | `getValue`, `getCopyText`, `compare`, `filter`, `meta` | a cell's value, its copied text, the in-memory sort and filter, and anything of yours |
 
 ### Descending first
@@ -237,7 +237,7 @@ through the same row kinds (`getRowMeta`), and the grid is then a `treegrid`.
 | `TreeDataGrid` | `DataGrid.Root` with `useLocalRows`'s props | `useLocalRows(rows, columns, { groupBy })` from `@fragiola/data-grid-react/local` groups in memory and hands the root the rows shown |
 | `groupBy` | `groupBy` (an option of `useLocalRows`) | the outer column first |
 | `rowGrouper(rows, columnKey)` | a column's `getValue` | rows group by their value's text in that column; a server sends its own grouped rows (`rowCount`, `getRow`, `getRowMeta`) |
-| `expandedGroupIds`, `onExpandedGroupIdsChange` | `expandedGroupKeys`, `onExpandedGroupKeysChange` (on the hook, or on `Root` for a server's rows) | `groupKeyOf(path)` makes a group's key |
+| `expandedGroupIds`, `onExpandedGroupIdsChange` | `expandedGroupKeys`, `onExpandedGroupKeysChange` (on the hook, or on `Root` for a server's rows, with `rowGrouping()`) | `groupKeyOf(path)` makes a group's key |
 | `groupIdGetter` | — | a group's key is its path (`groupKeyOf`) |
 | a group's figures in `renderGroupCell` | `aggregates` (an option of `useLocalRows`) | your functions over a group's rows, by column key |
 | a tree drawn with your own rows (the TreeView example) | `getSubRows` (an option of `useLocalRows`) | parents expand by their own key; a server can list children as they open |
@@ -248,7 +248,7 @@ See [Row grouping](/docs/concepts/row-grouping) and [Tree data](/docs/concepts/t
 
 React Data Grid's master-detail example adds detail rows to the rows, gives them a height with
 `rowHeight` and spans them with `colSpan`. Here a row expands into its own detail:
-`DataGrid.RowDetail` inside the row, the expanded rows' keys in `expandedRowKeys` (with
+`RowDetail` inside the row (with `rowExpansion()`, both from `/row-expansion`), the expanded rows' keys in `expandedRowKeys` (with
 `onExpandedRowKeysChange` or `defaultExpandedRowKeys`), and its height in `detailHeight` (a
 number, a function of the row, or `"auto"`). Indexes, counts and `getRow` stay those of your
 rows. See [Master-detail](/docs/guides/master-detail).
@@ -261,7 +261,7 @@ rows. See [Master-detail](/docs/guides/master-detail).
 | `useRowSelection` | `useRow(row).state.selected`, or the model's `row-selected` question, as above |
 | `useHeaderRowSelection` | `useSelectAll(rowKeys)` from `@fragiola/data-grid-react/row-selection`: `status` (`"all"`, `"some"`, `"none"`), `toggle` |
 | `renderTextEditor` | your field in `renderEditCell`, from `value` and `onChange` |
-| `renderToggleGroup`, `ToggleGroup` | your control with `useGroupToggle(row)` |
+| `renderToggleGroup`, `ToggleGroup` | your control with `useGroupToggle(row)` (`/row-grouping`) |
 | `renderHeaderCell`, `renderSortIcon`, `renderSortPriority` | `headerCellContent(cell)`, and your own marks from `data-sort` and `data-sort-priority` |
 | `renderCheckbox`, `renderValue`, `SelectCellFormatter` | your own components |
 | `Row`, `Cell` | `DataGrid.Row`, `DataGrid.Cell` |
@@ -279,8 +279,8 @@ rows. See [Master-detail](/docs/guides/master-detail).
   [Measured heights](/docs/concepts/measured-heights).
 - **Collapsible column groups** with labels that stay in view. See
   [Collapsible groups](/docs/concepts/collapsible-groups).
-- **Row reordering by the grid.** `onRowMove` turns it on: a drag on your handle
-  (`useRowDragHandle`) or Ctrl+Shift+↑ and ↓. See [Row reordering](/docs/concepts/row-reordering).
+- **Row reordering by the grid.** `onRowMove` turns it on, with `rowReorder()`: a drag on your
+  handle (`useRowDragHandle`, from `/row-reorder`) or Ctrl+Shift+↑ and ↓. See [Row reordering](/docs/concepts/row-reordering).
 
 ## The examples side by side
 

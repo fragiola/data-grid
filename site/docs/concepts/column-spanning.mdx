@@ -10,6 +10,26 @@ them.
 
 <Example id="column-spanning" />
 
+## Install column spans
+
+A body cell's span is a [feature](/docs/concepts/features): `cellSpans()` from the `/spans`
+entry, with no props. Installed, a column's `colSpan` spans a row's cells and a summary row's, and
+the keys, the ranges and the clipboard follow it; `model.get("cell-span-by", { rowIndex,
+columnIndex })` reads the cell covering a position. Without it, a column's `colSpan` is never
+asked for a body or summary cell: every one is one column, with no `aria-colspan`. A header
+cell's span (a column's `colSpan` for `type: "header"`, a group's over its columns) is the core's
+either way.
+
+```ts title="features.ts"
+import { navigation } from "@fragiola/data-grid-react/navigation";
+import { cellSpans } from "@fragiola/data-grid-react/spans";
+
+const features = [navigation(), cellSpans()];
+```
+
+The same factory comes from `@fragiola/data-grid-vue/spans` and
+`@fragiola/data-grid-angular/spans` (no directive: give it in the root's `[features]`).
+
 ## Spanning a cell
 
 `colSpan` is a function on a column. The grid asks it for the cells it renders: a loaded row's
