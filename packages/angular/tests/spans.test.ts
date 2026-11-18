@@ -12,7 +12,7 @@ import {
     type DataGridNode,
     injectCell,
 } from "../src/public-api";
-import { renderTestGrid } from "./grid";
+import { renderTestGrid, SPAN_FEATURES } from "./grid";
 import { cellAt, headerAt, render, stubViewportSize } from "./helpers";
 
 // Column spans (Epic #85, E1.2): `dataGridCells` hands one cell per rendered column, a spanning
@@ -91,7 +91,7 @@ describe("column spans", () => {
             imports: [DATA_GRID],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20">
+                <div dataGridRoot [features]="spanFeatures" [rows]="rows" [columns]="columns" [rowHeight]="20">
                     <div dataGridGrid>
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -107,6 +107,7 @@ describe("column spans", () => {
             `,
         })
         class Seeing {
+            readonly spanFeatures = SPAN_FEATURES;
             readonly rows = rows;
             readonly columns = columns;
             see(cell: CellInfo<Row>) {
@@ -147,7 +148,7 @@ describe("a render function (the epic review)", () => {
             imports: [DATA_GRID, TestCell],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [rowHeight]="20">
+                <div dataGridRoot [features]="spanFeatures" [rows]="rows" [columns]="columns" [rowHeight]="20">
                     <div dataGridGrid>
                         <div dataGridBody>
                             <ng-template dataGridRows let-row>
@@ -163,6 +164,7 @@ describe("a render function (the epic review)", () => {
             `,
         })
         class Rendering {
+            readonly spanFeatures = SPAN_FEATURES;
             readonly rows = rows;
             readonly columns = columns;
         }

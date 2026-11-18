@@ -6,7 +6,6 @@ import { DataGridCells } from "./directives/cells.directive";
 import { DataGridEmpty } from "./directives/empty.directive";
 import { DataGridGrid } from "./directives/grid.directive";
 import { DataGridGroupLabel } from "./directives/group-label.directive";
-import { DataGridGroupToggle } from "./directives/group-toggle.directive";
 import { DataGridHeader } from "./directives/header.directive";
 import { DataGridHeaderCell } from "./directives/header-cell.directive";
 import { DataGridHeaderCells } from "./directives/header-cells.directive";
@@ -14,14 +13,7 @@ import { DataGridHeaderRow } from "./directives/header-row.directive";
 import { DataGridHeaderRows } from "./directives/header-rows.directive";
 import { DataGridRoot } from "./directives/root.directive";
 import { DataGridRow } from "./directives/row.directive";
-import { DataGridRowDetail } from "./directives/row-detail.directive";
-import { DataGridRowDragHandle } from "./directives/row-drag-handle.directive";
 import { DataGridRows } from "./directives/rows.directive";
-import { DataGridSummary } from "./directives/summary.directive";
-import { DataGridSummaryCell } from "./directives/summary-cell.directive";
-import { DataGridSummaryCells } from "./directives/summary-cells.directive";
-import { DataGridSummaryRow } from "./directives/summary-row.directive";
-import { DataGridSummaryRows } from "./directives/summary-rows.directive";
 import { DataGridTemplate } from "./directives/template.directive";
 
 /**
@@ -43,14 +35,6 @@ export const DATA_GRID = [
     DataGridCells,
     DataGridCell,
     DataGridCellContent,
-    DataGridRowDetail,
-    DataGridSummary,
-    DataGridSummaryRows,
-    DataGridSummaryRow,
-    DataGridSummaryCells,
-    DataGridSummaryCell,
-    DataGridRowDragHandle,
-    DataGridGroupToggle,
     DataGridGroupLabel,
     DataGridTemplate,
     DataGridBind,

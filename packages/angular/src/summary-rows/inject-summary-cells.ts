@@ -1,12 +1,12 @@
 import { computed, inject, type Signal } from "@angular/core";
-import { summaryCellsOf } from "@fragiola/data-grid";
+import { summaryCellsOf } from "@fragiola/data-grid/summary-rows";
 import {
-    DATA_GRID_SUMMARY_ROW,
-    type SummaryCellInfo,
-    type SummaryRowInfo,
-} from "../context";
-import { injectGridView } from "./inject-data-grid";
-import { type ValueOrSignal, valueNow } from "./internal";
+    ɵDATA_GRID_SUMMARY_ROW as DATA_GRID_SUMMARY_ROW,
+    injectGridView,
+    type ValueOrSignal,
+    ɵvalueNow as valueNow,
+} from "@fragiola/data-grid-angular";
+import type { SummaryCellInfo, SummaryRowInfo } from "./types";
 
 /**
  * The cells a summary row renders (React's `useSummaryCells`): the given row, else the one around

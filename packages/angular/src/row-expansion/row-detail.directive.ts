@@ -1,13 +1,16 @@
 import { computed, Directive } from "@angular/core";
+import { PINNED_KEYS } from "@fragiola/data-grid";
 import {
-    PINNED_KEYS,
     type RowDetailState,
     rowDetailPartOf,
-} from "@fragiola/data-grid";
-import { injectGrid, injectRowContext } from "../context";
-import { withTableSpans } from "../utils/cell-binding";
-import { bindPart } from "../utils/helpers";
-import { structuralView } from "../utils/structural";
+} from "@fragiola/data-grid/row-expansion";
+import {
+    ɵbindPart as bindPart,
+    ɵinjectGrid as injectGrid,
+    ɵinjectRowContext as injectRowContext,
+    ɵstructuralView as structuralView,
+    ɵwithTableSpans as withTableSpans,
+} from "@fragiola/data-grid-angular";
 
 /** The context of the `*dataGridRowDetail` template. */
 export interface RowDetailContext {

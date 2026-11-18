@@ -24,7 +24,12 @@ import {
     type GridRootProps,
 } from "../src/public-api";
 import { cellRange } from "../src/range";
+import { rowExpansion } from "../src/row-expansion";
+import { rowGrouping } from "../src/row-grouping";
+import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { cellSpans } from "../src/spans";
+import { SUMMARY_ROWS, summaryRows } from "../src/summary-rows";
 import { type Rendered, render, settled } from "./helpers";
 
 // The grid most tests render (the React and Vue suites' `divGrid`/`tableGrid`): every part, as
@@ -32,10 +37,10 @@ import { type Rendered, render, settled } from "./helpers";
 // through a test directive on the root, as `[dataGridLocalRows]` gives its own.
 
 /**
- * The features the tests' grids install unless a test gives its own (Epics #144, #146, #148):
- * every behaviour the core had before it became a feature (navigation, row selection, cell
- * ranges, the clipboard, the fill handle, cell editing, column resizing, reordering, pinning and
- * collapsible groups), so the tests of those behaviours pass unchanged.
+ * The features the tests' grids install unless a test gives its own (Epics #144, #146, #148,
+ * #151): every behaviour the core had before it became a feature (navigation, row selection, cell
+ * ranges, the clipboard, the fill handle, cell editing, the column features and the row
+ * features), so the tests of those behaviours pass unchanged.
  */
 export const TEST_FEATURES = [
     navigation(),
@@ -48,7 +53,18 @@ export const TEST_FEATURES = [
     columnReorder(),
     columnPinning(),
     columnGroupCollapse(),
+    cellSpans(),
+    rowGrouping(),
+    rowExpansion(),
+    summaryRows(),
+    rowReorder(),
 ] as const;
+
+/** The features a root whose columns span installs on its own (no other feature). */
+export const SPAN_FEATURES = [cellSpans()] as const;
+
+/** The features a root that shows summary rows on its own installs (no other feature). */
+export const SUMMARY_FEATURES = [summaryRows()] as const;
 
 /** The test features' list type: what a test's props are typed by. */
 export type TestFeatures = typeof TEST_FEATURES;
@@ -104,7 +120,7 @@ export interface TestGridOptions {
 
 @Component({
     selector: "test-grid",
-    imports: [DATA_GRID, TestRootProps],
+    imports: [DATA_GRID, SUMMARY_ROWS, TestRootProps],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div dataGridRoot [columns]="props().columns" [testProps]="props()">

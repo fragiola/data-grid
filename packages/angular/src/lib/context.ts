@@ -9,7 +9,6 @@ import type {
     GridCellInfo,
     GridHandle,
     GridRowInfo,
-    GridSummaryCellInfo,
     GridView,
     HeaderCellLayout,
     HeaderRowView,
@@ -67,12 +66,6 @@ export type HeaderRowInfo<TRow = unknown> = HeaderRowView<TRow, DataGridNode>;
  */
 export type SummaryRowInfo = SummaryRowView;
 
-/** A summary row's cell, as `[dataGridSummaryCells]` hands it to its template. */
-export type SummaryCellInfo<TRow = unknown> = GridSummaryCellInfo<
-    TRow,
-    DataGridNode
->;
-
 /** A body cell's render props in Angular: what a column's `renderCell` receives. */
 export type CellTemplateProps<TRow = unknown> = CellRenderProps<
     TRow,
@@ -127,7 +120,7 @@ export interface SummaryContext {
     readonly position: Signal<SummaryPosition>;
 }
 
-/** @internal */
+/** The summary rows' position around a part (private to the package's entries: `/summary-rows`). */
 export const DATA_GRID_SUMMARY = new InjectionToken<SummaryContext | null>(
     "DataGridSummary",
 );
@@ -137,7 +130,7 @@ export interface SummaryRowContext {
     readonly summaryRow: Signal<SummaryRowInfo>;
 }
 
-/** @internal */
+/** The summary row around a part (private to the package's entries: `/summary-rows`). */
 export const DATA_GRID_SUMMARY_ROW =
     new InjectionToken<SummaryRowContext | null>("DataGridSummaryRow");
 
@@ -174,7 +167,10 @@ export function injectGrid(part: string): GridContext {
     return grid;
 }
 
-/** @internal The row around a part; throws outside one. */
+/**
+ * The row around a part; throws outside one. Private to the package's entries (`ɵinjectRowContext`,
+ * `/row-expansion`).
+ */
 export function injectRowContext(part: string): RowContext {
     const row = inject(DATA_GRID_ROW, { optional: true });
     if (!row) {

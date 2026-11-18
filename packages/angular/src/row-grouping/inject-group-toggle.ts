@@ -1,15 +1,15 @@
+import type { RowMeta } from "@fragiola/data-grid";
 import {
     type GroupToggleState,
     groupTogglePartOf,
-    type RowMeta,
-} from "@fragiola/data-grid";
-import { injectGridView } from "./inject-data-grid";
+} from "@fragiola/data-grid/row-grouping";
 import {
+    injectGridView,
     type PartInjectResult,
-    partResult,
+    ɵpartResult as partResult,
     type ValueOrSignal,
-    valueNow,
-} from "./internal";
+    ɵvalueNow as valueNow,
+} from "@fragiola/data-grid-angular";
 
 /**
  * A row group's toggle's state and props (Epic #87; React's `useGroupToggle`): no props under a

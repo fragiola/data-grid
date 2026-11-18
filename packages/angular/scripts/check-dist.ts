@@ -31,6 +31,11 @@ const ENTRIES = [
     "column-reorder",
     "column-pinning",
     "column-group-collapse",
+    "row-expansion",
+    "row-grouping",
+    "row-reorder",
+    "spans",
+    "summary-rows",
 ];
 
 const ALLOWED = new RegExp(

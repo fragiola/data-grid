@@ -1,12 +1,14 @@
 import { computed, Directive, input } from "@angular/core";
+import type { RowMeta } from "@fragiola/data-grid";
 import {
     type GroupToggleState,
     groupTogglePartOf,
-    type RowMeta,
-} from "@fragiola/data-grid";
-import { injectGrid } from "../context";
-import { bindPart } from "../utils/helpers";
-import { structuralView } from "../utils/structural";
+} from "@fragiola/data-grid/row-grouping";
+import {
+    ɵbindPart as bindPart,
+    ɵinjectGrid as injectGrid,
+    ɵstructuralView as structuralView,
+} from "@fragiola/data-grid-angular";
 
 /** The context of the `*dataGridGroupToggle` template. */
 export interface GroupToggleContext {

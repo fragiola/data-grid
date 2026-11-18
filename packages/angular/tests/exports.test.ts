@@ -46,8 +46,6 @@ const ANGULAR_ONLY = [
     // a cell's default content (React renders it without children)
     "DataGridCellContent",
     // the parts React gives through a hook's props (Angular cannot spread props)
-    "DataGridRowDragHandle",
-    "DataGridGroupToggle",
     "DataGridGroupLabel",
     // an injection function's props on an element of the app's
     "DataGridBind",
@@ -56,11 +54,21 @@ const ANGULAR_ONLY = [
     "templateContent",
     "contextOf",
     // private to the package's own entry points (the fill handle's element, an editor's
-    // template), as Angular's `ɵ` names
+    // template, the row features' parts: Epic #151), as Angular's `ɵ` names
     "ɵbindPart",
     "ɵstructuralView",
     "ɵDATA_GRID_CELL",
     "ɵinjectGrid",
+    "ɵDATA_GRID_SUMMARY",
+    "ɵDATA_GRID_SUMMARY_ROW",
+    "ɵinjectRowContext",
+    "ɵpartResult",
+    "ɵvalueNow",
+    "ɵcellBinding",
+    "ɵwithTableSpans",
+    "ɵbeforeInputs",
+    "ɵinjectHost",
+    "ɵkeyedTemplateViews",
 ];
 
 /**
@@ -81,6 +89,13 @@ const ENTRIES: Readonly<Record<string, readonly string[]>> = {
     "column-reorder": ["DataGridColumnReorder"],
     "column-pinning": [],
     "column-group-collapse": ["DataGridColumnGroupCollapse"],
+    // the row features (Epic #151): the root's inputs, and the parts React gives through a hook's
+    // props (Angular cannot spread props); the summary's directives in one list
+    "row-expansion": ["DataGridRowExpansion"],
+    "row-grouping": ["DataGridRowGrouping", "DataGridGroupToggle"],
+    "row-reorder": ["DataGridRowReorder", "DataGridRowDragHandle"],
+    spans: [],
+    "summary-rows": ["DataGridSummaryRowsRoot", "SUMMARY_ROWS"],
 };
 
 /** The features' entries: each re-exports the core's of the same name. */
@@ -192,7 +207,6 @@ describe("@fragiola/data-grid-angular", () => {
     });
 
     it("maps the opt-in entries: /local and the features'", async () => {
-        const map = (names: string[]) => names.map((name) => hookOf(name));
         for (const [entry, directives] of Object.entries(ENTRIES)) {
             const reactEntry = (await import(
                 /* @vite-ignore */ join(
@@ -200,6 +214,21 @@ describe("@fragiola/data-grid-angular", () => {
                     `../../react/src/${entry}/index.ts`,
                 )
             )) as Record<string, unknown>;
+            const coreEntry = (await import(
+                /* @vite-ignore */ join(
+                    import.meta.dirname,
+                    `../../core/src/${entry}/index.ts`,
+                )
+            )) as Record<string, unknown>;
+            // a React primitive of the entry (a component, not the core's) is a directive
+            // (Epic #151: `RowDetail`, `Summary`, …), a hook an injection function
+            const nameOf = (name: string) =>
+                /^[A-Z][a-z]/.test(name) &&
+                typeof reactEntry[name] === "function" &&
+                !(name in coreEntry)
+                    ? directiveOf(name)
+                    : hookOf(name);
+            const map = (names: string[]) => names.map(nameOf);
             const angularEntry = (await import(
                 /* @vite-ignore */ join(
                     import.meta.dirname,
@@ -215,7 +244,16 @@ describe("@fragiola/data-grid-angular", () => {
             );
             expect(
                 exportedNames(read(`../react/src/${entry}/index.ts`))
-                    .map((name) => hookOf(name))
+                    // a primitive's element props are a directive's inputs
+                    .filter(
+                        (name) =>
+                            !(
+                                name.endsWith("Props") &&
+                                name.slice(0, -5) in reactEntry &&
+                                !(name in coreEntry)
+                            ),
+                    )
+                    .map(nameOf)
                     .filter((name) => !angularTypes.has(name)),
                 entry,
             ).toEqual([]);

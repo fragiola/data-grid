@@ -1,8 +1,12 @@
 import { computed, inject, type Signal } from "@angular/core";
 import { type SummaryPosition, summaryRowsOf } from "@fragiola/data-grid";
-import { DATA_GRID_SUMMARY, type SummaryRowInfo } from "../context";
-import { injectGridView } from "./inject-data-grid";
-import { type ValueOrSignal, valueNow } from "./internal";
+import {
+    ɵDATA_GRID_SUMMARY as DATA_GRID_SUMMARY,
+    injectGridView,
+    type ValueOrSignal,
+    ɵvalueNow as valueNow,
+} from "@fragiola/data-grid-angular";
+import type { SummaryRowInfo } from "./types";
 
 /**
  * A position's summary rows (Epic #86; React's `useSummaryRows`), the first one first:

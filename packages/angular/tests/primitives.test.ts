@@ -28,7 +28,13 @@ import {
     type TemplateContext,
     templateContent,
 } from "../src/public-api";
-import { renderTestGrid, TEST_FEATURES, type TestFeatures } from "./grid";
+import { SUMMARY_ROWS } from "../src/summary-rows";
+import {
+    renderTestGrid,
+    SUMMARY_FEATURES,
+    TEST_FEATURES,
+    type TestFeatures,
+} from "./grid";
 import {
     click,
     keyDown,
@@ -1656,10 +1662,10 @@ describe("the engine's life", () => {
 describe("layering (Epic #89, E5.2)", () => {
     it("stacks the header above the summary rows above the body, inside the grid's own context", async () => {
         @Component({
-            imports: [DATA_GRID],
+            imports: [DATA_GRID, SUMMARY_ROWS],
             changeDetection: ChangeDetectionStrategy.OnPush,
             template: `
-                <div dataGridRoot [rows]="rows" [columns]="columns" [summaryRows]="summaryRows" style="z-index: 5">
+                <div dataGridRoot dataGridSummaryRows [features]="summaryFeatures" [rows]="rows" [columns]="columns" [summaryRows]="summaryRows" style="z-index: 5">
                     <div dataGridGrid style="z-index: 9">
                         <div *dataGridHeader style="z-index: 50"></div>
                         <div *dataGridSummary="'top'"></div>
@@ -1670,6 +1676,7 @@ describe("layering (Epic #89, E5.2)", () => {
             `,
         })
         class Layered {
+            readonly summaryFeatures = SUMMARY_FEATURES;
             readonly rows = people;
             readonly columns = columns;
             readonly summaryRows = { top: 1, bottom: 1 };

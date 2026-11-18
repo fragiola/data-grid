@@ -95,6 +95,36 @@
             "import": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs",
             "default": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs"
         },
+        "./row-expansion": {
+            "@fragiola/source": "./src/row-expansion/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-row-expansion.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-row-expansion.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-row-expansion.mjs"
+        },
+        "./row-grouping": {
+            "@fragiola/source": "./src/row-grouping/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-row-grouping.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-row-grouping.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-row-grouping.mjs"
+        },
+        "./row-reorder": {
+            "@fragiola/source": "./src/row-reorder/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-row-reorder.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-row-reorder.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-row-reorder.mjs"
+        },
+        "./spans": {
+            "@fragiola/source": "./src/spans/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-spans.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-spans.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-spans.mjs"
+        },
+        "./summary-rows": {
+            "@fragiola/source": "./src/summary-rows/index.ts",
+            "types": "./dist/types/fragiola-data-grid-angular-summary-rows.d.ts",
+            "import": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs",
+            "default": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -168,6 +198,31 @@
                 "types": "./dist/types/fragiola-data-grid-angular-column-group-collapse.d.ts",
                 "import": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs",
                 "default": "./dist/fesm2022/fragiola-data-grid-angular-column-group-collapse.mjs"
+            },
+            "./row-expansion": {
+                "types": "./dist/types/fragiola-data-grid-angular-row-expansion.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-row-expansion.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-row-expansion.mjs"
+            },
+            "./row-grouping": {
+                "types": "./dist/types/fragiola-data-grid-angular-row-grouping.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-row-grouping.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-row-grouping.mjs"
+            },
+            "./row-reorder": {
+                "types": "./dist/types/fragiola-data-grid-angular-row-reorder.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-row-reorder.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-row-reorder.mjs"
+            },
+            "./spans": {
+                "types": "./dist/types/fragiola-data-grid-angular-spans.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-spans.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-spans.mjs"
+            },
+            "./summary-rows": {
+                "types": "./dist/types/fragiola-data-grid-angular-summary-rows.d.ts",
+                "import": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs",
+                "default": "./dist/fesm2022/fragiola-data-grid-angular-summary-rows.mjs"
             },
             "./package.json": "./package.json"
         }

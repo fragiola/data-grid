@@ -2,9 +2,13 @@ import { computed, Directive, input, type Signal } from "@angular/core";
 import {
     type RowDragHandleState,
     rowDragHandlePartOf,
-} from "@fragiola/data-grid";
-import { injectGrid } from "../context";
-import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
+} from "@fragiola/data-grid/row-reorder";
+import {
+    ɵbeforeInputs as beforeInputs,
+    ɵbindPart as bindPart,
+    ɵinjectGrid as injectGrid,
+    ɵinjectHost as injectHost,
+} from "@fragiola/data-grid-angular";
 
 /**
  * A row's drag handle (Epic #86), the app's element in a row (a cell of it):

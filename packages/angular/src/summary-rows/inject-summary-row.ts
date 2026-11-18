@@ -1,12 +1,13 @@
-import { type SummaryRowState, summaryRowPartOf } from "@fragiola/data-grid";
-import type { SummaryRowInfo } from "../context";
-import { injectGridView } from "./inject-data-grid";
+import type { SummaryRowState } from "@fragiola/data-grid";
+import { summaryRowPartOf } from "@fragiola/data-grid/summary-rows";
 import {
+    injectGridView,
     type PartInjectResult,
-    partResult,
+    ɵpartResult as partResult,
     type ValueOrSignal,
-    valueNow,
-} from "./internal";
+    ɵvalueNow as valueNow,
+} from "@fragiola/data-grid-angular";
+import type { SummaryRowInfo } from "./types";
 
 /** A summary row's state, and the props for its element (Epic #86; React's `useSummaryRow`). */
 export function injectSummaryRow(

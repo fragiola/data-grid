@@ -5,21 +5,23 @@ import {
     input,
     type Signal,
 } from "@angular/core";
+import type { SummaryCellState } from "@fragiola/data-grid";
 import {
-    type SummaryCellState,
     summaryCellContent,
     summaryCellPartOf,
-} from "@fragiola/data-grid";
+} from "@fragiola/data-grid/summary-rows";
 import {
+    ɵbeforeInputs as beforeInputs,
+    ɵbindPart as bindPart,
     type CellContext,
     type CellInfo,
-    DATA_GRID_CELL,
-    injectGrid,
-    type SummaryCellInfo,
-} from "../context";
-import { cellBinding } from "../utils/cell-binding";
-import type { DataGridNode } from "../utils/content";
-import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
+    ɵcellBinding as cellBinding,
+    ɵDATA_GRID_CELL as DATA_GRID_CELL,
+    type DataGridNode,
+    ɵinjectGrid as injectGrid,
+    ɵinjectHost as injectHost,
+} from "@fragiola/data-grid-angular";
+import type { SummaryCellInfo } from "./types";
 
 /**
  * A summary row's cell (`role="gridcell"`, `data-summary`), positioned in its row as a body cell:

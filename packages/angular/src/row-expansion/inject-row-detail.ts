@@ -1,13 +1,15 @@
-import type { RowDetailState } from "@fragiola/data-grid";
-import { rowDetailPartOf } from "@fragiola/data-grid";
-import type { RowInfo } from "../context";
-import { injectGridView } from "./inject-data-grid";
 import {
+    type RowDetailState,
+    rowDetailPartOf,
+} from "@fragiola/data-grid/row-expansion";
+import {
+    injectGridView,
     type PartInjectResult,
-    partResult,
+    ɵpartResult as partResult,
+    type RowInfo,
     type ValueOrSignal,
-    valueNow,
-} from "./internal";
+    ɵvalueNow as valueNow,
+} from "@fragiola/data-grid-angular";
 
 /** A row's detail (M3): its state, and the props for its element (render it only while `state().expanded`; React's `useRowDetail`). */
 export function injectRowDetail<TRow>(

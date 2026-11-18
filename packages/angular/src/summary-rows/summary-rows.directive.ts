@@ -13,8 +13,12 @@ import {
     type SummaryRowView,
     summaryRowsOf,
 } from "@fragiola/data-grid";
-import { DATA_GRID_SUMMARY, injectGrid, type SummaryRowInfo } from "../context";
-import { keyedTemplateViews } from "../utils/views";
+import {
+    ɵDATA_GRID_SUMMARY as DATA_GRID_SUMMARY,
+    ɵinjectGrid as injectGrid,
+    ɵkeyedTemplateViews as keyedTemplateViews,
+} from "@fragiola/data-grid-angular";
+import type { SummaryRowInfo } from "./types";
 
 /** The context of the `[dataGridSummaryRows]` template. */
 export interface SummaryRowsContext {

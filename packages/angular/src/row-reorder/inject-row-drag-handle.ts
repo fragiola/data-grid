@@ -1,14 +1,14 @@
 import {
     type RowDragHandleState,
     rowDragHandlePartOf,
-} from "@fragiola/data-grid";
-import { injectGridView } from "./inject-data-grid";
+} from "@fragiola/data-grid/row-reorder";
 import {
+    injectGridView,
     type PartInjectResult,
-    partResult,
+    ɵpartResult as partResult,
     type ValueOrSignal,
-    valueNow,
-} from "./internal";
+    ɵvalueNow as valueNow,
+} from "@fragiola/data-grid-angular";
 
 /**
  * A row's drag handle's state and props (Epic #86; React's `useRowDragHandle`).

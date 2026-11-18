@@ -5,14 +5,18 @@ import {
     input,
     type Signal,
 } from "@angular/core";
+import type { SummaryPosition } from "@fragiola/data-grid";
 import {
-    type SummaryPosition,
     type SummaryState,
     summaryPartOf,
-} from "@fragiola/data-grid";
-import { DATA_GRID_SUMMARY, injectGrid, type SummaryContext } from "../context";
-import { bindPart } from "../utils/helpers";
-import { structuralView } from "../utils/structural";
+} from "@fragiola/data-grid/summary-rows";
+import {
+    ɵbindPart as bindPart,
+    ɵDATA_GRID_SUMMARY as DATA_GRID_SUMMARY,
+    ɵinjectGrid as injectGrid,
+    type SummaryContext,
+    ɵstructuralView as structuralView,
+} from "@fragiola/data-grid-angular";
 
 /** The context of the `*dataGridSummary` template. */
 export interface SummaryTemplateContext {

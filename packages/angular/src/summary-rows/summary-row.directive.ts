@@ -5,18 +5,17 @@ import {
     input,
     type Signal,
 } from "@angular/core";
+import { LAYER_KEYS, type SummaryRowState } from "@fragiola/data-grid";
+import { summaryRowPartOf } from "@fragiola/data-grid/summary-rows";
 import {
-    LAYER_KEYS,
-    type SummaryRowState,
-    summaryRowPartOf,
-} from "@fragiola/data-grid";
-import {
-    DATA_GRID_SUMMARY_ROW,
-    injectGrid,
+    ɵbeforeInputs as beforeInputs,
+    ɵbindPart as bindPart,
+    ɵDATA_GRID_SUMMARY_ROW as DATA_GRID_SUMMARY_ROW,
+    ɵinjectGrid as injectGrid,
+    ɵinjectHost as injectHost,
     type SummaryRowContext,
-    type SummaryRowInfo,
-} from "../context";
-import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
+} from "@fragiola/data-grid-angular";
+import type { SummaryRowInfo } from "./types";
 
 /**
  * A summary row (`role="row"`, `data-summary`), one of the layers the engine moves with the

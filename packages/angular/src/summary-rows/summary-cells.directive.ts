@@ -7,14 +7,14 @@ import {
     untracked,
     ViewContainerRef,
 } from "@angular/core";
-import { summaryCellsOf } from "@fragiola/data-grid";
+import { summaryCellsOf } from "@fragiola/data-grid/summary-rows";
 import {
-    DATA_GRID_SUMMARY_ROW,
-    injectGrid,
-    type SummaryCellInfo,
+    ɵDATA_GRID_SUMMARY_ROW as DATA_GRID_SUMMARY_ROW,
+    ɵinjectGrid as injectGrid,
+    ɵkeyedTemplateViews as keyedTemplateViews,
     type TypedBy,
-} from "../context";
-import { keyedTemplateViews } from "../utils/views";
+} from "@fragiola/data-grid-angular";
+import type { SummaryCellInfo } from "./types";
 
 /** The context of the `[dataGridSummaryCells]` template. */
 export interface SummaryCellsContext<TRow = unknown> {
