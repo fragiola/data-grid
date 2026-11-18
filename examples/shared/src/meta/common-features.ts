@@ -5,7 +5,7 @@ export default {
     description:
         "One realistic sheet: rows selected by checkbox, columns pinned at both ends, sorted, resized and edited, totals above and below, and an export to CSV from the app's own rows.",
     category: "real-world",
-    order: 5,
+    order: 6,
     features: [
         "rowSelection",
         "isRowSelectable",

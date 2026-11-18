@@ -5,7 +5,7 @@ export default {
     description:
         "A CRM table: logos, chips, badges and links in the cells, rows the grid selects and the app deletes, and sorting in memory.",
     category: "real-world",
-    order: 1,
+    order: 2,
     features: [
         "renderCell",
         "renderHeaderCell",

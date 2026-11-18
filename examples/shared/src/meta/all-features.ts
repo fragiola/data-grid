@@ -5,7 +5,7 @@ export default {
     description:
         "A task sheet that edits in place, selects ranges, copies and pastes them, fills from a handle, sorts, pins its first column and resizes the others, every value written by the app.",
     category: "real-world",
-    order: 4,
+    order: 5,
     features: [
         "renderEditCell",
         "onCellEdit",
