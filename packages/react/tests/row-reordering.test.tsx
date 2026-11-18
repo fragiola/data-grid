@@ -441,6 +441,7 @@ describe("useLocalRows' moveRow", () => {
         function Local() {
             const [rows, setRows] = useState<readonly Task[]>(tasks);
             const local = useLocalRows(rows, columns, {
+                features: FEATURES,
                 defaultFilters: { id: [1, 3, 5, 7] },
             });
             shown = local.rows;
@@ -463,6 +464,7 @@ describe("useLocalRows' moveRow", () => {
         let shown: readonly string[] = [];
         function Paged() {
             const local = useLocalRows(letters, letter, {
+                features: FEATURES,
                 pageSize: 2,
                 defaultPageIndex: 1,
             });
@@ -485,7 +487,7 @@ describe("useLocalRows' moveRow", () => {
         let apply: (moves: readonly RowMove[]) => void = () => {};
         function Local() {
             const [rows, setRows] = useState<readonly Task[]>(tasks);
-            const local = useLocalRows(rows, columns);
+            const local = useLocalRows(rows, columns, { features: FEATURES });
             kept.push(local.moveRow);
             shown = local.rows;
             apply = (moves) => {

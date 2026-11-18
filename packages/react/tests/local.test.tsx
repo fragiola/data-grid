@@ -1,8 +1,18 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { type Column, DataGrid } from "../src";
+import {
+    type Column,
+    createDataGridRef,
+    DataGrid,
+    type DataGridFeature,
+    type DataGridModel,
+    type DataGridRef,
+} from "../src";
+import { filtering } from "../src/filtering";
 import { type LocalRowsResult, useLocalRows } from "../src/local";
+import { pagination } from "../src/pagination";
+import { search } from "../src/search";
 import { type SortColumn, sorting } from "../src/sorting";
 import {
     FEATURES as GRID_FEATURES,
@@ -50,7 +60,7 @@ function People({
     pageSize?: number;
     table?: boolean;
 }) {
-    const local = useLocalRows(rows, columns, { pageSize });
+    const local = useLocalRows(rows, columns, { features: FEATURES, pageSize });
     latest = local;
     const tag = tags(table);
     return (
@@ -170,6 +180,7 @@ describe("useLocalRows across renders", () => {
         function Deleting() {
             const [rows, setRows] = useState(people);
             const local = useLocalRows(rows, columns, {
+                features: FEATURES,
                 pageSize: 2,
                 defaultSortColumns: [
                     { columnKey: "name", direction: "ascending" },
@@ -225,7 +236,7 @@ describe("useLocalRows across renders", () => {
     it("hands the grid the same onSortColumnsChange on every render", () => {
         const seen = new Set<(sortColumns: readonly SortColumn[]) => void>();
         function Watch() {
-            const local = useLocalRows(people, columns);
+            const local = useLocalRows(people, columns, { features: FEATURES });
             seen.add(local.props.onSortColumnsChange);
             return (
                 <DataGrid.Root
@@ -243,5 +254,103 @@ describe("useLocalRows across renders", () => {
         fireEvent.click(headerAt(container, 0));
         fireEvent.click(headerAt(container, 1));
         expect(seen.size).toBe(1);
+    });
+});
+
+describe("useLocalRows over the features (Epic #153)", () => {
+    function Model({
+        features,
+        gridRef,
+        renders,
+    }: {
+        features: readonly DataGridFeature[];
+        gridRef?: DataGridRef<Person>;
+        renders?: { count: number };
+    }) {
+        const local = useLocalRows(people, columns, {
+            features,
+            pageSize: 2,
+            defaultFilters: { team: "Core" },
+        });
+        latest = local as LocalRowsResult<Person>;
+        if (renders) renders.count += 1;
+        return (
+            <DataGrid.Root
+                columns={columns}
+                features={features}
+                gridRef={gridRef}
+                {...local.props}
+            >
+                <DataGrid.Grid>
+                    <DataGrid.Body>
+                        <DataGrid.Rows<Person>>
+                            {(row) => (
+                                <DataGrid.Row row={row}>
+                                    <DataGrid.Cells<Person>>
+                                        {(cell) => (
+                                            <DataGrid.Cell cell={cell} />
+                                        )}
+                                    </DataGrid.Cells>
+                                </DataGrid.Row>
+                            )}
+                        </DataGrid.Rows>
+                    </DataGrid.Body>
+                </DataGrid.Grid>
+            </DataGrid.Root>
+        );
+    }
+
+    it("skips the stages of the features not installed, and hands no prop of theirs", () => {
+        const { container } = render(<Model features={[sorting()]} />);
+        // no filter, no page: every row, the filters kept
+        expect(names(container)).toEqual(people.map((row) => row.name));
+        expect(latest?.filter.values).toEqual({ team: "Core" });
+        expect(Object.keys(latest?.props ?? {}).sort()).toEqual([
+            "onSortColumnsChange",
+            "rows",
+            "sortColumns",
+        ]);
+    });
+
+    it("hands the root's model the state, and takes a command run on it back, in one render", () => {
+        const gridRef = createDataGridRef<Person>();
+        const renders = { count: 0 };
+        const features = [sorting(), filtering(), search(), pagination()];
+        const { container } = render(
+            <Model features={features} gridRef={gridRef} renders={renders} />,
+        );
+        expect(names(container)).toEqual(["Carla", "Bruno"]);
+        const model = gridRef.current?.model as DataGridModel<
+            Person,
+            unknown,
+            typeof features
+        >;
+        expect(model.get("column-filters")).toEqual({ team: "Core" });
+        expect(model.get("page-info")).toMatchObject({
+            pageIndex: 0,
+            pageSize: 2,
+            pageCount: 1,
+            rowCount: 2,
+        });
+        const before = renders.count;
+        act(() => {
+            model.run("column-filters.clear", undefined);
+        });
+        expect(renders.count - before).toBe(1);
+        expect(names(container)).toEqual(["Carla", "Ana"]);
+        expect(model.get("page-count")).toBe(3);
+        act(() => {
+            model.run("page.set", { pageIndex: 2 });
+        });
+        expect(names(container)).toEqual(["Élodie"]);
+        expect(latest?.page.index).toBe(2);
+        act(() => {
+            model.run("search.set", { text: "an" });
+        });
+        // the search goes back to the first page
+        expect(names(container)).toEqual(["Ana"]);
+        expect(model.get("page-info").pageIndex).toBe(0);
+        act(() => latest?.filter.set("team", "Design"));
+        expect(model.get("column-filters")).toEqual({ team: "Design" });
     });
 });

@@ -13,12 +13,15 @@ import { columnReorder } from "../src/column-reorder";
 import { columnResize } from "../src/column-resize";
 import { editing } from "../src/editing";
 import { fillHandle } from "../src/fill";
+import { filtering } from "../src/filtering";
 import { navigation } from "../src/navigation";
+import { pagination } from "../src/pagination";
 import { cellRange } from "../src/range";
 import { rowExpansion } from "../src/row-expansion";
 import { rowGrouping } from "../src/row-grouping";
 import { rowReorder } from "../src/row-reorder";
 import { rowSelection } from "../src/row-selection";
+import { search } from "../src/search";
 import { cellSpans } from "../src/spans";
 import { summaryRows } from "../src/summary-rows";
 
@@ -30,7 +33,7 @@ import { summaryRows } from "../src/summary-rows";
  * Every feature of Epics #144, #146, #148 and #151, in their requirements' order: navigation, row
  * selection, cell ranges, the clipboard, the fill handle, cell editing, the column features
  * (resizing, reordering, pinning, collapsible groups) and the row features (spans, grouping,
- * expansion, summary rows, reorder), as the grid had them before they were features. A test of these behaviours installs them (`features={FEATURES}`); a test of a grid
+ * expansion, summary rows, reorder), and filtering, search and pagination (Epic #153), as the grid had them before they were features. A test of these behaviours installs them (`features={FEATURES}`); a test of a grid
  * without them installs none.
  */
 export const FEATURES = [
@@ -49,6 +52,9 @@ export const FEATURES = [
     rowExpansion(),
     summaryRows(),
     rowReorder(),
+    filtering(),
+    search(),
+    pagination(),
 ] as const;
 
 /** Their types (`useDataGridRef<Row, Features>()`, `RootProps<Row, Features>`). */
