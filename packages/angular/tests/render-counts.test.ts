@@ -23,7 +23,7 @@ import {
 } from "../src/public-api";
 import { DataGridRowDetail } from "../src/row-expansion";
 import { SUMMARY_ROWS } from "../src/summary-rows";
-import { type TestProps, TestRootProps } from "./grid";
+import { TEST_FEATURES, type TestProps, TestRootProps } from "./grid";
 import {
     render,
     rendered,
@@ -209,6 +209,7 @@ const TEAM_KEYS: readonly RowKey[] = TEAMS.map((team) =>
 })
 class GroupedGrid extends Counted {
     protected readonly local = injectLocalRows(items, COLUMNS, {
+        features: TEST_FEATURES,
         groupBy: ["team"],
         rowKey,
         expandedGroupKeys: TEAM_KEYS,
@@ -239,6 +240,7 @@ const getSubRows = (row: Item) => row.children;
 })
 class TreeGrid extends Counted {
     protected readonly local = injectLocalRows(parents, COLUMNS, {
+        features: TEST_FEATURES,
         getSubRows,
         rowKey,
         expandedGroupKeys: PARENT_KEYS,

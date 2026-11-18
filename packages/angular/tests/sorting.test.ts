@@ -563,6 +563,7 @@ describe("[features] and [dataGridSorting]", () => {
                 { columnKey: "age", direction: "descending" },
             ];
             readonly local = injectLocalRows(people, columns, {
+                features: FEATURES,
                 defaultSortColumns: [
                     { columnKey: "name", direction: "ascending" },
                 ],

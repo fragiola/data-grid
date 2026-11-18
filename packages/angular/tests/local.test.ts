@@ -5,17 +5,20 @@ import {
     signal,
 } from "@angular/core";
 import { describe, expect, it } from "vitest";
+import { filtering } from "../src/filtering";
 import {
     DataGridLocalRows,
     injectLocalRows,
     type LocalRowsResult,
 } from "../src/local";
+import { pagination } from "../src/pagination";
 import { type Column, DATA_GRID, type DataGridNode } from "../src/public-api";
+import { search } from "../src/search";
 import { type SortColumn, sorting } from "../src/sorting";
 import { click, headerAt, render, settled, stubViewportSize } from "./helpers";
 
-/** The root's features: the local rows' sort is sorting's (Epic #141). */
-const FEATURES = [sorting()];
+/** The root's features: the local rows' sort, filters, search and page are theirs (Epics #141, #153). */
+const FEATURES = [sorting(), filtering(), search(), pagination()] as const;
 
 // One injection function for rows in memory (Epic #47, L1): its props given to the root
 // (`[dataGridLocalRows]`) make the header sort the rows, and its controls filter, search and page
@@ -110,6 +113,7 @@ class People {
     readonly columns = columns;
     readonly features = FEATURES;
     readonly local = injectLocalRows(this.rows, columns, () => ({
+        features: FEATURES,
         pageSize: this.pageSize(),
     }));
 
@@ -249,6 +253,7 @@ describe("injectLocalRows across renders", () => {
             readonly features = FEATURES;
             readonly rows = signal<readonly Person[]>(people);
             readonly local = injectLocalRows(this.rows, columns, {
+                features: FEATURES,
                 pageSize: 2,
                 defaultSortColumns: [
                     { columnKey: "name", direction: "ascending" },
@@ -314,7 +319,9 @@ describe("injectLocalRows across renders", () => {
         class Watch {
             readonly columns = columns;
             readonly features = FEATURES;
-            readonly local = injectLocalRows(people, columns);
+            readonly local = injectLocalRows(people, columns, {
+                features: FEATURES,
+            });
             // the template reads the props: a new sort renders it again
             see() {
                 renders += 1;

@@ -36,6 +36,9 @@ const ENTRIES = [
     "row-reorder",
     "spans",
     "summary-rows",
+    "filtering",
+    "search",
+    "pagination",
 ];
 
 const ALLOWED = new RegExp(
