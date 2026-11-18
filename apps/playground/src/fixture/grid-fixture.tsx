@@ -37,8 +37,10 @@ import {
     repeatedFill,
     useFillHandle,
 } from "@fragiola/data-grid-react/fill";
+import { filtering } from "@fragiola/data-grid-react/filtering";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import { pagination } from "@fragiola/data-grid-react/pagination";
 import { cellRange } from "@fragiola/data-grid-react/range";
 import {
     RowDetail,
@@ -53,6 +55,7 @@ import {
     useRowDragHandle,
 } from "@fragiola/data-grid-react/row-reorder";
 import { rowSelection } from "@fragiola/data-grid-react/row-selection";
+import { search } from "@fragiola/data-grid-react/search";
 import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
 import { cellSpans } from "@fragiola/data-grid-react/spans";
 import {
@@ -80,7 +83,8 @@ import { createRoot } from "react-dom/client";
  * the features the fixture installs: sorting (Epic #141), cell navigation, row selection, cell
  * ranges, the clipboard and the fill handle (Epic #144), cell editing (Epic #146), column
  * resizing, reordering, pinning and collapsible groups (Epic #148), column spans, row grouping,
- * row expansion, summary rows and row reordering (Epic #151)
+ * row expansion, summary rows and row reordering (Epic #151), filtering, search and pagination
+ * (Epic #153)
  */
 export const FEATURES = [
     sorting(),
@@ -99,6 +103,9 @@ export const FEATURES = [
     rowExpansion(),
     summaryRows(),
     rowReorder(),
+    filtering(),
+    search(),
+    pagination(),
 ];
 
 /** Their types: the model's keys and the root's props (`window.grid`'s too). */
@@ -1146,6 +1153,7 @@ function Fixture({ kind }: { kind: "table" | "div" }) {
         [treeData, grouping, rowCount],
     );
     const local = useLocalRows(memoryRows, columns, {
+        features: FEATURES,
         groupBy,
         getSubRows,
         aggregates: AGGREGATES,
