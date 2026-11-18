@@ -59,11 +59,41 @@ describe("the grid's own entry", () => {
             "row-reorder",
             "spans",
             "summary-rows",
+            // filtering, search and pagination (Epic #153), and the filters' rules they share
+            // with `/local`
+            "filtering",
+            "search",
+            "pagination",
+            "model/filters",
         ]) {
             expect(
                 files.filter((file) => file.startsWith(feature)),
                 feature,
             ).toEqual([]);
         }
+    });
+});
+
+describe("the local pipeline", () => {
+    it("reaches no feature's code: it reads their state through the props it hands a root (Epic #153)", () => {
+        const files = [...reachable(join(src, "local", "index.ts"))].map(
+            (file) => relative(src, file),
+        );
+        const features = [
+            "sorting",
+            "filtering",
+            "search",
+            "pagination",
+            "row-grouping",
+        ];
+        // a feature's types only (type imports: no code)
+        expect(
+            files.filter(
+                (file) =>
+                    features.some((feature) =>
+                        file.startsWith(`${feature}/`),
+                    ) && !file.endsWith("/types.ts"),
+            ),
+        ).toEqual([]);
     });
 });

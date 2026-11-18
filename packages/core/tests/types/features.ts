@@ -21,9 +21,14 @@ import { columnReorder } from "../../src/column-reorder";
 import { columnResize } from "../../src/column-resize";
 import { type CellEditEvent, editing } from "../../src/editing";
 import { fillHandle } from "../../src/fill";
+import { type ColumnFilters, filtering } from "../../src/filtering";
+import type { LocalRowsProps } from "../../src/local";
 import { navigation } from "../../src/navigation";
+import { pagination } from "../../src/pagination";
 import { cellRange } from "../../src/range";
+import type { rowGrouping } from "../../src/row-grouping";
 import { rowSelection } from "../../src/row-selection";
+import { search } from "../../src/search";
 import { type SortColumn, sorting } from "../../src/sorting";
 
 interface Person {
@@ -411,3 +416,101 @@ columned.use((ctx, next) => {
     }
     return next();
 });
+
+// Epic #153: filtering, search and pagination are features. Without them, their keys, options
+// and root props do not compile
+// @ts-expect-error
+bare.run("column-filters.set", { columnFilters: {} });
+// @ts-expect-error
+bare.get("search-text");
+// @ts-expect-error
+bare.get("page-count");
+// @ts-expect-error: their options neither
+createDataGridModel({ columns, rows, pageSize: 10 });
+const noFilters: GridRootProps<Person, unknown> = {
+    columns,
+    rows,
+    // @ts-expect-error
+    columnFilters: {},
+};
+void noFilters;
+// with them, they do, typed
+const rowFeatures = [filtering(), search(), pagination()] as const;
+const listed = createDataGridModel({
+    columns,
+    rows,
+    features: rowFeatures,
+    columnFilters: { age: 3 },
+    searchText: "a",
+    pageSize: 10,
+});
+const filters: ColumnFilters = listed.get("column-filters");
+const text: string = listed.get("search-text");
+const pages: number = listed.get("page-info").pageCount;
+void filters;
+void text;
+void pages;
+listed.run("column-filter.set", { columnKey: "age", value: [1, 2] });
+listed.run("column-filters.clear", { columnKey: "age" });
+listed.run("search.clear");
+listed.run("page.set", { pageIndex: 2 });
+// @ts-expect-error: a page that is no number
+listed.run("page.set", { pageIndex: "2" });
+listed.is("page-next", undefined);
+const withRowFeatures: GridRootProps<Person, unknown, typeof rowFeatures> = {
+    columns,
+    rows,
+    features: rowFeatures,
+    columnFilters: { age: 3 },
+    onColumnFiltersChange: (next) => next.age,
+    defaultSearchText: "a",
+    onSearchTextChange: (next) => next.length,
+    pageIndex: 0,
+    onPageIndexChange: (index) => index + 1,
+    pageSize: null,
+    onPageSizeChange: (size) => size,
+    totalRowCount: 100,
+};
+void withRowFeatures;
+
+// `/local`'s props carry the state of the features given: a root with them takes them, one
+// without them does not
+declare const sortedLocal: LocalRowsProps<
+    Person,
+    readonly [ReturnType<typeof sorting>]
+>;
+const sortColumnsOfLocal: readonly SortColumn[] = sortedLocal.sortColumns;
+void sortColumnsOfLocal;
+// @ts-expect-error: filtering is not installed
+void sortedLocal.columnFilters;
+declare const everyLocal: LocalRowsProps<
+    Person,
+    readonly [
+        ReturnType<typeof sorting>,
+        ReturnType<typeof filtering>,
+        ReturnType<typeof search>,
+        ReturnType<typeof pagination>,
+        ReturnType<typeof rowGrouping>,
+    ]
+>;
+const everyProps: Partial<
+    GridRootProps<
+        Person,
+        unknown,
+        readonly [
+            ReturnType<typeof sorting>,
+            ReturnType<typeof filtering>,
+            ReturnType<typeof search>,
+            ReturnType<typeof pagination>,
+            ReturnType<typeof rowGrouping>,
+        ]
+    >
+> = everyLocal;
+void everyProps;
+if (everyLocal.rows === undefined) {
+    const keys: readonly RowKey[] = everyLocal.expandedGroupKeys;
+    void keys;
+}
+declare const plainLocal: LocalRowsProps<Person>;
+// @ts-expect-error: without features, no feature's props
+void plainLocal.sortColumns;

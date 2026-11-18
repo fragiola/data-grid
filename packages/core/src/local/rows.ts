@@ -1,11 +1,11 @@
 import { leafColumns } from "../header/header";
+import { sameFilters, withoutEmptyFilters } from "../model/filters";
 import type { ColumnOrGroup, RowKey } from "../model/types";
 import type { SortColumn } from "../sorting/types";
 import { memo, sameList } from "../utils/utils";
 import {
     entriesOf,
     filterEntries,
-    isEmptyFilter,
     type LocalFilters,
     type RowEntry,
     searchEntries,
@@ -125,8 +125,56 @@ export function treeRows<TRow>(
     );
 }
 
+/**
+ * The stages the local pipeline runs (Epic #153): each one its feature's, installed on the grid
+ * (`localStagesOf(features)`). A stage left out is skipped: its state is kept, never applied.
+ */
+export interface LocalStages {
+    /** sorting's (`sorting()`) */
+    readonly sort: boolean;
+    /** filtering's (`filtering()`) */
+    readonly filter: boolean;
+    /** search's (`search()`) */
+    readonly search: boolean;
+    /** pagination's (`pagination()`) */
+    readonly page: boolean;
+}
+
+/** Every stage: the pipeline used on its own, without a grid's features. */
+const EVERY_STAGE: LocalStages = {
+    sort: true,
+    filter: true,
+    search: true,
+    page: true,
+};
+
+const NO_SORT: readonly SortColumn[] = [];
+const NO_FILTERS: LocalFilters = {};
+
+/**
+ * The stages a grid's features run (Epic #153): sorting's, filtering's, search's and
+ * pagination's, each only when the feature is installed (read by its name: the pipeline never
+ * imports a feature).
+ */
+export function localStagesOf(
+    features: readonly { readonly name: string }[],
+): LocalStages {
+    const has = (name: string) => features.some((f) => f.name === name);
+    return {
+        sort: has("sorting"),
+        filter: has("filtering"),
+        search: has("search"),
+        page: has("pagination"),
+    };
+}
+
 /** Where the local pipeline starts: every field optional. */
 export interface LocalRowsOptions {
+    /**
+     * the stages it runs (Epic #153: the grid's features', `localStagesOf`); without it, every
+     * one. Read once
+     */
+    readonly stages?: LocalStages | undefined;
     readonly defaultSortColumns?: readonly SortColumn[] | undefined;
     readonly defaultFilters?: LocalFilters | undefined;
     readonly defaultSearch?: string | undefined;
@@ -181,6 +229,11 @@ export interface LocalRowsView<TRow> {
     /** grouped (Epic #87): of the rows shown, group rows included */
     readonly pageCount: number;
     /**
+     * the rows the pages are counted from (Epic #153: pagination's `totalRowCount`): the rows
+     * passing the filters and the search, grouped the rows shown, group rows included
+     */
+    readonly pagedCount: number;
+    /**
      * the rows grouped (Epic #87: `groupBy` given), as the grid takes them: the current page of
      * the rows shown, group rows and the rows of the expanded ones; `null` without grouping
      */
@@ -209,6 +262,8 @@ export interface LocalRows<TRow, TNode = unknown> {
     setSortColumns(sortColumns: readonly SortColumn[]): void;
     /** filters a column by a value (an empty one clears it), from the first page */
     setFilter(columnKey: string, value: unknown): void;
+    /** replaces every filter (the empty ones left out), from the first page (Epic #153) */
+    setFilters(filters: LocalFilters): void;
     /** clears every filter, or one column's, from the first page */
     clearFilters(columnKey?: string): void;
     /** searches every column for a text, from the first page */
@@ -234,6 +289,7 @@ export function createLocalRows<TRow, TNode = unknown>(
         expandedGroupKeys: options.defaultExpandedGroupKeys ?? [],
     };
     const listeners = new Set<() => void>();
+    const stages = options.stages ?? EVERY_STAGE;
 
     function update(next: Partial<LocalRowsState>, firstPage: boolean) {
         const changed = (Object.keys(next) as (keyof LocalRowsState)[]).some(
@@ -266,7 +322,7 @@ export function createLocalRows<TRow, TNode = unknown>(
         total: number,
         paging: Pick<
             LocalRowsView<TRow>,
-            "pageIndex" | "pageSize" | "pageCount" | "groups"
+            "pageIndex" | "pageSize" | "pageCount" | "pagedCount" | "groups"
         >,
     ): LocalRowsView<TRow> {
         let rowIndexes: readonly number[] | undefined;
@@ -299,6 +355,7 @@ export function createLocalRows<TRow, TNode = unknown>(
                 pageIndex: index,
                 pageSize,
                 pageCount: pageCount(ordered.length, pageSize),
+                pagedCount: ordered.length,
                 groups: null,
             });
         },
@@ -337,6 +394,7 @@ export function createLocalRows<TRow, TNode = unknown>(
                 pageIndex: index,
                 pageSize,
                 pageCount: pageCount(shown.length, pageSize),
+                pagedCount: shown.length,
                 groups: groupedRowsOf(
                     page,
                     pageSize === undefined ? 0 : index * pageSize,
@@ -360,15 +418,21 @@ export function createLocalRows<TRow, TNode = unknown>(
         },
         derive(rows, columns, grouping) {
             const columnsOf = leaves(columns);
+            // a stage whose feature is not installed is skipped (Epic #153)
+            const filters = stages.filter ? state.filters : NO_FILTERS;
+            const searchText = stages.search ? state.search : "";
+            const sortColumns = stages.sort ? state.sortColumns : NO_SORT;
+            const pageIndex = stages.page ? state.pageIndex : 0;
+            const pageSize = stages.page ? state.pageSize : undefined;
             // a tree (E3.3): every row at every depth is an entry, in the tree's order
             const getSubRows = grouping?.getSubRows;
             const nested = getSubRows ? treeFrom(rows, getSubRows) : null;
             const all = nested ? nested.entries : entries(rows);
             const matched = searched(
-                filtered(all, state.filters, columnsOf),
-                state.search,
+                filtered(all, filters, columnsOf),
+                searchText,
                 columnsOf,
-                state.search.trim() === "" ? undefined : texts(all, columnsOf),
+                searchText.trim() === "" ? undefined : texts(all, columnsOf),
             );
             const expandedGroupKeys =
                 grouping?.expandedGroupKeys ?? state.expandedGroupKeys;
@@ -378,7 +442,7 @@ export function createLocalRows<TRow, TNode = unknown>(
                     nested.roots,
                     all,
                     matched,
-                    state.sortColumns,
+                    sortColumns,
                     columnsOf,
                 );
                 return groupedView(
@@ -388,20 +452,20 @@ export function createLocalRows<TRow, TNode = unknown>(
                     treeEntries(roots),
                     all,
                     rows,
-                    state.pageIndex,
-                    state.pageSize,
+                    pageIndex,
+                    pageSize,
                     grouping.rowKey,
                     grouping.isRowSelectable,
                 );
             }
-            const ordered = sorted(matched, state.sortColumns, columnsOf);
+            const ordered = sorted(matched, sortColumns, columnsOf);
             const groupBy = groupByOf(grouping?.groupBy ?? []);
             if (grouping && groupBy.length > 0) {
                 const groups = tree(
                     ordered,
                     groupBy,
                     columnsOf,
-                    state.sortColumns,
+                    sortColumns,
                     grouping.aggregates,
                     grouping.rowKey,
                     grouping.isRowSelectable,
@@ -412,22 +476,15 @@ export function createLocalRows<TRow, TNode = unknown>(
                     ordered,
                     all,
                     rows,
-                    state.pageIndex,
-                    state.pageSize,
+                    pageIndex,
+                    pageSize,
                     grouping.rowKey,
                     grouping.isRowSelectable,
                 );
             }
             // pure: a page past the last shows the last; the state keeps what was set (an adapter
             // may write the shown page back once it is on screen)
-            return view(
-                ordered,
-                all,
-                rows,
-                rows.length,
-                state.pageIndex,
-                state.pageSize,
-            );
+            return view(ordered, all, rows, rows.length, pageIndex, pageSize);
         },
         setSortColumns: (sortColumns) => update({ sortColumns }, true),
         setFilter: (columnKey, value) => {
@@ -435,6 +492,11 @@ export function createLocalRows<TRow, TNode = unknown>(
                 ...state.filters,
                 [columnKey]: value,
             });
+            if (sameFilters(filters, state.filters)) return;
+            update({ filters }, true);
+        },
+        setFilters: (given) => {
+            const filters = withoutEmpty(given);
             if (sameFilters(filters, state.filters)) return;
             update({ filters }, true);
         },
@@ -483,17 +545,7 @@ function validPageSize(pageSize: number | undefined): number | undefined {
         : undefined;
 }
 
-/** The filters without the empty ones (they filter nothing). */
+/** The filters without the empty ones (they filter nothing): a new object. */
 function withoutEmpty(filters: LocalFilters): LocalFilters {
-    return Object.fromEntries(
-        Object.entries(filters).filter(([, value]) => !isEmptyFilter(value)),
-    );
-}
-
-function sameFilters(a: LocalFilters, b: LocalFilters): boolean {
-    const keys = Object.keys(a);
-    return (
-        keys.length === Object.keys(b).length &&
-        keys.every((key) => Object.hasOwn(b, key) && Object.is(a[key], b[key]))
-    );
+    return { ...withoutEmptyFilters(filters) };
 }

@@ -1,9 +1,16 @@
+import type { ColumnFilters } from "../filtering/types";
+import { isEmptyFilter } from "../model/filters";
 import { cellValue } from "../model/source";
 import type { Column, RowKey, RowKeyGetter } from "../model/types";
-import { foldText, isEmptyValue, textOf } from "./values";
+import { foldText, textOf } from "./values";
 
-/** The filters by column key: a value each; an empty one (`undefined`, `null`, `""`, `[]`) is no filter. */
-export type LocalFilters = Readonly<Record<string, unknown>>;
+export { isEmptyFilter };
+
+/**
+ * The filters by column key: a value each; an empty one (`undefined`, `null`, `""`, `[]`) is no
+ * filter. The filtering feature's `ColumnFilters` (Epic #153)
+ */
+export type LocalFilters = ColumnFilters;
 
 /** A row and its index in the rows given to the pipeline (`getValue`'s `rowIndex`). */
 export interface RowEntry<TRow> {
@@ -25,14 +32,6 @@ export function entryKeyOf<TRow>(
 /** The rows as entries: each with its index. */
 export function entriesOf<TRow>(rows: readonly TRow[]): RowEntry<TRow>[] {
     return rows.map((row, index) => ({ row, index }));
-}
-
-/** Whether a filter value filters nothing: empty, or an empty list. */
-export function isEmptyFilter(filterValue: unknown): boolean {
-    return (
-        isEmptyValue(filterValue) ||
-        (Array.isArray(filterValue) && filterValue.length === 0)
-    );
 }
 
 /** Whether two values are the same: dates by time, anything else by identity. */
