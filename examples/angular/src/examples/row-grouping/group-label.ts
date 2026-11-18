@@ -4,6 +4,7 @@ import {
     DATA_GRID,
     type GroupRow,
 } from "@fragiola/data-grid-angular";
+import { DataGridGroupToggle } from "@fragiola/data-grid-angular/row-grouping";
 import { LucideChevronRight } from "@lucide/angular";
 import { formatNumber, type Person } from "../_kit/data";
 import * as styles from "./styles";
@@ -12,7 +13,7 @@ import * as styles from "./styles";
 
 @Component({
     selector: "example-group-label",
-    imports: [DATA_GRID, LucideChevronRight],
+    imports: [DATA_GRID, DataGridGroupToggle, LucideChevronRight],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <span [class]="styles.groupLabel(group().depth)">

@@ -14,6 +14,7 @@ import {
 } from "@fragiola/data-grid-angular";
 import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
+import { cellSpans } from "@fragiola/data-grid-angular/spans";
 import {
     bookingAt,
     FIRST_HOUR,
@@ -87,8 +88,8 @@ interface BookingContext {
 })
 export default class ColumnSpanning {
     // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
-    // pinned columns (without it, every column scrolls)
-    readonly features = [navigation(), columnPinning()];
+    // pinned columns (without it, every column scrolls), column spans (a column's `colSpan`)
+    readonly features = [navigation(), columnPinning(), cellSpans()];
     protected readonly styles = styles;
 
     protected readonly bookingContext = contextOf<BookingContext>();

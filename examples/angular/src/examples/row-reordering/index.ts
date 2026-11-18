@@ -16,6 +16,11 @@ import {
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowDragHandle,
+    DataGridRowReorder,
+    rowReorder,
+} from "@fragiola/data-grid-angular/row-reorder";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
 import {
     LucideArrowDown,
@@ -50,8 +55,8 @@ function describeMove(rows: readonly Task[], move: RowMove): string {
         : "";
 }
 
-// The rows move by drag and keys while `reorderableRows` is on the root; `(rowMove)` tells each
-// move, and the app moves its own rows. A row's handle is the app's element in the rank's cell:
+// The rows move by drag and keys while `dataGridRowReorder` is on the root (`rowReorder()`
+// installed); `(rowMove)` tells each move, and the app moves its own rows. A row's handle is the app's element in the rank's cell:
 // `[dataGridRowDragHandle]` marks it for the grid and hides it from screen readers, which move
 // rows with the keys.
 
@@ -59,6 +64,8 @@ function describeMove(rows: readonly Task[], move: RowMove): string {
     selector: "example-row-reordering",
     imports: [
         DATA_GRID,
+        DataGridRowReorder,
+        DataGridRowDragHandle,
         DataGridLocalRows,
         ClickableButton,
         FIELDS,
@@ -114,7 +121,7 @@ function describeMove(rows: readonly Task[], move: RowMove): string {
                 [columns]="columns"
                 [rowKey]="rowKey"
                 [rowHeight]="38"
-                reorderableRows
+                dataGridRowReorder
                 (rowMove)="onRowMove($event)"
                 [class]="styles.root"
             >
@@ -186,8 +193,13 @@ export default class RowReordering {
     // searched and sorted in memory; a move lands beside the row it was dropped on, searched too
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), pinned columns (without it, every
-    // column scrolls)
-    readonly features = [sorting(), navigation(), columnPinning()];
+    // column scrolls), row reorder (the drag handles and the keys move rows)
+    readonly features = [
+        sorting(),
+        navigation(),
+        columnPinning(),
+        rowReorder(),
+    ];
     readonly local = injectLocalRows(this.rows, columns);
     protected readonly sorted = computed(
         () => this.local.sort.columns.length > 0,

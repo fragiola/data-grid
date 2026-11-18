@@ -11,6 +11,12 @@ import {
 } from "@fragiola/data-grid-angular/local";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
+import { cellSpans } from "@fragiola/data-grid-angular/spans";
+import {
+    DataGridSummary,
+    DataGridSummaryRowsRoot,
+    summaryRows,
+} from "@fragiola/data-grid-angular/summary-rows";
 import { LucideSearch } from "@lucide/angular";
 import { FIELDS } from "#/components/atoms/fields";
 import { formatMoney, type Person, people } from "../_kit/data";
@@ -26,7 +32,15 @@ const all = people(500);
 
 @Component({
     selector: "example-summary-rows",
-    imports: [DATA_GRID, DataGridLocalRows, FIELDS, LucideSearch, Summary],
+    imports: [
+        DATA_GRID,
+        DataGridSummaryRowsRoot,
+        DataGridSummary,
+        DataGridLocalRows,
+        FIELDS,
+        LucideSearch,
+        Summary,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -48,6 +62,7 @@ const all = people(500);
                 [columns]="columns"
                 [rowKey]="rowKey"
                 [rowHeight]="36"
+                dataGridSummaryRows
                 [summaryRows]="summaryRows"
                 [summaryRowHeight]="38"
                 [class]="styles.root"
@@ -130,8 +145,14 @@ export default class SummaryRows {
     // the rows in memory, searched and sorted by one injection function; the totals follow what it
     // leaves the features the grid installs: sorting (the local rows' sort needs it, or no column
     // sorts), cell navigation (the keys, the active cell, the tab stop), pinned columns (without
-    // it, every column scrolls)
-    readonly features = [sorting(), navigation(), columnPinning()];
+    // it, every column scrolls), the summary rows, column spans (the bottom row's count spans)
+    readonly features = [
+        sorting(),
+        navigation(),
+        columnPinning(),
+        summaryRows(),
+        cellSpans(),
+    ];
     readonly local = injectLocalRows(all, this.columns, {
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });

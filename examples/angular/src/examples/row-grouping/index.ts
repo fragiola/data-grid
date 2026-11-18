@@ -12,6 +12,7 @@ import {
     injectLocalRows,
 } from "@fragiola/data-grid-angular/local";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
+import { rowGrouping } from "@fragiola/data-grid-angular/row-grouping";
 import {
     DataGridRowSelection,
     rowSelection,
@@ -203,12 +204,14 @@ export default class RowGrouping {
 
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), row selection, pinned columns
-    // (without it, every column scrolls)
+    // (without it, every column scrolls), row grouping (the groups expand: the local rows' props
+    // carry the expanded groups)
     readonly features = [
         sorting(),
         navigation(),
         rowSelection(),
         columnPinning(),
+        rowGrouping(),
     ];
     readonly local = injectLocalRows(ROWS, this.columns, () => ({
         groupBy: GROUP_BY[this.grouping()],

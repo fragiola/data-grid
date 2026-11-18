@@ -34,6 +34,11 @@ import {
     rowSelection,
 } from "@fragiola/data-grid-angular/row-selection";
 import { sorting } from "@fragiola/data-grid-angular/sorting";
+import {
+    DataGridSummary,
+    DataGridSummaryRowsRoot,
+    summaryRows,
+} from "@fragiola/data-grid-angular/summary-rows";
 import { LucideDownload } from "@lucide/angular";
 import { ClickableButton } from "#/components/atoms/clickable";
 import { Input, Numeric } from "#/components/atoms/fields";
@@ -148,6 +153,8 @@ function download(text: string, name: string) {
         SelectRow,
         Summary,
         DataGridRowSelection,
+        DataGridSummaryRowsRoot,
+        DataGridSummary,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
@@ -170,6 +177,7 @@ function download(text: string, name: string) {
                 rowSelection="multiple"
                 [isRowSelectable]="isSelectable"
                 (selectedRowKeysChange)="selected.set($event)"
+                dataGridSummaryRows
                 [summaryRows]="SUMMARY_ROWS"
                 [summaryRowHeight]="38"
                 [dataGridEditing]="columns"
@@ -377,7 +385,7 @@ export default class CommonFeatures {
     // the features the grid installs: sorting (the local rows' sort needs it, or no column sorts),
     // cell navigation (the keys, the active cell, the tab stop), row selection, cell editing,
     // column resizing (its handles, keys and fits), pinned columns (without it, every column
-    // scrolls)
+    // scrolls), the summary rows
     readonly features = [
         sorting(),
         navigation(),
@@ -385,6 +393,7 @@ export default class CommonFeatures {
         editing(),
         columnResize(),
         columnPinning(),
+        summaryRows(),
     ];
     readonly local = injectLocalRows(this.jobs, this.columns);
     /**

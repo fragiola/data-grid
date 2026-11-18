@@ -18,6 +18,11 @@ import {
 } from "@fragiola/data-grid-angular";
 import { columnPinning } from "@fragiola/data-grid-angular/column-pinning";
 import { navigation } from "@fragiola/data-grid-angular/navigation";
+import {
+    DataGridRowDetail,
+    DataGridRowExpansion,
+    rowExpansion,
+} from "@fragiola/data-grid-angular/row-expansion";
 import { SWITCH } from "#/components/ui/switch";
 import { formatMoney } from "../_kit/data";
 import { Expander } from "./expander";
@@ -45,7 +50,15 @@ function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
 
 @Component({
     selector: "example-master-detail",
-    imports: [DATA_GRID, SWITCH, Expander, OrderItems, OrderSummary],
+    imports: [
+        DATA_GRID,
+        DataGridRowExpansion,
+        DataGridRowDetail,
+        SWITCH,
+        Expander,
+        OrderItems,
+        OrderSummary,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div [class]="styles.frame">
@@ -64,6 +77,7 @@ function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
             <div
                 dataGridRoot
                 [features]="features"
+                dataGridRowExpansion
                 [gridRef]="gridRef"
                 [columns]="columns"
                 [rows]="orders"
@@ -128,8 +142,8 @@ function onExpanderKey(event: KeyboardEvent, toggle: () => void) {
 })
 export default class MasterDetail {
     // the features the grid installs: cell navigation (the keys, the active cell, the tab stop),
-    // pinned columns (without it, every column scrolls)
-    readonly features = [navigation(), columnPinning()];
+    // pinned columns (without it, every column scrolls), row expansion (the details)
+    readonly features = [navigation(), columnPinning(), rowExpansion()];
     protected readonly styles = styles;
     protected readonly formatMoney = formatMoney;
     protected readonly total = total;
@@ -138,7 +152,7 @@ export default class MasterDetail {
     protected readonly cellContext = contextOf<CellTemplateProps<Order>>();
 
     readonly orders = orders;
-    readonly gridRef = createDataGridRef<Order>();
+    readonly gridRef = createDataGridRef<Order, typeof this.features>();
 
     // the details' heights: computed from each order, or measured from what they render
     readonly measured = signal(false);

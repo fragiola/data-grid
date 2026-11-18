@@ -1,9 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
-import {
-    type CellInfo,
-    DATA_GRID,
-    injectGroupToggle,
-} from "@fragiola/data-grid-angular";
+import { type CellInfo, DATA_GRID } from "@fragiola/data-grid-angular";
+import { injectGroupToggle } from "@fragiola/data-grid-angular/row-grouping";
 import {
     LucideChevronRight,
     LucideFileText,

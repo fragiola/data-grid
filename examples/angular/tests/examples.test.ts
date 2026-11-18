@@ -26,7 +26,7 @@ const ALLOWED = [
     // the core's extras only: its main entry's types and helpers come through the Angular package,
     // and so do its features (each re-exported by the Angular package's own entry, Epic #144)
     /^@fragiola\/data-grid\/local$/,
-    /^@fragiola\/data-grid-angular(\/(local|sorting|navigation|row-selection|range|clipboard|fill|editing|column-resize|column-reorder|column-pinning|column-group-collapse))?$/,
+    /^@fragiola\/data-grid-angular(\/(local|sorting|navigation|row-selection|range|clipboard|fill|editing|column-resize|column-reorder|column-pinning|column-group-collapse|row-expansion|row-grouping|row-reorder|spans|summary-rows))?$/,
     /^@lucide\/angular$/,
     /^#\/components\/(ui|atoms)\/[a-z-]+$/,
     /^#\/lib\/cn$/,

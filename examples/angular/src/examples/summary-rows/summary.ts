@@ -4,6 +4,12 @@ import {
     DATA_GRID,
     type DataGridNode,
 } from "@fragiola/data-grid-angular";
+import {
+    DataGridSummaryCell,
+    DataGridSummaryCells,
+    DataGridSummaryRow,
+    DataGridSummaryRows,
+} from "@fragiola/data-grid-angular/summary-rows";
 import type { Person } from "../_kit/data";
 import * as styles from "./styles";
 import { SUMMARIES, type Totals } from "./totals";
@@ -15,7 +21,13 @@ import { SUMMARIES, type Totals } from "./totals";
 
 @Component({
     selector: "[exampleSummary]",
-    imports: [DATA_GRID],
+    imports: [
+        DATA_GRID,
+        DataGridSummaryRows,
+        DataGridSummaryRow,
+        DataGridSummaryCells,
+        DataGridSummaryCell,
+    ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <ng-template dataGridSummaryRows let-row>
