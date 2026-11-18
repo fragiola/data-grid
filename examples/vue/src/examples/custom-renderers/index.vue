@@ -64,7 +64,7 @@ const highPriority = (cell: CellInfo<Task>) =>
     cell.column.key === "priority" && cell.value === "High";
 
 const rows = shallowRef<readonly Task[]>(ROWS);
-const local = useLocalRows(rows, columns);
+const local = useLocalRows(rows, columns, { features: features });
 
 const rowKey = (row: Task) => row.id;
 

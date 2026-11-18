@@ -126,7 +126,7 @@ useMoveAnnouncements(gridRef, moving, (message) => {
     announcement.value = message;
 });
 // a click on a sortable header still sorts: the rows in memory, ordered by the app
-const local = useLocalRows(all, columns);
+const local = useLocalRows(all, columns, { features: features });
 
 const rowKey = (row: Person) => row.id;
 const setOrder = (next: ColumnOrder) => {

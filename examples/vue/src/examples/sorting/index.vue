@@ -46,6 +46,7 @@ const columns: Column<Person, VNodeChild>[] = [
 // the rows in memory, sorted by one composable: its props give the grid the sorted rows and its
 // sort (a click, Enter or Space on a header cell; Ctrl or ⌘ adds a column)
 const local = useLocalRows(all, columns, {
+    features: features,
     defaultSortColumns: [{ columnKey: "team", direction: "ascending" }],
 });
 

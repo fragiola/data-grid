@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import { filtering } from "@fragiola/data-grid-vue/filtering";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
@@ -13,7 +14,9 @@ import * as styles from "./styles";
 
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop)
-const features = [sorting(), navigation()] as const;
+// and filtering (the column filters): `useLocalRows` applies them to the rows, the grid's
+// model holds them
+const features = [sorting(), filtering(), navigation()] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.
@@ -47,7 +50,7 @@ const columns: Column<Task, VNodeChild>[] = [
 // a cell's controls and Escape gives them back; a click on a control is never a sort. The rows
 // are filtered and sorted in memory by `useLocalRows`, the filters' values kept by it.
 
-const local = useLocalRows(ROWS, columns);
+const local = useLocalRows(ROWS, columns, { features: features });
 const shown = ref(true);
 const shownLabel = useId();
 

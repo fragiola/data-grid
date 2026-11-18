@@ -3,6 +3,7 @@ import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
 import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { search } from "@fragiola/data-grid-vue/search";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { cellSpans } from "@fragiola/data-grid-vue/spans";
 import { summaryRows } from "@fragiola/data-grid-vue/summary-rows";
@@ -22,8 +23,11 @@ const searchInset = {
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
 // scrolls), column spans (without it, a column's colSpan is not asked), summary rows
+// and search (the search text): `useLocalRows` applies them to the rows, the grid's
+// model holds them
 const features = [
     sorting(),
+    search(),
     navigation(),
     columnPinning(),
     cellSpans(),
@@ -63,6 +67,7 @@ const columns: Column<Person, VNodeChild>[] = [
 
 // the rows in memory, searched and sorted by one composable; the totals follow what it leaves
 const local = useLocalRows(all, columns, {
+    features: features,
     defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
 });
 const totals = computed(() => totalsOf(local.filteredRows));

@@ -123,7 +123,7 @@ interface Change {
 const tasks = shallowRef<readonly BudgetedTask[]>(budgetedTasks(300));
 const announcement = ref("");
 // sorted in memory: the grid's indexes are the rows shown
-const local = useLocalRows(tasks, columns);
+const local = useLocalRows(tasks, columns, { features: features });
 // the grid's model from outside its root: a fill repeats the values it reads
 const gridRef = useDataGridRef<BudgetedTask>();
 

@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { pageCount } from "@fragiola/data-grid/local";
 import { type Column, typedDataGrid } from "@fragiola/data-grid-vue";
+import {
+    type ColumnFilters,
+    filtering,
+} from "@fragiola/data-grid-vue/filtering";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
+import { pageCount, pagination } from "@fragiola/data-grid-vue/pagination";
+import { search } from "@fragiola/data-grid-vue/search";
 import { type SortColumn, sorting } from "@fragiola/data-grid-vue/sorting";
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "@lucide/vue";
 import {
     computed,
     h,
+    onScopeDispose,
     ref,
     shallowRef,
     type VNodeChild,
@@ -17,13 +23,22 @@ import { Clickable } from "#/components/atoms/clickable";
 import { Input } from "#/components/atoms/fields";
 import { Select } from "#/components/ui/select";
 import { formatMoney, formatNumber, type Person } from "../_kit/data";
+import { fetchPeople } from "../_kit/people-server";
+import { createServerQuery } from "../_kit/server-query";
 import RequestLog from "./request-log.vue";
-import { fetchPeople } from "./server";
 import * as styles from "./styles";
 
-// the features the grid installs: sorting (without it, a sortable column never sorts), cell
-// navigation (the keys, the active cell, the tab stop)
-const features = [sorting(), navigation()] as const;
+// the features the grid installs: sorting (without it, a sortable column never sorts), filtering,
+// search and pagination (the column filters, the search text and the page, held by the grid's
+// model: the app reads them to ask the server, no rows in memory), cell navigation (the keys, the
+// active cell, the tab stop)
+const features = [
+    sorting(),
+    filtering(),
+    search(),
+    pagination(),
+    navigation(),
+] as const;
 
 // The parts typed by the row type and the features: a template cannot pass them as type
 // arguments.
@@ -55,49 +70,44 @@ const columns: Column<Person, VNodeChild>[] = [
     },
 ];
 
-// the external mode: the app keeps the sort (grid state, the header toggles it), the filter,
-// the search and the page, and asks the server; the grid shows the page it gets back
+// the external mode: the grid's features hold the sort (the header toggles it), the column
+// filters, the search text and the page, controlled here; the app asks the server for the page
+// they make (the fetch policy in `_kit/server-query.ts`) and the grid shows it
 const sortColumns = shallowRef<readonly SortColumn[]>([
     { columnKey: "name", direction: "ascending" },
 ]);
-const team = ref("");
+const columnFilters = shallowRef<ColumnFilters>({});
 const typed = ref("");
-const search = ref("");
+const searchText = ref("");
 const pageIndex = ref(0);
-const page = shallowRef<{ rows: readonly Person[]; total: number }>({
-    rows: [],
-    total: 0,
-});
-const loading = ref(true);
+const query = createServerQuery(fetchPeople);
+const answer = shallowRef(query.state);
+onScopeDispose(
+    query.subscribe(() => {
+        answer.value = query.state;
+    }),
+);
+const page = computed(() => answer.value.answer ?? { rows: [], total: 0 });
+const loading = computed(() => answer.value.loading);
 
 // the search goes to the server once the typing pauses (and only when it changed: a page
 // chosen meanwhile stays)
-watch([typed, search], ([text, sent], _, onCleanup) => {
+watch([typed, searchText], ([text, sent], _, onCleanup) => {
     if (text === sent) return;
     const timer = setTimeout(() => {
-        search.value = text;
+        searchText.value = text;
         pageIndex.value = 0;
     }, 250);
     onCleanup(() => clearTimeout(timer));
 });
 
-watchEffect((onCleanup) => {
-    // an answer to a query the app has moved on from is dropped
-    let current = true;
-    loading.value = true;
-    fetchPeople({
+watchEffect(() => {
+    query.ask({
         sortColumns: sortColumns.value,
-        team: team.value,
-        search: search.value,
+        columnFilters: columnFilters.value,
+        searchText: searchText.value,
         pageIndex: pageIndex.value,
         pageSize: PAGE_SIZE,
-    }).then((answer) => {
-        if (!current) return;
-        page.value = answer;
-        loading.value = false;
-    });
-    onCleanup(() => {
-        current = false;
     });
 });
 
@@ -112,14 +122,39 @@ function setTyped(event: Event) {
         typed.value = event.target.value;
 }
 
+/** The team a filter holds: a list of one, the team chosen from the select. */
+const team = computed(() => {
+    const value = columnFilters.value.team;
+    return Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
+});
+
 function chooseTeam(choice: unknown) {
-    team.value = typeof choice === "string" && choice !== "any" ? choice : "";
+    // a team chosen from a list: an exact value (a list filter), not a text
+    columnFilters.value =
+        typeof choice === "string" && choice !== "any"
+            ? { team: [choice] }
+            : {};
     pageIndex.value = 0;
 }
 
 function sortBy(next: readonly SortColumn[]) {
     sortColumns.value = next;
     pageIndex.value = 0;
+}
+
+function filterBy(next: ColumnFilters) {
+    columnFilters.value = next;
+    pageIndex.value = 0;
+}
+
+function searchFor(next: string) {
+    typed.value = next;
+    searchText.value = next;
+    pageIndex.value = 0;
+}
+
+function goTo(next: number) {
+    pageIndex.value = next;
 }
 
 const rowKey = (row: Person) => row.id;
@@ -167,6 +202,14 @@ const rowKey = (row: Person) => row.id;
                 :row-height="36"
                 :sort-columns="sortColumns"
                 :on-sort-columns-change="sortBy"
+                :column-filters="columnFilters"
+                :on-column-filters-change="filterBy"
+                :search-text="searchText"
+                :on-search-text-change="searchFor"
+                :page-index="pageIndex"
+                :on-page-index-change="goTo"
+                :page-size="PAGE_SIZE"
+                :total-row-count="page.total"
                 :class="styles.root"
                 :aria-busy="loading || undefined"
             >

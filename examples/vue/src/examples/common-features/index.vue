@@ -235,7 +235,7 @@ const columns: Column<Job, VNodeChild>[] = [
     },
 ];
 
-const local = useLocalRows(jobs, columns);
+const local = useLocalRows(jobs, columns, { features: features });
 provide(
     SELECTABLE_IDS,
     computed(() => jobs.value.filter(isSelectable).map((job) => job.id)),

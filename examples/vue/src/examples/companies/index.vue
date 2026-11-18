@@ -262,6 +262,7 @@ const selected = shallowRef<readonly RowKey[]>([]);
 // the rows in memory sorted by one composable: the header and the toolbar's select both set its
 // sort (the first column first, the next ones breaking ties)
 const local = useLocalRows(() => all.value, columns, {
+    features,
     defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
 });
 const ids = computed(() => local.rows.map((row) => row.id));

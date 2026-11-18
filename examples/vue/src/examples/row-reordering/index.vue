@@ -8,6 +8,7 @@ import { columnPinning } from "@fragiola/data-grid-vue/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-vue/local";
 import { navigation } from "@fragiola/data-grid-vue/navigation";
 import { rowReorder } from "@fragiola/data-grid-vue/row-reorder";
+import { search } from "@fragiola/data-grid-vue/search";
 import { sorting } from "@fragiola/data-grid-vue/sorting";
 import { ArrowDown, ArrowUp, RotateCcw, Search } from "@lucide/vue";
 import { computed, h, shallowRef, type VNodeChild } from "vue";
@@ -20,8 +21,11 @@ import * as styles from "./styles";
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
 // scrolls), row reordering (a row's drag handle and keys)
+// and search (the search text): `useLocalRows` applies them to the rows, the grid's
+// model holds them
 const features = [
     sorting(),
+    search(),
     navigation(),
     columnPinning(),
     rowReorder(),
@@ -56,7 +60,7 @@ function describeMove(rows: readonly Task[], move: RowMove): string {
 const rows = shallowRef<readonly Task[]>(backlog);
 const announcement = shallowRef("");
 // searched and sorted in memory; a move lands beside the row it was dropped on, searched too
-const local = useLocalRows(rows, columns);
+const local = useLocalRows(rows, columns, { features: features });
 const sorted = computed(() => local.sort.columns.length > 0);
 // each task's place in the backlog, searched or sorted alike
 const ranks = computed(
