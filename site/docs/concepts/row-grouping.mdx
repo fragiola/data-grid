@@ -51,6 +51,7 @@ const aggregates = {
 
 function People({ people }: { people: Person[] }) {
     const local = useLocalRows(people, columns, {
+        features,
         groupBy: ["team"],
         aggregates,
         rowKey: (person) => person.id,

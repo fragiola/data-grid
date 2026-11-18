@@ -23,10 +23,10 @@ Vue follows React (Epic #123), then Angular (Epic #129), and other adapters may 
 
 | package | name | contains | depends on |
 |---|---|---|---|
-| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, the engine that binds one grid to the DOM, the feature registry (below); opt-in entry points: `/local` (the pipeline for rows in memory); the features: `/sorting` (`sorting()`), `/navigation` (`navigation()`), `/row-selection` (`rowSelection()` and its helpers), `/range` (`cellRange()`), `/clipboard` (`clipboard()`, `parseTsv`/`toTsv`), `/fill` (`fillHandle()`, `repeatedFill`), `/editing` (`editing()`, `editActions`, `editCellPropsOf`), the column features (`/column-resize`, `/column-reorder`, `/column-pinning`, `/column-group-collapse`) and the row features (Epic #151): `/row-expansion` (`rowExpansion()`, `rowDetailPartOf`), `/row-grouping` (`rowGrouping()`, `groupTogglePartOf`), `/row-reorder` (`rowReorder()`, `rowDragHandlePartOf`, `rowsMove`), `/spans` (`cellSpans()`), `/summary-rows` (`summaryRows()`, the summary parts' helpers) | DOM only |
-| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle`, `/editing` with `useCellEdit`, `/column-resize` with `useColumnResizer`, the other column features, and (Epic #151) `/row-expansion` with `RowDetail` and `useRowDetail`, `/row-grouping` with `useGroupToggle`, `/row-reorder` with `useRowDragHandle`, `/spans`, `/summary-rows` with `Summary`, `SummaryRows`, `SummaryRow`, `SummaryCells`, `SummaryCell`, their hooks, `SummaryRowInfo`, `SummaryCellInfo` (the core's `SummaryRowsProps` as `SummaryRowsFeatureProps`) | peer `react`, `react-dom` (^19) |
-| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow, TFeatures>()`) and composables over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle`, `/editing` with `useCellEdit`, `/column-resize` with `useColumnResizer`, the other column features, and (Epic #151) `/row-expansion` with `RowDetail`, `/row-grouping` with `useGroupToggle`, `/row-reorder` with `useRowDragHandle`, `/spans`, `/summary-rows` with the summary components, their composables and `typedSummaryRows<TRow>()` | peer `vue` (^3.5) |
-| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; each feature's secondary entry re-exports the core's with a root directive for its inputs: `/sorting` (`[dataGridSorting]`), `/navigation` (`[dataGridNavigation]`), `/row-selection` (`[dataGridRowSelection]`, `injectSelectAll`), `/range` (`[dataGridCellRange]`), `/clipboard` (`[dataGridClipboard]`), `/fill` (`[dataGridFill]`, `*dataGridFillHandle`, `injectFillHandle`), `/editing` (`[dataGridEditing]`, `*dataGridCellEdit`, `injectCellEdit`), the column features, and (Epic #151) `/row-expansion` (`[dataGridRowExpansion]`, `*dataGridRowDetail`, `injectRowDetail`), `/row-grouping` (`[dataGridRowGrouping]`, `*dataGridGroupToggle`, `injectGroupToggle`), `/row-reorder` (`[dataGridRowReorder]`: present, the rows move, `="false"` stops them; `[dataGridRowDragHandle]`, `injectRowDragHandle`), `/spans`, `/summary-rows` (`[dataGridSummaryRows]`, class `DataGridSummaryRowsRoot`; the summary directives in `SUMMARY_ROWS`, their inject functions) | peer `@angular/core` (^22) |
+| `packages/core` | `@fragiola/data-grid` | the typed model and its commands, axis math, windows, scroll scaling, the engine that binds one grid to the DOM, the feature registry (below); opt-in entry points: `/local` (the pipeline for rows in memory); the features: `/sorting` (`sorting()`), `/navigation` (`navigation()`), `/row-selection` (`rowSelection()` and its helpers), `/range` (`cellRange()`), `/clipboard` (`clipboard()`, `parseTsv`/`toTsv`), `/fill` (`fillHandle()`, `repeatedFill`), `/editing` (`editing()`, `editActions`, `editCellPropsOf`), the column features (`/column-resize`, `/column-reorder`, `/column-pinning`, `/column-group-collapse`) and the row features (Epic #151): `/row-expansion` (`rowExpansion()`, `rowDetailPartOf`), `/row-grouping` (`rowGrouping()`, `groupTogglePartOf`), `/row-reorder` (`rowReorder()`, `rowDragHandlePartOf`, `rowsMove`), `/spans` (`cellSpans()`), `/summary-rows` (`summaryRows()`, the summary parts' helpers), and (Epic #153) `/filtering` (`filtering()`, `validColumnFilters`, `sameFilters`), `/search` (`search()`), `/pagination` (`pagination()`, `pageCount`) | DOM only |
+| `packages/react` | `@fragiola/data-grid-react` | the `DataGrid.*` primitives and hooks over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle`, `/editing` with `useCellEdit`, `/column-resize` with `useColumnResizer`, the other column features, and (Epic #151) `/row-expansion` with `RowDetail` and `useRowDetail`, `/row-grouping` with `useGroupToggle`, `/row-reorder` with `useRowDragHandle`, `/spans`, `/summary-rows` with `Summary`, `SummaryRows`, `SummaryRow`, `SummaryCells`, `SummaryCell`, their hooks, `SummaryRowInfo`, `SummaryCellInfo` (the core's `SummaryRowsProps` as `SummaryRowsFeatureProps`), and (Epic #153) `/filtering`, `/search`, `/pagination` (the core's only) | peer `react`, `react-dom` (^19) |
+| `packages/vue` | `@fragiola/data-grid-vue` | the `DataGrid.*` primitives (Vue 3 components, `typedDataGrid<TRow, TFeatures>()`) and composables over the core; `/local`: `useLocalRows`; each feature's subpath re-exports the core's (`/sorting`, `/navigation`, `/range`, `/clipboard`), `/row-selection` with `useSelectAll`, `/fill` with `useFillHandle`, `/editing` with `useCellEdit`, `/column-resize` with `useColumnResizer`, the other column features, and (Epic #151) `/row-expansion` with `RowDetail`, `/row-grouping` with `useGroupToggle`, `/row-reorder` with `useRowDragHandle`, `/spans`, `/summary-rows` with the summary components, their composables and `typedSummaryRows<TRow>()`, and (Epic #153) `/filtering`, `/search`, `/pagination` (the core's only) | peer `vue` (^3.5) |
+| `packages/angular` | `@fragiola/data-grid-angular` | the primitives as Angular directives (`DATA_GRID`: `[dataGridRoot]`, `[dataGridRow]`, …) and injection functions (`inject<Hook>`) over the core; `/local`: `injectLocalRows`, `[dataGridLocalRows]`; each feature's secondary entry re-exports the core's with a root directive for its inputs: `/sorting` (`[dataGridSorting]`), `/navigation` (`[dataGridNavigation]`), `/row-selection` (`[dataGridRowSelection]`, `injectSelectAll`), `/range` (`[dataGridCellRange]`), `/clipboard` (`[dataGridClipboard]`), `/fill` (`[dataGridFill]`, `*dataGridFillHandle`, `injectFillHandle`), `/editing` (`[dataGridEditing]`, `*dataGridCellEdit`, `injectCellEdit`), the column features, and (Epic #151) `/row-expansion` (`[dataGridRowExpansion]`, `*dataGridRowDetail`, `injectRowDetail`), `/row-grouping` (`[dataGridRowGrouping]`, `*dataGridGroupToggle`, `injectGroupToggle`), `/row-reorder` (`[dataGridRowReorder]`: present, the rows move, `="false"` stops them; `[dataGridRowDragHandle]`, `injectRowDragHandle`), `/spans`, `/summary-rows` (`[dataGridSummaryRows]`, class `DataGridSummaryRowsRoot`; the summary directives in `SUMMARY_ROWS`, their inject functions), and (Epic #153) `/filtering` (`[dataGridFiltering]`), `/search` (`[dataGridSearch]`), `/pagination` (`[dataGridPagination]`) | peer `@angular/core` (^22) |
 | `apps/playground` | private | the dev app (every site example live, with themes and source), unstyled fixture pages driven by Playwright | both packages, `examples/react`, `examples/shared` |
 
 ## Non-negotiable rules
@@ -393,19 +393,33 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
     `SummaryContext`/`SummaryRowContext` reset by `Root` for nested grids. Their layer is the
     grid's (a structural `z-index`, below the header's, Epic #89, E5.2); their background is the
     app's, as the header's. **Rows in memory (Epic #47, L1–L7):** an opt-in entry point per package, never imported by
-    the main ones (their built files must not contain it): `@fragiola/data-grid/local` holds the
-    framework-free pipeline (`createLocalRows` keeps the sort, filters, search and page;
+    the main ones (their built files must not contain it), and since Epic #153 the in-memory
+    derivation over the features' state: the sort, the column filters, the search text and the page
+    are model state, each its feature's (`sorting()`, `filtering()`, `search()`, `pagination()`),
+    and `/local` applies the state of those installed. `@fragiola/data-grid/local` holds the
+    framework-free pipeline (`createLocalRows` keeps the sort, filters, search and page, its
+    `stages` option, `localStagesOf(features)`, the stages it runs: every one without it;
     `derive(rows, columns)` filters, searches, sorts and pages in that order, each stage
-    computed again only when its own inputs change; `sortRows`, `filterRows`, `searchRows`,
-    `pageRows`), `@fragiola/data-grid-react/local` holds `useLocalRows(rows, columns, options)`,
-    which keeps that state itself and returns `props` to spread onto `Root` (`rows`,
-    `sortColumns`, a stable `onSortColumnsChange`) and `sort`/`filter`/`page` for the app's
-    controls (and `moveRow(move)`, Epic #86: a row move applied to the rows given; stable, the
-    latest rows and `rowIndexes` written to a ref in a layout effect, moves before a render applied
-    one after the other). Filter and page are not model state (no grid behaviour); the sort is. Values
+    computed again only when its own inputs change, a stage left out skipped; `sortRows`,
+    `filterRows`, `searchRows`, `pageRows`), `@fragiola/data-grid-react/local` holds
+    `useLocalRows(rows, columns, options)`, whose `features` option (the root's list, read once;
+    none without it) says which stages run, and which return `props` to spread onto `Root`
+    (`rows`, and for each feature given its state and a stable handler: `sortColumns`,
+    `columnFilters`, `searchText`, `pageIndex`/`pageSize` (`null`: none)/`totalRowCount`, the rows
+    paged; grouped, with `rowGrouping()`, `expandedGroupKeys`; `LocalRowsProps<TRow, TFeatures>`
+    types them by the features) and `sort`/`filter`/`page` for the app's controls (and
+    `moveRow(move)`, Epic #86: a row move applied to the rows given; stable, the latest rows and
+    `rowIndexes` written to a ref in a layout effect, moves before a render applied one after the
+    other). The pipeline stays the controlling parent of that state (the hook runs before the
+    root's model exists): the root's model holds it as controlled props, `model.get` reads it, a
+    command run on the model is asked of the hook through its handler, one pipeline update per
+    action (a filter and the first page together). `/local` never imports a feature (the entry
+    tests, and the bundle guard over every `/local` entry): it reads their names
+    (`localStagesOf`) and hands their props. Values
     compare by type (`Intl.Collator`, numeric, base), empty ones last; `Column.compare` and
     `Column.filter` override; a text filter contains (case and accents aside), a list holds,
-    anything else equals. A filter, the search or the sort changing goes to the first page.
+    anything else equals. A filter, the search or the sort changing goes to the first page (the
+    pipeline's rule: the model's pieces never move each other, a server app does it itself).
    **Row kinds and grouping (Epic #87, E3.1–E3.2):** one generic still (the epic's stop
    condition never met). A source's optional `getRowMeta` (`RowSource`, `RowMetaGetter`; option,
    `data.set`: by index, it belongs to the source it comes with, so a payload without it has none,
@@ -1097,8 +1111,8 @@ Do not "fix" these. They are the decisions of Epic #1 (D1–D12).
 
 A **minimal core plus opt-in features** (the ecosystem's pattern,
 `../guidelines/architecture/features.md`; this repo is its reference): a feature the app does
-not import is not in its bundle. Epics #144–#153 move every other optional behaviour onto it
-(filtering, search, paging come next: Epic #153). Sixteen are features now:
+not import is not in its bundle. Epics #144–#153 moved every other optional behaviour onto it:
+the migration is complete, and new capabilities start as features. Nineteen are features:
 `sorting()` (`/sorting`, Epic #141), and since Epic #144 `navigation()` (`/navigation`),
 `rowSelection()` (`/row-selection`), `cellRange()` (`/range`, requires `navigation`),
 `clipboard()` (`/clipboard`, requires `cellRange`) and `fillHandle()` (`/fill`, requires
@@ -1109,7 +1123,29 @@ not import is not in its bundle. Epics #144–#153 move every other optional beh
 (`/row-expansion`), `rowGrouping()` (`/row-grouping`), `rowReorder()` (`/row-reorder`),
 `cellSpans()` (`/spans`: one feature for the body's column spans, a row's and a summary row's;
 a header cell's span, a column's `colSpan` for `type: "header"` and a group's, stays the core's)
-and `summaryRows()` (`/summary-rows`). The core keeps the column model (columns and groups as
+and `summaryRows()` (`/summary-rows`), and since Epic #153 `filtering()` (`/filtering`: the
+column filters, `column-filters.set`/`column-filter.set`/`column-filters.clear`,
+`get("column-filters")`/`get("column-filter-by")`/`is("column-filtered")`, `data-filtered` and
+`HeaderCellState.filtered` on a filtered column's header cell, root props `columnFilters`/
+`defaultColumnFilters`/`onColumnFiltersChange`; keys are leaf columns', a hidden one's too, empty
+values never kept), `search()` (`/search`: `search.set`/`search.clear`, `get("search-text")`,
+`is("searched")`, `searchText`/`defaultSearchText`/`onSearchTextChange`) and `pagination()`
+(`/pagination`: `page.set`, `page-size.set`, `total-row-count.set`, `get("page-info")`,
+`get("page-count")`, `is("page-previous")`/`is("page-next")`; `pageIndex`/`defaultPageIndex`/
+`onPageIndexChange`, `pageSize` (`null` controls it as none)/`defaultPageSize`/
+`onPageSizeChange`, and `totalRowCount`, a followed plain prop (`FeatureRoot.follow`): the rows
+across every page, the grid's own row count without it; a page past the last is kept, the app
+clamps it: a server's total may not be known yet). None of the three filters, searches or pages
+rows (the app's, or `/local`'s), and none moves another's piece (the first page on a filter is
+`/local`'s and the app's). The full list, factory, subpath and requirements: `navigation()`
+`/navigation`; `sorting()` `/sorting`; `rowSelection()` `/row-selection`; `cellRange()` `/range`
+(requires `navigation`); `clipboard()` `/clipboard` (requires `cellRange`); `fillHandle()`
+`/fill` (requires `cellRange`); `editing()` `/editing` (requires `navigation`); `columnResize()`
+`/column-resize`; `columnReorder()` `/column-reorder`; `columnPinning()` `/column-pinning`;
+`columnGroupCollapse()` `/column-group-collapse`; `rowExpansion()` `/row-expansion`;
+`rowGrouping()` `/row-grouping`; `rowReorder()` `/row-reorder`; `cellSpans()` `/spans`;
+`summaryRows()` `/summary-rows`; `filtering()` `/filtering`; `search()` `/search`;
+`pagination()` `/pagination`. The core keeps the column model (columns and groups as
 declared, their header rows, spans and sticky labels, the declared pinned parts, `width`,
 `flex`, `autoSize` and the limits on a resizable column's flex/auto width), the row model (the
 data contract with `getRowMeta`: a group row renders as a row at its depth; the sizes and
@@ -1242,7 +1278,8 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
   `navigation()`, `onFill` only with `fillHandle()`, `columnWidths` only with `columnResize()`,
   `expandedRowKeys`/`detailHeight` only with `rowExpansion()`, `expandedGroupKeys` only with
   `rowGrouping()`, `onRowMove` only with `rowReorder()`, `summaryRows`/`summaryRowHeight` only
-  with `summaryRows()`). `GridView` declares none of a feature's
+  with `summaryRows()`, `columnFilters` only with `filtering()`, `searchText` only with
+  `search()`, `pageIndex`/`totalRowCount` only with `pagination()`). `GridView` declares none of a feature's
   fields: read them as `view as GridView & FillView`. The adapters' hooks, composables, inject
   functions and refs take the features as a type argument (`useDataGrid<Person, typeof
   features>()`, `createDataGridRef<…>()`); any ref fits a root. Type fixtures:
@@ -1262,8 +1299,8 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
   rows' (`[dataGridSummaryRows]`, the template directive keeping `DataGridSummaryRows`)).
   Nothing a main entry imports reaches a feature (the entry tests), and **the bundle guard**
   (`scripts/check-features.ts`, run by `pnpm build`, tested by
-  `site/tests/check-features.test.ts`) fails when a package's main entry or a chunk it imports
-  holds a feature's markers (its command, `get` and `is` keys, read from the built feature) or
+  `site/tests/check-features.test.ts`) fails when a package's main entry, its `/local` entry
+  (Epic #153), or a chunk either imports holds a feature's markers (its command, `get` and `is` keys, read from the built feature) or
   imports a feature's entry point: a feature with none gets a key for it (`get("cell-span-by")`,
   `is("row-movable")`). `pnpm size` lists each entry.
 - **The bare grid**: `apps/playground/fixtures/bare-grid` (no feature, both structures, both
@@ -1271,15 +1308,20 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
   resizable and reorderable, which scrolls, never moves nor resizes; a column with a `colSpan`,
   whose cells never span) and `e2e/bare.spec.ts`. Every example
   and fixture installs what it uses (`navigation()` wherever keys move: practically all;
-  `useLocalRows`' props carry the sort: install `sorting()` with them; `editing()` wherever a
+  `useLocalRows` runs the stages of the features it is given (`features`, the root's list) and its
+  props carry their state: install `sorting()`, `filtering()`, `search()`, `pagination()` for the
+  stages an example applies; `editing()` wherever a
   column is `editable`; the column features wherever a column is `pinned`, `resizable`,
   `reorderable` or a group `collapsible`; `rowExpansion()` where rows expand, `rowGrouping()`
   where rows have kinds that expand (grouped `useLocalRows` hands the expanded groups),
   `cellSpans()` where a column spans, `summaryRows()` where there are summary rows,
   `rowReorder()` where rows move); the stress fixture
-  installs every migrated feature (sorting, Epic #144's five, editing, the four column
-  features and the five row features), its commit counts
-  unchanged (D9).
+  installs every feature (sorting, Epic #144's five, editing, the four column features, the five
+  row features and Epic #153's three), its commit counts unchanged (D9). The server-side example
+  (every framework) installs sorting, filtering, search and pagination with controlled props and no
+  `/local`: its pretend server and its fetch policy (`createServerQuery`: the last answer kept
+  while the next loads, a stale one dropped) are `_kit/people-server.ts` and
+  `_kit/server-query.ts`.
 
 ## Commands
 
@@ -1309,7 +1351,8 @@ packages/core/      @fragiola/data-grid        src/<domain>/ (axis, engine, mode
                                                column-reorder/, column-pinning/,
                                                column-group-collapse/, row-expansion/,
                                                row-grouping/, row-reorder/, spans/,
-                                               summary-rows/: each feature.ts and
+                                               summary-rows/, filtering/, search/,
+                                               pagination/: each feature.ts and
                                                index.ts, its entry);
                                                tests/ mirrors src/
 packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid.*`), context.ts
@@ -1322,7 +1365,8 @@ packages/react/     @fragiola/data-grid-react  src/index.ts, parts.ts (`DataGrid
                                                editing/, column-resize/, column-reorder/,
                                                column-pinning/, column-group-collapse/,
                                                row-expansion/, row-grouping/, row-reorder/,
-                                               spans/, summary-rows/: a feature's primitives
+                                               spans/, summary-rows/, filtering/, search/,
+                                               pagination/: a feature's primitives
                                                and hooks live there);
                                                tests/ named after behaviour
 packages/vue/       @fragiola/data-grid-vue    the same layout: src/components/ (root.ts, …),
@@ -1339,7 +1383,8 @@ packages/angular/   @fragiola/data-grid-angular src/public-api.ts (the entry), s
                                                column-reorder/, column-pinning/,
                                                column-group-collapse/, row-expansion/,
                                                row-grouping/, row-reorder/, spans/,
-                                               summary-rows/ ng-package.json);
+                                               summary-rows/, filtering/, search/,
+                                               pagination/ ng-package.json);
                                                scripts/check-dist.ts
 apps/playground/    src/main.tsx, app.tsx      the entries
                     src/shell/                 the shell: catalog, sidebar, toolbar, stage, source

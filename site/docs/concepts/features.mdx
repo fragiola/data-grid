@@ -1,6 +1,6 @@
 ---
 title: Features
-description: A small core and the features your app installs on a grid (keys, sorting, selections, ranges, editing, column and row features), each typed and opt-in.
+description: A small core and the features your app installs on a grid (keys, sorting, filters, selections, editing, column and row features), each typed and opt-in.
 ---
 
 The grid's core renders, scrolls and virtualizes. What an app may not need is a **feature**: a
@@ -25,6 +25,11 @@ creates it.
 | `rowReorder()` | `/row-reorder` | | rows moved by their drag handles or the keys ([Row reordering](/docs/concepts/row-reordering)) |
 | `cellSpans()` | `/spans` | | a column's `colSpan` in the body ([Column spanning](/docs/concepts/column-spanning)) |
 | `summaryRows()` | `/summary-rows` | | rows of figures under the header and at the bottom, `Summary` ([Summary rows](/docs/concepts/summary-rows)) |
+| `filtering()` | `/filtering` | | the column filters as grid state, `data-filtered` on a filtered column's header cell ([Rows in memory](/docs/concepts/rows-in-memory)) |
+| `search()` | `/search` | | the search text as grid state ([Rows in memory](/docs/concepts/rows-in-memory)) |
+| `pagination()` | `/pagination` | | the page, its size and the page count as grid state ([Rows in memory](/docs/concepts/rows-in-memory)) |
+
+Every optional behaviour is one of these nineteen: a grid installs only what it uses.
 
 A feature another one needs is installed with it: a grid missing one throws when it is created,
 naming it (`feature "cellRange" requires feature "navigation": install it too`). Their order in
@@ -114,7 +119,9 @@ A feature's inputs are a directive of its own, on the root's element: `DataGridS
 `[(collapsedGroupKeys)]`, `DataGridRowExpansion` `[(expandedRowKeys)]` and the details' heights,
 `DataGridRowGrouping` `[(expandedGroupKeys)]`, `DataGridRowReorder` `(rowMove)` (present, the rows
 move; `[dataGridRowReorder]="false"` stops them), `DataGridSummaryRowsRoot`
-(`dataGridSummaryRows`) `[summaryRows]` and `[summaryRowHeight]`. A feature you give no input
+(`dataGridSummaryRows`) `[summaryRows]` and `[summaryRowHeight]`, `DataGridFiltering`
+`[(columnFilters)]`, `DataGridSearch` `[(searchText)]`, `DataGridPagination` `[(pageIndex)]`,
+`[(pageSize)]` and `[totalRowCount]`. A feature you give no input
 (`columnPinning()`, `cellSpans()`) needs no directive.
 
 </Framework>
@@ -183,9 +190,16 @@ measured heights, the windows. But:
 - a row's drag handle drags nothing and Ctrl/⌘+Shift+↑/↓ moves nothing;
 - their props, commands and primitives do not compile, nor import from the main entry.
 
-Rows in memory hand the root their sort (`useLocalRows`, `injectLocalRows`,
-`[dataGridLocalRows]`), so [install `sorting()`](/docs/concepts/rows-in-memory) with them, and
-`rowGrouping()` when they group (their props carry the expanded groups).
+Nor does it keep a filter, a search or a page: without `filtering()`, `search()` and
+`pagination()`, no header cell carries `data-filtered`, and `columnFilters`, `searchText`,
+`pageIndex`, `pageSize` and `totalRowCount` do not compile. The grid never filters, searches or
+pages the rows either way: your app does, or `/local` in memory.
+
+Rows in memory run the stages of the features you give them (`useLocalRows`, `injectLocalRows`:
+`features`, the root's list) and hand the root their state (`[dataGridLocalRows]` in Angular):
+[install `sorting()`, `filtering()`, `search()`, `pagination()`](/docs/concepts/rows-in-memory)
+for what they apply, and `rowGrouping()` when they group (their props then carry the expanded
+groups). A stage whose feature is not installed is skipped.
 
 ## Typed by the features
 
@@ -236,7 +250,8 @@ returns `{ ok: false, error: { code: "not_found" } }`, as any command the grid d
 
 A feature lives in its own entry point, and the packages' main entries never import one: a feature
 your app does not import is not in its bundle. `pnpm build` checks it, failing when a package's
-main entry holds a feature's code.
+main entry holds a feature's code, or when a `/local` entry does (the pipeline reads the
+features' state from the props it hands the root, and never imports one).
 
 ## Your own feature
 
@@ -299,7 +314,7 @@ part optional:
 | `rowDetails(state)` | the rows showing a detail, ascending (`rowExpansion()`'s): the core lays their details out on the rows' axis, sizes and measures them; without it, none, and the axis is the rows' own |
 | `cellSpans` | the body cells' column spans, a reader the core keeps on its state at creation (`state.cellSpans`, asked through `spansOf`): the navigation, the ranges and the clipboard ask the same (`cellSpans()`'s) |
 | `tree` | its rows form a tree: with navigation, a grid whose rows have kinds is a `treegrid` (`rowGrouping()`'s) |
-| `root` | the props a root takes for it, controlled or not (`defineControlled`) |
+| `root` | the props a root takes for it, controlled or not (`defineControlled`), and plain props it follows (`follow`: pagination's `totalRowCount`, the details' heights) |
 
 In an engine, a feature's keys run at a place of their own in the grid's: `beforeKeydown` before
 any (never taking one), `guardKeydown` for the elements it holds (an edit's editor), `keydown`

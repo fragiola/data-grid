@@ -109,8 +109,8 @@ import { type SortColumn, sorting } from "@fragiola/data-grid-react/sorting";
 
 const features = [sorting()];
 
-// rows in memory: one hook keeps the sort and orders the rows
-const local = useLocalRows(people, columns);
+// rows in memory: one hook orders the rows by the sort the root's model holds
+const local = useLocalRows(people, columns, { features });
 <DataGrid.Root features={features} columns={columns} {...local.props}>{/* … */}</DataGrid.Root>
 
 // a server: the app keeps the sort and sends it

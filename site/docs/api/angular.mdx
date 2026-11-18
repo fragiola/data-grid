@@ -172,6 +172,9 @@ evaluates class bindings before the element's inputs), so read it with `?.`.
 | `[dataGridRoot][dataGridRowExpansion]` | `expandedRowKeys` (`[(expandedRowKeys)]`, the output `expandedRowKeysChange`), `defaultExpandedRowKeys`, `detailHeight`, `estimatedDetailHeight`; from `/row-expansion`, with `rowExpansion()` | |
 | `[dataGridRoot][dataGridRowGrouping]` | `expandedGroupKeys` (`[(expandedGroupKeys)]`, the output `expandedGroupKeysChange`), `defaultExpandedGroupKeys`; from `/row-grouping`, with `rowGrouping()` | |
 | `[dataGridRoot][dataGridRowReorder]` | the rows move while it is present (`[dataGridRowReorder]="false"` stops them), the output `rowMove`; from `/row-reorder`, with `rowReorder()` | |
+| `[dataGridRoot][dataGridFiltering]` | `columnFilters` (`[(columnFilters)]`, the output `columnFiltersChange`), `defaultColumnFilters`; from `/filtering`, with `filtering()` | |
+| `[dataGridRoot][dataGridSearch]` | `searchText` (`[(searchText)]`, the output `searchTextChange`), `defaultSearchText`; from `/search`, with `search()` | |
+| `[dataGridRoot][dataGridPagination]` | `pageIndex` and `pageSize` (`[(pageIndex)]`, `[(pageSize)]`, the outputs `pageIndexChange`, `pageSizeChange`), `defaultPageIndex`, `defaultPageSize`, `totalRowCount`; from `/pagination`, with `pagination()` | |
 | `[dataGridRoot][dataGridSummaryRows]` | `summaryRows`, `summaryRowHeight` (`DataGridSummaryRowsRoot`); from `/summary-rows`, with `summaryRows()` (`cellSpans()`, from `/spans`, has no input) | |
 | `[dataGridGrid]` | none | |
 | `*dataGridHeader` | none | |
@@ -226,7 +229,7 @@ The opt-in entry points:
 
 | entry | exports |
 | --- | --- |
-| `@fragiola/data-grid-angular/local` | `injectLocalRows(rows, columns, options?)`: rows in memory, sorted, filtered, searched, grouped and paged, each field a getter; `[dataGridLocalRows]="local"` on the root gives it their props (React's `{...local.props}`); its sort needs `sorting()` in `[features]` |
+| `@fragiola/data-grid-angular/local` | `injectLocalRows(rows, columns, options?)`: rows in memory, sorted, filtered, searched, grouped and paged by the features in `options.features` (the root's list: `sorting()`, `filtering()`, `search()`, `pagination()`, each one's stage; one not installed is skipped), each field a getter; `[dataGridLocalRows]="local"` on the root gives it their props (React's `{...local.props}`): the rows and those features' state |
 | `@fragiola/data-grid-angular/sorting` | `sorting()`, the [sorting feature](/docs/concepts/sorting); `DataGridSorting`, the directive holding the sort's inputs on the root; `sortColumnsOf(view)`, `headerCellSort`, `SortColumn` (the core's, re-exported) |
 | `@fragiola/data-grid-angular/navigation` | `navigation()`, the [keys and the active cell](/docs/concepts/keyboard); `DataGridNavigation`; `samePosition` |
 | `@fragiola/data-grid-angular/row-selection` | `rowSelection()`, the [row selection](/docs/concepts/row-selection); `DataGridRowSelection`; its helpers (`selectionStatus`, `withRowKeys`, …); `injectSelectAll(rowKeys, gridRef?)`: a "select all" control's state and its `toggle`, each field a getter |
@@ -237,6 +240,9 @@ The opt-in entry points:
 | `@fragiola/data-grid-angular/row-grouping` | `rowGrouping()`, [row groups and trees](/docs/concepts/row-grouping) that expand; `DataGridRowGrouping`; `*dataGridGroupToggle` (`DataGridGroupToggle`, `GroupToggleContext`), `injectGroupToggle(row)` |
 | `@fragiola/data-grid-angular/row-reorder` | `rowReorder()`, [rows moved](/docs/concepts/row-reordering); `DataGridRowReorder`; `[dataGridRowDragHandle]` (`DataGridRowDragHandle`), `injectRowDragHandle(row)` |
 | `@fragiola/data-grid-angular/spans` | `cellSpans()`, a column's [`colSpan`](/docs/concepts/column-spanning) in the body |
+| `@fragiola/data-grid-angular/filtering` | `filtering()`, the column filters as the model's state; `DataGridFiltering` (`dataGridFiltering`: `[(columnFilters)]`, `[defaultColumnFilters]`); `data-filtered` on a filtered column's header cell |
+| `@fragiola/data-grid-angular/search` | `search()`, the search text as the model's state; `DataGridSearch` (`dataGridSearch`: `[(searchText)]`, `[defaultSearchText]`) |
+| `@fragiola/data-grid-angular/pagination` | `pagination()`, the page and its size as the model's state, `pageCount`; `DataGridPagination` (`dataGridPagination`: `[(pageIndex)]`, `[(pageSize)]`, their defaults, `[totalRowCount]`) |
 | `@fragiola/data-grid-angular/summary-rows` | `summaryRows()`, the [summary rows](/docs/concepts/summary-rows); `DataGridSummaryRowsRoot` (`dataGridSummaryRows`); the summary's directives (`SUMMARY_ROWS`: `*dataGridSummary`, `[dataGridSummaryRows]`, `[dataGridSummaryRow]`, `[dataGridSummaryCells]`, `[dataGridSummaryCell]`) and inject functions; `SummaryRowInfo`, `SummaryCellInfo`, `SummaryRowsFeatureProps` |
 | `@fragiola/data-grid-angular/editing` | `editing()`, [cells edited in place](/docs/concepts/editing) (with `navigation()`); `DataGridEditing`; `*dataGridCellEdit` (`DataGridCellEdit`, `CellEditContext`), `injectCellEdit(cell)`; `CellEditEvent`, `editActions`, `editCellPropsOf`, `EDITOR_ATTRIBUTE` |
 

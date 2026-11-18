@@ -166,7 +166,7 @@ before a render apply one after the other.
 
 ```tsx title="local.tsx"
 const [tasks, setTasks] = useState(initialTasks);
-const local = useLocalRows(tasks, columns);
+const local = useLocalRows(tasks, columns, { features });
 
 <DataGrid.Root
     features={features}

@@ -175,7 +175,7 @@ The opt-in entry points have the same exports as React's:
 
 | entry | composable |
 | --- | --- |
-| `@fragiola/data-grid-vue/local` | `useLocalRows(rows, columns, options?)`: rows in memory, sorted, filtered, searched, grouped and paged. Bind `v-bind="local.props"` on `Root`; each field is a getter, read when used; its sort needs `sorting()` in `:features` |
+| `@fragiola/data-grid-vue/local` | `useLocalRows(rows, columns, options?)`: rows in memory, sorted, filtered, searched, grouped and paged by the features in `options.features` (the root's list: `sorting()`, `filtering()`, `search()`, `pagination()`, each one's stage; one not installed is skipped). Bind `v-bind="local.props"` on `Root`: the rows and those features' state; each field is a getter, read when used |
 | `@fragiola/data-grid-vue/sorting` | `sorting()`, the [sorting feature](/docs/concepts/sorting), and `sortColumnsOf(view)`, `headerCellSort`, `SortColumn` (the core's, re-exported) |
 | `@fragiola/data-grid-vue/navigation` | `navigation()`, the [keys and the active cell](/docs/concepts/keyboard), and `samePosition` |
 | `@fragiola/data-grid-vue/row-selection` | `rowSelection()`, the [row selection](/docs/concepts/row-selection), its helpers (`selectionStatus`, `withRowKeys`, …), and `useSelectAll(rowKeys, gridRef?)`: a "select all" control's state and its `toggle`, each field a getter |
@@ -187,6 +187,9 @@ The opt-in entry points have the same exports as React's:
 | `@fragiola/data-grid-vue/row-grouping` | `rowGrouping()`, [row groups and trees](/docs/concepts/row-grouping) that expand, `useGroupToggle(row)` |
 | `@fragiola/data-grid-vue/row-reorder` | `rowReorder()`, [rows moved](/docs/concepts/row-reordering) by a handle or the keys, `useRowDragHandle(row)` |
 | `@fragiola/data-grid-vue/spans` | `cellSpans()`, a column's [`colSpan`](/docs/concepts/column-spanning) in the body |
+| `@fragiola/data-grid-vue/filtering` | `filtering()`, the column filters as the model's state (`columnFilters`, `defaultColumnFilters`, `@column-filters-change`; `data-filtered` on a filtered column's header cell) |
+| `@fragiola/data-grid-vue/search` | `search()`, the search text as the model's state (`searchText`, `defaultSearchText`, `@search-text-change`) |
+| `@fragiola/data-grid-vue/pagination` | `pagination()`, the page and its size as the model's state (`pageIndex`, `pageSize`, their defaults and events, `totalRowCount`), `pageCount` |
 | `@fragiola/data-grid-vue/summary-rows` | `summaryRows()`, the [summary rows](/docs/concepts/summary-rows), `Summary`, `SummaryRows`, `SummaryRow`, `SummaryCells`, `SummaryCell`, their composables, `typedSummaryRows<TRow>()`; the feature's root props are `SummaryRowsFeatureProps` |
 
 ## Types
