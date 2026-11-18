@@ -40,8 +40,14 @@ const FEATURES = [
     columnPinning(),
     rowGrouping(),
 ];
-// the server's tree sorts nothing: navigation, row selection and the pinned columns only
-const LAZY_FEATURES = [navigation(), rowSelection(), columnPinning()];
+// the server's tree sorts nothing: navigation, row selection, the pinned columns and the tree's
+// groups only
+const LAZY_FEATURES = [
+    navigation(),
+    rowSelection(),
+    columnPinning(),
+    rowGrouping(),
+];
 
 const columns: Column<Entry>[] = [
     { key: "select", width: 44, pinned: "start" },
