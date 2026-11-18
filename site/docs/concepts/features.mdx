@@ -292,8 +292,8 @@ export function flags(): DataGridFeature<FlagsTypes> {
 }
 ```
 
-Installed (`features: [flags(), sorting()]`), its keys are the grid's: `model.run("flags.toggle",
-{ rowIndex: 3 })` goes through the same middleware and returns the same results. Its handlers
+Installed (`features: [flags(), sorting()]`), its keys are the grid's:
+`model.run("flags.toggle", { rowIndex: 3 })` goes through the same middleware and returns the same results. Its handlers
 return `done(state, value)`, or `fail(code, message)`. What else a feature can contribute, every
 part optional:
 
