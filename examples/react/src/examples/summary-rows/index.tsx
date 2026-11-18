@@ -8,6 +8,7 @@ import {
 import { columnPinning } from "@fragiola/data-grid-react/column-pinning";
 import { useLocalRows } from "@fragiola/data-grid-react/local";
 import { navigation } from "@fragiola/data-grid-react/navigation";
+import { search } from "@fragiola/data-grid-react/search";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { cellSpans } from "@fragiola/data-grid-react/spans";
 import {
@@ -28,8 +29,11 @@ import * as styles from "./styles";
 // navigation (the keys, the active cell, the tab stop), pinned columns (without it, every column
 // scrolls), column spans (without it, every cell is one column), summary rows (without it, a grid
 // has none)
+// and search (the search text): `useLocalRows` applies them to the rows, the grid's
+// model holds them
 const FEATURES = [
     sorting(),
+    search(),
     navigation(),
     columnPinning(),
     cellSpans(),
@@ -117,6 +121,7 @@ const SUMMARIES: Partial<
 export default function SummaryRowsExample() {
     // the rows in memory, searched and sorted by one hook; the totals follow what it leaves
     const local = useLocalRows(all, columns, {
+        features: FEATURES,
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });
     const totals = useMemo(

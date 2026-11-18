@@ -21,6 +21,7 @@ import {
     rowSelection,
     useSelectAll,
 } from "@fragiola/data-grid-react/row-selection";
+import { search } from "@fragiola/data-grid-react/search";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronRight, Search } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -34,8 +35,11 @@ import * as styles from "./styles";
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
 // every column scrolls), row groups (without it, nothing expands)
+// and search (the search text): `useLocalRows` applies them to the rows, the grid's
+// model holds them
 const FEATURES = [
     sorting(),
+    search(),
     navigation(),
     rowSelection(),
     columnPinning(),
@@ -191,6 +195,7 @@ export default function RowGrouping() {
     const [selected, setSelected] = useState<readonly RowKey[]>([]);
     // the rows in memory searched, sorted and grouped by one hook; it keeps the expanded groups
     const local = useLocalRows(ROWS, columns, {
+        features: FEATURES,
         groupBy: GROUP_BY[grouping],
         aggregates: AGGREGATES,
         rowKey,

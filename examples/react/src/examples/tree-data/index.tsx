@@ -18,6 +18,7 @@ import {
     rowSelection,
     useSelectAll,
 } from "@fragiola/data-grid-react/row-selection";
+import { search } from "@fragiola/data-grid-react/search";
 import { sorting } from "@fragiola/data-grid-react/sorting";
 import { ChevronRight, FileText, Folder, Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -33,8 +34,11 @@ import * as styles from "./styles";
 // the features the grid installs: sorting (without it, a sortable column never sorts), cell
 // navigation (the keys, the active cell, the tab stop), row selection, pinned columns (without it,
 // every column scrolls), row groups (without it, nothing expands)
+// and search (the search text): `useLocalRows` applies them to the rows, the grid's
+// model holds them
 const FEATURES = [
     sorting(),
+    search(),
     navigation(),
     rowSelection(),
     columnPinning(),
@@ -190,6 +194,7 @@ function FileGrid({ subRowKeysOf }: { subRowKeysOf: SubRowKeysOf }) {
 /** The files in memory: one hook makes the tree, searches it (a match's folders stay) and sorts it. */
 function InMemory() {
     const local = useLocalRows(FILES, columns, {
+        features: FEATURES,
         getSubRows,
         rowKey,
         defaultExpandedGroupKeys: ["src"],

@@ -261,6 +261,7 @@ export default function Companies() {
     // the rows in memory sorted by one hook: the header and the toolbar's select both set its
     // sort (the first column first, the next ones breaking ties)
     const local = useLocalRows(all, columns, {
+        features: FEATURES,
         defaultSortColumns: [{ columnKey: "name", direction: "ascending" }],
     });
     const { rows } = local;

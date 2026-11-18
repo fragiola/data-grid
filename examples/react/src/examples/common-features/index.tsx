@@ -319,7 +319,7 @@ export default function CommonFeatures() {
         ],
         [],
     );
-    const local = useLocalRows(jobs, columns);
+    const local = useLocalRows(jobs, columns, { features: FEATURES });
     const selectableIds = useMemo(
         () => jobs.filter(isSelectable).map((job) => job.id),
         [jobs],
