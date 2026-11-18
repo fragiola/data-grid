@@ -191,7 +191,10 @@ for (const kind of KINDS) {
             page,
         }) => {
             await open(page, kind);
-            await expect(page.locator("[aria-colspan]")).toHaveCount(0);
+            // a header cell spanning columns (a column group) is the core's: only body cells
+            await expect(
+                page.locator('[data-grid-part="cell"][aria-colspan]'),
+            ).toHaveCount(0);
             await expect(cell(page, 0, 1)).toHaveText("0:1");
             await expect(cell(page, 0, 2)).toHaveText("0:2");
         });
