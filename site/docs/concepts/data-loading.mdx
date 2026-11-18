@@ -58,6 +58,12 @@ useEffect(
 `rows.changed` takes `{ start, end }` (end excluded), either bound alone, or nothing for every
 row. Passing a new `getRow` still works too, and renders the grid each time.
 
+The same call serves data that changes all the time, as a live feed does: batch the moves and
+tell the grid their range once a frame. It renders the rows on screen again, once a frame
+whatever the rate, and nothing for the rows that moved out of view. The
+[`live-market`](/examples/live-market) example ticks a thousand rows up to ten thousand times a
+second that way, its summary row following with `summary-rows.changed`.
+
 Wait for the scroll to settle before loading (a short timeout): a thumb dragged across the
 dataset then asks only for where it stops. See the [`windowed-loading`](/examples/windowed-loading)
 example, and [`windowed-columns`](/examples/windowed-columns) for the same with columns, by tiles.

@@ -1407,6 +1407,8 @@ apps/playground/    src/main.tsx, app.tsx      the entries
                     e2e/, tests/               Playwright specs, unit tests
 examples/shared/    src/meta/<slug>.ts         every example's metadata, whatever the framework
                     src/themes/, src/embed/    the five themes, the embed's messages
+                    src/styles/grid-edges.css  the grids' clean edges at any zoom (Epic #166), every app's
+                                               embed stylesheet imports it
                     scripts/                   the manifest builder, the loader generator (by framework)
                     e2e/                       the Playwright specs every framework's embed runs, also
                                                inside an iframe; tests/: no framework import, metadata

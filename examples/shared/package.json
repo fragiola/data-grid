@@ -8,6 +8,7 @@
         "./meta-types": "./src/meta-types.ts",
         "./themes": "./src/themes/themes.ts",
         "./themes/*.css": "./src/themes/*.css",
+        "./styles/*.css": "./src/styles/*.css",
         "./embed/messages": "./src/embed/messages.ts",
         "./scripts/*": "./scripts/*.ts",
         "./e2e/*": "./e2e/*.ts"

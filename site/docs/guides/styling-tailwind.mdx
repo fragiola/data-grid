@@ -56,6 +56,13 @@ The examples read their shapes from CSS variables a theme declares (`--dg-cell-p
 `px-(--dg-cell-padding)`, `border-b-(length:--dg-gridline)`,
 `data-active:outline-(--dg-active-line)`. The gallery shows each example in every theme.
 
+## Clean edges at any zoom
+
+At a fractional zoom, the cells scrolling under the header or a pinned column can show as a row
+of dots along the viewport's edge. Keep the few rules that prevent it in a stylesheet beside your
+classes: [Clean edges at any zoom](/docs/guides/styling-css#clean-edges-at-any-zoom) has them,
+and every example loads them.
+
 ## Keep classes complete
 
 Tailwind finds classes by reading your source: write whole class names, and map a value to a

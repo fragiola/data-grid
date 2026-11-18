@@ -1,0 +1,68 @@
+/* Clean edges: every example's grid, in every framework (imported by each app's embed stylesheet).
+
+   At a zoom or a device pixel ratio that puts the viewport's edge between two device pixels
+   (1.1, 1.25, a browser zoom of 90%…), the device pixel at the edge is shared: the cells that
+   scroll are drawn into it, anti-aliased, while a sticky part's background is snapped to whole
+   pixels and may leave it. That pixel then shows the cells scrolling under the header, the pinned
+   columns or the bottom summary rows: rows of dots along the edge while it scrolls. Three rules
+   keep it clean:
+
+   1. Each part that sticks to an edge paints a few pixels past it, in its own background
+      (`background: inherit` on its `::before`), which the viewport clips: the header and its first
+      row at the top, the first column pinned at the start, the last one pinned at the end, the
+      bottom summary rows at the bottom. A part that is not at the edge (columns narrower than the
+      view, rows shorter than it) paints them outside the grid, which clips them (`overflow: clip`).
+   2. Those pinned cells clip their content a few pixels out (`overflow-clip-margin`), so their
+      own clip (a cell's text is cut at its edge) leaves that cover alone.
+   3. The grid is drawn as one surface before the frame's rounded corners clip it
+      (`clip-path: inset(0)`, which cuts nothing): with a radius, Chromium clips each sticky
+      layer on its own at the fraction, and the rows still show at the top edge under the header.
+
+   The grid's own styles stay structural (position, offsets, sizes); these are a styling choice,
+   the app's, as every rule of the examples. */
+
+[data-grid-part="grid"] {
+    clip-path: inset(0);
+}
+
+[data-grid-part="header"]::before,
+[data-grid-part="header-row"]:first-child::before,
+[data-grid-part="summary"][data-summary="bottom"]::before,
+[data-pinned="start"][data-column-index="0"]::before,
+[data-pinned="end"]:not(:has(~ [data-pinned="end"]))::before {
+    content: "";
+    position: absolute;
+    background: inherit;
+    pointer-events: none;
+}
+
+[data-grid-part="header"]::before,
+[data-grid-part="header-row"]:first-child::before {
+    inset-inline: 0;
+    top: -3px;
+    height: 3px;
+}
+
+[data-grid-part="summary"][data-summary="bottom"]::before {
+    inset-inline: 0;
+    bottom: -3px;
+    height: 3px;
+}
+
+[data-pinned="start"][data-column-index="0"]::before {
+    inset-block: 0;
+    inset-inline-start: -3px;
+    width: 3px;
+}
+
+[data-pinned="end"]:not(:has(~ [data-pinned="end"]))::before {
+    inset-block: 0;
+    inset-inline-end: -3px;
+    width: 3px;
+}
+
+[data-grid-part="cell"][data-pinned="start"][data-column-index="0"],
+[data-grid-part="cell"][data-pinned="end"]:not(:has(~ [data-pinned="end"])) {
+    overflow: clip;
+    overflow-clip-margin: 3px;
+}

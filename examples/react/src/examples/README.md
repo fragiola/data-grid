@@ -18,6 +18,7 @@ examples/shared/
   src/meta/<slug>.ts   title, description, category, order, features, docs link, layout, height
                        (one per example, whatever the framework; `src/meta-types.ts`)
   src/themes/          the five themes (one CSS file each, values only) and their list
+  src/styles/          grid-edges.css: the grids' clean edges at any zoom, every app's embed loads it
   src/embed/           the messages between the embed and the site
   scripts/             the manifest builder and the loader generator, by framework
   e2e/                 the Playwright helpers and specs every framework's embed runs

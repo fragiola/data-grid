@@ -5,7 +5,7 @@ export default {
     description:
         "Orders that expand into a detail below their cells: a summary and a grid of the order's items, each grid with its own keys, as wide as the view while the orders scroll sideways, and as tall as computed or measured.",
     category: "real-world",
-    order: 3,
+    order: 4,
     features: [
         "rowExpansion()",
         "RowDetail",

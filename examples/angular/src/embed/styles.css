@@ -1,6 +1,7 @@
 /* The examples' stylesheet, the docs app's stack minus the site chrome (Fumadocs):
    1. the Fragiola base (Tailwind, the palette roles) and the palettes, keyed off :root[data-theme]
-   2. the example themes, scoped to [data-example-theme] (on <body>) */
+   2. the example themes, scoped to [data-example-theme] (on <body>)
+   3. the grids' clean edges (examples-shared/styles/grid-edges.css) */
 
 @import "../styles/global.css";
 @import "../styles/palettes/surface.css";
@@ -13,6 +14,7 @@
 @import "../styles/palettes/rose.css";
 
 @import "examples-shared/themes/index.css";
+@import "examples-shared/styles/grid-edges.css";
 
 @source "../../index.html";
 @source "../examples";
