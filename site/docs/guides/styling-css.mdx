@@ -38,6 +38,68 @@ without a single class.
 }
 ```
 
+## Clean edges at any zoom
+
+At a zoom or a device pixel ratio that puts the viewport's edge between two device pixels (a
+browser zoom of 90% or 110%, a screen scaled to 125%), the browser draws the cells that scroll
+into the device pixel at the edge but snaps a sticky part's background to whole pixels. That
+pixel then shows the cells passing under the header, a pinned column or the bottom summary rows:
+a row of dots along the edge while it scrolls. Paint those parts a few pixels past the edge, in
+their own background, and the viewport clips the rest:
+
+```css title="grid-edges.css"
+/* one surface under the frame's rounded corners (cuts nothing) */
+[data-grid-part="grid"] {
+    clip-path: inset(0);
+}
+
+[data-grid-part="header"]::before,
+[data-grid-part="header-row"]:first-child::before,
+[data-grid-part="summary"][data-summary="bottom"]::before,
+[data-pinned="start"][data-column-index="0"]::before,
+[data-pinned="end"]:not(:has(~ [data-pinned="end"]))::before {
+    content: "";
+    position: absolute;
+    background: inherit;
+    pointer-events: none;
+}
+
+[data-grid-part="header"]::before,
+[data-grid-part="header-row"]:first-child::before {
+    inset-inline: 0;
+    top: -3px;
+    height: 3px;
+}
+
+[data-grid-part="summary"][data-summary="bottom"]::before {
+    inset-inline: 0;
+    bottom: -3px;
+    height: 3px;
+}
+
+[data-pinned="start"][data-column-index="0"]::before {
+    inset-block: 0;
+    inset-inline-start: -3px;
+    width: 3px;
+}
+
+[data-pinned="end"]:not(:has(~ [data-pinned="end"]))::before {
+    inset-block: 0;
+    inset-inline-end: -3px;
+    width: 3px;
+}
+
+/* a cell cuts its content a few pixels out, so its own clip leaves the cover alone */
+[data-grid-part="cell"][data-pinned="start"][data-column-index="0"],
+[data-grid-part="cell"][data-pinned="end"]:not(:has(~ [data-pinned="end"])) {
+    overflow: clip;
+    overflow-clip-margin: 3px;
+}
+```
+
+The examples share this stylesheet (`examples/shared/src/styles/grid-edges.css`). It needs the
+parts' backgrounds opaque, as the header's above.
+
 ## Several grids on a page
 
 Scope the selectors under a class on the root (`.people [data-grid-part="cell"]`), or pass a
