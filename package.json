@@ -24,14 +24,21 @@
         "test": "vitest run",
         "bench": "vitest bench --run",
         "build": "pnpm -r build && node scripts/check-dts.ts && node scripts/check-features.ts",
+        "check:package": "pnpm --filter \"./packages/*\" build && node scripts/check-package.ts",
         "size": "node scripts/size-report.ts",
         "e2e": "pnpm --workspace-concurrency=1 --filter playground --filter \"./examples/*\" e2e",
         "dev": "pnpm --filter playground dev",
         "site:export": "node site/export.ts",
-        "site:dev": "node site/dev.ts"
+        "site:dev": "node site/dev.ts",
+        "changeset": "changeset",
+        "release:version": "changeset version"
     },
     "devDependencies": {
+        "@arethetypeswrong/cli": "0.18.5",
         "@biomejs/biome": "2.5.14",
+        "@changesets/changelog-github": "1.0.1",
+        "@changesets/cli": "3.0.3",
+        "publint": "0.3.25",
         "vitest": "5.0.2"
     }
 }

@@ -15,7 +15,8 @@ maps them and its props), plus four capabilities it lacks: **cell ranges** (with
 and the fill handle), **measured row heights**, **collapsible column groups with sticky labels**
 and **row reordering**. It also takes rows by index (`rowCount` + `getRow`) and scales the scroll
 past the browser's size limit. What it leaves out is `site/docs/beyond-v0.mdx`; next come the
-maintainer's API review, then features and examples inspired by Bryntum Grid, then publishing.
+maintainer's API review, then features and examples inspired by Bryntum Grid. Publishing is set
+up (`docs/releasing.md`): nothing reaches npm until the maintainer merges the Version Packages PR.
 
 Vue follows React (Epic #123), then Angular (Epic #129), and other adapters may follow, so
 **every piece of logic that isn't rendering lives in the core**: a decision every adapter takes is a core helper
@@ -1335,6 +1336,8 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
 | `pnpm test` | Vitest: `core` (node), `react` (jsdom), `vue` (jsdom), `angular` (jsdom, `@analogjs/vitest-angular`, zoneless TestBed), `playground`, `examples-react`, `examples-vue`, `examples-angular`, `examples-shared`, `site` (`--project <name>` for one) |
 | `pnpm bench` | Vitest benchmarks (informative, not a gate) |
 | `pnpm build` | `pnpm -r build` (tsdown for the packages, ng-packagr for `packages/angular`, Vite for the apps), then the `.d.ts` check (the Angular compiler's own `static ɵ…` metadata aside) and the features' bundle guard (`scripts/check-features.ts`, below) |
+| `pnpm check:package` | builds the packages, packs each with pnpm and checks the tarballs (`scripts/check-package.ts`, from Dockable): the packed `exports` are the repo's without the source condition (`types`/`import`/`default`, `dist` targets), publint (strict), attw (`esm-only`), each adapter of `ADAPTERS` pins the core exactly, and its smoke app (outside the workspace, that adapter's tarball only, rows in memory with the `/local`, `/sorting` and `/navigation` entries: React, Vite + React checked by `tsc`; Vue, Vite + Vue with a single-file component checked by vue-tsc on TypeScript 6; Angular, Vite + `@analogjs/vite-plugin-angular` with a standalone component checked by `ngc` on TypeScript 6, none with `skipLibCheck`) typechecks, builds and loads its dev server. `--tarballs <dir>` checks given tarballs (the release workflow's) |
+| `pnpm changeset` / `release:version` | Changesets: add a changeset / bump the versions (the release workflow runs the latter); core and adapters are one `fixed` group (`@fragiola/*`). Releasing: `docs/releasing.md` |
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip; ng-packagr's `fesm2022/*.mjs` too): a report, after `pnpm build` |
 | `pnpm e2e` | Playwright: the playground and every examples app (`./examples/*`, each running the shared specs against its embed), each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
@@ -1344,7 +1347,9 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
 ## CI
 
 `.github/workflows/ci.yml` (its comment header describes every job) runs on pull requests and on
-a manual run: Checks, Site export, and the E2E suites (Epic #162). A `Changes` job picks the suites
+a manual run: Checks, Package (`pnpm check:package`), Changesets (a PR that changes what a package
+ships needs a changeset; skipped for the Version Packages PR), Site export, and the E2E suites
+(Epic #162). A `Changes` job picks the suites
 a pull request can affect (`scripts/e2e-suites.ts`, a `git diff` against the base, tested by
 `site/tests/e2e-suites.test.ts`): none for docs only (`site/docs/**`, `*.md`, `AGENTS.md`);
 `packages/react` or `examples/react`: the playground and examples react; `packages/vue` or
@@ -1354,6 +1359,16 @@ never what it runs. The E2E jobs run in `mcr.microsoft.com/playwright:v<version>
 1001`), its tag the version of `@playwright/test` (`site/tests/ci-workflow.test.ts`): upgrading
 Playwright changes both. Each suite is sharded (`--shard`, balanced per test under
 `fullyParallel`), the playground in 4 and each examples app in 3, every browser in every shard.
+
+## Releasing
+
+**Releasing is a merge.** Changesets versions the four packages together (one `fixed` group) and
+`.github/workflows/release.yml` publishes them over npm trusted publishing (OIDC, provenance, no
+token) when the Version Packages PR is merged. A PR that changes what a package ships
+(`changedFilePatterns` in `.changeset/config.json`) adds a changeset (`pnpm changeset`); while
+`0.x`, a break is a `minor`, anything else a `patch`. Never run `npm`, `pnpm` or `changeset`
+publish by hand: the stubs and `npm trust` of the first release are the maintainer's steps
+(`docs/releasing.md`, which also covers adding a package and a failed publish).
 
 ## Repository layout
 
@@ -1434,7 +1449,12 @@ site/               docs/                      the pages fragiola.com/data-grid 
                     export.ts, contract.ts     `pnpm site:export` and its validation, every framework
                     dev.ts, dev-proxy.ts       `pnpm site:dev`: one port, one dev server per framework
                     sources.ts                 the export's parts, by framework of project.json
-docs/                                          reports
+docs/                                          reports; releasing.md (the release runbook)
+.changeset/                                    pending changesets, config.json (one `fixed` group)
+.github/workflows/  ci.yml                     the checks, Package, Changesets, the E2E suites, Site export
+                    release.yml                Version Packages PR, then pack, check --tarballs and
+                                               publish over OIDC from the `npm` environment
+scripts/check-package.ts                       `pnpm check:package` (tests: site/tests/check-package.test.ts)
 ```
 
 ## Playground
