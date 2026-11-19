@@ -12,6 +12,10 @@ you can load exactly that window.
 |---|---|
 | [`@fragiola/data-grid`](packages/core) | framework-agnostic core: typed model and commands, axis math, windows, scroll scaling, cell navigation, the engine |
 | [`@fragiola/data-grid-react`](packages/react) | composable React 19 primitives over the core |
+| [`@fragiola/data-grid-vue`](packages/vue) | composable Vue 3.5 primitives over the core |
+| [`@fragiola/data-grid-angular`](packages/angular) | standalone Angular 22 directives over the core |
+
+Documentation, guides and live examples: **<https://fragiola.com/data-grid>**.
 
 ## Running it
 
