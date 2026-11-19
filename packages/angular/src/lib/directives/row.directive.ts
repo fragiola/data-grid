@@ -6,12 +6,7 @@ import {
     type Signal,
 } from "@angular/core";
 import { type RowState, rowPartOf } from "@fragiola/data-grid";
-import {
-    DATA_GRID_ROW,
-    injectGrid,
-    type RowContext,
-    type RowInfo,
-} from "../context";
+import { DATA_GRID_ROW, injectGrid, type RowInfo } from "../context";
 import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
 
 /**
@@ -27,7 +22,11 @@ import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
         { provide: DATA_GRID_ROW, useExisting: forwardRef(() => DataGridRow) },
     ],
 })
-export class DataGridRow<TRow = unknown> implements RowContext {
+// It provides `DATA_GRID_ROW` as a `RowContext`, but does not declare `implements RowContext`: the members
+// that make it one are `@internal`, stripped from the published declarations, which would then
+// declare a class missing them (an error for an app that type-checks its libraries).
+// tests/contexts.test.ts checks it is one.
+export class DataGridRow<TRow = unknown> {
     /** the row, as `[dataGridRows]` hands it */
     readonly dataGridRow = input.required<RowInfo<TRow>>();
 

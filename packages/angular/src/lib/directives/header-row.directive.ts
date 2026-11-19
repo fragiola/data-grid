@@ -13,7 +13,6 @@ import {
 } from "@fragiola/data-grid";
 import {
     DATA_GRID_HEADER_ROW,
-    type HeaderRowContext,
     type HeaderRowInfo,
     injectGrid,
 } from "../context";
@@ -35,7 +34,11 @@ import { bindPart, injectHost } from "../utils/helpers";
         },
     ],
 })
-export class DataGridHeaderRow<TRow = unknown> implements HeaderRowContext {
+// It provides `DATA_GRID_HEADER_ROW` as a `HeaderRowContext`, but does not declare `implements HeaderRowContext`: the members
+// that make it one are `@internal`, stripped from the published declarations, which would then
+// declare a class missing them (an error for an app that type-checks its libraries).
+// tests/contexts.test.ts checks it is one.
+export class DataGridHeaderRow<TRow = unknown> {
     /** its header row; without it, the columns' row */
     readonly dataGridHeaderRow = input<HeaderRowInfo<TRow> | "" | undefined>(
         undefined,

@@ -11,7 +11,6 @@ import {
     headerCellPartOf,
 } from "@fragiola/data-grid";
 import {
-    type CellContext,
     type CellInfo,
     DATA_GRID_CELL,
     type HeaderCellInfo,
@@ -37,7 +36,11 @@ import { beforeInputs, bindPart, injectHost } from "../utils/helpers";
         },
     ],
 })
-export class DataGridHeaderCell<TRow = unknown> implements CellContext {
+// It provides `DATA_GRID_CELL` as a `CellContext`, but does not declare `implements CellContext`: the members
+// that make it one are `@internal`, stripped from the published declarations, which would then
+// declare a class missing them (an error for an app that type-checks its libraries).
+// tests/contexts.test.ts checks it is one.
+export class DataGridHeaderCell<TRow = unknown> {
     /** the header cell, as `[dataGridHeaderCells]` hands it */
     readonly dataGridHeaderCell = input.required<HeaderCellInfo<TRow>>();
 
