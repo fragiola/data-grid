@@ -1,6 +1,6 @@
 {
     "name": "@fragiola/data-grid-angular",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "description": "Composable, unstyled Angular directives for @fragiola/data-grid: render the grid as a table, as divs, or as anything else.",
     "license": "MIT",
     "type": "module",

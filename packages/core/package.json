@@ -1,6 +1,6 @@
 {
     "name": "@fragiola/data-grid",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "description": "Headless data grid core: a typed model with commands, axis math and scroll scaling for millions of cells, windows, the engine that binds a grid to the DOM, and opt-in features (sorting, navigation, row selection, cell ranges, the clipboard, the fill handle, cell editing, column resizing, reordering, pinning and collapsible groups).",
     "license": "MIT",
     "type": "module",
