@@ -1,0 +1,187 @@
+# Release: Changesets versions every package under packages/ (one `fixed` group), and npm trusted
+# publishing (OIDC) publishes them. No step names a package: a new one under packages/ is built,
+# packed, checked and published like the others (docs/releasing.md, "Adding a package").
+# Based on Changesets' trusted-publishing template, with pnpm in place of npm. The maintainer's
+# steps (the first publish, the `npm` environment, `npm trust`, the repository setting) are in
+# docs/releasing.md.
+#
+# Do not rename this file, nor the publish job's `npm` environment: npm trusts the packages'
+# publisher by this repository, this filename and that environment.
+#
+# On every push to main, `select-mode` decides what to do:
+#
+#   version   pending changesets: `pnpm release:version` bumps every package (one `fixed` group)
+#             and writes their changelogs, then the "Version Packages" PR is opened or updated.
+#   publish   no changeset, and a version npm does not have yet (the Version Packages PR was
+#             merged): `pack` builds the packages and packs them with pnpm (so `publishConfig`
+#             applies), then `scripts/check-package.ts --tarballs` checks those very tarballs;
+#             `publish` publishes them with pnpm over OIDC, with provenance, then pushes the git
+#             tags and creates the GitHub releases.
+#   none      nothing to release.
+#
+# Concurrency. There is no workflow-level group: GitHub keeps one pending run per group and
+# cancels the others, so a queued publish could be dropped by a later push and its version never
+# published. Only the version job has a group, which cancels an older version run (the newest
+# main supersedes it). The pack and publish jobs are grouped by commit, so no run ever cancels or
+# replaces another one's publish.
+#
+# Least privilege: no permission by default, each job asks for its own, and only `publish` can
+# mint an OIDC token, from the `npm` environment (deployments from main only). Every action is
+# pinned by commit. No job persists git credentials or restores a dependency cache (a poisoned
+# cache must never reach a release), and the publish job installs only the root's tools, without
+# install scripts.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  select-mode:
+    name: Select mode
+    # not in forks: only this repository is a trusted publisher
+    if: github.repository == 'fragiola/data-grid'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # actions/checkout
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Reads the pnpm version from `packageManager` in package.json.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Select the Changesets mode
+        id: select-mode
+        uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+
+  version:
+    name: Version Packages PR
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-latest
+    # a newer version run supersedes an older one: both rewrite the same PR from main
+    concurrency:
+      group: release-version-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: write # commit the version changes to the changeset-release/main branch
+      pull-requests: write # open or update the Version Packages PR
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - run: pnpm install --frozen-lockfile
+
+      # commits through the GitHub API with the job's token, so no git credentials are needed
+      - name: Version the packages
+        uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          script: pnpm release:version
+
+  pack:
+    name: Pack
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    # one group per commit: never cancelled, never replaced by a later push's run
+    concurrency:
+      group: release-pack-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read # actions/checkout
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the packages
+        run: pnpm --filter "./packages/*" build
+
+      # `changeset pack` runs `pnpm pack` on each package of the publish plan, into
+      # $RUNNER_TEMP/changeset-pack-<time>, and uploads that directory as the publish job's input
+      - name: Pack the packages
+        id: pack
+        uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
+      # The tarballs the publish job will publish, checked as `pnpm check:package` checks its own:
+      # dist-only exports, publint, attw, each adapter's exact core pin and its scratch smoke app.
+      # A failure here fails the job, so the publish job never runs.
+      - name: Check the packed tarballs
+        run: |
+          shopt -s nullglob
+          dirs=("$RUNNER_TEMP"/changeset-pack-*/)
+          if [ "${#dirs[@]}" -ne 1 ]; then
+            echo "::error::expected one changeset-pack-* directory in RUNNER_TEMP, found ${#dirs[@]}"
+            exit 1
+          fi
+          node scripts/check-package.ts --tarballs "${dirs[0]}"
+
+  publish:
+    name: Publish
+    needs: pack
+    runs-on: ubuntu-latest
+    # npm's trusted publisher names this environment, which deploys from main only
+    environment: npm
+    concurrency:
+      group: release-publish-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: write # push the git tags and create the GitHub releases
+      id-token: write # npm trusted publishing (OIDC), with provenance
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      # no `cache`: nothing restored from a cache runs next to the OIDC token
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      # Only the root's devDependencies (@changesets/cli and the changelog plugin), without
+      # install scripts: no workspace package and none of its dependencies is installed next to
+      # the OIDC token. Publishing needs no build: the tarballs come from the pack job.
+      - name: Install the release tools
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter "{.}"
+
+      # `changeset publish --from-pack-dir` runs `pnpm publish` on the packed tarballs: pnpm tries
+      # OIDC before any token, so no npm token exists anywhere
+      - name: Publish the packages
+        uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}

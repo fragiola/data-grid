@@ -1,0 +1,28 @@
+{
+    "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+    "baseBranch": "main",
+    "access": "public",
+    "format": false,
+    "changelog": [
+        "@changesets/changelog-github",
+        {
+            "repo": "fragiola/data-grid"
+        }
+    ],
+    "commit": false,
+    "ignore": [],
+    "fixed": [["@fragiola/*"]],
+    "linked": [],
+    "updateInternalDependencies": "patch",
+    "changedFilePatterns": [
+        "src/**",
+        "package.json",
+        "README.md",
+        "LICENSE",
+        "tsdown.config.ts",
+        "tsconfig*.json",
+        "ng-package.json",
+        "*/ng-package.json",
+        "scripts/check-dist.ts"
+    ]
+}

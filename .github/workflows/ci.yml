@@ -15,6 +15,15 @@
 #            packages from source, so its jobs build nothing; an examples suite builds the embed
 #            against the packages' dist, so its jobs build the packages. A failure uploads the
 #            shard's report (playwright-report-<suite>-<shard>).
+#   Package  `pnpm check:package`: builds the packages, packs them with pnpm and checks the
+#            tarballs (dist-only exports, publint, attw), checks each adapter pins the core
+#            exactly, and runs each adapter's smoke app (React, Vue, Angular) on its tarball (the
+#            release workflow's pack job runs `scripts/check-package.ts --tarballs` on the very
+#            tarballs it publishes).
+#   Changesets  on a pull request, `pnpm changeset status` fails when the PR changes what a
+#            package ships (`changedFilePatterns` in .changeset/config.json) without adding a
+#            changeset. Skipped for the Version Packages PR (changeset-release/*), which consumes
+#            them. Releasing: docs/releasing.md.
 #   Site export       fragiola.com builds /data-grid from `pnpm site:export` (contract v1.2,
 #                     fragiola/www CONTRACT.md), built and validated the way www's deploy runs
 #                     it: it fails on anything www would reject.
@@ -69,6 +78,50 @@ jobs:
 
       # a report, never a gate (Epic #62): the bundle sizes in the job summary
       - run: pnpm size
+
+  package:
+    name: Package
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # builds the packages first, then packs, lints and smoke-tests the tarballs
+      - run: pnpm check:package
+
+  changesets:
+    name: Changesets
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `--since` diffs from the merge base with the base branch: the full history is needed
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # the root's tools only (@changesets/cli): the check reads the packages' manifests and git
+      - run: pnpm install --frozen-lockfile --filter "{.}"
+
+      - name: A changeset for every package change
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: pnpm changeset status --since="origin/$BASE_REF"
 
   # The E2E suites this change can affect (scripts/e2e-suites.ts): none for the docs, an
   # adapter's own for its package or examples app, every suite for anything else and for a manual
