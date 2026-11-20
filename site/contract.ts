@@ -1,4 +1,4 @@
-// The site export contract, v1.2 (fragiola/www CONTRACT.md): its types, and the checks this repo
+// The site export contract, v1.7 (fragiola/www CONTRACT.md): its types, and the checks this repo
 // runs on what it exports. `www` runs the same checks on every build; running them here first
 // means an export that `www` would reject never leaves this repo.
 //
@@ -8,10 +8,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-/** v1.1 and v1.2 keep the file format: `project.json` keeps `"contract": 1`. */
+/** v1.1 to v1.7 keep the file format: `project.json` keeps `"contract": 1`. */
 export const CONTRACT = 1;
 /** The version this repo implements, for messages. */
-export const CONTRACT_VERSION = "1.2";
+export const CONTRACT_VERSION = "1.7";
 
 /** v1.2 (§2, §3.2): lengths in characters (Unicode code points). */
 export const LIMITS = {
@@ -805,6 +805,10 @@ export function validateSite(site: Site): string[] {
         if (!path.startsWith("/"))
             return `relative link "${href}" (write it base-free, from /)`;
         if (path === "/" || path === "/examples") return undefined;
+        // v1.7 (§3.3): reserved and base-free, the site's AI agents docs (never /<slug>/ai)
+        if (path === "/ai") return undefined;
+        if (path.startsWith("/ai/"))
+            return `"${href}": the AI agents docs are linked as /ai (optionally /ai#anchor), nothing below it`;
         const example = /^\/examples\/([^/]+)$/.exec(path);
         if (example) {
             return exampleIds.has(example[1] ?? "")

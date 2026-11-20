@@ -14,7 +14,7 @@ import {
 } from "../contract.ts";
 import { readSite } from "../sources.ts";
 
-// The export's sources meet the site export contract (v1.2), and the checks that guarantee it
+// The export's sources meet the site export contract (v1.7), and the checks that guarantee it
 // catch what `www` would reject: each case below breaks one rule on a copy of the real site.
 
 let site: Site;
@@ -156,6 +156,21 @@ describe("the contract checks", () => {
                 project: { ...site.project, repository: "github.com/x" },
             }).join(),
         ).toContain("repository must be an https:// URL");
+    });
+
+    it("accept the reserved /ai link of v1.7, and nothing below it", () => {
+        expect(
+            problemsOf("[a](/ai) [b](/ai#set-it-up-in-your-client)"),
+        ).toEqual([]);
+        expect(problemsOf("[x](/ai/x)").join()).toContain(
+            "the AI agents docs are linked as /ai",
+        );
+        expect(problemsOf("[x](/ai/docs/mcp)").join()).toContain(
+            "the AI agents docs are linked as /ai",
+        );
+        expect(problemsOf("[x](/data-grid/ai)").join()).toContain(
+            "no page /data-grid/ai",
+        );
     });
 
     it("reject broken, relative and anchorless links", () => {
