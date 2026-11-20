@@ -1,13 +1,13 @@
 ---
-title: Data Grid — a headless data grid for millions of cells
-description: A headless data grid for React. It ships virtualization, keyboard navigation and accessibility; the markup and every pixel are yours.
+title: Data Grid — a headless data grid for live, complex data
+description: A headless data grid with React, Vue and Angular adapters. It ships virtualization, live updates, keyboard navigation and accessibility; every pixel is yours.
 layout: landing
 ---
 
 <Hero
-    eyebrow="@fragiola/data-grid · React"
-    title="A billion cells, and not a line of CSS from us."
-    description="A headless data grid: both axes virtualized, a scrollbar that covers the whole dataset, windows you load data by, and the APG grid keyboard. Render it as a table or as divs, and style it your way."
+    eyebrow="@fragiola/data-grid"
+    title="Live, complex data, and not a line of CSS from us."
+    description="A headless data grid for data that never sits still: a thousand instruments ticking, prices flashing, the sort following every tick, and only the rows on screen rendered. Both axes virtualized, the APG grid keyboard, a table or divs, styled your way."
     actions={[
         { label: "Read the docs", href: "/docs/getting-started/introduction", variant: "primary" },
         { label: "Browse {examples} examples", href: "/examples", variant: "secondary" },
@@ -16,17 +16,17 @@ layout: landing
 />
 
 <Example
-    id="large-dataset"
+    id="live-market"
     variant="showcase"
     theme="ide"
-    height={560}
-    label="One million rows by a thousand columns, five themes:"
+    height={640}
+    label="A live trading desk, five themes:"
 />
 
 <Features columns={4}>
 <Feature title="Millions of cells">
 Rows and columns are virtualized, and scroll scaling keeps the whole dataset reachable past the
-browser's size limit.
+browser's size limit: [a billion cells](/examples/large-dataset).
 </Feature>
 <Feature title="Windows">
 The grid tells you which rows and columns are in view: load exactly that range, wherever the
