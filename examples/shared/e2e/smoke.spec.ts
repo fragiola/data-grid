@@ -30,6 +30,7 @@ const REPRESENTATIVE: string[] = [
     "editing", // editors filling their cells, the edited cell's outline, a select's list portalled out
     "fill", // the handle at a range's corner, the fill's dashed target, the mode buttons
     "all-features", // editors, ranges, the fill handle, sort icons and resizers together
+    "live-market", // the landing's showcase: badges, sparklines, flashing figures, a pinned summary row
 ];
 
 // a framework may ship a subset of the examples: a representative one it lacks is not run, but a
