@@ -1341,7 +1341,7 @@ and the layers (sticky insets, the windows between the strips: zeros without pin
 | `pnpm size` | the bundle sizes of every entry point and chunk (raw, gzip, min + gzip; ng-packagr's `fesm2022/*.mjs` too): a report, after `pnpm build` |
 | `pnpm e2e` | Playwright: the playground and every examples app (`./examples/*`, each running the shared specs against its embed), each in Chromium, Firefox and WebKit (`--project=<name>` for one) |
 | `pnpm dev` | the playground on <http://localhost:5173>: every example live, the fixtures (`PLAYGROUND_PORT` moves it) |
-| `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.2, `../www/CONTRACT.md`), self-validated |
+| `pnpm site:export --base /data-grid --out <dir>` | the site export for fragiola.com (contract v1.7, `../www/CONTRACT.md`), self-validated |
 | `pnpm site:dev --base /data-grid --port <n>` | every framework's examples app with hot reload, under `<base>/embed/<framework>/` on one port (a Node proxy, `site/dev-proxy.ts`, in front of one dev server per framework), the base `www` proxies in dev |
 
 ## CI
@@ -1859,8 +1859,9 @@ an adapter, look here; if two adapters would write it, it moves here.
 ## Site
 
 The docs and examples are served by `fragiola.com/data-grid`, built by the `www` repo from this
-repo's **site export** (`../www/CONTRACT.md`, v1.2). This repo only provides: the pages
-(`site/docs`, base-free links, the v1.2 vocabulary), the gallery configuration (`examples.json`)
+repo's **site export** (`../www/CONTRACT.md`, v1.7). This repo only provides: the pages
+(`site/docs`, base-free links, among them v1.7's reserved `/ai`: the site's AI agents docs,
+`/ai#anchor` too, nothing below it; the v1.2 vocabulary), the gallery configuration (`examples.json`)
 and one examples app per framework of `site/project.json`'s `frameworks` (`examples/<framework>`,
 package `examples-<framework>`, built for `<base>/embed/<framework>/`, with its own manifest:
 `examples/react`, `examples/vue` (Epic #126) and `examples/angular` (Epics #129, #132), each with
